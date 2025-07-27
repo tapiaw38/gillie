@@ -66,6 +66,7 @@ class Message(BaseModel):
         default_factory=lambda: str(uuid4()),
     )
     content: str
+    audio_url: Optional[str] = None
     sender: SenderEnum
     created_at: datetime
 

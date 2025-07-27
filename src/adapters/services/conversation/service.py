@@ -41,9 +41,9 @@ class ConversationService:
         except Exception as e:
             raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(e))
 
-    async def add_message(self, conversation_id: str, message: MessageInput, sender: SenderEnum, user_id: str, has_image_processor: Optional[str] = None):
+    async def add_message(self, conversation_id: str, message: MessageInput, sender: SenderEnum, user_id: str, has_image_processor: Optional[str] = None, has_text_to_voice: Optional[str] = None):
         try:
-            messages = await self.usecase.add_message_usecase.execute(conversation_id, message, sender, user_id, has_image_processor)
+            messages = await self.usecase.add_message_usecase.execute(conversation_id, message, sender, user_id, has_image_processor, has_text_to_voice)
             return messages
         except Exception as e:
             raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(e))

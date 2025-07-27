@@ -17,7 +17,7 @@ from pymongo.errors import PyMongoError
 from src.core.platform.appcontext.appcontext import Factory
 from src.adapters.web.utils.image_formatter import format_images_for_chat_response
 from uuid import uuid4
-from typing import Optional
+from typing import Optional, Dict
 
 
 # Set up logger
@@ -97,6 +97,7 @@ class FindByUserIdUseCase:
         except Exception as e:
             raise Exception(f"Error executing FindByUserIdUseCase: {e}")
 
+
 class FindByIdUseCase:
     def __init__(self, context_factory: Factory):
         self.context_factory = context_factory()
@@ -115,6 +116,7 @@ class FindByIdUseCase:
         except Exception as e:
             raise Exception(f"Error executing FindByIdUseCase: {e}")
 
+
 class AddMessageUseCase:
     def __init__(self, context_factory: Factory):
         self.context_factory = context_factory()
@@ -128,6 +130,105 @@ class AddMessageUseCase:
         ]
         return " - ".join(message_objects)
 
+    async def _get_spanish_female_voice_id(self) -> Optional[int]:
+        """
+        Searches for a female Spanish voice among the available voices.
+        Returns the voice ID or None if a suitable one is not found.
+        Improved error handling to avoid configuration issues.
+        """
+        try:
+            voices = await self.context_factory.integrations.tts.get_available_voices()
+            logger.info(f"Voices found: {len(voices)}")
+
+            if not voices:
+                logger.warning("No available voices found")
+                return None
+
+            for i, voice in enumerate(voices):
+                logger.info(
+                    f"Voice {i}: {voice.get('name', 'No name')} - Gender: {voice.get('gender', 'Unknown')} - Languages: {voice.get('languages', [])}"
+                )
+
+            for voice in voices:
+                voice_name = voice.get("name", "").lower()
+                languages = voice.get("languages", [])
+                gender = voice.get("gender", "").lower()
+
+                spanish_indicators = [
+                    "spanish",
+                    "español",
+                    "es_",
+                    "es-",
+                    "helena",
+                    "sabina",
+                    "monica",
+                    "paloma",
+                    "carmen",
+                ]
+                female_indicators = ["female", "mujer", "femenina", "woman"]
+
+                is_spanish = any(
+                    indicator in voice_name for indicator in spanish_indicators
+                ) or any("es" in str(lang).lower() for lang in languages if lang)
+                is_female = gender in ["female", "mujer"] or any(
+                    indicator in voice_name for indicator in female_indicators
+                )
+
+                if is_spanish and is_female:
+                    logger.info(f"Voice found: {voice['name']} (ID: {voice['id']}) - ")
+                    return voice["id"]
+
+            logger.info("Not found a specific voice, searching")
+            for voice in voices:
+                gender = voice.get("gender", "").lower()
+                if gender in ["female", "mujer"]:
+                    logger.info(
+                        f"Female voice found: {voice['name']} (ID: {voice['id']}"
+                    )
+                    return voice["id"]
+
+            logger.warning(
+                "Not found a voice that matches the criteria, using default system voice."
+            )
+            return None
+
+        except Exception as e:
+            logger.error(f"Error while fetching voices: {e}")
+            return None  # Use default voice if there's an error
+
+    async def _upload_audio_to_s3(
+        self, audio_data: bytes, user_id: str, conversation_id: str
+    ) -> str:
+        """
+        Uploads audio data to S3 and returns the public URL.
+        """
+        try:
+            import io
+            from datetime import datetime
+
+            # Create a BytesIO object from the audio data
+            audio_file = io.BytesIO(audio_data)
+
+            # Generate a unique filename using message ID and timestamp
+            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+            filename = f"tts_audio_{conversation_id}_{timestamp}.wav"
+
+            s3_key = self.context_factory.store_service.put_object(
+                file=audio_file,
+                user_file=user_id,
+                filename=filename,
+                size=len(audio_data),
+                object_id=conversation_id,
+            )
+
+            audio_url = self.context_factory.store_service.generate_url(s3_key)
+
+            return audio_url
+
+        except Exception as e:
+            logger.error(f"Error uploading audio to S3: {e}")
+            raise e
+
     async def execute(
         self,
         conversation_id: str,
@@ -135,6 +236,7 @@ class AddMessageUseCase:
         sender: SenderEnum,
         user_id: str,
         has_image_processor: Optional[str] = None,
+        has_text_to_voice: Optional[str] = None,
     ) -> list[Message]:
         """
         Adds a message to a conversation and processes image extraction if enabled.
@@ -168,7 +270,9 @@ class AddMessageUseCase:
                 search_conversation.messages = []
 
             if any(msg.id == new_message.id for msg in search_conversation.messages):
-                logger.error("Message with the same ID already exists in the conversation")
+                logger.error(
+                    "Message with the same ID already exists in the conversation"
+                )
                 raise Exception(
                     "Message with the same ID already exists in the conversation"
                 )
@@ -194,11 +298,13 @@ class AddMessageUseCase:
                     "Respond ONLY with the keyword or phrase, no explanation.\n\n"
                     f"User message: {new_message.content}"
                 )
-                image_search_keyword = await self.context_factory.integrations.openai.ask(
-                    keyword_prompt,
-                    message.context,
-                    self.convert_messages_to_string(search_conversation.messages),
-                    search_conversation.profile,
+                image_search_keyword = (
+                    await self.context_factory.integrations.openai.ask(
+                        keyword_prompt,
+                        message.context,
+                        self.convert_messages_to_string(search_conversation.messages),
+                        search_conversation.profile,
+                    )
                 )
                 logger.info(f"Image search keyword received: '{image_search_keyword}'")
 
@@ -219,16 +325,46 @@ class AddMessageUseCase:
                 logger.info(f"File images found: {len(file_images)}")
 
                 # Filter by confidence threshold
-                file_images = [img for img in file_images if getattr(img, 'confidence', 1.0) >= IMAGE_CONFIDENCE_THRESHOLD]
+                file_images = [
+                    img
+                    for img in file_images
+                    if getattr(img, "confidence", 1.0) >= IMAGE_CONFIDENCE_THRESHOLD
+                ]
 
                 if file_images:
                     formatted_images = format_images_for_chat_response(
-                        file_images, image_search_keyword, max_images_to_show=MAX_IMAGES_TO_SHOW
+                        file_images,
+                        image_search_keyword,
+                        max_images_to_show=MAX_IMAGES_TO_SHOW,
                     )
                     formatted_images_list.append(formatted_images)
 
+            audio_url = None
+            if has_text_to_voice == "activate":
+                try:
+                    logger.info("Generating audio response...")
+
+                    tts_settings = {
+                        "rate": 150,  # Moderate speed
+                        "volume": 0.8,  # High volume
+                        # DO NOT include voice_id to avoid configuration errors
+                    }
+
+                    audio_data = await self.context_factory.integrations.tts.text_to_speech_stream(
+                        text=response, settings=tts_settings
+                    )
+
+                    audio_url = await self._upload_audio_to_s3(
+                        audio_data, user_id, conversation_id
+                    )
+
+                except Exception as e:
+                    logger.error(f"Error generating audio: {e}")
+                    raise Exception(f"Error generating audio: {e}")
+
             response_message = Message(
                 content=response,
+                audio_url=audio_url,
                 sender="assistant",
                 created_at=datetime.now(timezone.utc),
             )

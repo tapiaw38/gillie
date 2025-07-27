@@ -1,4 +1,5 @@
 from src.adapters.web.integrations.openapi.openapi import OpenAIIntegration
+from src.adapters.web.integrations.tts.tts import TTSIntegration
 from src.core.platform.config.service import ConfigurationService
 
 
@@ -9,6 +10,7 @@ class Integrations:
         if Integrations._instance is not None:
             raise Exception("This class is a singleton! Use `Integrations.get_instance()` to access it.")
         self.openai = OpenAIIntegration(config_service)
+        self.tts = TTSIntegration(config_service)
         Integrations._instance = self
 
     @classmethod
