@@ -2,7 +2,7 @@ from pydantic import BaseModel, Field
 from typing import Optional, List, Dict, Any
 from src.core.domain.model import (
     Profile,
-    Conversation,  
+    Conversation,
     Message,
     ApiKey,
 )
@@ -55,10 +55,7 @@ class ApiKeyListOutput(BaseModel):
     @staticmethod
     def from_output(api_keys: list[ApiKey]):
         return ApiKeyListOutput(
-            data=[
-                ApiKeyOutput.from_output(api_key).data
-                for api_key in api_keys
-            ]
+            data=[ApiKeyOutput.from_output(api_key).data for api_key in api_keys]
         )
 
 
@@ -82,21 +79,25 @@ class FileInput:
     def __init__(self, file: UploadFile):
         if not file:
             raise ValueError("File object cannot be None")
-        if not hasattr(file, 'filename'):
+        if not hasattr(file, "filename"):
             raise ValueError("UploadFile object missing 'filename' attribute")
 
-        if not hasattr(file, 'file'):
+        if not hasattr(file, "file"):
             raise ValueError("UploadFile object missing 'file' attribute")
 
         self.filename = file.filename
         self.file = file.file
-        self.file_header = getattr(file, 'headers', {})
+        self.file_header = getattr(file, "headers", {})
 
         try:
-            if hasattr(file, 'size') and file.size is not None:
+            if hasattr(file, "size") and file.size is not None:
                 self.filesize = file.size
                 print(f"FileInput init - size from file.size: {self.filesize}")
-            elif self.file and hasattr(self.file, '_file') and hasattr(self.file._file, 'tell'):
+            elif (
+                self.file
+                and hasattr(self.file, "_file")
+                and hasattr(self.file._file, "tell")
+            ):
                 current_pos = self.file._file.tell()
                 self.file._file.seek(0, 2)  # Ir al final
                 self.filesize = self.file._file.tell()
@@ -112,7 +113,9 @@ class FileInput:
         if not self.file:
             raise ValueError(f"File content is None for file: {self.filename}")
 
-        print(f"FileInput init completed - filename: {self.filename}, size: {self.filesize}")
+        print(
+            f"FileInput init completed - filename: {self.filename}, size: {self.filesize}"
+        )
 
     def __repr__(self):
         return f"FileInput(filename='{self.filename}', filesize={self.filesize}, file_type={type(self.file)})"
@@ -122,6 +125,7 @@ class FileOutputData(BaseModel):
     id: str
     name: str
     url: str
+
 
 class FileOutput(BaseModel):
     data: FileOutputData
@@ -143,10 +147,7 @@ class FileListOutput(BaseModel):
     @staticmethod
     def from_output(files: list[FileOutputData]):
         return FileListOutput(
-            data=[
-                FileOutput.from_output(file).data
-                for file in files
-            ]
+            data=[FileOutput.from_output(file).data for file in files]
         )
 
 
@@ -216,6 +217,7 @@ class ProfileInput(BaseModel):
     business_name: Optional[str] = None
     functions: Optional[str] = None
     business_context: Optional[str] = None
+    role: Optional[str] = None
 
 
 class ProfileStatusInput(BaseModel):
@@ -229,6 +231,7 @@ class ProfileOutputData(BaseModel):
     business_name: str
     functions: str
     business_context: str
+    role: Optional[str]
     is_active: bool
     created_at: Optional[datetime]
     updated_at: Optional[datetime]
@@ -252,12 +255,31 @@ class ProfileOutput(BaseModel):
                 functions=profile.functions,
                 business_context=profile.business_context,
                 is_active=profile.is_active,
+                role=profile.role,
                 created_at=profile.created_at,
                 updated_at=profile.updated_at,
                 iteration_limit=profile.iteration_limit,
-                api_keys=[ApiKeyOutput.from_output(api_key).data for api_key in profile.api_keys] if profile.api_keys else None,
-                files=[FileOutput.from_output(file).data for file in profile.files] if profile.files else None,
-                integrations=[IntegrationOutput.from_output(integration).data for integration in profile.integrations] if profile.integrations else None,
+                api_keys=(
+                    [
+                        ApiKeyOutput.from_output(api_key).data
+                        for api_key in profile.api_keys
+                    ]
+                    if profile.api_keys
+                    else None
+                ),
+                files=(
+                    [FileOutput.from_output(file).data for file in profile.files]
+                    if profile.files
+                    else None
+                ),
+                integrations=(
+                    [
+                        IntegrationOutput.from_output(integration).data
+                        for integration in profile.integrations
+                    ]
+                    if profile.integrations
+                    else None
+                ),
             )
         )
 
@@ -268,7 +290,7 @@ class ConversationOutputData(BaseModel):
     created_at: datetime
     client_id: str
     profile: Profile
-    messages:  Optional[List[Message]]
+    messages: Optional[List[Message]]
 
 
 class ConversationOutput(BaseModel):
@@ -331,20 +353,24 @@ class MessageListOutput(BaseModel):
     @staticmethod
     def from_output(messages: list[Message]):
         return MessageListOutput(
-            data=[
-                MessageOutput.from_output(message).data
-                for message in messages
-            ]
+            data=[MessageOutput.from_output(message).data for message in messages]
         )
+
 
 # TTS Schemas
 class TTSInput(BaseModel):
-    text: str = Field(..., min_length=1, max_length=5000, description="Text to convert to speech")
-    settings: Optional[Dict[str, Any]] = Field(None, description="TTS settings override")
+    text: str = Field(
+        ..., min_length=1, max_length=5000, description="Text to convert to speech"
+    )
+    settings: Optional[Dict[str, Any]] = Field(
+        None, description="TTS settings override"
+    )
 
 
 class TTSSettingsInput(BaseModel):
-    rate: Optional[int] = Field(None, ge=50, le=400, description="Speech rate (words per minute)")
+    rate: Optional[int] = Field(
+        None, ge=50, le=400, description="Speech rate (words per minute)"
+    )
     volume: Optional[float] = Field(None, ge=0.0, le=1.0, description="Volume level")
     voice_id: Optional[int] = Field(None, ge=0, description="Voice ID")
 
@@ -365,11 +391,11 @@ class TTSVoicesOutput(BaseModel):
         return TTSVoicesOutput(
             data=[
                 TTSVoiceData(
-                    id=voice['id'],
-                    name=voice['name'],
-                    languages=voice['languages'],
-                    gender=voice['gender'],
-                    age=voice['age']
+                    id=voice["id"],
+                    name=voice["name"],
+                    languages=voice["languages"],
+                    gender=voice["gender"],
+                    age=voice["age"],
                 )
                 for voice in voices
             ]
@@ -392,6 +418,45 @@ class TTSFileOutput(BaseModel):
         return TTSFileOutput(
             data={
                 "file_path": file_path,
-                "message": "Audio file generated successfully"
+                "message": "Audio file generated successfully",
             }
         )
+
+
+class RoleOutputData(BaseModel):
+    code: str
+    name: str
+
+
+class RoleOutput(BaseModel):
+    data: RoleOutputData
+    @staticmethod
+    def from_output(role):
+        return RoleOutput(
+            data=RoleOutputData(
+                code=role.code,
+                name=role.name,
+            )
+        )
+
+
+class ListOptionsOutputData(BaseModel):
+    """Output data structure for role list options"""
+    roles: List[RoleOutputData]
+
+
+class ListOptionsOutput(BaseModel):
+    """Main output structure for role list options"""
+    data: ListOptionsOutputData
+    @staticmethod
+    def from_output(roles: List):
+        role_data = []
+        for role in roles:
+            role_data.append(
+                RoleOutputData(
+                    code=role.code,
+                    name=role.name,
+                )
+            )
+
+        return ListOptionsOutput(data=ListOptionsOutputData(roles=role_data))

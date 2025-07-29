@@ -1,7 +1,13 @@
 from src.core.platform.config.service import ConfigurationService
 from openai import AsyncOpenAI
 from typing import Optional, List
-from src.adapters.web.integrations.openapi.context import CONTEXT_INFORMATION
+from src.adapters.web.integrations.openapi.context import (
+    CONTEXT_INFORMATION,
+    CONTEXT_ROLE_ASSISTANT,
+    CONTEXT_ROLE_SELLER,
+    CONTEXT_ROLE_TUTOR,
+    CONTEXT_RULES,
+)
 from src.core.domain.model import Profile
 from src.core.platform.fileprocessor.pdf_processor import FileImageProcessor
 from src.core.platform.fileprocessor.xlsx_processor import ExcelImageProcessor
@@ -70,6 +76,15 @@ class OpenAIIntegration:
             previous_messages=previous_messages,
         )
 
+        if profile.role == "seller":
+            question_message += CONTEXT_ROLE_SELLER
+        elif profile.role == "tutor":
+            question_message += CONTEXT_ROLE_TUTOR
+        elif profile.role == "assistant":
+            question_message += CONTEXT_ROLE_ASSISTANT
+
+        question_message += CONTEXT_RULES
+
         response = await self.client.chat.completions.create(
             model=self.model,
             messages=[
@@ -131,14 +146,16 @@ class OpenAIIntegration:
             Dictionary with extracted text, related images and metadata
         """
         try:
-            return await self.image_processor.extract_text_and_images(pdf_url, search_term)
+            return await self.image_processor.extract_text_and_images(
+                pdf_url, search_term
+            )
         except Exception as e:
             return {
                 "error": f"Error processing PDF with OCR: {str(e)}",
                 "analysis": None,
                 "extracted_text": None,
                 "related_images": None,
-                "recommendations": ["Manual review required"]
+                "recommendations": ["Manual review required"],
             }
 
     async def analyze_pdf_content(self, pdf_url: str) -> dict:
@@ -159,7 +176,7 @@ class OpenAIIntegration:
                 "text_pages": analysis_result.text_pages,
                 "image_pages": analysis_result.image_pages,
                 "processing_method": analysis_result.processing_method,
-                "text_extraction_count": len(analysis_result.text_extraction_results)
+                "text_extraction_count": len(analysis_result.text_extraction_results),
             }
         except Exception as e:
             return {
@@ -168,7 +185,7 @@ class OpenAIIntegration:
                 "total_pages": 0,
                 "text_pages": [],
                 "image_pages": [],
-                "processing_method": "error"
+                "processing_method": "error",
             }
 
     async def search_images_with_text_analysis(
