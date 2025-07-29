@@ -100,3 +100,7 @@ class ProfileService:
             return integration
         except Exception as e:
             raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(e))
+
+    async def list_options(self):
+        list_options = self.usecase.list_options_usecase.execute()
+        return list_options

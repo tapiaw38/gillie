@@ -1,7 +1,7 @@
 from src.schemas.schemas import (
-    ProfileInput, 
-    ProfileOutput, 
-    ApiKeyInput, 
+    ProfileInput,
+    ProfileOutput,
+    ApiKeyInput,
     ApiKeyListOutput,
     ApiKeyDeleteOutput,
     FileListOutput,
@@ -9,6 +9,9 @@ from src.schemas.schemas import (
     FileDeleteOutput,
     IntegrationInput,
     IntegrationListOutput,
+    ListOptionsOutput,
+    ListOptionsOutputData,
+    RoleOutputData,
 )
 from src.core.domain.model import (
     Profile,
@@ -25,6 +28,7 @@ from datetime import datetime, timezone, timedelta
 from typing import List, Tuple, Optional
 from asyncio import to_thread, gather
 
+
 class CreateUseCase:
     def __init__(self, context_factory: Factory):
         self.context_factory = context_factory()
@@ -34,7 +38,7 @@ class CreateUseCase:
             generated_id = str(uuid4())
             iteration_limit = 100
             new_profile = Profile(
-                _id= generated_id,
+                _id=generated_id,
                 user_id=user_id,
                 assistant_name=profile.assistant_name,
                 business_name=profile.business_name,
@@ -46,7 +50,9 @@ class CreateUseCase:
             )
 
             profile_id = self.context_factory.repositories.profile.create(new_profile)
-            created_profile = self.context_factory.repositories.profile.find_by_id(profile_id)
+            created_profile = self.context_factory.repositories.profile.find_by_id(
+                profile_id
+            )
 
             if not created_profile:
                 raise Exception("Error profile not found after creation")
@@ -104,20 +110,29 @@ class UpdateUseCase:
                 business_name=profile.business_name,
                 functions=profile.functions,
                 business_context=profile.business_context,
+                role=profile.role,
                 updated_at=datetime.now(timezone.utc),
             )
 
-            search_profile = self.context_factory.repositories.profile.find_by_user_id(user_id)
+            search_profile = self.context_factory.repositories.profile.find_by_user_id(
+                user_id
+            )
             if not search_profile:
                 raise Exception(f"No profile found with user_id: {user_id}")
 
-            profile_updated_id = self.context_factory.repositories.profile.update(search_profile.id, updated_profile)
+            profile_updated_id = self.context_factory.repositories.profile.update(
+                search_profile.id, updated_profile
+            )
             if not profile_updated_id:
                 raise Exception(f"No profile found with id: {search_profile.id}")
 
-            profile_updated = self.context_factory.repositories.profile.find_by_id(profile_updated_id)
+            profile_updated = self.context_factory.repositories.profile.find_by_id(
+                profile_updated_id
+            )
             if not profile_updated:
-                raise Exception(f"No profile found with user_id: {user_id} after update")
+                raise Exception(
+                    f"No profile found with user_id: {user_id} after update"
+                )
 
             self.context_factory.repositories.conversation.update_profile_by_user_id(
                 user_id,
@@ -144,17 +159,25 @@ class ChangeStatusUseCase:
                 is_active=status,
             )
 
-            search_profile = self.context_factory.repositories.profile.find_by_user_id(user_id)
+            search_profile = self.context_factory.repositories.profile.find_by_user_id(
+                user_id
+            )
             if not search_profile:
                 raise Exception(f"No profile found with user_id: {user_id}")
 
-            profile_updated_id = self.context_factory.repositories.profile.update(search_profile.id, updated_profile)
+            profile_updated_id = self.context_factory.repositories.profile.update(
+                search_profile.id, updated_profile
+            )
             if not profile_updated_id:
                 raise Exception(f"No profile found with id: {search_profile.id}")
 
-            profile_updated = self.context_factory.repositories.profile.find_by_id(profile_updated_id)
+            profile_updated = self.context_factory.repositories.profile.find_by_id(
+                profile_updated_id
+            )
             if not profile_updated:
-                raise Exception(f"No profile found with user_id: {user_id} after update")
+                raise Exception(
+                    f"No profile found with user_id: {user_id} after update"
+                )
 
             return ProfileOutput.from_output(profile_updated)
 
@@ -169,13 +192,15 @@ class AddApiKeyUseCase:
     def __init__(self, context_factory: Factory):
         self.context_factory = context_factory()
 
-    def generate_api_key(self, user_id: str, expires_in_minutes: int = 60*24*365) -> str:
+    def generate_api_key(
+        self, user_id: str, expires_in_minutes: int = 60 * 24 * 365
+    ) -> str:
         secret_key = self.context_factory.config_service.server_config.jwt_secret
         payload = {
             "user_id": user_id,
             "type": "api_key",
             "exp": datetime.now(timezone.utc) + timedelta(minutes=expires_in_minutes),
-            "iat": datetime.now(timezone.utc)
+            "iat": datetime.now(timezone.utc),
         }
         token = jwt.encode(payload, secret_key, algorithm="HS256")
         return token
@@ -202,11 +227,15 @@ class AddApiKeyUseCase:
                 profile.api_keys = []
 
             if any(api_key.id == new_api_key.id for api_key in profile.api_keys):
-                raise Exception("API key with the same ID already exists in the profile")
+                raise Exception(
+                    "API key with the same ID already exists in the profile"
+                )
 
             profile.api_keys.append(new_api_key)
 
-            self.context_factory.repositories.profile.update_api_keys(user_id, profile.api_keys)
+            self.context_factory.repositories.profile.update_api_keys(
+                user_id, profile.api_keys
+            )
 
             self.context_factory.repositories.conversation.update_profile_by_user_id(
                 user_id,
@@ -228,7 +257,9 @@ class DeleteApiKeyUseCase:
 
     async def execute(self, user_id: str, api_key_id: str):
         try:
-            self.context_factory.repositories.profile.deactivate_api_key(user_id, api_key_id)
+            self.context_factory.repositories.profile.deactivate_api_key(
+                user_id, api_key_id
+            )
 
             profile = self.context_factory.repositories.profile.find_by_user_id(user_id)
 
@@ -245,13 +276,16 @@ class DeleteApiKeyUseCase:
         except Exception as e:
             raise Exception(f"Error executing DeleteApiKeyUseCase: {e}")
 
+
 class FindByApiKeyValueUseCase:
     def __init__(self, context_factory: Factory):
         self.context_factory = context_factory()
 
     async def execute(self, user_id: str, api_key_value: str):
         try:
-            api_key = self.context_factory.repositories.profile.find_by_api_key_value(user_id, api_key_value)
+            api_key = self.context_factory.repositories.profile.find_by_api_key_value(
+                user_id, api_key_value
+            )
             if not api_key:
                 raise Exception(f"No API key found for user_id: {user_id}")
             return api_key
@@ -269,13 +303,21 @@ class UpdateIterationLimitUseCase:
 
     async def execute(self, user_id: str, iteration_limit: int):
         try:
-            profile_user_id = self.context_factory.repositories.profile.update_iteration_limit(user_id, iteration_limit)
+            profile_user_id = (
+                self.context_factory.repositories.profile.update_iteration_limit(
+                    user_id, iteration_limit
+                )
+            )
             if not profile_user_id:
                 raise Exception(f"No profile found with id: {profile_user_id}")
 
-            profile_updated = self.context_factory.repositories.profile.find_by_user_id(profile_user_id)
+            profile_updated = self.context_factory.repositories.profile.find_by_user_id(
+                profile_user_id
+            )
             if not profile_updated:
-                raise Exception(f"No profile found with user_id: {user_id} after update")
+                raise Exception(
+                    f"No profile found with user_id: {user_id} after update"
+                )
 
             self.context_factory.repositories.conversation.update_profile_by_user_id(
                 user_id,
@@ -301,21 +343,31 @@ class AddFilesUseCase:
         results: List[File] = []
         errors: List[Exception] = []
 
-        async def process_file(file: FileInput, user_file: str) -> Tuple[Optional[File], Optional[Exception]]:
+        async def process_file(
+            file: FileInput, user_file: str
+        ) -> Tuple[Optional[File], Optional[Exception]]:
             try:
                 file_id = str(uuid4())
 
                 file_name = await to_thread(
-                    app.store_service.put_object, file.file, user_file, file.filename, file.filesize, file_id
+                    app.store_service.put_object,
+                    file.file,
+                    user_file,
+                    file.filename,
+                    file.filesize,
+                    file_id,
                 )
                 file_url = await to_thread(app.store_service.generate_url, file_name)
 
-                return File(
-                    _id=file_id,
-                    name=file_name,
-                    url=file_url,
-                    created_at=datetime.now(timezone.utc),
-                ), None
+                return (
+                    File(
+                        _id=file_id,
+                        name=file_name,
+                        url=file_url,
+                        created_at=datetime.now(timezone.utc),
+                    ),
+                    None,
+                )
             except Exception as e:
                 return None, e
 
@@ -345,7 +397,9 @@ class AddFilesUseCase:
 
             updated_profile = app.repositories.profile.find_by_user_id(user_id)
             if not updated_profile:
-                raise Exception(f"No profile found with user_id: {user_id} after update")
+                raise Exception(
+                    f"No profile found with user_id: {user_id} after update"
+                )
 
             app.repositories.conversation.update_profile_by_user_id(
                 user_id,
@@ -366,11 +420,15 @@ class DeleteFileByIdUseCase:
 
     async def execute(self, user_id: str, file_id: str):
         try:
-            file = self.context_factory.repositories.profile.get_file_by_id(user_id, file_id)
+            file = self.context_factory.repositories.profile.get_file_by_id(
+                user_id, file_id
+            )
             if not file:
                 raise Exception(f"No file found with id: {file_id}")
 
-            self.context_factory.repositories.profile.delete_file_by_id(user_id, file_id)
+            self.context_factory.repositories.profile.delete_file_by_id(
+                user_id, file_id
+            )
             self.context_factory.store_service.delete_object(file.name)
 
             profile = self.context_factory.repositories.profile.find_by_user_id(user_id)
@@ -389,6 +447,7 @@ class DeleteFileByIdUseCase:
 
         except Exception as e:
             raise Exception(f"Error executing DeleteApiKeyUseCase: {e}")
+
 
 class AddIntegrationUseCase:
     def __init__(self, context_factory: Factory):
@@ -413,14 +472,24 @@ class AddIntegrationUseCase:
                 updated_at=datetime.now(timezone.utc),
             )
             if any(integ.id == new_integration.id for integ in profile.integrations):
-                raise Exception("Integration with the same ID already exists in the profile")
+                raise Exception(
+                    "Integration with the same ID already exists in the profile"
+                )
 
-            if any(integ.name == new_integration.name and integ.type == new_integration.type for integ in profile.integrations):
-                raise Exception("Integration with the same name already exists in the profile")
+            if any(
+                integ.name == new_integration.name
+                and integ.type == new_integration.type
+                for integ in profile.integrations
+            ):
+                raise Exception(
+                    "Integration with the same name already exists in the profile"
+                )
 
             profile.integrations.append(new_integration)
 
-            self.context_factory.repositories.profile.update_integrations(user_id, profile.integrations)
+            self.context_factory.repositories.profile.update_integrations(
+                user_id, profile.integrations
+            )
 
             self.context_factory.repositories.conversation.update_profile_by_user_id(
                 user_id,
@@ -434,3 +503,24 @@ class AddIntegrationUseCase:
 
         except Exception as e:
             raise Exception(f"Error executing AddIntegrationUseCase: {e}")
+
+
+class ListOptionsUseCase:
+    def __init__(self, context_factory: Factory):
+        self.context_factory = context_factory()
+
+    def execute(self) -> ListOptionsOutput:
+        roles = self.context_factory.repositories.role.get_all_roles()
+
+        print(f"Roles found: {len(roles)}")
+        role_data = []
+        for role in roles:
+            role_data.append(
+                RoleOutputData(
+                    code=role.code,
+                    name=role.name,
+                )
+            )
+        list_options_data = ListOptionsOutputData(roles=role_data)
+
+        return ListOptionsOutput(data=list_options_data)

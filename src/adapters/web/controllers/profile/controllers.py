@@ -112,3 +112,11 @@ async def add_integration(
     user_id = request.state.user.get("user_id")
     integration = await service.profile.add_integration(user_id, integration)
     return integration
+
+@router.get("/options", status_code=status.HTTP_200_OK)
+async def list_options(
+    request: Request,
+    service: Services = Depends(get_instance)
+):
+    list_options = await service.profile.list_options()
+    return list_options

@@ -54,7 +54,8 @@ async def add_message(
     message: MessageInput,
     request: Request,
     service: Services = Depends(get_instance),
-    has_image_processor: Optional[str] = Query(None, regex="^(activate|deactivate)$")
+    has_image_processor: Optional[str] = Query(None, regex="^(activate|deactivate)$"),
+    has_text_to_voice: Optional[str] = Query(None, regex="^(activate|deactivate)$")
 ):
     sender = SenderEnum.user
     user_id = request.state.user.get("user_id")
@@ -64,7 +65,8 @@ async def add_message(
         message, 
         sender, 
         user_id, 
-        has_image_processor
+        has_image_processor,
+        has_text_to_voice
     )
     return messages
 

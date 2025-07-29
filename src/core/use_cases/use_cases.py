@@ -18,6 +18,7 @@ class Profile:
     add_files_usecase: profile_use_case.AddFilesUseCase
     delete_file_by_id_usecase: profile_use_case.DeleteFileByIdUseCase
     add_integration_usecase: profile_use_case.AddIntegrationUseCase
+    list_options_usecase: profile_use_case.ListOptionsUseCase
 
 
 @dataclass
@@ -49,7 +50,8 @@ def create_usecases(context_factory: Factory) -> Usecases:
             update_iteration_limit_usecase=profile_use_case.UpdateIterationLimitUseCase(context_factory),
             add_files_usecase=profile_use_case.AddFilesUseCase(context_factory),
             delete_file_by_id_usecase=profile_use_case.DeleteFileByIdUseCase(context_factory),
-            add_integration_usecase=profile_use_case.AddIntegrationUseCase(context_factory)
+            add_integration_usecase=profile_use_case.AddIntegrationUseCase(context_factory),
+            list_options_usecase=profile_use_case.ListOptionsUseCase(context_factory),
         ),
         conversation=Conversation(
             create_usecase=conversation_use_case.CreateUseCase(context_factory),
@@ -57,5 +59,5 @@ def create_usecases(context_factory: Factory) -> Usecases:
             find_by_id_usecase=conversation_use_case.FindByIdUseCase(context_factory),
             add_message_usecase=conversation_use_case.AddMessageUseCase(context_factory),
             delete_all_messages_usecase=conversation_use_case.DeleteAllMessagesUseCase(context_factory),
-        )
+        ),
     )

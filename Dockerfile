@@ -1,8 +1,18 @@
-FROM python:3.10-slim-buster
+FROM python:3.10-slim-bullseye
 
 WORKDIR /app
 
-RUN apt-get update && apt-get install -y espeak ffmpeg wget
+RUN apt-get update && apt-get install -y \
+    espeak \
+    espeak-data \
+    libespeak1 \
+    libespeak-dev \
+    ffmpeg \
+    wget \
+    alsa-utils \
+    pulseaudio \
+    && apt-get clean \
+    && rm -rf /var/lib/apt/lists/*
 
 RUN wget https://truststore.pki.rds.amazonaws.com/global/global-bundle.pem -O /app/global-bundle.pem
 

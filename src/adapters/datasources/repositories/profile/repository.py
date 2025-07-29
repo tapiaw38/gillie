@@ -101,7 +101,9 @@ class Repository(RepositoryInterface):
             document = self.client.find_one({"user_id": user_id})
             if not document:
                 raise Exception(f"No profile found with user_id: {user_id}")
-
+            # Ensure 'role' is always present for Pydantic validation
+            if "role" not in document or not document["role"]:
+                document["role"] = "seller"
             return Profile(**document)
 
         except PyMongoError as e:
@@ -117,8 +119,8 @@ class Repository(RepositoryInterface):
     def update(self, id: str, profile: Profile) -> str:
         try:
             profile_dict = profile.dict(
+                by_alias=True,
                 exclude_none=True,
-                by_alias=True
             )
             result = self.client.update_one(
                 {"_id": id},

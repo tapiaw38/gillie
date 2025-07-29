@@ -37,6 +37,12 @@ def execute_profile_migrations() -> List[Migration]:
                 {},
                 {"$set": {"client_id": str(uuid4())}}
             )
+        ),Migration(
+            version=5,
+            up=lambda db: db["profiles"].update_many(
+                {},
+                {"$set": {"role": "seller"}}
+            )
         ),
         # Add more migrations here
     ]
