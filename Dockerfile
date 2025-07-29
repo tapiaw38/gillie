@@ -11,6 +11,10 @@ RUN apt-get update && apt-get install -y \
     wget \
     alsa-utils \
     pulseaudio \
+    tesseract-ocr \
+    tesseract-ocr-spa \
+    tesseract-ocr-eng \
+    poppler-utils \
     && apt-get clean \
     && rm -rf /var/lib/apt/lists/*
 
