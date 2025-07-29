@@ -687,8 +687,8 @@ class ExcelImageProcessor(BaseFileProcessor):
                     img_data["image_base64"]
                 )
 
-                # Use optimized relevance calculation (no API calls)
-                relevance_score = self._calculate_relevance_score_optimized(
+                # Use Excel-specific relevance calculation (same strategy as PDF)
+                relevance_score = self._calculate_excel_relevance_score(
                     python_analysis, search_term, img_data
                 )
 
@@ -1345,6 +1345,53 @@ class ExcelImageProcessor(BaseFileProcessor):
             logger.error(f"Error creating description with proximity: {e}")
             return self._create_excel_description(analysis, search_term, img_data)
 
+    def _create_optimized_description(
+        self, analysis: Dict[str, Any], search_term: str, img_data: Dict[str, Any]
+    ) -> str:
+        """Create optimized description for Excel chart or embedded image (no API calls)"""
+        try:
+            description_parts = []
+
+            # Basic image type and sheet information
+            image_type = img_data.get("image_type", "")
+            chart_type = img_data.get("chart_type", "")
+            sheet_name = img_data.get("sheet_name", "Unknown")
+
+            if image_type == "embedded":
+                description_parts.append(f"Embedded image from Excel sheet '{sheet_name}'")
+            else:
+                description_parts.append(f"{chart_type.title()} chart from Excel sheet '{sheet_name}'")
+
+            # Basic technical details
+            dimensions = analysis.get("dimensions", (0, 0))
+            if dimensions[0] > 0 and dimensions[1] > 0:
+                description_parts.append(f"({dimensions[0]}x{dimensions[1]} pixels)")
+
+            # Simple quality assessment
+            quality_score = analysis.get("quality_score", 0.0)
+            if quality_score > 0.7:
+                description_parts.append("good quality")
+
+            # Basic content info
+            objects_detected = analysis.get("objects_detected", 0)
+            if objects_detected > 0:
+                description_parts.append(f"{objects_detected} visual elements")
+
+            # Text detection
+            if analysis.get("text_detected", False):
+                description_parts.append("contains text")
+
+            # Relevance to search term
+            description_parts.append(f"Related to: {search_term}")
+
+            return ". ".join(description_parts).capitalize() + "."
+
+        except Exception as e:
+            logger.error(f"Error creating optimized description: {e}")
+            image_type = img_data.get("image_type", "chart")
+            sheet_name = img_data.get("sheet_name", "Unknown")
+            return f"Excel {image_type} from sheet '{sheet_name}'. Related to {search_term}."
+
     def _describe_colors(self, colors: List[List[int]]) -> str:
         """Create a text description of dominant colors"""
         try:
@@ -1728,11 +1775,6 @@ class ExcelImageProcessor(BaseFileProcessor):
                 max_results=5
             )
             
-            logger.info(f"📝 Extracted keywords: {result.processed_keywords}")
-            logger.info(f"🎯 Found {result.total_matches} text matches")
-            logger.info(f"📄 Extraction method: {result.extraction_method}")
-            logger.info(f"📊 Analyzed sheets: {result.sheets_analyzed}")
-            logger.info(f"🖼️ Related images: {len(result.related_images)}")
             
             # Display some text matches
             if result.text_matches:
