@@ -511,15 +511,19 @@ class FileImageProcessor(BaseFileProcessor):
                         img_base64 = base64.b64encode(buffered.getvalue()).decode()
 
                         # Analyze image relevance to text
-                        if getattr(self, 'enable_fast_processing', True):
+                        if getattr(self, "enable_fast_processing", True):
                             # Use optimized method (no API calls)
-                            relevance_score = await self._calculate_image_text_relevance_optimized(
-                                img_base64, text
+                            relevance_score = (
+                                await self._calculate_image_text_relevance_optimized(
+                                    img_base64, text
+                                )
                             )
                         else:
                             # Use full method (with API calls)
-                            relevance_score = await self._calculate_image_text_relevance(
-                                img_base64, text
+                            relevance_score = (
+                                await self._calculate_image_text_relevance(
+                                    img_base64, text
+                                )
                             )
 
                         if (
@@ -2657,42 +2661,46 @@ class FileImageProcessor(BaseFileProcessor):
         )
         return image_results[:max_results]
 
-    async def _force_search_images_for_term(self, pdf_data, search_term, extracted_text):
+    async def _force_search_images_for_term(
+        self, pdf_data, search_term, extracted_text
+    ):
         """
         Forced search for images by term in PDF.
         Uses multiple strategies to find related images when normal methods do not yield enough results.
-        
+
         Args:
             pdf_data: PDF binary data
             search_term: Search term
             extracted_text: Extracted text from the PDF
-            
+
         Returns:
             List of dictionaries with information about found images
         """
         try:
             logger.info(f"Starting forced image search for term: '{search_term}'")
-            
+
             # Extract all images from the PDF aggressively
-            all_images = await self._extract_all_images_aggressive(pdf_data, search_term)
-            
+            all_images = await self._extract_all_images_aggressive(
+                pdf_data, search_term
+            )
+
             if not all_images:
                 logger.warning("No images found in the PDF")
                 return []
-            
+
             # Strategy 1: Search by expanded keywords
             expanded_keywords = self._expand_search_keywords(search_term)
             keyword_matches = []
-            
+
             for image in all_images:
                 relevance_score = await self._calculate_keyword_relevance_force(
                     image, expanded_keywords, extracted_text
                 )
                 if relevance_score > 0.2:  # Lower threshold for forced search
-                    image['relevance_score'] = relevance_score
-                    image['match_strategy'] = 'expanded_keywords'
+                    image["relevance_score"] = relevance_score
+                    image["match_strategy"] = "expanded_keywords"
                     keyword_matches.append(image)
-            
+
             # Strategy 2: Page context analysis
             context_matches = []
             for image in all_images:
@@ -2701,40 +2709,45 @@ class FileImageProcessor(BaseFileProcessor):
                         image, search_term, extracted_text
                     )
                     if context_score > 0.25:
-                        image['relevance_score'] = context_score
-                        image['match_strategy'] = 'page_context'
+                        image["relevance_score"] = context_score
+                        image["match_strategy"] = "page_context"
                         context_matches.append(image)
-            
+
             # Strategy 3: Visual content analysis (OCR on images)
             visual_matches = []
-            remaining_images = [img for img in all_images 
-                             if img not in keyword_matches and img not in context_matches]
-            
+            remaining_images = [
+                img
+                for img in all_images
+                if img not in keyword_matches and img not in context_matches
+            ]
+
             for image in remaining_images[:5]:  # Limit to avoid overload
                 visual_score = await self._analyze_image_content_force(
                     image, search_term
                 )
                 if visual_score > 0.3:
-                    image['relevance_score'] = visual_score
-                    image['match_strategy'] = 'visual_content'
+                    image["relevance_score"] = visual_score
+                    image["match_strategy"] = "visual_content"
                     visual_matches.append(image)
-            
+
             # Combine all results
             all_matches = keyword_matches + context_matches + visual_matches
-            
+
             # Sort by relevance
-            all_matches.sort(key=lambda x: x.get('relevance_score', 0), reverse=True)
-            
+            all_matches.sort(key=lambda x: x.get("relevance_score", 0), reverse=True)
+
             # Enhance descriptions with search term context
             enhanced_matches = []
             for match in all_matches[:10]:  # Max 10 results
                 enhanced_description = await self._enhance_description_with_search_term(
                     match, search_term, extracted_text
                 )
-                match['description'] = enhanced_description
+                match["description"] = enhanced_description
                 enhanced_matches.append(match)
 
-            logger.info(f"Forced search completed. Found {len(enhanced_matches)} images")
+            logger.info(
+                f"Forced search completed. Found {len(enhanced_matches)} images"
+            )
 
             return enhanced_matches
         except Exception as e:
@@ -2747,120 +2760,132 @@ class FileImageProcessor(BaseFileProcessor):
         """
         try:
             keywords = [search_term.lower()]
-            
+
             # Add variations
             if len(search_term) > 3:
                 # Add plural/singular variations
-                if search_term.endswith('s'):
+                if search_term.endswith("s"):
                     keywords.append(search_term[:-1])  # Remove 's'
                 else:
-                    keywords.append(search_term + 's')  # Add 's'
-                
+                    keywords.append(search_term + "s")  # Add 's'
+
                 # Add common variations
-                keywords.extend([
-                    search_term.replace(' ', ''),  # Remove spaces
-                    search_term.replace('-', ' '),  # Replace hyphens with spaces
-                    search_term.replace('_', ' '),  # Replace underscores with spaces
-                ])
-            
+                keywords.extend(
+                    [
+                        search_term.replace(" ", ""),  # Remove spaces
+                        search_term.replace("-", " "),  # Replace hyphens with spaces
+                        search_term.replace(
+                            "_", " "
+                        ),  # Replace underscores with spaces
+                    ]
+                )
+
             # Remove duplicates and empty strings
             keywords = list(set([k for k in keywords if k.strip()]))
-            
+
             logger.info(f"Expanded keywords for '{search_term}': {keywords}")
             return keywords
-            
+
         except Exception as e:
             logger.error(f"Error expanding search keywords: {e}")
             return [search_term.lower()]
 
-    async def _search_images_directly_in_pdf(self, pdf_data: bytes, search_term: str) -> List[Dict[str, Any]]:
+    async def _search_images_directly_in_pdf(
+        self, pdf_data: bytes, search_term: str
+    ) -> List[Dict[str, Any]]:
         """
         Searches for images directly in PDF by extracting all images and analyzing them
         """
         try:
             logger.info(f"Starting direct image search for term: '{search_term}'")
-            
+
             pdf_document = fitz.open(stream=pdf_data, filetype="pdf")
             found_images = []
-            
+
             for page_num in range(len(pdf_document)):
                 page = pdf_document[page_num]
                 image_list = page.get_images()
-                
+
                 for img_index, img in enumerate(image_list):
                     try:
                         # Extract image
                         xref = img[0]
                         pix = fitz.Pixmap(pdf_document, xref)
-                        
+
                         if pix.n - pix.alpha < 4:  # GRAY or RGB
                             img_data = pix.tobytes("png")
                             pil_image = Image.open(io.BytesIO(img_data))
-                            
+
                             # Convert to base64
                             buffered = io.BytesIO()
                             pil_image.save(buffered, format="PNG")
                             img_base64 = base64.b64encode(buffered.getvalue()).decode()
-                            
+
                             # Simple relevance check based on image characteristics
-                            relevance_score = await self._calculate_direct_image_relevance(
-                                img_base64, search_term
+                            relevance_score = (
+                                await self._calculate_direct_image_relevance(
+                                    img_base64, search_term
+                                )
                             )
-                            
+
                             if relevance_score > 0.3:
                                 image_info = {
-                                    'page_number': page_num + 1,
-                                    'image_base64': img_base64,
-                                    'description': f"Image from page {page_num + 1} potentially related to '{search_term}'",
-                                    'confidence': relevance_score,
-                                    'extraction_method': 'direct_pdf_search'
+                                    "page_number": page_num + 1,
+                                    "image_base64": img_base64,
+                                    "description": f"Image from page {page_num + 1} potentially related to '{search_term}'",
+                                    "confidence": relevance_score,
+                                    "extraction_method": "direct_pdf_search",
                                 }
                                 found_images.append(image_info)
-                        
+
                         pix = None
-                        
+
                     except Exception as e:
-                        logger.error(f"Error processing image {img_index} on page {page_num + 1}: {e}")
+                        logger.error(
+                            f"Error processing image {img_index} on page {page_num + 1}: {e}"
+                        )
                         continue
-            
+
             pdf_document.close()
-            
+
             # Sort by confidence
-            found_images.sort(key=lambda x: x.get('confidence', 0), reverse=True)
-            
+            found_images.sort(key=lambda x: x.get("confidence", 0), reverse=True)
+
             logger.info(f"Direct search found {len(found_images)} images")
             return found_images[:5]  # Return top 5 results
-            
+
         except Exception as e:
             logger.error(f"Error in direct PDF image search: {e}")
             return []
 
-    async def _calculate_direct_image_relevance(self, image_base64: str, search_term: str) -> float:
+    async def _calculate_direct_image_relevance(
+        self, image_base64: str, search_term: str
+    ) -> float:
         """
         Calculates relevance of an image to a search term using basic analysis
         """
         try:
             # Use technical analysis
             technical_analysis = self._analyze_image_with_python_tools(image_base64)
-            
+
             base_score = 0.4  # Base relevance
-            
+
             # Bonus for image quality
             quality_score = technical_analysis.get("quality_score", 0.0)
             if quality_score > 0.7:
                 base_score += 0.2
-            
+
             # Bonus for detected objects
             objects_detected = technical_analysis.get("objects_detected", 0)
             if objects_detected > 0:
                 base_score += 0.2
-            
+
             # Bonus if there's text in the image
             if technical_analysis.get("text_detected", False):
                 base_score += 0.3
-            
+
             return min(max(base_score, 0.0), 1.0)
-            
+
         except Exception as e:
             logger.error(f"Error calculating direct image relevance: {e}")
             return 0.4
