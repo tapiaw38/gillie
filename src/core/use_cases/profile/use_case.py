@@ -467,23 +467,25 @@ class AddIntegrationUseCase:
                 _id=integration_id,
                 name=integration.name,
                 type=integration.type,
+                activated=integration.activated,
                 config=integration.config,
                 created_at=datetime.now(timezone.utc),
                 updated_at=datetime.now(timezone.utc),
             )
-            if any(integ.id == new_integration.id for integ in profile.integrations):
-                raise Exception(
-                    "Integration with the same ID already exists in the profile"
-                )
-
-            if any(
-                integ.name == new_integration.name
-                and integ.type == new_integration.type
-                for integ in profile.integrations
-            ):
-                raise Exception(
-                    "Integration with the same name already exists in the profile"
-                )
+            # Check for existing integration with same name and type
+            for integ in profile.integrations:
+                if integ.name == new_integration.name and integ.type == new_integration.type:
+                    integ.activated = new_integration.activated
+                    integ.config = new_integration.config
+                    integ.updated_at = datetime.now(timezone.utc)
+                    self.context_factory.repositories.profile.update_integrations(
+                        user_id, profile.integrations
+                    )
+                    self.context_factory.repositories.conversation.update_profile_by_user_id(
+                        user_id,
+                        profile=profile,
+                    )
+                    return IntegrationListOutput.from_output(profile.integrations)
 
             profile.integrations.append(new_integration)
 

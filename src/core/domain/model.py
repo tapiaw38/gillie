@@ -33,6 +33,7 @@ class Integration(BaseModel):
     id: Optional[str] = Field(alias="_id", default=None)
     name: str
     type: str
+    activated: bool
     config: dict
     created_at: datetime
     updated_at: datetime
