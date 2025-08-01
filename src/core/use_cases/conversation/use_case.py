@@ -243,9 +243,57 @@ class AddMessageUseCase:
         Adds a message to a conversation and processes image extraction if enabled.
         If image processing is activated, first asks OpenAI for the keyword to search in images,
         then uses that keyword for image search instead of the original message content.
+        Also processes voice_content if provided to enhance the message content.
         """
+        # Process voice_content if provided
+        enhanced_content = message.content
+        voice_transcription = ""
+
+        if message.voice_content:
+            try:
+                logger.info("Processing voice context...")
+
+                # Read the audio file content
+                audio_content = await message.voice_content.read()
+
+                # Use STT integration to transcribe the audio
+                stt_result = await self.context_factory.integrations.stt.audio_bytes_to_text(
+                    audio_bytes=audio_content,
+                    audio_format=(
+                        message.voice_content.filename.split(".")[-1]
+                        if message.voice_content.filename
+                        else "wav"
+                    ),
+                    settings={
+                        "language": "es-ES",  # Default to Spanish
+                        "model": "base",  # Use base model for balance of speed/accuracy
+                    },
+                )
+
+                if (
+                    stt_result.get("success", False)
+                    and stt_result.get("text", "").strip()
+                ):
+                    voice_transcription = stt_result["text"].strip()
+                    logger.info(
+                        f"Voice transcription successful: '{voice_transcription[:100]}...'"
+                    )
+
+                    # Enhance the message content with voice context
+                    if voice_transcription:
+                        print(f"Voice transcription: {voice_transcription}")
+                        enhanced_content = f"{message.content}\n\n[Contexto de voz]: {voice_transcription}"
+                else:
+                    logger.warning(
+                        f"Voice transcription failed: {stt_result.get('error', 'Unknown error')}"
+                    )
+
+            except Exception as e:
+                logger.error(f"Error processing voice context: {e}")
+                # Continue with original content if voice processing fails
+
         new_message = Message(
-            content=message.content,
+            content=enhanced_content,
             sender=sender,
             created_at=datetime.now(timezone.utc),
         )

@@ -1,5 +1,5 @@
 
-from fastapi import APIRouter, status, Depends, Request, Query, HTTPException
+from fastapi import APIRouter, status, Depends, Request, Query, HTTPException, Form, File, UploadFile
 from src.schemas.schemas import (
     ConversationInput,
     MessageInput,
@@ -51,14 +51,23 @@ async def find_conversation_by_id(
 @router.post("/{conversation_id}/message", status_code=status.HTTP_200_OK)
 async def add_message(
     conversation_id: str,
-    message: MessageInput,
     request: Request,
+    content: str = Form(...),
+    context: Optional[str] = Form(None),
+    voice_content: Optional[UploadFile] = File(None),
     service: Services = Depends(get_instance),
     has_image_processor: Optional[str] = Query(None, regex="^(activate|deactivate)$"),
     has_text_to_voice: Optional[str] = Query(None, regex="^(activate|deactivate)$")
 ):
     sender = SenderEnum.user
     user_id = request.state.user.get("user_id")
+
+    # Create MessageInput object from form data
+    message = MessageInput(
+        content=content,
+        context=context,
+        voice_content=voice_content
+    )
 
     messages = await service.conversation.add_message(
         conversation_id, 
