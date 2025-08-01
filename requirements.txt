@@ -35,3 +35,8 @@ pytesseract
 scikit-learn
 aiohttp
 aiofiles
+SpeechRecognition
+openai-whisper
+vosk
+pocketsphinx
+pydub
