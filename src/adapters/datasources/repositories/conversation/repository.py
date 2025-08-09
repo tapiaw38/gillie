@@ -72,7 +72,7 @@ class Repository(RepositoryInterface):
             )
 
             if result.matched_count == 0:
-                raise Exception(f"No conversation found with user_id: {user_id}")
+                print(f"No conversations found for user_id: {user_id}")
 
             return user_id
 
