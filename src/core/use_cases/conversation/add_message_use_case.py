@@ -1,121 +1,20 @@
 import logging
-from src.schemas.schemas import (
-    ConversationInput,
-    MessageInput,
-    ConversationOutput,
-    ConversationListOutput,
-    MessageListOutput,
-)
-from src.core.domain.model import (
-    Conversation,
-    Message,
-    SenderEnum,
-    Profile,
-)
+from src.schemas.schemas import MessageInput, MessageListOutput
+from src.core.domain.model import Message, SenderEnum
 from datetime import datetime, timezone
 from pymongo.errors import PyMongoError
 from src.core.platform.appcontext.appcontext import Factory
 from src.adapters.web.utils.image_formatter import format_images_for_chat_response
-from uuid import uuid4
-from typing import Optional, Dict
-
+from typing import Optional
+from src.core.platform.functions.http_functions import HTTPFunction, HTTPFunctionParams
 
 # Set up logger
 logger = logging.getLogger(__name__)
-logging.basicConfig(level=logging.INFO)
 
-# Remove os import and environment variable usage
-# Set module-level constants
+# Module-level constants
 IMAGE_CONFIDENCE_THRESHOLD = 0.3
 MAX_IMAGES_TO_SHOW = 3
-# Optimization: Use fast mode to reduce API calls
 ENABLE_FAST_IMAGE_PROCESSING = True
-
-
-class CreateUseCase:
-    def __init__(self, context_factory: Factory):
-        self.context_factory = context_factory()
-
-    def execute(self, conversation: ConversationInput, user_id: str) -> Conversation:
-        try:
-            profile = self.context_factory.repositories.profile.find_by_user_id(user_id)
-            generated_id = str(uuid4())
-            generated_client_id = str(uuid4())
-            new_conversation = Conversation(
-                _id=generated_id,
-                profile=Profile(
-                    _id=profile.id,
-                    user_id=profile.user_id,
-                    assistant_name=profile.assistant_name,
-                    business_name=profile.business_name,
-                    functions=profile.functions,
-                    business_context=profile.business_context,
-                    role=profile.role,
-                    files=profile.files,
-                    created_at=profile.created_at,
-                    updated_at=profile.updated_at,
-                ),
-                title=conversation.title,
-                created_at=datetime.now(timezone.utc),
-                client_id=generated_client_id,
-            )
-
-            conversation_id = self.context_factory.repositories.conversation.create(
-                new_conversation
-            )
-
-            created_conversation = (
-                self.context_factory.repositories.conversation.find_by_id(
-                    conversation_id
-                )
-            )
-
-            if not created_conversation:
-                raise Exception("Error: conversation not found after creation")
-
-            return ConversationOutput.from_output(created_conversation)
-
-        except PyMongoError as e:
-            raise Exception(f"Error interacting with database: {e}")
-
-        except Exception as e:
-            raise Exception(f"Error executing CreateUseCase: {e}")
-
-
-class FindByUserIdUseCase:
-    def __init__(self, context_factory: Factory):
-        self.context_factory = context_factory()
-
-    def execute(self, user_id: str):
-        try:
-            conversations = self.context_factory.repositories.conversation.find_user_id(
-                user_id
-            )
-            return ConversationListOutput.from_output(conversations)
-        except PyMongoError as e:
-            raise Exception(f"Error interacting with database: {e}")
-
-        except Exception as e:
-            raise Exception(f"Error executing FindByUserIdUseCase: {e}")
-
-
-class FindByIdUseCase:
-    def __init__(self, context_factory: Factory):
-        self.context_factory = context_factory()
-
-    def execute(self, conversation_id: str) -> Optional[Conversation]:
-        try:
-            conversation = self.context_factory.repositories.conversation.find_by_id(
-                conversation_id
-            )
-            if not conversation:
-                raise Exception("Conversation not found")
-            return ConversationOutput.from_output(conversation)
-        except PyMongoError as e:
-            raise Exception(f"Error interacting with database: {e}")
-
-        except Exception as e:
-            raise Exception(f"Error executing FindByIdUseCase: {e}")
 
 
 class AddMessageUseCase:
@@ -328,12 +227,135 @@ class AddMessageUseCase:
 
             search_conversation.messages.append(new_message)
 
-            response = await self.context_factory.integrations.openai.ask(
-                new_message.content,
-                message.context,
-                self.convert_messages_to_string(search_conversation.messages),
-                search_conversation.profile,
-            )
+            # Verificar si hay funciones configuradas
+            response = ""
+            if search_conversation.profile.functions:
+                try:
+                    # Analizar el mensaje con IA para determinar si coincide con alguna función
+                    can_execute, missing_params, complete_url = await self.context_factory.integrations.openai.analyze_text(
+                        new_message.content,
+                        search_conversation.profile.functions
+                    )
+
+                    if can_execute and complete_url:
+                        try:
+                            # Ejecutar la función HTTP
+                            http_params = HTTPFunctionParams(
+                                name=["execute_function"],
+                                url=[complete_url],
+                                method="GET",
+                            )
+                            http_function = HTTPFunction(http_params)
+                            result = await http_function.execute()
+
+                            # Formatear el resultado de manera amigable
+                            format_prompt = f"""
+                            Actúa como {search_conversation.profile.assistant_name} y convierte esta respuesta técnica en un mensaje amigable:
+                            
+                            Datos: {result}
+                            
+                            Reglas:
+                            1. Usa un tono conversacional y amigable
+                            2. Incluye emojis apropiados
+                            3. Explica los datos de manera clara y simple
+                            4. Si hay temperaturas, menciona si hace frío o calor
+                            5. Si hay viento, describe si es suave o fuerte
+                            6. Si hay datos de ubicación, menciona la ciudad o región
+                            7. Adapta la respuesta al tipo de servicio consultado
+                            """
+
+                            formatted_response = await self.context_factory.integrations.openai.ask(
+                                format_prompt,
+                                "",
+                                "",
+                                search_conversation.profile,
+                            )
+                            
+                            # Agregar la URL utilizada al final de la respuesta
+                            response = f"{formatted_response}\n\n🔗 **URL consultada:** `{complete_url}`"
+
+                        except Exception as e:
+                            logger.error(f"Error executing function: {e}")
+                            response = f"¡Ups! 😅 Lo siento, tuve un pequeño problema al consultar la información. ¿Podrías intentarlo de nuevo?"
+                    
+                    elif missing_params:
+                        # Generar mensaje amigable pidiendo los parámetros faltantes
+                        missing_params_text = ", ".join(missing_params)
+                        
+                        parameters_prompt = f"""
+                        Actúa como {search_conversation.profile.assistant_name} y ayuda al usuario a proporcionar los parámetros faltantes.
+                        
+                        Mensaje del usuario: "{new_message.content}"
+                        Parámetros necesarios: {missing_params_text}
+                        
+                        Instrucciones:
+                        1. Explica de manera amigable qué información necesitas
+                        2. Da ejemplos específicos de cómo proporcionar cada parámetro
+                        3. Si son coordenadas, menciona formatos como "40.4168, -3.7038" o nombres de ciudades
+                        4. Usa emojis apropiados
+                        5. Mantén un tono conversacional y útil
+                        
+                        Responde solo con el mensaje para el usuario.
+                        """
+                        
+                        response = await self.context_factory.integrations.openai.ask(
+                            parameters_prompt,
+                            message.context,
+                            self.convert_messages_to_string(search_conversation.messages),
+                            search_conversation.profile,
+                        )
+                    
+                    else:
+                        # El mensaje no está relacionado con funciones, respuesta normal
+                        response = await self.context_factory.integrations.openai.ask(
+                            new_message.content,
+                            message.context,
+                            self.convert_messages_to_string(search_conversation.messages),
+                            search_conversation.profile,
+                        )
+
+                except Exception as analyze_error:
+                        logger.error(f"Error in analyze_text (likely AI service issue): {analyze_error}")
+                        # Si analyze_text falla, intentar respuesta normal con timeout más corto
+                        try:
+                            response = await self.context_factory.integrations.openai.ask(
+                                new_message.content,
+                                message.context,
+                                self.convert_messages_to_string(search_conversation.messages),
+                                search_conversation.profile,
+                            )
+                        except Exception as fallback_error:
+                            logger.error(f"Error in fallback AI response: {fallback_error}")
+                            # Si todo falla, dar una respuesta genérica
+                            response = f"¡Hola! Soy {search_conversation.profile.assistant_name} 😊 Disculpa, estoy teniendo algunos problemas técnicos en este momento. ¿Podrías intentarlo de nuevo en unos minutos?"
+
+                except Exception as e:
+                    logger.error(f"Error in function processing: {e}")
+                    # Si hay error en el procesamiento de funciones, intentar respuesta normal
+                    try:
+                        response = await self.context_factory.integrations.openai.ask(
+                            new_message.content,
+                            message.context,
+                            self.convert_messages_to_string(search_conversation.messages),
+                            search_conversation.profile,
+                        )
+                    except Exception as final_error:
+                        logger.error(f"Error in final fallback AI response: {final_error}")
+                        # Respuesta genérica si todo falla
+                        response = f"¡Hola! Soy {search_conversation.profile.assistant_name} 😊 Disculpa, estoy teniendo algunos problemas técnicos en este momento. ¿Podrías intentarlo de nuevo en unos minutos?"
+            else:
+                # Respuesta normal si no hay funciones configuradas
+                try:
+                    response = await self.context_factory.integrations.openai.ask(
+                        new_message.content,
+                        message.context,
+                        self.convert_messages_to_string(search_conversation.messages),
+                        search_conversation.profile,
+                    )
+                except Exception as no_functions_error:
+                    logger.error(f"Error in normal AI response (no functions): {no_functions_error}")
+                    # Respuesta genérica si la IA falla completamente
+                    response = f"¡Hola! Soy {search_conversation.profile.assistant_name} 😊 Disculpa, estoy teniendo algunos problemas técnicos en este momento. ¿Podrías intentarlo de nuevo en unos minutos?"
 
             file_images = []
             formatted_images_list = []
@@ -442,36 +464,3 @@ class AddMessageUseCase:
         except Exception as e:
             logger.error(f"Error executing AddMessageUseCase: {e}")
             raise Exception(f"Error executing AddMessageUseCase: {e}")
-
-
-class DeleteAllMessagesUseCase:
-    def __init__(self, context_factory: Factory):
-        self.context_factory = context_factory()
-
-    async def execute(self, conversation_id: str, user_id: str):
-        try:
-            search_conversation = (
-                self.context_factory.repositories.conversation.find_by_id(
-                    conversation_id
-                )
-            )
-            if not search_conversation:
-                raise Exception("Conversation not found")
-
-            if user_id != search_conversation.profile.user_id:
-                raise Exception("User not authorized to delete messages")
-
-            self.context_factory.repositories.conversation.update_messages_by_id(
-                conversation_id,
-                [],
-            )
-
-            search_conversation.messages = []
-
-            return MessageListOutput.from_output(search_conversation.messages)
-
-        except PyMongoError as e:
-            raise Exception(f"Error interacting with the database: {e}")
-
-        except Exception as e:
-            raise Exception(f"Error executing DeleteAllMessagesUseCase: {e}")

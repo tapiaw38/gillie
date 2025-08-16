@@ -1,0 +1,43 @@
+from src.schemas.schemas import ProfileInput, ProfileOutput
+from src.core.domain.model import Profile
+from datetime import datetime, timezone
+from pymongo.errors import PyMongoError
+from src.core.platform.appcontext.appcontext import Factory
+from uuid import uuid4
+
+
+class CreateUseCase:
+    def __init__(self, context_factory: Factory):
+        self.context_factory = context_factory()
+
+    def execute(self, profile: ProfileInput, user_id: str):
+        try:
+            generated_id = str(uuid4())
+            iteration_limit = 100
+            new_profile = Profile(
+                _id=generated_id,
+                user_id=user_id,
+                assistant_name=profile.assistant_name,
+                business_name=profile.business_name,
+                functions=profile.functions,
+                business_context=profile.business_context,
+                is_active=True,
+                created_at=datetime.now(timezone.utc),
+                iteration_limit=iteration_limit,
+            )
+
+            profile_id = self.context_factory.repositories.profile.create(new_profile)
+            created_profile = self.context_factory.repositories.profile.find_by_id(
+                profile_id
+            )
+
+            if not created_profile:
+                raise Exception("Error profile not found after creation")
+
+            return ProfileOutput.from_output(created_profile)
+
+        except PyMongoError as e:
+            raise Exception(f"Error interacting with database: {e}")
+
+        except Exception as e:
+            raise Exception(f"Error executing CreateUseCase: {e}")
