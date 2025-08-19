@@ -1,15 +1,15 @@
 from typing import List
 from src.core.domain.model import Profile
-from pymongo.database import Database
+from src.core.platform.nosql.client import Client
 
 
-def find_all(client: Database) -> List[Profile]:
+def find_all(client: Client) -> List[Profile]:
     """
     Encuentra todos los perfiles
     """
     try:
-        profiles_collection = client["profiles"]
-        profiles_data = list(profiles_collection.find())
+        # El cliente ya apunta a la colección "profiles", podemos usar find() directamente
+        profiles_data = list(client.find({}))
         
         profiles = []
         for profile_data in profiles_data:
