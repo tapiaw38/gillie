@@ -59,7 +59,7 @@ class WhatsAppIntegration:
 
         messages = []
         try:
-            logger.debug(f"Analized payload: {payload}")
+            logger.debug(f"Analyzed payload: {payload}")
 
             if "entry" in payload:
                 entry = payload.get("entry", [])
