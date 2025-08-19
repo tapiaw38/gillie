@@ -126,3 +126,22 @@ class ProfileService:
             return None
         except Exception as e:
             raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(e))
+            
+    async def find_with_active_whatsapp_integration(self) -> Optional[ProfileModel]:
+        """
+        Busca un perfil que tenga la integración de WhatsApp activa, sin importar el ID de negocio
+        """
+        try:
+            # Obtener todos los perfiles
+            profiles = await self.usecase.find_all_usecase.execute()
+            
+            # Buscar cualquier perfil con integración de WhatsApp activa
+            for profile in profiles:
+                if profile.integrations:
+                    for integration in profile.integrations:
+                        if integration.name == "whatsapp" and integration.activated:
+                            return profile
+            
+            return None
+        except Exception as e:
+            raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(e))
