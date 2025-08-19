@@ -111,8 +111,8 @@ class ProfileService:
         Busca un perfil por el ID de negocio de WhatsApp
         """
         try:
-            # Obtener todos los perfiles
-            profiles = await self.usecase.find_all_usecase.execute()
+            # Obtener todos los perfiles (sin await ya que execute() no es asíncrono)
+            profiles = self.usecase.find_all_usecase.execute()
             
             # Buscar el perfil con la integración de WhatsApp que tenga el ID de negocio correspondiente
             for profile in profiles:
@@ -132,8 +132,8 @@ class ProfileService:
         Busca un perfil que tenga la integración de WhatsApp activa, sin importar el ID de negocio
         """
         try:
-            # Obtener todos los perfiles
-            profiles = await self.usecase.find_all_usecase.execute()
+            # Obtener todos los perfiles (sin await ya que execute() no es asíncrono)
+            profiles = self.usecase.find_all_usecase.execute()
             
             # Buscar cualquier perfil con integración de WhatsApp activa
             for profile in profiles:
