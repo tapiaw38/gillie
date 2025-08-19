@@ -6,18 +6,17 @@ from botocore.config import Config
 from typing import Protocol
 from src.core.platform.config.service import ConfigurationService
 
+
 class StoreService(Protocol):
-    def put_object(self, file: BinaryIO, user_file: str, filename: str, size: int, object_id: str) -> str:
-        ...
+    def put_object(
+        self, file: BinaryIO, user_file: str, filename: str, size: int, object_id: str
+    ) -> str: ...
 
-    def generate_url(self, key_name: str) -> str:
-        ...
+    def generate_url(self, key_name: str) -> str: ...
 
-    def delete_object(self, key_name: str) -> None:
-        ...
+    def delete_object(self, key_name: str) -> None: ...
 
-    def get_object(self, key_name: str) -> bytes:
-        ...
+    def get_object(self, key_name: str) -> bytes: ...
 
 
 class StoreServiceImpl:
@@ -26,7 +25,9 @@ class StoreServiceImpl:
         self.config = config
         self.client = session.client("s3", config=Config(signature_version="s3v4"))
 
-    def put_object(self, file: BinaryIO, user_file: str, filename: str, size: int, object_id: str) -> str:
+    def put_object(
+        self, file: BinaryIO, user_file: str, filename: str, size: int, object_id: str
+    ) -> str:
         name, ext = os.path.splitext(filename)
         temp_file_name = f"files/{user_file}/{name}{object_id}{ext}"
         buffer = file.read()
@@ -52,13 +53,11 @@ class StoreServiceImpl:
 
     def delete_object(self, key_name: str) -> None:
         self.client.delete_object(
-            Bucket=self.config.aws_config.bucket_name,
-            Key=key_name
+            Bucket=self.config.aws_config.bucket_name, Key=key_name
         )
 
     def get_object(self, key_name: str) -> bytes:
         response = self.client.get_object(
-            Bucket=self.config.aws_config.bucket_name,
-            Key=key_name
+            Bucket=self.config.aws_config.bucket_name, Key=key_name
         )
-        return response['Body'].read()
+        return response["Body"].read()
