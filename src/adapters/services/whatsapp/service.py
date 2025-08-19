@@ -14,6 +14,9 @@ class WhatsAppService:
         Procesa los mensajes entrantes de WhatsApp y responde usando la IA
         """
         # Verificar si la integración de WhatsApp está activada
+        import logging
+        logger = logging.getLogger(__name__)
+        
         whatsapp_integration = None
         
         if profile.integrations:
@@ -27,6 +30,16 @@ class WhatsAppService:
                 status_code=status.HTTP_400_BAD_REQUEST, 
                 detail="La integración de WhatsApp no está activada"
             )
+            
+        # Verificar que la configuración de WhatsApp es válida
+        required_configs = ["accessToken", "phoneNumberId"]
+        for config in required_configs:
+            if config not in whatsapp_integration.config or not whatsapp_integration.config[config]:
+                logger.error(f"Configuración de WhatsApp incompleta: falta {config}")
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST, 
+                    detail=f"La configuración de WhatsApp no es válida: falta {config}"
+                )
         
         try:
             # Inicializar la integración de WhatsApp
@@ -94,18 +107,31 @@ class WhatsAppService:
                 
                 # Obtener la última respuesta de la IA
                 # El objeto ConversationOutput tiene una estructura anidada, los mensajes están en data.messages
+                import logging
+                logger = logging.getLogger(__name__)
+                
                 assistant_messages = [msg for msg in updated_conversation.data.messages if msg.sender == SenderEnum.assistant]
                 if assistant_messages:
                     last_assistant_message = assistant_messages[-1]
                     
+                    logger.info(f"Enviando respuesta de IA a WhatsApp: teléfono={sender_phone}, mensaje_id={message_id}")
+                    
                     # Enviar la respuesta de vuelta a WhatsApp
                     sent = wa_client.send_message(sender_phone, last_assistant_message.content)
+                    
+                    if sent:
+                        logger.info(f"Respuesta enviada correctamente a WhatsApp: teléfono={sender_phone}")
+                    else:
+                        logger.warning(f"Falló el envío de la respuesta a WhatsApp: teléfono={sender_phone}")
                     
                     responses.append({
                         "phone": sender_phone,
                         "message_id": message_id,
-                        "response_sent": sent
+                        "response_sent": sent,
+                        "message": last_assistant_message.content[:100] + "..." if len(last_assistant_message.content) > 100 else last_assistant_message.content
                     })
+                else:
+                    logger.warning(f"No se encontraron mensajes del asistente para enviar como respuesta: conversation_id={conversation_id}")
                 
             return {"status": "success", "processed_messages": responses}
             

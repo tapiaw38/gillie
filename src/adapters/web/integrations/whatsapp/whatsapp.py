@@ -7,6 +7,15 @@ class WhatsAppIntegration:
         self.api_url = f"https://graph.facebook.com/v18.0/{self.phone_number_id}/messages"
 
     def send_message(self, recipient: str, message: str) -> bool:
+        import logging
+        logger = logging.getLogger(__name__)
+        
+        # Asegurar que el número de teléfono tiene el formato correcto
+        # Remover cualquier caracter no numérico y asegurar que no empiece con '+'
+        recipient = ''.join(filter(str.isdigit, recipient))
+        
+        logger.info(f"Enviando mensaje a WhatsApp: url={self.api_url}, recipient={recipient}")
+        
         headers = {
             "Authorization": f"Bearer {self.access_token}",
             "Content-Type": "application/json"
@@ -17,8 +26,21 @@ class WhatsAppIntegration:
             "type": "text",
             "text": {"body": message}
         }
-        response = requests.post(self.api_url, headers=headers, json=data)
-        return response.status_code == 200
+        
+        try:
+            response = requests.post(self.api_url, headers=headers, json=data)
+            response_json = response.json() if response.content else {}
+            
+            if response.status_code == 200:
+                logger.info(f"Mensaje enviado correctamente: {response.status_code} {response.reason}")
+                return True
+            else:
+                logger.error(f"Error al enviar mensaje: status={response.status_code}, response={response_json}")
+                return False
+                
+        except Exception as e:
+            logger.error(f"Excepción al enviar mensaje de WhatsApp: {str(e)}", exc_info=True)
+            return False
 
     def receive_message(self, payload):
         """
