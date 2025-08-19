@@ -12,14 +12,10 @@ class Services:
     ):
         self.profile = profile
         self.conversation = conversation
-        # El servicio de WhatsApp se inicializa bajo demanda ya que depende de conversation
         self._whatsapp = None
 
     @property
     def whatsapp(self) -> WhatsAppService:
-        """
-        Devuelve el servicio de WhatsApp, inicializándolo si es necesario
-        """
         if self._whatsapp is None:
             self._whatsapp = WhatsAppService(self.conversation)
         return self._whatsapp
