@@ -63,12 +63,15 @@ class WhatsAppService:
                         break
                 
                 if not conversation_id:
-                    # Crear una nueva conversación
+                    # Crear una nueva conversación usando el objeto ConversationInput adecuado
+                    from src.schemas.schemas import ConversationInput
+                    
+                    conversation_input = ConversationInput(
+                        title=f"WhatsApp-{sender_phone}"
+                    )
+                    
                     new_conversation = await self.conversation_service.create(
-                        {
-                            "title": f"WhatsApp-{sender_phone}",
-                            "client_id": sender_phone,
-                        }, 
+                        conversation_input, 
                         profile.user_id
                     )
                     conversation_id = new_conversation.id
