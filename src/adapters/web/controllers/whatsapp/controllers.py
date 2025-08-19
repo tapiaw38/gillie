@@ -1,8 +1,11 @@
-from fastapi import APIRouter, Depends, Body, HTTPException, status
+from fastapi import APIRouter, Depends, Body, HTTPException, status, Request
+from fastapi.responses import PlainTextResponse, JSONResponse
 from src.adapters.services.services import Services
 from src.adapters.services.whatsapp.service import WhatsAppService
 from src.adapters.services.profile.service import ProfileService
 from typing import Dict, Any
+import logging
+import os
 
 router = APIRouter(prefix="/api/whatsapp", tags=["WhatsApp"])
 
@@ -59,25 +62,57 @@ async def whatsapp_webhook(
     )
 
 
-@router.get("/webhook")
-async def verify_webhook(
-    hub_mode: str,
-    hub_verify_token: str,
-    hub_challenge: str,
-    services: Services = Depends(Services.get_instance),
-):
+@router.get("/webhook", response_class=PlainTextResponse)
+async def verify_webhook(request: Request):
     """
     Verificar el webhook para WhatsApp Cloud API
+    Esta función maneja la verificación del webhook cuando WhatsApp intenta validar tu endpoint.
+    WhatsApp envía parámetros con formato hub.mode, hub.verify_token y hub.challenge
     """
-    from src.core.platform.config.service import get_config_service
-
-    # El token debe configurarse en la configuración y coincidir con el configurado en Facebook
-    config_service = get_config_service()
-    verify_token = config_service.whatsapp_config.verify_token
-
+    logger = logging.getLogger(__name__)
+    
+    # Obtener los parámetros directamente de la URL original
+    url = str(request.url)
+    logger.info(f"URL completa recibida: {url}")
+    
+    # Extraer los parámetros manualmente ya que FastAPI no maneja bien los parámetros con punto
+    import re
+    
+    # Extraer los parámetros con expresiones regulares
+    mode_match = re.search(r'hub\.mode=([^&]+)', url)
+    token_match = re.search(r'hub\.verify_token=([^&]+)', url)
+    challenge_match = re.search(r'hub\.challenge=([^&]+)', url)
+    
+    hub_mode = mode_match.group(1) if mode_match else None
+    hub_verify_token = token_match.group(1) if token_match else None
+    hub_challenge = challenge_match.group(1) if challenge_match else None
+    
+    # Log para ayudar a depurar
+    logger.info(f"Solicitud de verificación de webhook recibida: mode={hub_mode}, token={hub_verify_token}, challenge={hub_challenge}")
+    
+    # Verificar que se recibieron todos los parámetros necesarios
+    if not hub_mode or not hub_verify_token or not hub_challenge:
+        logger.error("Faltan parámetros en la solicitud de verificación")
+        return f"Faltan parámetros de verificación: mode={hub_mode}, token={hub_verify_token}, challenge={hub_challenge}"
+    
+    # Obtener el token directamente desde las variables de entorno para simplificar
+    verify_token = os.getenv("WHATSAPP_VERIFY_TOKEN", "assistant_ia_whatsapp_verification_token")
+    logger.info(f"Token de verificación configurado: {verify_token}")
+    
+    # Verificar el token
     if hub_mode == "subscribe" and hub_verify_token == verify_token:
-        return int(hub_challenge)
+        logger.info(f"Verificación exitosa, devolviendo challenge: {hub_challenge}")
+        # Devolver el challenge como texto plano
+        try:
+            # Convertir a entero si es posible
+            challenge_int = int(hub_challenge)
+            return PlainTextResponse(content=str(challenge_int))
+        except (TypeError, ValueError):
+            logger.error(f"Error al convertir challenge a entero: {hub_challenge}")
+            return PlainTextResponse(content=hub_challenge)
     else:
+        logger.error(f"Verificación fallida: token recibido '{hub_verify_token}' no coincide con token esperado '{verify_token}'")
         raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN, detail="Verificación fallida"
+            status_code=status.HTTP_403_FORBIDDEN, 
+            detail=f"Verificación fallida: Token recibido no coincide con el esperado."
         )
