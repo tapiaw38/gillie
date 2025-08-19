@@ -61,21 +61,34 @@ async def test_send_message(
                 content={"status": "error", "message": "No se encontró integración de WhatsApp activa en el perfil"}
             )
         
-        # Inicializar el cliente de WhatsApp
-        from src.adapters.web.integrations.whatsapp.whatsapp import WhatsAppIntegration
+        # Inicializar el cliente de WhatsApp utilizando el servicio de WhatsApp
+        # Crear un pequeño payload para simular un mensaje y utilizar el servicio
+        test_payload = {
+            "entry": [{
+                "changes": [{
+                    "value": {
+                        "messages": [{
+                            "from": phone_number,
+                            "id": f"test-{phone_number}",
+                            "timestamp": "0",
+                            "type": "text",
+                            "text": {
+                                "body": message
+                            }
+                        }]
+                    }
+                }]
+            }]
+        }
         
-        wa_client = WhatsAppIntegration(
-            access_token=whatsapp_integration.config["accessToken"],
-            phone_number_id=whatsapp_integration.config["phoneNumberId"]
-        )
-        
-        # Enviar mensaje
-        result = wa_client.send_message(phone_number, message)
+        # Enviar mensaje utilizando el servicio de WhatsApp
+        result = await services.whatsapp.process_message(test_payload, profile)
         
         return {
-            "status": "success" if result else "error",
-            "message": "Mensaje enviado correctamente" if result else "Error al enviar el mensaje",
-            "phone_number": phone_number
+            "status": "success",
+            "message": "Mensaje procesado correctamente",
+            "phone_number": phone_number,
+            "result": result
         }
         
     except Exception as e:
@@ -222,9 +235,8 @@ async def whatsapp_webhook(
                 
             logger.info(f"Perfil encontrado para business_account_id {business_account_id}: {profile.id}")
                 
-            # Crear el servicio de WhatsApp y procesar el mensaje
-            whatsapp_service = WhatsAppService(services.conversation)
-            result = await whatsapp_service.process_message(payload, profile)
+            # Utilizar el servicio de WhatsApp de la instancia de services
+            result = await services.whatsapp.process_message(payload, profile)
             
             logger.info(f"Mensaje procesado exitosamente: {result}")
             return result

@@ -11,7 +11,7 @@ class FindAllUseCase:
         Encuentra todos los perfiles
         """
         try:
-            repository = self.context_factory.create_profile_repository()
+            repository = self.context_factory.repositories.profile
             profiles = repository.find_all()
             return profiles
         except Exception as e:
