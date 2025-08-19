@@ -9,6 +9,16 @@ import os
 
 router = APIRouter(prefix="/api/whatsapp", tags=["WhatsApp"])
 
+@router.get("/verify", response_class=PlainTextResponse)
+async def verify_endpoint():
+    """
+    Endpoint simple para verificar que el servidor está funcionando y accesible.
+    Útil para depurar problemas de conexión con el webhook.
+    """
+    logger = logging.getLogger(__name__)
+    logger.info("Solicitud de verificación simple recibida")
+    return "WhatsApp webhook server is running"
+
 
 @router.post("/webhook")
 async def whatsapp_webhook(
@@ -18,48 +28,72 @@ async def whatsapp_webhook(
     """
     Webhook para recibir mensajes de WhatsApp
     """
-    if payload.get("object") == "whatsapp_business_account":
+    logger = logging.getLogger(__name__)
+    try:
+        # Log del payload recibido (limitado para seguridad)
+        logger.info(f"Webhook POST recibido - object: {payload.get('object')}")
+        
+        # Verificar si el payload es un mensaje de WhatsApp
+        if payload.get("object") != "whatsapp_business_account":
+            logger.warning(f"Payload incorrecto, objeto recibido: {payload.get('object')}")
+            return JSONResponse(
+                status_code=200,  # Devolver 200 aunque sea incorrecto para evitar reintento
+                content={"status": "ignored", "message": "Payload no es de tipo whatsapp_business_account"}
+            )
+            
         # Verificamos si hay un entry.changes
         if not payload.get("entry") or not payload.get("entry")[0].get("changes"):
-            return {
-                "status": "success",
-                "message": "Payload no contiene cambios para procesar",
-            }
-
+            logger.info("Payload no contiene cambios para procesar")
+            return {"status": "success", "message": "Payload no contiene cambios para procesar"}
+            
         # Obtener el ID de negocio de WhatsApp del payload
         business_account_id = None
         try:
-            business_account_id = payload["entry"][0]["changes"][0]["value"][
-                "metadata"
-            ]["business_account_id"]
-        except (KeyError, IndexError):
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail="No se pudo obtener el business_account_id del payload",
+            business_account_id = payload["entry"][0]["changes"][0]["value"]["metadata"]["business_account_id"]
+            logger.info(f"Business Account ID extraído: {business_account_id}")
+        except (KeyError, IndexError) as e:
+            logger.error(f"Error al obtener business_account_id: {str(e)}")
+            logger.debug(f"Estructura del payload: {payload}")
+            return JSONResponse(
+                status_code=200,  # Devolver 200 aunque sea error para evitar reintento
+                content={"status": "error", "message": "No se pudo obtener el business_account_id del payload"}
             )
-
+            
         # Buscar el perfil correspondiente con esta integración de WhatsApp activa
-        profile = await services.profile.find_by_whatsapp_business_id(
-            business_account_id
-        )
-
-        if not profile:
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail=f"No se encontró un perfil con el business_account_id: {business_account_id}",
+        try:
+            profile = await services.profile.find_by_whatsapp_business_id(business_account_id)
+            
+            if not profile:
+                logger.warning(f"No se encontró un perfil con el business_account_id: {business_account_id}")
+                return JSONResponse(
+                    status_code=200,  # Devolver 200 aunque no se encuentre para evitar reintento
+                    content={"status": "error", "message": f"No se encontró un perfil con el business_account_id: {business_account_id}"}
+                )
+                
+            logger.info(f"Perfil encontrado para business_account_id {business_account_id}: {profile.id}")
+                
+            # Crear el servicio de WhatsApp y procesar el mensaje
+            whatsapp_service = WhatsAppService(services.conversation)
+            result = await whatsapp_service.process_message(payload, profile)
+            
+            logger.info(f"Mensaje procesado exitosamente: {result}")
+            return result
+            
+        except Exception as e:
+            logger.error(f"Error al buscar perfil o procesar mensaje: {str(e)}", exc_info=True)
+            # Siempre devolver 200 para WhatsApp aunque haya error
+            return JSONResponse(
+                status_code=200,
+                content={"status": "error", "message": f"Error al procesar el mensaje: {str(e)}"}
             )
-
-        # Crear el servicio de WhatsApp y procesar el mensaje
-        whatsapp_service = WhatsAppService(services.conversation)
-        result = await whatsapp_service.process_message(payload, profile)
-
-        return result
-
-    # Si el payload no es de tipo whatsapp_business_account, no lo procesamos
-    raise HTTPException(
-        status_code=status.HTTP_400_BAD_REQUEST,
-        detail="Payload no es de tipo whatsapp_business_account",
-    )
+            
+    except Exception as e:
+        logger.error(f"Error no manejado en webhook: {str(e)}", exc_info=True)
+        # Siempre devolver 200 para WhatsApp aunque haya error
+        return JSONResponse(
+            status_code=200,
+            content={"status": "error", "message": f"Error general: {str(e)}"}
+        )
 
 
 @router.get("/webhook", response_class=PlainTextResponse)
