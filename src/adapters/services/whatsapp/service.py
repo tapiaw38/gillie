@@ -74,7 +74,8 @@ class WhatsAppService:
                         conversation_input, 
                         profile.user_id
                     )
-                    conversation_id = new_conversation.id
+                    # El objeto ConversationOutput tiene una estructura anidada, el ID está en data.id
+                    conversation_id = new_conversation.data.id
                 
                 # Agregar el mensaje recibido a la conversación
                 message_input = MessageInput(content=message_text)
@@ -92,7 +93,8 @@ class WhatsAppService:
                 updated_conversation = await self.conversation_service.find_by_id(conversation_id)
                 
                 # Obtener la última respuesta de la IA
-                assistant_messages = [msg for msg in updated_conversation.messages if msg.sender == SenderEnum.assistant]
+                # El objeto ConversationOutput tiene una estructura anidada, los mensajes están en data.messages
+                assistant_messages = [msg for msg in updated_conversation.data.messages if msg.sender == SenderEnum.assistant]
                 if assistant_messages:
                     last_assistant_message = assistant_messages[-1]
                     
