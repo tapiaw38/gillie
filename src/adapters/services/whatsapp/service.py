@@ -78,7 +78,7 @@ class WhatsAppService:
                     conversation_id = new_conversation.data.id
                 
                 # Agregar el mensaje recibido a la conversación
-                message_input = MessageInput(content=message_text)
+                message_input = MessageInput(content=message_text, context=None)
                 await self.conversation_service.add_message(
                     conversation_id=conversation_id,
                     message=message_input,
