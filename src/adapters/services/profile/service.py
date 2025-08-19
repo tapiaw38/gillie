@@ -1,11 +1,12 @@
 from fastapi import HTTPException, status
-from typing import List
+from typing import List, Optional
 from src.schemas.schemas import (
     ProfileInput,
     ApiKeyInput,
     FileInput,
 )
 from src.core.use_cases.use_cases import Profile
+from src.core.domain.model import Profile as ProfileModel
 
 
 class ProfileService:
@@ -104,3 +105,24 @@ class ProfileService:
     async def list_options(self):
         list_options = self.usecase.list_options_usecase.execute()
         return list_options
+        
+    async def find_by_whatsapp_business_id(self, business_account_id: str) -> Optional[ProfileModel]:
+        """
+        Busca un perfil por el ID de negocio de WhatsApp
+        """
+        try:
+            # Obtener todos los perfiles
+            profiles = await self.usecase.find_all_usecase.execute()
+            
+            # Buscar el perfil con la integración de WhatsApp que tenga el ID de negocio correspondiente
+            for profile in profiles:
+                if profile.integrations:
+                    for integration in profile.integrations:
+                        if (integration.name == "whatsapp" and 
+                            integration.activated and 
+                            integration.config.get("businessAccountId") == business_account_id):
+                            return profile
+            
+            return None
+        except Exception as e:
+            raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(e))

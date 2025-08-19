@@ -26,19 +26,19 @@ class WhatsAppIntegration:
             entry = payload.get("entry", [])
             for ent in entry:
                 changes = ent.get("changes", [])
-            for change in changes:
-                value = change.get("value", {})
-                messages_list = value.get("messages", [])
-                for msg in messages_list:
-                    message_data = {
-                        "from": msg.get("from"),
-                        "id": msg.get("id"),
-                        "timestamp": msg.get("timestamp"),
-                        "type": msg.get("type"),
-                        "text": msg.get("text", {}).get("body") if msg.get("type") == "text" else None,
-                        "raw": msg
-                    }
-                    messages.append(message_data)
+                for change in changes:
+                    value = change.get("value", {})
+                    messages_list = value.get("messages", [])
+                    for msg in messages_list:
+                        message_data = {
+                            "from": msg.get("from"),
+                            "id": msg.get("id"),
+                            "timestamp": msg.get("timestamp"),
+                            "type": msg.get("type"),
+                            "text": msg.get("text", {}).get("body") if msg.get("type") == "text" else None,
+                            "raw": msg
+                        }
+                        messages.append(message_data)
         except Exception as e:
             raise ValueError(f"Error processing WhatsApp message payload: {e}")
         return messages

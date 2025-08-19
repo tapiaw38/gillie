@@ -13,6 +13,7 @@ from .create import create_profile
 from .find_by_id import find_profile_by_id
 from .find_by_user_id import find_profile_by_user_id
 from .find_all_user_ids import find_all_user_ids
+from .find_all import find_all
 from .update import update_profile
 from .update_api_keys import update_api_keys
 from .deactivate_api_key import deactivate_api_key
@@ -40,6 +41,9 @@ class Repository(RepositoryInterface):
 
     def find_all_user_ids(self) -> List[str]:
         return find_all_user_ids(self.client)
+        
+    def find_all(self) -> List[Profile]:
+        return find_all(self.client)
 
     def update(self, id: str, profile: Profile) -> str:
         return update_profile(self.client, id, profile)

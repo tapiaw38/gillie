@@ -1,5 +1,6 @@
 from src.adapters.services.conversation.service import ConversationService
 from src.adapters.services.profile.service import ProfileService
+from src.adapters.services.whatsapp.service import WhatsAppService
 
 class Services:
     _instance = None

@@ -11,6 +11,7 @@ from src.core.use_cases.profile import (
     CreateUseCase as ProfileCreateUseCase,
     FindByUserIdUseCase as ProfileFindByUserIdUseCase,
     FindAllUserIdsUseCase as ProfileFindAllUserIdsUseCase,
+    FindAllUseCase as ProfileFindAllUseCase,
     UpdateUseCase as ProfileUpdateUseCase,
     ChangeStatusUseCase as ProfileChangeStatusUseCase,
     AddApiKeyUseCase as ProfileAddApiKeyUseCase,
@@ -29,6 +30,7 @@ class Profile:
     create_usecase: ProfileCreateUseCase
     find_by_user_id_usecase: ProfileFindByUserIdUseCase
     find_all_user_ids_usecase: ProfileFindAllUserIdsUseCase
+    find_all_usecase: ProfileFindAllUseCase
     update_usecase: ProfileUpdateUseCase
     change_status_usecase: ProfileChangeStatusUseCase
     add_api_key_usecase: ProfileAddApiKeyUseCase
@@ -62,6 +64,7 @@ def create_usecases(context_factory: Factory) -> Usecases:
             create_usecase=ProfileCreateUseCase(context_factory),
             find_by_user_id_usecase=ProfileFindByUserIdUseCase(context_factory),
             find_all_user_ids_usecase=ProfileFindAllUserIdsUseCase(context_factory),
+            find_all_usecase=ProfileFindAllUseCase(context_factory),
             update_usecase=ProfileUpdateUseCase(context_factory),
             change_status_usecase=ProfileChangeStatusUseCase(context_factory),
             add_api_key_usecase=ProfileAddApiKeyUseCase(context_factory),
