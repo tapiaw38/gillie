@@ -52,13 +52,14 @@ class WhatsAppService:
                 message_id = msg["id"]
                 
                 # Buscar una conversación existente o crear una nueva
-                conversations = await self.conversation_service.find_by_user_id(profile.user_id)
+                conversation_list = await self.conversation_service.find_by_user_id(profile.user_id)
                 
                 # Buscar conversación existente con este número de teléfono en el título
                 conversation_id = None
-                for conversation in conversations:
-                    if f"WhatsApp-{sender_phone}" in conversation.title:
-                        conversation_id = conversation.id
+                # conversation_list es un objeto ConversationListOutput, necesitamos acceder a data
+                for conversation_data in conversation_list.data:
+                    if f"WhatsApp-{sender_phone}" in conversation_data.title:
+                        conversation_id = conversation_data.id
                         break
                 
                 if not conversation_id:
