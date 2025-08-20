@@ -12,6 +12,7 @@ from src.core.domain.model import Profile
 from src.core.platform.fileprocessor.pdf_processor import FileImageProcessor
 from src.core.platform.fileprocessor.xlsx_processor import ExcelImageProcessor
 from src.core.platform.fileprocessor.processor import ImageSearchResult
+from src.core.platform.logging import get_logger, log_function_call, log_execution_time
 import pandas as pd
 import requests
 import json
@@ -27,6 +28,7 @@ from pathlib import Path
 
 class OpenAIIntegration:
     def __init__(self, config_service: ConfigurationService):
+        self.logger = get_logger(__name__)
         config = config_service.openai_config
 
         self.api_key = config.api_key
@@ -49,6 +51,9 @@ class OpenAIIntegration:
         self._max_failures = 3
         self._circuit_open_until = None
 
+        self.logger.info(f"OpenAI integration initialized with model: {self.model}")
+
+    @log_function_call
     async def ask(
         self,
         question: str,
@@ -56,6 +61,7 @@ class OpenAIIntegration:
         previous_messages: str,
         profile: Profile,
     ) -> str:
+        self.logger.info(f"Processing question for profile: {profile.user_id}")
 
         extracted_text = ""
         if profile.files:
@@ -70,12 +76,14 @@ class OpenAIIntegration:
                             await self._extract_text_from_pdf_async(file.url) + "\n"
                         )
                     else:
-                        raise ValueError(f"Unsupported file format: {file.url}")
+                        self.logger.warning(f"Unsupported file format: {file.url}")
+                        continue
                 except Exception as e:
-                    print(f"Error processing file {file.url}: {e}")
+                    self.logger.error(f"Error processing file {file.url}: {e}")
                     continue
 
         full_context = f"{context or ''}\n{extracted_text.strip()}"
+        self.logger.debug(f"Full context length: {len(full_context)} characters")
 
         question_message = CONTEXT_INFORMATION.format(
             assistant_name=profile.assistant_name,
@@ -96,17 +104,27 @@ class OpenAIIntegration:
 
         question_message += CONTEXT_RULES
 
-        response = await self.client.chat.completions.create(
-            model=self.model,
-            messages=[
-                {"role": self.role, "content": question_message},
-            ],
-        )
-        return response.choices[0].message.content
+        try:
+            response = await self.client.chat.completions.create(
+                model=self.model,
+                messages=[
+                    {"role": self.role, "content": question_message},
+                ],
+            )
+            self.logger.info(f"OpenAI response received successfully")
+            return response.choices[0].message.content
+        except Exception as e:
+            self.logger.error(f"Error getting OpenAI response: {e}")
+            raise
 
+    @log_function_call
     async def search_images_in_files(
         self, search_term: str, profile: Profile, max_results: int = 5
     ) -> List[ImageSearchResult]:
+        self.logger.info(
+            f"Searching images for term: '{search_term}' in {len(profile.files or [])} files"
+        )
+
         if not profile.files:
             return []
 
@@ -119,8 +137,9 @@ class OpenAIIntegration:
                         file.url, search_term, max_results
                     )
                     all_results.extend(results)
+                    self.logger.debug(f"Found {len(results)} images in PDF: {file.url}")
                 except Exception as e:
-                    print(f"Error searching images in PDF {file.url}: {e}")
+                    self.logger.error(f"Error searching images in PDF {file.url}: {e}")
                     continue
             elif file.url.lower().endswith((".xlsx", ".xls")):
                 try:
@@ -128,27 +147,41 @@ class OpenAIIntegration:
                         file.url, search_term, max_results
                     )
                     all_results.extend(results)
+                    self.logger.debug(
+                        f"Found {len(results)} images in Excel: {file.url}"
+                    )
                 except Exception as e:
-                    print(f"Error searching images in Excel {file.url}: {e}")
+                    self.logger.error(
+                        f"Error searching images in Excel {file.url}: {e}"
+                    )
                     continue
 
         all_results.sort(key=lambda x: x.confidence, reverse=True)
-        return all_results[:max_results]
+        final_results = all_results[:max_results]
+        self.logger.info(f"Total images found: {len(final_results)}")
+        return final_results
 
+    @log_function_call
     async def describe_image_from_base64(self, image_base64: str) -> str:
+        self.logger.debug("Describing image from base64")
         return await self.image_processor.describe_image(image_base64)
 
+    @log_function_call
     async def analyze_excel_file(self, excel_url: str) -> dict:
+        self.logger.info(f"Analyzing Excel file: {excel_url}")
         return await self.excel_processor.analyze_excel_data(excel_url)
 
+    @log_function_call
     async def extract_text_and_images_from_pdf(
         self, pdf_url: str, search_term: Optional[str] = None
     ) -> dict:
+        self.logger.info(f"Extracting text and images from PDF: {pdf_url}")
         try:
             return await self.image_processor.extract_text_and_images(
                 pdf_url, search_term
             )
         except Exception as e:
+            self.logger.error(f"Error processing PDF with OCR: {e}")
             return {
                 "error": f"Error processing PDF with OCR: {str(e)}",
                 "analysis": None,
@@ -157,10 +190,12 @@ class OpenAIIntegration:
                 "recommendations": ["Manual review required"],
             }
 
+    @log_function_call
     async def analyze_pdf_content(self, pdf_url: str) -> dict:
+        self.logger.info(f"Analyzing PDF content: {pdf_url}")
         try:
             analysis_result = await self.image_processor.analyze_pdf_content(pdf_url)
-            return {
+            result = {
                 "has_text": analysis_result.has_text,
                 "total_pages": analysis_result.total_pages,
                 "text_pages": analysis_result.text_pages,
@@ -168,7 +203,12 @@ class OpenAIIntegration:
                 "processing_method": analysis_result.processing_method,
                 "text_extraction_count": len(analysis_result.text_extraction_results),
             }
+            self.logger.info(
+                f"PDF analysis completed: {result['total_pages']} pages, {result['text_extraction_count']} text extractions"
+            )
+            return result
         except Exception as e:
+            self.logger.error(f"Error analyzing PDF content: {e}")
             return {
                 "error": f"Error analyzing PDF content: {str(e)}",
                 "has_text": False,
@@ -178,9 +218,14 @@ class OpenAIIntegration:
                 "processing_method": "error",
             }
 
+    @log_function_call
     async def search_images_with_text_analysis(
         self, search_term: str, profile: Profile, max_results: int = 5
     ) -> List[ImageSearchResult]:
+        self.logger.info(
+            f"Enhanced image search with text analysis for term: '{search_term}'"
+        )
+
         if not profile.files:
             return []
 
@@ -189,21 +234,29 @@ class OpenAIIntegration:
         for file in profile.files:
             if file.url.lower().endswith(".pdf"):
                 try:
-                    # Use enhanced search with text analysis
                     results = await self.image_processor.search_images_in_pdf_with_text_analysis(
                         file.url, search_term, max_results
                     )
                     all_results.extend(results)
+                    self.logger.debug(
+                        f"Enhanced search found {len(results)} images in PDF: {file.url}"
+                    )
                 except Exception as e:
-                    print(f"Error in enhanced PDF image search {file.url}: {e}")
-                    # Fallback to original method
+                    self.logger.error(
+                        f"Error in enhanced PDF image search {file.url}: {e}"
+                    )
                     try:
                         results = await self.image_processor.search_images_in_pdf(
                             file.url, search_term, max_results
                         )
                         all_results.extend(results)
+                        self.logger.debug(
+                            f"Fallback search found {len(results)} images in PDF: {file.url}"
+                        )
                     except Exception as fallback_e:
-                        print(f"Error in fallback PDF search {file.url}: {fallback_e}")
+                        self.logger.error(
+                            f"Error in fallback PDF search {file.url}: {fallback_e}"
+                        )
                         continue
             elif file.url.lower().endswith((".xlsx", ".xls")):
                 try:
@@ -211,16 +264,27 @@ class OpenAIIntegration:
                         file.url, search_term, max_results
                     )
                     all_results.extend(results)
+                    self.logger.debug(
+                        f"Found {len(results)} images in Excel: {file.url}"
+                    )
                 except Exception as e:
-                    print(f"Error searching images in Excel {file.url}: {e}")
+                    self.logger.error(
+                        f"Error searching images in Excel {file.url}: {e}"
+                    )
                     continue
 
         all_results.sort(key=lambda x: x.confidence, reverse=True)
-        return all_results[:max_results]
+        final_results = all_results[:max_results]
+        self.logger.info(
+            f"Enhanced search completed: {len(final_results)} total results"
+        )
+        return final_results
 
+    @log_execution_time
     async def _extract_text_from_excel_async(
         self, file_url: str, chunk_size: int = 1000
     ) -> str:
+        self.logger.debug(f"Extracting text from Excel file: {file_url}")
         try:
             async with aiohttp.ClientSession() as session:
                 async with session.get(file_url) as response:
@@ -264,14 +328,23 @@ class OpenAIIntegration:
                 excel_file.close()
                 os.unlink(temp_path)
 
-            return "\n".join(text_parts)
+            extracted_text = "\n".join(text_parts)
+            self.logger.debug(
+                f"Excel text extraction completed: {len(extracted_text)} characters"
+            )
+            return extracted_text
 
         except Exception as e:
+            self.logger.error(f"Error reading Excel file {file_url}: {e}")
             return f"Error reading Excel file {file_url}: {e}"
 
+    @log_execution_time
     async def _extract_text_from_pdf_async(
         self, file_url: str, max_pages: int = 50
     ) -> str:
+        self.logger.debug(
+            f"Extracting text from PDF file: {file_url}, max pages: {max_pages}"
+        )
         try:
             async with aiohttp.ClientSession() as session:
                 async with session.get(file_url) as response:
@@ -292,6 +365,9 @@ class OpenAIIntegration:
                     total_pages = len(reader.pages)
 
                     pages_to_read = min(max_pages, total_pages)
+                    self.logger.debug(
+                        f"Processing {pages_to_read} of {total_pages} pages"
+                    )
 
                     for i in range(pages_to_read):
                         page = reader.pages[i]
@@ -309,24 +385,35 @@ class OpenAIIntegration:
             finally:
                 os.unlink(temp_path)
 
-            return "\n".join(text_parts)
+            extracted_text = "\n".join(text_parts)
+            self.logger.debug(
+                f"PDF text extraction completed: {len(extracted_text)} characters from {pages_to_read} pages"
+            )
+            return extracted_text
 
         except Exception as e:
+            self.logger.error(f"Error reading PDF file {file_url}: {e}")
             return f"Error reading PDF file {file_url}: {e}"
 
     async def _extract_text_with_summary(
         self, file_url: str, max_chars: int = 50000
     ) -> str:
+        self.logger.debug(
+            f"Extracting text with summary from: {file_url}, max chars: {max_chars}"
+        )
+
         if file_url.lower().endswith((".xlsx", ".xls")):
             text = await self._extract_text_from_excel_async(file_url)
         elif file_url.lower().endswith(".pdf"):
             text = await self._extract_text_from_pdf_async(file_url)
         else:
+            self.logger.warning(f"Unsupported format: {file_url}")
             return f"Unsupported format: {file_url}"
 
         if len(text) > max_chars:
             truncated_text = text[:max_chars]
             truncated_text += f"\n\n[TEXT TRUNCATED - File too large. Showing first {max_chars} characters of {len(text)} total]"
+            self.logger.info(f"Text truncated: {len(text)} -> {max_chars} characters")
             return truncated_text
 
         return text
@@ -342,41 +429,38 @@ class OpenAIIntegration:
 
         self._circuit_open_until = None
         self._consecutive_failures = 0
-        print("Circuit breaker reset - attempting to reconnect to AI service")
+        self.logger.info(
+            "Circuit breaker reset - attempting to reconnect to AI service"
+        )
         return False
 
     def _record_failure(self):
         self._consecutive_failures += 1
-        print(f"AI service failure #{self._consecutive_failures}")
+        self.logger.warning(f"AI service failure #{self._consecutive_failures}")
 
         if self._consecutive_failures >= self._max_failures:
             import time
 
             self._circuit_open_until = time.time() + 60
-            print(
+            self.logger.error(
                 f"Circuit breaker OPENED - AI service will be bypassed for 60 seconds"
             )
 
     def _record_success(self):
         if self._consecutive_failures > 0:
-            print(f"AI service recovered after {self._consecutive_failures} failures")
+            self.logger.info(
+                f"AI service recovered after {self._consecutive_failures} failures"
+            )
             self._consecutive_failures = 0
 
+    @log_function_call
     async def analyze_text_with_ai(
         self, text: str, actions_text: str
     ) -> Dict[str, Any]:
-        """
-        Utiliza IA para analizar si el texto corresponde a una acción y extraer parámetros.
+        self.logger.info(f"Analyzing text with AI: '{text[:100]}...'")
 
-        Args:
-            text (str): El texto a analizar
-            actions_text (str): JSON con las acciones y sus URLs
-
-        Returns:
-            Dict[str, Any]: Diccionario con el resultado del análisis
-        """
         if self._is_circuit_open():
-            print("Circuit breaker is OPEN - skipping AI analysis")
+            self.logger.warning("Circuit breaker is OPEN - skipping AI analysis")
             return {"matches_action": False, "confidence": 0.0, "extracted_params": {}}
 
         try:
@@ -404,6 +488,7 @@ RESPUESTA (solo JSON):
                 )
 
                 ai_response = response.choices[0].message.content.strip()
+                self.logger.debug(f"AI response received: {ai_response[:200]}...")
 
                 try:
                     import re
@@ -419,6 +504,9 @@ RESPUESTA (solo JSON):
                             "extracted_params": {},
                         }
                 except json.JSONDecodeError as json_error:
+                    self.logger.warning(
+                        f"Failed to parse AI response as JSON: {json_error}"
+                    )
                     result = {
                         "matches_action": False,
                         "confidence": 0.0,
@@ -443,67 +531,71 @@ RESPUESTA (solo JSON):
                                 self.store_parameter(
                                     "consultar_clima", "longitude", str(lon)
                                 )
-                                print(
+                                self.logger.info(
                                     f"AI extracted and validated coordinates: lat={lat}, lon={lon}"
                                 )
                                 result["confidence"] = 0.9
                         except (ValueError, TypeError) as e:
-                            print(f"Error validating coordinates from AI: {e}")
+                            self.logger.error(
+                                f"Error validating coordinates from AI: {e}"
+                            )
 
+                self.logger.info(
+                    f"AI analysis completed: matches_action={result.get('matches_action')}, confidence={result.get('confidence')}"
+                )
                 return result
 
             except Exception as api_error:
                 self._record_failure()
 
                 error_message = str(api_error)
-                print(f"Error in AI API call: {error_message}")
+                self.logger.error(f"Error in AI API call: {error_message}")
 
                 if (
                     "Connection error" in error_message
                     or "connection" in error_message.lower()
                 ):
-                    print("Network connectivity issue with AI service")
+                    self.logger.error("Network connectivity issue with AI service")
                 elif (
                     "timeout" in error_message.lower()
                     or "timed out" in error_message.lower()
                 ):
-                    print("AI service timeout - service is slow or overloaded")
+                    self.logger.error(
+                        "AI service timeout - service is slow or overloaded"
+                    )
                 elif "402" in error_message or "insufficient" in error_message.lower():
-                    print("AI service billing/credit issue")
+                    self.logger.error("AI service billing/credit issue")
                 elif "401" in error_message or "unauthorized" in error_message.lower():
-                    print("AI service authentication issue")
+                    self.logger.error("AI service authentication issue")
                 elif "429" in error_message or "rate limit" in error_message.lower():
-                    print("AI service rate limit exceeded")
+                    self.logger.error("AI service rate limit exceeded")
                 else:
-                    print(f"Unknown AI service error: {error_message}")
+                    self.logger.error(f"Unknown AI service error: {error_message}")
 
                 raise api_error
 
         except Exception as e:
-            print(f"Error in AI analysis: {str(e)}")
+            self.logger.error(f"Error in AI analysis: {str(e)}")
             return {"matches_action": False, "confidence": 0.0, "extracted_params": {}}
 
     def store_parameter(self, action_name: str, param_name: str, param_value: str):
-        """
-        Almacena un parámetro proporcionado por el usuario para una acción específica.
-
-        Args:
-            action_name (str): Nombre de la acción
-            param_name (str): Nombre del parámetro
-            param_value (str): Valor del parámetro
-        """
         try:
             param_value = str(param_value).strip()
             if action_name not in self._stored_parameters:
                 self._stored_parameters[action_name] = {}
             self._stored_parameters[action_name][param_name] = param_value
-            print(f"Stored parameter: {action_name}.{param_name} = {param_value}")
+            self.logger.debug(
+                f"Stored parameter: {action_name}.{param_name} = {param_value}"
+            )
         except Exception as e:
-            print(f"Error storing parameter: {e}")
+            self.logger.error(f"Error storing parameter: {e}")
 
+    @log_function_call
     async def analyze_text(
         self, text: str, actions_text: str
     ) -> Tuple[bool, List[str], str]:
+        self.logger.info(f"Analyzing text for actions: '{text[:100]}...'")
+
         try:
             action = json.loads(actions_text)
 
@@ -512,11 +604,14 @@ RESPUESTA (solo JSON):
             import re
 
             required_params = re.findall(r"\{(\w+)\}", url_template)
-            print(f"Required parameters: {required_params}")
+            self.logger.debug(f"Required parameters: {required_params}")
 
             ai_result = await self.analyze_text_with_ai(text, actions_text)
 
             if not ai_result.get("matches_action", False):
+                self.logger.debug(
+                    "AI analysis failed, falling back to pattern detection"
+                )
                 ai_result = self._detect_function_with_patterns(
                     text, action_name, required_params
                 )
@@ -528,28 +623,33 @@ RESPUESTA (solo JSON):
                         self.store_parameter(action_name, param_name, param_value)
 
             stored_action_params = self._stored_parameters.get(action_name, {})
-            print(f"Stored parameters: {stored_action_params}")
+            self.logger.debug(f"Stored parameters: {stored_action_params}")
 
             missing_params = [
                 param for param in required_params if param not in stored_action_params
             ]
 
             if ai_result.get("matches_action", False) and missing_params:
+                self.logger.info(
+                    f"Action matches but missing parameters: {missing_params}"
+                )
                 return False, missing_params, ""
 
             if ai_result.get("matches_action", False) and not missing_params:
                 final_url = url_template
                 for param, value in stored_action_params.items():
                     final_url = final_url.replace(f"{{{param}}}", str(value))
-                print(f"Final URL: {final_url}")
+                self.logger.info(f"Action ready with final URL: {final_url}")
                 return True, [], final_url
 
+            self.logger.debug("Action does not match or parameters incomplete")
             return False, [], ""
 
         except json.JSONDecodeError:
+            self.logger.error("Invalid JSON in actions_text")
             return False, [], ""
         except Exception as e:
-            print(f"Error analyzing text: {str(e)}")
+            self.logger.error(f"Error analyzing text: {str(e)}")
             return False, [], ""
 
     def _detect_function_with_patterns(
@@ -558,6 +658,7 @@ RESPUESTA (solo JSON):
         import re
 
         text_lower = text.lower().strip()
+        self.logger.debug(f"Pattern detection for action: {action_name}")
 
         matches_action = False
 
@@ -583,7 +684,7 @@ RESPUESTA (solo JSON):
         for keyword in keywords:
             if keyword in text_lower:
                 matches_action = True
-                print(
+                self.logger.debug(
                     f"Pattern detection: Found keyword '{keyword}' for function '{action_name}'"
                 )
                 break
@@ -613,7 +714,7 @@ RESPUESTA (solo JSON):
                         if -90 <= lat_float <= 90 and -180 <= lon_float <= 180:
                             extracted_params["latitude"] = str(lat_float)
                             extracted_params["longitude"] = str(lon_float)
-                            print(
+                            self.logger.info(
                                 f"Pattern detection: Extracted coordinates lat={lat_float}, lon={lon_float}"
                             )
                             break
@@ -638,7 +739,7 @@ RESPUESTA (solo JSON):
             for city, coords in city_coords.items():
                 if city in text_lower:
                     extracted_params.update(coords)
-                    print(
+                    self.logger.info(
                         f"Pattern detection: Found city '{city}' with coordinates {coords}"
                     )
                     break
@@ -649,8 +750,11 @@ RESPUESTA (solo JSON):
             else (0.6 if matches_action else 0.0)
         )
 
-        return {
+        result = {
             "matches_action": matches_action,
             "confidence": confidence,
             "extracted_params": extracted_params,
         }
+
+        self.logger.debug(f"Pattern detection result: {result}")
+        return result

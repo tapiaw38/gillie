@@ -3,6 +3,7 @@ from src.schemas.schemas import MessageInput
 from src.core.domain.model import SenderEnum, Profile
 from src.adapters.web.integrations.whatsapp.whatsapp import WhatsAppIntegration
 from src.adapters.services.conversation.service import ConversationService
+from src.core.platform.logging import get_logger
 from typing import Dict, Any, List, Optional
 
 
@@ -11,9 +12,7 @@ class WhatsAppService:
         self.conversation_service = conversation_service
 
     async def process_message(self, payload: Dict[Any, Any], profile: Profile):
-        import logging
-
-        logger = logging.getLogger(__name__)
+        logger = get_logger(__name__)
 
         whatsapp_integration = None
 
@@ -98,10 +97,6 @@ class WhatsAppService:
                 updated_conversation = await self.conversation_service.find_by_id(
                     conversation_id
                 )
-
-                import logging
-
-                logger = logging.getLogger(__name__)
 
                 assistant_messages = [
                     msg
