@@ -17,8 +17,6 @@ logger = logging.getLogger(__name__)
 
 
 class RAGDocumentProcessor:
-    """Procesador RAG que mantiene toda la data sin truncar"""
-
     def __init__(self, config_service: ConfigurationService):
         self.config_service = config_service
         self.openai_config = config_service.openai_config
@@ -51,15 +49,11 @@ class RAGDocumentProcessor:
         self.embeddings_cache = {}
 
     def _get_document_id(self, file_url: str) -> str:
-        """Genera un ID único para el documento basado en su URL"""
         return hashlib.md5(file_url.encode()).hexdigest()
 
     async def process_and_store_document(
         self, file_url: str, file_type: str
     ) -> Dict[str, Any]:
-        """
-        Procesa un documento completo y almacena vectores sin enviar al contexto
-        """
         try:
             document_id = self._get_document_id(file_url)
             collection_name = f"doc_{document_id}"
@@ -68,11 +62,19 @@ class RAGDocumentProcessor:
 
             if document_id in self.vectorstore_cache:
                 logger.info(f"Document already processed: {document_id}")
+                vectorstore = self.vectorstore_cache[document_id]
+                vector_count = 0
+
+                if isinstance(vectorstore, dict) and "chunks" in vectorstore:
+                    vector_count = len(vectorstore["chunks"])
+                elif hasattr(vectorstore, "docstore"):
+                    vector_count = len(vectorstore.docstore._dict)
+
                 return {
                     "document_id": document_id,
                     "status": "already_processed",
                     "collection_name": collection_name,
-                    "vector_count": len(self.vectorstore_cache[document_id].get()),
+                    "vector_count": vector_count,
                 }
 
             if file_type.lower() == "pdf":
@@ -123,7 +125,6 @@ class RAGDocumentProcessor:
             return {"error": f"Error processing document: {str(e)}"}
 
     def _create_simple_vectorstore(self, chunks: List[Document]) -> Dict[str, Any]:
-        """Crea un vectorstore simple basado en TF-IDF para fallback"""
         try:
             from sklearn.feature_extraction.text import TfidfVectorizer
             from sklearn.metrics.pairwise import cosine_similarity
@@ -154,7 +155,6 @@ class RAGDocumentProcessor:
             }
 
     def _save_simple_vectorstore(self, vectorstore: Dict[str, Any], path: Path):
-        """Guarda un vectorstore simple en disco"""
         try:
             import pickle
 
@@ -167,7 +167,6 @@ class RAGDocumentProcessor:
             logger.error(f"Error saving simple vectorstore: {e}")
 
     def _load_simple_vectorstore(self, path: Path) -> Dict[str, Any]:
-        """Carga un vectorstore simple desde disco"""
         try:
             import pickle
 
@@ -184,7 +183,6 @@ class RAGDocumentProcessor:
     def _search_simple_tfidf(
         self, vectorstore: Dict[str, Any], query: str, max_results: int
     ) -> List[tuple]:
-        """Búsqueda usando TF-IDF"""
         try:
             from sklearn.metrics.pairwise import cosine_similarity
 
@@ -212,7 +210,6 @@ class RAGDocumentProcessor:
     def _search_simple_chunks(
         self, vectorstore: Dict[str, Any], query: str, max_results: int
     ) -> List[tuple]:
-        """Búsqueda simple por palabras clave"""
         try:
             query_words = set(query.lower().split())
             results = []
@@ -234,7 +231,6 @@ class RAGDocumentProcessor:
             return []
 
     async def _process_pdf(self, pdf_url: str) -> List[Document]:
-        """Procesa PDF usando UnstructuredFileLoader"""
         import aiohttp
         import tempfile
 
@@ -264,7 +260,6 @@ class RAGDocumentProcessor:
             return []
 
     async def _process_xlsx(self, xlsx_url: str) -> List[Document]:
-        """Procesa XLSX usando pandas"""
         import aiohttp
         import tempfile
         import pandas as pd
@@ -326,9 +321,6 @@ class RAGDocumentProcessor:
     async def search_relevant_content(
         self, query: str, document_ids: List[str], max_results: int = 5
     ) -> Dict[str, Any]:
-        """
-        Busca contenido relevante en los documentos procesados
-        """
         try:
             all_results = []
 
@@ -477,15 +469,22 @@ class RAGDocumentProcessor:
             }
 
     def get_document_status(self, file_url: str) -> Dict[str, Any]:
-        """Obtiene el estado de procesamiento de un documento"""
         document_id = self._get_document_id(file_url)
 
         if document_id in self.vectorstore_cache:
+            vectorstore = self.vectorstore_cache[document_id]
+            vector_count = 0
+
+            if isinstance(vectorstore, dict) and "chunks" in vectorstore:
+                vector_count = len(vectorstore["chunks"])
+            elif hasattr(vectorstore, "docstore"):
+                vector_count = len(vectorstore.docstore._dict)
+
             return {
                 "document_id": document_id,
                 "status": "processed",
                 "file_url": file_url,
-                "vector_count": len(self.vectorstore_cache[document_id].get()),
+                "vector_count": vector_count,
             }
         else:
             return {
