@@ -40,3 +40,11 @@ openai-whisper
 vosk
 pocketsphinx
 pydub
+langchain>=0.1.0
+langchain-openai>=0.1.0
+langchain-community>=0.1.0
+faiss-cpu
+sentence-transformers
+scikit-learn
+unstructured
+python-magic

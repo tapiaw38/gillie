@@ -12,6 +12,8 @@ from src.core.domain.model import Profile
 from src.core.platform.fileprocessor.pdf_processor import FileImageProcessor
 from src.core.platform.fileprocessor.xlsx_processor import ExcelImageProcessor
 from src.core.platform.fileprocessor.processor import ImageSearchResult
+from src.core.platform.fileprocessor.hybrid_processor import HybridDocumentProcessor
+from src.core.platform.fileprocessor.rag_processor import RAGDocumentProcessor
 from src.core.platform.logging import get_logger, log_function_call, log_execution_time
 import pandas as pd
 import requests
@@ -45,7 +47,11 @@ class OpenAIIntegration:
 
         self.image_processor = FileImageProcessor(config_service)
         self.excel_processor = ExcelImageProcessor(config_service)
+        self.hybrid_processor = HybridDocumentProcessor(config_service)
+        self.rag_processor = RAGDocumentProcessor(config_service)
         self._stored_parameters = {}
+
+        self._processed_documents = {}
 
         self._consecutive_failures = 0
         self._max_failures = 3
@@ -63,18 +69,31 @@ class OpenAIIntegration:
     ) -> str:
         self.logger.info(f"Processing question for profile: {profile.user_id}")
 
-        extracted_text = ""
+        document_ids = []
         if profile.files:
             for file in profile.files:
                 try:
-                    if file.url.lower().endswith((".xlsx", ".xls")):
-                        extracted_text += (
-                            await self._extract_text_from_excel_async(file.url) + "\n"
+                    file_type = (
+                        "pdf"
+                        if file.url.lower().endswith(".pdf")
+                        else (
+                            "xlsx"
+                            if file.url.lower().endswith((".xlsx", ".xls"))
+                            else "unknown"
                         )
-                    elif file.url.lower().endswith(".pdf"):
-                        extracted_text += (
-                            await self._extract_text_from_pdf_async(file.url) + "\n"
+                    )
+
+                    if file_type != "unknown":
+                        result = await self.rag_processor.process_and_store_document(
+                            file.url, file_type
                         )
+                        if "document_id" in result:
+                            document_ids.append(result["document_id"])
+                            self.logger.info(
+                                f"Document processed for RAG: {file.url} -> {result['document_id']}"
+                            )
+                        else:
+                            self.logger.error(f"Failed to process document: {result}")
                     else:
                         self.logger.warning(f"Unsupported file format: {file.url}")
                         continue
@@ -82,8 +101,22 @@ class OpenAIIntegration:
                     self.logger.error(f"Error processing file {file.url}: {e}")
                     continue
 
-        full_context = f"{context or ''}\n{extracted_text.strip()}"
-        self.logger.debug(f"Full context length: {len(full_context)} characters")
+        relevant_context = ""
+        if document_ids:
+            try:
+                search_result = await self.rag_processor.search_relevant_content(
+                    query=question, document_ids=document_ids, max_results=5
+                )
+                relevant_context = search_result.get("unified_context", "")
+                self.logger.info(
+                    f"Found {len(search_result.get('results', []))} relevant chunks for question"
+                )
+            except Exception as e:
+                self.logger.error(f"Error searching relevant content: {e}")
+                relevant_context = ""
+
+        full_context = f"{context or ''}\n{relevant_context.strip()}"
+        self.logger.debug(f"RAG context length: {len(full_context)} characters")
 
         question_message = CONTEXT_INFORMATION.format(
             assistant_name=profile.assistant_name,
@@ -758,3 +791,104 @@ RESPUESTA (solo JSON):
 
         self.logger.debug(f"Pattern detection result: {result}")
         return result
+
+    @log_execution_time
+    async def process_document_with_langchain(
+        self, file_url: str, file_type: str, use_vectors: bool = True
+    ) -> Dict[str, Any]:
+        """
+        Process document using LangChain hybrid processor
+        """
+        try:
+            self.logger.info(
+                f"Processing {file_type} document with LangChain: {file_url}"
+            )
+
+            if use_vectors:
+                result = await self.hybrid_processor.process_document_with_vectors(
+                    file_url, file_type, use_langchain=True
+                )
+            else:
+                if file_type.lower() == "pdf":
+                    result = await self.hybrid_processor.process_pdf_hybrid(
+                        file_url, use_langchain=True
+                    )
+                elif file_type.lower() in ["xlsx", "xls"]:
+                    result = await self.hybrid_processor.process_xlsx_hybrid(
+                        file_url, use_langchain=True
+                    )
+                else:
+                    return {"error": f"Unsupported file type: {file_type}"}
+
+            self.logger.info(
+                f"Document processed successfully with method: {result.get('processing_method', 'unknown')}"
+            )
+            return result
+
+        except Exception as e:
+            self.logger.error(f"Error processing document with LangChain: {e}")
+            return {"error": f"Error processing document: {str(e)}"}
+
+    @log_execution_time
+    async def search_across_documents(
+        self, query: str, file_urls: List[str], file_types: List[str]
+    ) -> Dict[str, Any]:
+        """
+        Search across multiple documents using vector similarity
+        """
+        try:
+            self.logger.info(
+                f"Searching across {len(file_urls)} documents with query: {query}"
+            )
+
+            result = await self.hybrid_processor.search_across_documents(
+                query, file_urls, file_types
+            )
+
+            if "error" not in result:
+                self.logger.info(
+                    f"Search completed successfully with {result.get('total_results', 0)} results"
+                )
+
+            return result
+
+        except Exception as e:
+            self.logger.error(f"Error searching across documents: {e}")
+            return {"error": f"Error searching documents: {str(e)}"}
+
+    @log_execution_time
+    async def extract_text_hybrid(
+        self, file_url: str, file_type: str, use_langchain: bool = True
+    ) -> str:
+        """
+        Extract text using hybrid approach (LangChain + legacy fallback)
+        """
+        try:
+            if use_langchain:
+                result = await self.process_document_with_langchain(
+                    file_url, file_type, use_vectors=False
+                )
+            else:
+                if file_type.lower() == "pdf":
+                    result = await self._extract_text_from_pdf_async(file_url)
+                    return result
+                elif file_type.lower() in ["xlsx", "xls"]:
+                    result = await self._extract_text_from_excel_async(file_url)
+                    return result
+                else:
+                    return f"Unsupported file type: {file_type}"
+
+            if "error" in result:
+                self.logger.warning(
+                    f"LangChain processing failed: {result['error']}, falling back to legacy"
+                )
+                if file_type.lower() == "pdf":
+                    return await self._extract_text_from_pdf_async(file_url)
+                elif file_type.lower() in ["xlsx", "xls"]:
+                    return await self._extract_text_from_excel_async(file_url)
+
+            return result.get("extracted_text", {}).get("full_text", "")
+
+        except Exception as e:
+            self.logger.error(f"Error in hybrid text extraction: {e}")
+            return f"Error extracting text: {str(e)}"

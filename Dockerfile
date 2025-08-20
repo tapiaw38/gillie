@@ -1,5 +1,8 @@
 FROM python:3.10-slim-bullseye
 
+ARG GITHUB_TOKEN
+ENV GOPRIVATE=github.com/STM-GLOBAL/*
+
 WORKDIR /app
 
 RUN apt-get update && apt-get install -y \
@@ -15,8 +18,11 @@ RUN apt-get update && apt-get install -y \
     tesseract-ocr-spa \
     tesseract-ocr-eng \
     poppler-utils \
+    git \
     && apt-get clean \
     && rm -rf /var/lib/apt/lists/*
+
+RUN git config --global url."https://${GITHUB_TOKEN}@github.com/".insteadOf "https://github.com/"
 
 RUN wget https://truststore.pki.rds.amazonaws.com/global/global-bundle.pem -O /app/global-bundle.pem
 
