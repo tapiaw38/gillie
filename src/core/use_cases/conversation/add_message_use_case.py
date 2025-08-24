@@ -6,7 +6,7 @@ from pymongo.errors import PyMongoError
 from src.core.platform.appcontext.appcontext import Factory
 from src.adapters.web.utils.image_formatter import format_images_for_chat_response
 from typing import Optional
-from src.core.platform.functions.http_functions import HTTPFunction, HTTPFunctionParams
+from src.core.platform.functions.smart_function_executor import SmartFunctionExecutor
 
 # Set up logger
 logger = logging.getLogger(__name__)
@@ -20,6 +20,9 @@ ENABLE_FAST_IMAGE_PROCESSING = True
 class AddMessageUseCase:
     def __init__(self, context_factory: Factory):
         self.context_factory = context_factory()
+        self.smart_function_executor = SmartFunctionExecutor(
+            self.context_factory.config_service
+        )
 
     def convert_messages_to_string(self, messages: list[Message]) -> str:
         """
@@ -227,121 +230,45 @@ class AddMessageUseCase:
 
             search_conversation.messages.append(new_message)
 
-            # Verificar si hay funciones configuradas
             response = ""
             if search_conversation.profile.functions:
                 try:
-                    # Analizar el mensaje con IA para determinar si coincide con alguna función
-                    can_execute, missing_params, complete_url = await self.context_factory.integrations.openai.analyze_text(
-                        new_message.content,
-                        search_conversation.profile.functions
+                    logger.info("Using LangChain smart function executor")
+
+                    chat_history = []
+                    if search_conversation.messages:
+                        for msg in search_conversation.messages[
+                            -5:
+                        ]:  # Últimos 5 mensajes
+                            chat_history.append(f"{msg.sender}: {msg.content}")
+
+                    # Ejecutar función inteligente con LangChain
+                    response = await self.smart_function_executor.execute_function(
+                        user_message=new_message.content,
+                        profile=search_conversation.profile,
+                        chat_history=chat_history,
                     )
 
-                    if can_execute and complete_url:
-                        try:
-                            # Ejecutar la función HTTP
-                            http_params = HTTPFunctionParams(
-                                name=["execute_function"],
-                                url=[complete_url],
-                                method="GET",
-                            )
-                            http_function = HTTPFunction(http_params)
-                            result = await http_function.execute()
+                    logger.info(
+                        "LangChain smart function execution completed successfully"
+                    )
 
-                            # Formatear el resultado de manera amigable
-                            format_prompt = f"""
-                            Actúa como {search_conversation.profile.assistant_name} y convierte esta respuesta técnica en un mensaje amigable:
-                            
-                            Datos: {result}
-                            
-                            Reglas:
-                            1. Usa un tono conversacional y amigable
-                            2. Incluye emojis apropiados
-                            3. Explica los datos de manera clara y simple
-                            4. Si hay temperaturas, menciona si hace frío o calor
-                            5. Si hay viento, describe si es suave o fuerte
-                            6. Si hay datos de ubicación, menciona la ciudad o región
-                            7. Adapta la respuesta al tipo de servicio consultado
-                            """
-
-                            formatted_response = await self.context_factory.integrations.openai.ask(
-                                format_prompt,
-                                "",
-                                "",
-                                search_conversation.profile,
-                            )
-                            
-                            # Agregar la URL utilizada al final de la respuesta
-                            response = f"{formatted_response}\n\n🔗 **URL consultada:** `{complete_url}`"
-
-                        except Exception as e:
-                            logger.error(f"Error executing function: {e}")
-                            response = f"¡Ups! 😅 Lo siento, tuve un pequeño problema al consultar la información. ¿Podrías intentarlo de nuevo?"
-                    
-                    elif missing_params:
-                        # Generar mensaje amigable pidiendo los parámetros faltantes
-                        missing_params_text = ", ".join(missing_params)
-                        
-                        parameters_prompt = f"""
-                        Actúa como {search_conversation.profile.assistant_name} y ayuda al usuario a proporcionar los parámetros faltantes.
-                        
-                        Mensaje del usuario: "{new_message.content}"
-                        Parámetros necesarios: {missing_params_text}
-                        
-                        Instrucciones:
-                        1. Explica de manera amigable qué información necesitas
-                        2. Da ejemplos específicos de cómo proporcionar cada parámetro
-                        3. Si son coordenadas, menciona formatos como "40.4168, -3.7038" o nombres de ciudades
-                        4. Usa emojis apropiados
-                        5. Mantén un tono conversacional y útil
-                        
-                        Responde solo con el mensaje para el usuario.
-                        """
-                        
-                        response = await self.context_factory.integrations.openai.ask(
-                            parameters_prompt,
-                            message.context,
-                            self.convert_messages_to_string(search_conversation.messages),
-                            search_conversation.profile,
-                        )
-                    
-                    else:
-                        # El mensaje no está relacionado con funciones, respuesta normal
-                        response = await self.context_factory.integrations.openai.ask(
-                            new_message.content,
-                            message.context,
-                            self.convert_messages_to_string(search_conversation.messages),
-                            search_conversation.profile,
-                        )
-
-                except Exception as analyze_error:
-                        logger.error(f"Error in analyze_text (likely AI service issue): {analyze_error}")
-                        # Si analyze_text falla, intentar respuesta normal con timeout más corto
-                        try:
-                            response = await self.context_factory.integrations.openai.ask(
-                                new_message.content,
-                                message.context,
-                                self.convert_messages_to_string(search_conversation.messages),
-                                search_conversation.profile,
-                            )
-                        except Exception as fallback_error:
-                            logger.error(f"Error in fallback AI response: {fallback_error}")
-                            # Si todo falla, dar una respuesta genérica
-                            response = f"¡Hola! Soy {search_conversation.profile.assistant_name} 😊 Disculpa, estoy teniendo algunos problemas técnicos en este momento. ¿Podrías intentarlo de nuevo en unos minutos?"
-
-                except Exception as e:
-                    logger.error(f"Error in function processing: {e}")
-                    # Si hay error en el procesamiento de funciones, intentar respuesta normal
+                except Exception as function_error:
+                    logger.error(
+                        f"Error in LangChain smart function execution: {function_error}"
+                    )
+                    # Fallback a respuesta normal si falla la ejecución de funciones
                     try:
                         response = await self.context_factory.integrations.openai.ask(
                             new_message.content,
                             message.context,
-                            self.convert_messages_to_string(search_conversation.messages),
+                            self.convert_messages_to_string(
+                                search_conversation.messages
+                            ),
                             search_conversation.profile,
                         )
-                    except Exception as final_error:
-                        logger.error(f"Error in final fallback AI response: {final_error}")
-                        # Respuesta genérica si todo falla
+                    except Exception as fallback_error:
+                        logger.error(f"Error in fallback AI response: {fallback_error}")
                         response = f"¡Hola! Soy {search_conversation.profile.assistant_name} 😊 Disculpa, estoy teniendo algunos problemas técnicos en este momento. ¿Podrías intentarlo de nuevo en unos minutos?"
             else:
                 # Respuesta normal si no hay funciones configuradas
@@ -353,7 +280,9 @@ class AddMessageUseCase:
                         search_conversation.profile,
                     )
                 except Exception as no_functions_error:
-                    logger.error(f"Error in normal AI response (no functions): {no_functions_error}")
+                    logger.error(
+                        f"Error in normal AI response (no functions): {no_functions_error}"
+                    )
                     # Respuesta genérica si la IA falla completamente
                     response = f"¡Hola! Soy {search_conversation.profile.assistant_name} 😊 Disculpa, estoy teniendo algunos problemas técnicos en este momento. ¿Podrías intentarlo de nuevo en unos minutos?"
 

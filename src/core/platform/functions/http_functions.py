@@ -7,6 +7,7 @@ class HTTPFunctionParams:
     """
     Parameters for executing a function.
     """
+
     name: List[str]
     url: List[str]
     method: str
@@ -27,9 +28,11 @@ class HTTPFunction:
 
         headers = self.params.headers or {}
         body = self.params.body or {}
-        
+
         # Handle both single URL and list of URLs
-        url = self.params.url[0] if isinstance(self.params.url, list) else self.params.url
+        url = (
+            self.params.url[0] if isinstance(self.params.url, list) else self.params.url
+        )
 
         try:
             async with aiohttp.ClientSession() as session:
@@ -37,7 +40,7 @@ class HTTPFunction:
                     method=self.params.method,
                     url=url,
                     headers=headers,
-                    json=body if body else None
+                    json=body if body else None,
                 ) as response:
                     response.raise_for_status()
                     return await response.json()
