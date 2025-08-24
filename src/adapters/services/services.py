@@ -1,5 +1,6 @@
 from src.adapters.services.conversation.service import ConversationService
 from src.adapters.services.profile.service import ProfileService
+from src.adapters.services.whatsapp.service import WhatsAppService
 
 class Services:
     _instance = None
@@ -11,6 +12,13 @@ class Services:
     ):
         self.profile = profile
         self.conversation = conversation
+        self._whatsapp = None
+
+    @property
+    def whatsapp(self) -> WhatsAppService:
+        if self._whatsapp is None:
+            self._whatsapp = WhatsAppService(self.conversation)
+        return self._whatsapp
 
     @classmethod
     def create_services(

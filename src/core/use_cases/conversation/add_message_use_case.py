@@ -1,126 +1,28 @@
 import logging
-from src.schemas.schemas import (
-    ConversationInput,
-    MessageInput,
-    ConversationOutput,
-    ConversationListOutput,
-    MessageListOutput,
-)
-from src.core.domain.model import (
-    Conversation,
-    Message,
-    SenderEnum,
-    Profile,
-)
+from src.schemas.schemas import MessageInput, MessageListOutput
+from src.core.domain.model import Message, SenderEnum
 from datetime import datetime, timezone
 from pymongo.errors import PyMongoError
 from src.core.platform.appcontext.appcontext import Factory
 from src.adapters.web.utils.image_formatter import format_images_for_chat_response
-from uuid import uuid4
-from typing import Optional, Dict
-
+from typing import Optional
+from src.core.platform.functions.smart_function_executor import SmartFunctionExecutor
 
 # Set up logger
 logger = logging.getLogger(__name__)
-logging.basicConfig(level=logging.INFO)
 
-# Remove os import and environment variable usage
-# Set module-level constants
+# Module-level constants
 IMAGE_CONFIDENCE_THRESHOLD = 0.3
 MAX_IMAGES_TO_SHOW = 3
-# Optimization: Use fast mode to reduce API calls
 ENABLE_FAST_IMAGE_PROCESSING = True
-
-
-class CreateUseCase:
-    def __init__(self, context_factory: Factory):
-        self.context_factory = context_factory()
-
-    def execute(self, conversation: ConversationInput, user_id: str) -> Conversation:
-        try:
-            profile = self.context_factory.repositories.profile.find_by_user_id(user_id)
-            generated_id = str(uuid4())
-            generated_client_id = str(uuid4())
-            new_conversation = Conversation(
-                _id=generated_id,
-                profile=Profile(
-                    _id=profile.id,
-                    user_id=profile.user_id,
-                    assistant_name=profile.assistant_name,
-                    business_name=profile.business_name,
-                    functions=profile.functions,
-                    business_context=profile.business_context,
-                    role=profile.role,
-                    files=profile.files,
-                    created_at=profile.created_at,
-                    updated_at=profile.updated_at,
-                ),
-                title=conversation.title,
-                created_at=datetime.now(timezone.utc),
-                client_id=generated_client_id,
-            )
-
-            conversation_id = self.context_factory.repositories.conversation.create(
-                new_conversation
-            )
-
-            created_conversation = (
-                self.context_factory.repositories.conversation.find_by_id(
-                    conversation_id
-                )
-            )
-
-            if not created_conversation:
-                raise Exception("Error: conversation not found after creation")
-
-            return ConversationOutput.from_output(created_conversation)
-
-        except PyMongoError as e:
-            raise Exception(f"Error interacting with database: {e}")
-
-        except Exception as e:
-            raise Exception(f"Error executing CreateUseCase: {e}")
-
-
-class FindByUserIdUseCase:
-    def __init__(self, context_factory: Factory):
-        self.context_factory = context_factory()
-
-    def execute(self, user_id: str):
-        try:
-            conversations = self.context_factory.repositories.conversation.find_user_id(
-                user_id
-            )
-            return ConversationListOutput.from_output(conversations)
-        except PyMongoError as e:
-            raise Exception(f"Error interacting with database: {e}")
-
-        except Exception as e:
-            raise Exception(f"Error executing FindByUserIdUseCase: {e}")
-
-
-class FindByIdUseCase:
-    def __init__(self, context_factory: Factory):
-        self.context_factory = context_factory()
-
-    def execute(self, conversation_id: str) -> Optional[Conversation]:
-        try:
-            conversation = self.context_factory.repositories.conversation.find_by_id(
-                conversation_id
-            )
-            if not conversation:
-                raise Exception("Conversation not found")
-            return ConversationOutput.from_output(conversation)
-        except PyMongoError as e:
-            raise Exception(f"Error interacting with database: {e}")
-
-        except Exception as e:
-            raise Exception(f"Error executing FindByIdUseCase: {e}")
 
 
 class AddMessageUseCase:
     def __init__(self, context_factory: Factory):
         self.context_factory = context_factory()
+        self.smart_function_executor = SmartFunctionExecutor(
+            self.context_factory.config_service
+        )
 
     def convert_messages_to_string(self, messages: list[Message]) -> str:
         """
@@ -328,12 +230,61 @@ class AddMessageUseCase:
 
             search_conversation.messages.append(new_message)
 
-            response = await self.context_factory.integrations.openai.ask(
-                new_message.content,
-                message.context,
-                self.convert_messages_to_string(search_conversation.messages),
-                search_conversation.profile,
-            )
+            response = ""
+            if search_conversation.profile.functions:
+                try:
+                    logger.info("Using LangChain smart function executor")
+
+                    chat_history = []
+                    if search_conversation.messages:
+                        for msg in search_conversation.messages[
+                            -5:
+                        ]:  # Últimos 5 mensajes
+                            chat_history.append(f"{msg.sender}: {msg.content}")
+
+                    # Ejecutar función inteligente con LangChain
+                    response = await self.smart_function_executor.execute_function(
+                        user_message=new_message.content,
+                        profile=search_conversation.profile,
+                        chat_history=chat_history,
+                    )
+
+                    logger.info(
+                        "LangChain smart function execution completed successfully"
+                    )
+
+                except Exception as function_error:
+                    logger.error(
+                        f"Error in LangChain smart function execution: {function_error}"
+                    )
+                    # Fallback a respuesta normal si falla la ejecución de funciones
+                    try:
+                        response = await self.context_factory.integrations.openai.ask(
+                            new_message.content,
+                            message.context,
+                            self.convert_messages_to_string(
+                                search_conversation.messages
+                            ),
+                            search_conversation.profile,
+                        )
+                    except Exception as fallback_error:
+                        logger.error(f"Error in fallback AI response: {fallback_error}")
+                        response = f"¡Hola! Soy {search_conversation.profile.assistant_name} 😊 Disculpa, estoy teniendo algunos problemas técnicos en este momento. ¿Podrías intentarlo de nuevo en unos minutos?"
+            else:
+                # Respuesta normal si no hay funciones configuradas
+                try:
+                    response = await self.context_factory.integrations.openai.ask(
+                        new_message.content,
+                        message.context,
+                        self.convert_messages_to_string(search_conversation.messages),
+                        search_conversation.profile,
+                    )
+                except Exception as no_functions_error:
+                    logger.error(
+                        f"Error in normal AI response (no functions): {no_functions_error}"
+                    )
+                    # Respuesta genérica si la IA falla completamente
+                    response = f"¡Hola! Soy {search_conversation.profile.assistant_name} 😊 Disculpa, estoy teniendo algunos problemas técnicos en este momento. ¿Podrías intentarlo de nuevo en unos minutos?"
 
             file_images = []
             formatted_images_list = []
@@ -442,36 +393,3 @@ class AddMessageUseCase:
         except Exception as e:
             logger.error(f"Error executing AddMessageUseCase: {e}")
             raise Exception(f"Error executing AddMessageUseCase: {e}")
-
-
-class DeleteAllMessagesUseCase:
-    def __init__(self, context_factory: Factory):
-        self.context_factory = context_factory()
-
-    async def execute(self, conversation_id: str, user_id: str):
-        try:
-            search_conversation = (
-                self.context_factory.repositories.conversation.find_by_id(
-                    conversation_id
-                )
-            )
-            if not search_conversation:
-                raise Exception("Conversation not found")
-
-            if user_id != search_conversation.profile.user_id:
-                raise Exception("User not authorized to delete messages")
-
-            self.context_factory.repositories.conversation.update_messages_by_id(
-                conversation_id,
-                [],
-            )
-
-            search_conversation.messages = []
-
-            return MessageListOutput.from_output(search_conversation.messages)
-
-        except PyMongoError as e:
-            raise Exception(f"Error interacting with the database: {e}")
-
-        except Exception as e:
-            raise Exception(f"Error executing DeleteAllMessagesUseCase: {e}")

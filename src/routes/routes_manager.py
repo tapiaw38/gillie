@@ -2,6 +2,7 @@ from fastapi import FastAPI
 from src.adapters.web.controllers.conversation.controllers import router as conversation_router
 from src.adapters.web.controllers.profile.controllers import router as profile_router
 from src.adapters.web.controllers.nosql.controllers import router as nosql_router
+from src.adapters.web.controllers.whatsapp.controllers import router as whatsapp_router
 from src.core.use_cases.use_cases import Usecases
 from src.adapters.services.conversation.service import ConversationService
 from src.adapters.services.profile.service import ProfileService
@@ -34,3 +35,4 @@ class RoutesManager:
         self.app.include_router(profile_router)
         self.app.include_router(conversation_router)
         self.app.include_router(nosql_router)
+        self.app.include_router(whatsapp_router)

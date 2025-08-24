@@ -1,33 +1,55 @@
 from dataclasses import dataclass
 from src.core.platform.appcontext.appcontext import Factory
-from src.core.use_cases.conversation import use_case as conversation_use_case
-from src.core.use_cases.profile import use_case as profile_use_case
+from src.core.use_cases.conversation import (
+    CreateUseCase as ConversationCreateUseCase,
+    FindByUserIdUseCase as ConversationFindByUserIdUseCase,
+    FindByIdUseCase as ConversationFindByIdUseCase,
+    AddMessageUseCase as ConversationAddMessageUseCase,
+    DeleteAllMessagesUseCase as ConversationDeleteAllMessagesUseCase
+)
+from src.core.use_cases.profile import (
+    CreateUseCase as ProfileCreateUseCase,
+    FindByUserIdUseCase as ProfileFindByUserIdUseCase,
+    FindAllUserIdsUseCase as ProfileFindAllUserIdsUseCase,
+    FindAllUseCase as ProfileFindAllUseCase,
+    UpdateUseCase as ProfileUpdateUseCase,
+    ChangeStatusUseCase as ProfileChangeStatusUseCase,
+    AddApiKeyUseCase as ProfileAddApiKeyUseCase,
+    DeleteApiKeyUseCase as ProfileDeleteApiKeyUseCase,
+    FindByApiKeyValueUseCase as ProfileFindByApiKeyValueUseCase,
+    UpdateIterationLimitUseCase as ProfileUpdateIterationLimitUseCase,
+    AddFilesUseCase as ProfileAddFilesUseCase,
+    DeleteFileByIdUseCase as ProfileDeleteFileByIdUseCase,
+    AddIntegrationUseCase as ProfileAddIntegrationUseCase,
+    ListOptionsUseCase as ProfileListOptionsUseCase
+)
 
 
 @dataclass
 class Profile:
-    create_usecase: profile_use_case.CreateUseCase
-    find_by_user_id_usecase: profile_use_case.FindByUserIdUseCase
-    find_all_user_ids_usecase: profile_use_case.FindAllUserIdsUseCase
-    update_usecase: profile_use_case.UpdateUseCase
-    change_status_usecase: profile_use_case.ChangeStatusUseCase
-    add_api_key_usecase: profile_use_case.AddApiKeyUseCase
-    delete_api_key_usecase: profile_use_case.DeleteApiKeyUseCase
-    find_by_api_key_value_usecase: profile_use_case.FindByApiKeyValueUseCase
-    update_iteration_limit_usecase: profile_use_case.UpdateIterationLimitUseCase
-    add_files_usecase: profile_use_case.AddFilesUseCase
-    delete_file_by_id_usecase: profile_use_case.DeleteFileByIdUseCase
-    add_integration_usecase: profile_use_case.AddIntegrationUseCase
-    list_options_usecase: profile_use_case.ListOptionsUseCase
+    create_usecase: ProfileCreateUseCase
+    find_by_user_id_usecase: ProfileFindByUserIdUseCase
+    find_all_user_ids_usecase: ProfileFindAllUserIdsUseCase
+    find_all_usecase: ProfileFindAllUseCase
+    update_usecase: ProfileUpdateUseCase
+    change_status_usecase: ProfileChangeStatusUseCase
+    add_api_key_usecase: ProfileAddApiKeyUseCase
+    delete_api_key_usecase: ProfileDeleteApiKeyUseCase
+    find_by_api_key_value_usecase: ProfileFindByApiKeyValueUseCase
+    update_iteration_limit_usecase: ProfileUpdateIterationLimitUseCase
+    add_files_usecase: ProfileAddFilesUseCase
+    delete_file_by_id_usecase: ProfileDeleteFileByIdUseCase
+    add_integration_usecase: ProfileAddIntegrationUseCase
+    list_options_usecase: ProfileListOptionsUseCase
 
 
 @dataclass
 class Conversation:
-    create_usecase: conversation_use_case.CreateUseCase
-    find_by_user_id_usecase: conversation_use_case.FindByUserIdUseCase
-    find_by_id_usecase: conversation_use_case.FindByIdUseCase
-    add_message_usecase: conversation_use_case.AddMessageUseCase
-    delete_all_messages_usecase: conversation_use_case.DeleteAllMessagesUseCase
+    create_usecase: ConversationCreateUseCase
+    find_by_user_id_usecase: ConversationFindByUserIdUseCase
+    find_by_id_usecase: ConversationFindByIdUseCase
+    add_message_usecase: ConversationAddMessageUseCase
+    delete_all_messages_usecase: ConversationDeleteAllMessagesUseCase
 
 
 @dataclass
@@ -39,25 +61,26 @@ class Usecases:
 def create_usecases(context_factory: Factory) -> Usecases:
     return Usecases(
         profile=Profile(
-            create_usecase=profile_use_case.CreateUseCase(context_factory),
-            find_by_user_id_usecase=profile_use_case.FindByUserIdUseCase(context_factory),
-            find_all_user_ids_usecase=profile_use_case.FindAllUserIdsUseCase(context_factory),
-            update_usecase=profile_use_case.UpdateUseCase(context_factory),
-            change_status_usecase=profile_use_case.ChangeStatusUseCase(context_factory),
-            add_api_key_usecase=profile_use_case.AddApiKeyUseCase(context_factory),
-            delete_api_key_usecase=profile_use_case.DeleteApiKeyUseCase(context_factory),
-            find_by_api_key_value_usecase=profile_use_case.FindByApiKeyValueUseCase(context_factory),
-            update_iteration_limit_usecase=profile_use_case.UpdateIterationLimitUseCase(context_factory),
-            add_files_usecase=profile_use_case.AddFilesUseCase(context_factory),
-            delete_file_by_id_usecase=profile_use_case.DeleteFileByIdUseCase(context_factory),
-            add_integration_usecase=profile_use_case.AddIntegrationUseCase(context_factory),
-            list_options_usecase=profile_use_case.ListOptionsUseCase(context_factory),
+            create_usecase=ProfileCreateUseCase(context_factory),
+            find_by_user_id_usecase=ProfileFindByUserIdUseCase(context_factory),
+            find_all_user_ids_usecase=ProfileFindAllUserIdsUseCase(context_factory),
+            find_all_usecase=ProfileFindAllUseCase(context_factory),
+            update_usecase=ProfileUpdateUseCase(context_factory),
+            change_status_usecase=ProfileChangeStatusUseCase(context_factory),
+            add_api_key_usecase=ProfileAddApiKeyUseCase(context_factory),
+            delete_api_key_usecase=ProfileDeleteApiKeyUseCase(context_factory),
+            find_by_api_key_value_usecase=ProfileFindByApiKeyValueUseCase(context_factory),
+            update_iteration_limit_usecase=ProfileUpdateIterationLimitUseCase(context_factory),
+            add_files_usecase=ProfileAddFilesUseCase(context_factory),
+            delete_file_by_id_usecase=ProfileDeleteFileByIdUseCase(context_factory),
+            add_integration_usecase=ProfileAddIntegrationUseCase(context_factory),
+            list_options_usecase=ProfileListOptionsUseCase(context_factory),
         ),
         conversation=Conversation(
-            create_usecase=conversation_use_case.CreateUseCase(context_factory),
-            find_by_user_id_usecase=conversation_use_case.FindByUserIdUseCase(context_factory),
-            find_by_id_usecase=conversation_use_case.FindByIdUseCase(context_factory),
-            add_message_usecase=conversation_use_case.AddMessageUseCase(context_factory),
-            delete_all_messages_usecase=conversation_use_case.DeleteAllMessagesUseCase(context_factory),
+            create_usecase=ConversationCreateUseCase(context_factory),
+            find_by_user_id_usecase=ConversationFindByUserIdUseCase(context_factory),
+            find_by_id_usecase=ConversationFindByIdUseCase(context_factory),
+            add_message_usecase=ConversationAddMessageUseCase(context_factory),
+            delete_all_messages_usecase=ConversationDeleteAllMessagesUseCase(context_factory),
         ),
     )

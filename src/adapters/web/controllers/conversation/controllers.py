@@ -62,7 +62,6 @@ async def add_message(
     sender = SenderEnum.user
     user_id = request.state.user.get("user_id")
 
-    # Create MessageInput object from form data
     message = MessageInput(
         content=content,
         context=context,

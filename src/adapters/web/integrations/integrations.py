@@ -1,6 +1,7 @@
 from src.adapters.web.integrations.openapi.openapi import OpenAIIntegration
 from src.adapters.web.integrations.tts.tts import TTSIntegration
 from src.adapters.web.integrations.stt.stt import STTIntegration
+from src.adapters.web.integrations.mercadolibre.mercadolibre import MercadoLibreIntegration
 from src.core.platform.config.service import ConfigurationService
 
 
@@ -13,7 +14,13 @@ class Integrations:
         self.openai = OpenAIIntegration(config_service)
         self.tts = TTSIntegration(config_service)
         self.stt = STTIntegration(config_service)
+        self.mercadolibre = None  # Will be initialized when needed with user credentials
         Integrations._instance = self
+
+    def initialize_mercadolibre(self, access_token: str, user_id: str):
+        """Initialize MercadoLibre integration with user credentials"""
+        self.mercadolibre = MercadoLibreIntegration(access_token, user_id)
+        return self.mercadolibre
 
     @classmethod
     def get_instance(cls) -> "Integrations":
