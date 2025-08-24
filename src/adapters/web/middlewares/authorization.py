@@ -7,7 +7,14 @@ from src.core.platform.config.service import get_config_service
 from src.adapters.services.services import Services
 
 
-EXCLUDED_PATHS = {"/docs", "/docs/", "/openapi.json", "/redoc", "/redoc/"}
+EXCLUDED_PATHS = {
+    "/docs", 
+    "/docs/", 
+    "/openapi.json", 
+    "/redoc", 
+    "/redoc/", 
+    "/api/whatsapp/webhook",
+}
 
 async def decode_token(token: str):
     try:
@@ -59,7 +66,8 @@ class AuthorizationMiddleware(BaseHTTPMiddleware):
         self.get_instance = services.get_instance()
 
     async def dispatch(self, request: Request, call_next):
-        if request.url.path in EXCLUDED_PATHS or request.method == "OPTIONS":
+        path = request.url.path
+        if path in EXCLUDED_PATHS or path.startswith("/api/whatsapp") or request.method == "OPTIONS":
             return await call_next(request)
 
         authorization: Optional[str] = request.headers.get("Authorization")

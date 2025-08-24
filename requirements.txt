@@ -8,6 +8,7 @@ pytest-mock
 httpx
 openai>=1.61.1
 pyttsx3
+gtts
 typing
 pymongo
 mongomock
@@ -34,3 +35,16 @@ pytesseract
 scikit-learn
 aiohttp
 aiofiles
+SpeechRecognition
+openai-whisper
+vosk
+pocketsphinx
+pydub
+langchain>=0.1.0
+langchain-openai>=0.1.0
+langchain-community>=0.1.0
+faiss-cpu
+sentence-transformers
+scikit-learn
+unstructured
+python-magic

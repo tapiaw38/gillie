@@ -33,6 +33,7 @@ class Integration(BaseModel):
     id: Optional[str] = Field(alias="_id", default=None)
     name: str
     type: str
+    activated: bool
     config: dict
     created_at: datetime
     updated_at: datetime
@@ -47,6 +48,7 @@ class Profile(BaseModel):
     business_name: Optional[str] = None
     functions: Optional[str] = None
     business_context: Optional[str] = None
+    role: Optional[str] = None
     user_id: Optional[str] = None
     created_at: Optional[datetime] = Field(default=None)
     updated_at: Optional[datetime] = Field(default=None)
@@ -66,6 +68,7 @@ class Message(BaseModel):
         default_factory=lambda: str(uuid4()),
     )
     content: str
+    audio_url: Optional[str] = None
     sender: SenderEnum
     created_at: datetime
 
@@ -74,6 +77,7 @@ class Conversation(BaseModel):
     id: Optional[str] = Field(alias="_id", default=None)
     title: str
     created_at: datetime
+    client_id: str
     profile: Profile
     messages: Optional[List[Message]] = Field(default=None)
 

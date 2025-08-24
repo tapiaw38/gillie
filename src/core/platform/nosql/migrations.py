@@ -1,4 +1,5 @@
 from typing import List
+from uuid import uuid4
 
 
 class Migration:
@@ -28,6 +29,19 @@ def execute_profile_migrations() -> List[Migration]:
             up=lambda db: db["profiles"].update_many(
                 {},
                 {"$set": {"files": []}}
+            )
+        ),
+        Migration(
+            version=4,
+            up=lambda db: db["conversations"].update_many(
+                {},
+                {"$set": {"client_id": str(uuid4())}}
+            )
+        ),Migration(
+            version=5,
+            up=lambda db: db["profiles"].update_many(
+                {},
+                {"$set": {"role": "seller"}}
             )
         ),
         # Add more migrations here

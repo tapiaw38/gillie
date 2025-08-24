@@ -47,11 +47,17 @@ class AWSConfig:
 
 
 @dataclass
+class WhatsAppConfig:
+    verify_token: str
+
+
+@dataclass
 class ConfigurationService:
     server_config: ServerConfig
     nosql_config: NoSQLConfig
     openai_config: OpenAIConfig
     aws_config: AWSConfig
+    whatsapp_config: WhatsAppConfig
 
 _config_service: Optional[ConfigurationService] = None
 
@@ -112,12 +118,17 @@ def read_config() -> ConfigurationService:
         region=get_env("AWS_REGION", "us-east-1"),
         bucket_name=get_env("AWS_BUCKET_NAME", "assistant-ia-bucket"),
     )
+    
+    whatsapp_config = WhatsAppConfig(
+        verify_token=get_env("WHATSAPP_VERIFY_TOKEN", "assistant_ia_whatsapp_verification_token"),
+    )
 
     return ConfigurationService(
         server_config=server_config, 
         nosql_config=nosql_config,
         openai_config=openai_config,
         aws_config=aws_config,
+        whatsapp_config=whatsapp_config,
     )
 
 

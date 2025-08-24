@@ -1,4 +1,6 @@
 from src.adapters.web.integrations.openapi.openapi import OpenAIIntegration
+from src.adapters.web.integrations.tts.tts import TTSIntegration
+from src.adapters.web.integrations.stt.stt import STTIntegration
 from src.adapters.web.integrations.mercadolibre.mercadolibre import MercadoLibreIntegration
 from src.core.platform.config.service import ConfigurationService
 
@@ -10,6 +12,8 @@ class Integrations:
         if Integrations._instance is not None:
             raise Exception("This class is a singleton! Use `Integrations.get_instance()` to access it.")
         self.openai = OpenAIIntegration(config_service)
+        self.tts = TTSIntegration(config_service)
+        self.stt = STTIntegration(config_service)
         self.mercadolibre = None  # Will be initialized when needed with user credentials
         Integrations._instance = self
 
