@@ -242,16 +242,30 @@ class AddMessageUseCase:
                         ]:  # Últimos 5 mensajes
                             chat_history.append(f"{msg.sender}: {msg.content}")
 
-                    # Ejecutar función inteligente con LangChain
-                    response = await self.smart_function_executor.execute_function(
-                        user_message=new_message.content,
-                        profile=search_conversation.profile,
-                        chat_history=chat_history,
+                    function_response = (
+                        await self.smart_function_executor.execute_function(
+                            user_message=new_message.content,
+                            profile=search_conversation.profile,
+                            chat_history=chat_history,
+                        )
                     )
 
-                    logger.info(
-                        "LangChain smart function execution completed successfully"
-                    )
+                    if function_response and not function_response.startswith(
+                        "No encontré una función"
+                    ):
+                        response = function_response
+                        logger.info("Function executed successfully")
+                    else:
+                        # Si no se encontró función, usar respuesta normal de IA
+                        logger.info("No function found, using normal AI response")
+                        response = await self.context_factory.integrations.openai.ask(
+                            new_message.content,
+                            message.context,
+                            self.convert_messages_to_string(
+                                search_conversation.messages
+                            ),
+                            search_conversation.profile,
+                        )
 
                 except Exception as function_error:
                     logger.error(
