@@ -192,7 +192,6 @@ class AddMessageUseCase:
 
             except Exception as e:
                 logger.error(f"Error processing voice context: {e}")
-                # Continue with original content if voice processing fails
 
         new_message = Message(
             content=enhanced_content,
