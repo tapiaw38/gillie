@@ -45,11 +45,21 @@ class RAGDocumentProcessor:
         self.vector_store_path.mkdir(exist_ok=True)
 
         self.vectorstore_cache = {}
+        self.max_cache_size = 50  # Limite de cache para evitar problemas de memoria
 
         self.embeddings_cache = {}
 
     def _get_document_id(self, file_url: str) -> str:
         return hashlib.md5(file_url.encode()).hexdigest()
+    
+    def _manage_cache_size(self):
+        """Manage cache size to prevent memory issues"""
+        if len(self.vectorstore_cache) >= self.max_cache_size:
+            # Remove oldest entries (simple FIFO approach)
+            keys_to_remove = list(self.vectorstore_cache.keys())[:10]
+            for key in keys_to_remove:
+                del self.vectorstore_cache[key]
+            logger.info(f"Cache cleaned: removed {len(keys_to_remove)} old vectorstores")
 
     async def process_and_store_document(
         self, file_url: str, file_type: str
@@ -102,6 +112,7 @@ class RAGDocumentProcessor:
                 vectorstore_path = self.vector_store_path / f"{collection_name}.simple"
                 self._save_simple_vectorstore(vectorstore, vectorstore_path)
 
+            self._manage_cache_size()
             self.vectorstore_cache[document_id] = vectorstore
 
             result = {
@@ -323,6 +334,7 @@ class RAGDocumentProcessor:
     ) -> Dict[str, Any]:
         try:
             all_results = []
+            logger.info(f"Searching across {len(document_ids)} documents: {document_ids}")
 
             for document_id in document_ids:
                 vectorstore = None
@@ -332,25 +344,28 @@ class RAGDocumentProcessor:
                     logger.debug(f"Using cached vectorstore for {document_id}")
                 else:
                     try:
-
                         faiss_path = self.vector_store_path / f"doc_{document_id}.faiss"
                         simple_path = (
                             self.vector_store_path / f"doc_{document_id}.simple"
                         )
 
                         if faiss_path.exists():
-                            vectorstore = FAISS.load_local(
-                                str(faiss_path), self.embeddings
-                            )
-
-                            self.vectorstore_cache[document_id] = vectorstore
-                            logger.debug(
-                                f"Loaded FAISS vectorstore from disk for {document_id}"
-                            )
+                            if self.embeddings:
+                                vectorstore = FAISS.load_local(
+                                    str(faiss_path), self.embeddings, allow_dangerous_deserialization=True
+                                )
+                                self._manage_cache_size()
+                                self.vectorstore_cache[document_id] = vectorstore
+                                logger.debug(
+                                    f"Loaded FAISS vectorstore from disk for {document_id}"
+                                )
+                            else:
+                                logger.warning(f"Cannot load FAISS vectorstore without embeddings for {document_id}")
+                                continue
                         elif simple_path.exists():
                             vectorstore = self._load_simple_vectorstore(simple_path)
                             if vectorstore:
-
+                                self._manage_cache_size()
                                 self.vectorstore_cache[document_id] = vectorstore
                                 logger.debug(
                                     f"Loaded simple vectorstore from disk for {document_id}"
@@ -362,7 +377,7 @@ class RAGDocumentProcessor:
                                 continue
                         else:
                             logger.warning(
-                                f"No vectorstore file found for {document_id}"
+                                f"No vectorstore file found for {document_id}. Expected paths: {faiss_path} or {simple_path}"
                             )
                             continue
                     except Exception as e:
@@ -382,6 +397,7 @@ class RAGDocumentProcessor:
                             results = self._search_simple_tfidf(
                                 vectorstore, query, max_results
                             )
+                            logger.info(f"Found {len(results)} results in TF-IDF vectorstore for document {document_id}")
                             for doc, score in results:
                                 all_results.append(
                                     {
@@ -399,6 +415,7 @@ class RAGDocumentProcessor:
                             results = self._search_simple_chunks(
                                 vectorstore, query, max_results
                             )
+                            logger.info(f"Found {len(results)} results in simple chunks vectorstore for document {document_id}")
                             for doc, score in results:
                                 all_results.append(
                                     {
@@ -413,6 +430,7 @@ class RAGDocumentProcessor:
                             docs = vectorstore.similarity_search_with_score(
                                 query, k=max_results
                             )
+                            logger.info(f"Found {len(docs)} results in FAISS vectorstore for document {document_id}")
                             for doc, score in docs:
                                 all_results.append(
                                     {
