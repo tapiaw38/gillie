@@ -58,9 +58,6 @@ class OpenAIIntegration:
         self._circuit_open_until = None
 
         self.logger.info(f"OpenAI integration initialized with model: {self.model}")
-        
-        # Cache para document_ids por usuario para búsquedas bajo demanda
-        self._user_document_cache = {}
 
     @log_function_call
     async def ask(
@@ -71,14 +68,8 @@ class OpenAIIntegration:
         profile: Profile,
     ) -> str:
         self.logger.info(f"Processing question for profile: {profile.user_id}")
-        self.logger.info(
-            f"Profile has {len(profile.files) if profile.files else 0} files available"
-        )
 
         document_ids = []
-        total_files = len(profile.files) if profile.files else 0
-        processed_files = 0
-
         if profile.files:
             for file in profile.files:
                 try:
@@ -98,7 +89,6 @@ class OpenAIIntegration:
                         )
                         if "document_id" in result:
                             document_ids.append(result["document_id"])
-                            processed_files += 1
                             self.logger.info(
                                 f"Document processed for RAG: {file.url} -> {result['document_id']}"
                             )
@@ -111,41 +101,28 @@ class OpenAIIntegration:
                     self.logger.error(f"Error processing file {file.url}: {e}")
                     continue
 
-        # NO pasar contenido automáticamente - solo información contextual básica
-        full_context = context or ""
-        
-        # Guardar document_ids para búsquedas bajo demanda
+        relevant_context = ""
         if document_ids:
-            self._user_document_cache[profile.user_id] = document_ids
-            self.logger.info(f"Documents indexed and available for search: {len(document_ids)} files")
-        
-        self.logger.debug(f"Context length: {len(full_context)} characters")
+            try:
+                search_result = await self.rag_processor.search_relevant_content(
+                    query=question, document_ids=document_ids, max_results=5
+                )
+                relevant_context = search_result.get("unified_context", "")
+                self.logger.info(
+                    f"Found {len(search_result.get('results', []))} relevant chunks for question"
+                )
+            except Exception as e:
+                self.logger.error(f"Error searching relevant content: {e}")
+                relevant_context = ""
 
-        # Crear información sobre archivos disponibles
-        if total_files > 0:
-            file_info = (
-                f"Tienes acceso a {total_files} archivo(s) cargado(s) por el usuario. "
-            )
-            if processed_files != total_files:
-                file_info += f"De estos, {processed_files} archivo(s) se procesaron correctamente y están indexados para búsqueda. "
-            else:
-                file_info += f"Todos los {processed_files} archivo(s) están procesados y listos para búsqueda. "
-            file_info += "Los archivos están indexados pero NO se incluye su contenido automáticamente en este contexto para optimizar el rendimiento. "
-            file_info += "Si necesitas información específica de los archivos, indica qué tipo de información buscas y realizaré una búsqueda dirigida. "
-        else:
-            file_info = "No tienes archivos cargados actualmente. "
-
-        self.logger.info(
-            f"File processing summary: {total_files} total files, {processed_files} processed successfully, {len(document_ids)} document IDs generated"
-        )
-        self.logger.info(f"Context usage: {len(full_context)} characters, max allowed: 50000")
+        full_context = f"{context or ''}\n{relevant_context.strip()}"
+        self.logger.debug(f"RAG context length: {len(full_context)} characters")
 
         question_message = CONTEXT_INFORMATION.format(
             assistant_name=profile.assistant_name,
             business_name=profile.business_name,
             business_context=profile.business_context,
             functions=profile.functions,
-            file_info=file_info,
             product_context=full_context,
             question=question,
             previous_messages=previous_messages,
@@ -915,40 +892,3 @@ RESPUESTA (solo JSON):
         except Exception as e:
             self.logger.error(f"Error in hybrid text extraction: {e}")
             return f"Error extracting text: {str(e)}"
-
-    @log_function_call
-    async def search_in_user_files(
-        self, user_id: str, query: str, max_results: int = 3
-    ) -> Dict[str, Any]:
-        """
-        Búsqueda bajo demanda en los archivos del usuario
-        """
-        try:
-            document_ids = self._user_document_cache.get(user_id, [])
-            if not document_ids:
-                return {
-                    "error": "No hay archivos indexados para este usuario",
-                    "results": [],
-                    "unified_context": ""
-                }
-
-            self.logger.info(f"Performing on-demand search for user {user_id}: '{query}'")
-            
-            # Realizar búsqueda con límites conservadores
-            search_result = await self.rag_processor.search_relevant_content(
-                query=query, document_ids=document_ids, max_results=max_results
-            )
-            
-            self.logger.info(
-                f"On-demand search completed: {len(search_result.get('results', []))} results found"
-            )
-            
-            return search_result
-            
-        except Exception as e:
-            self.logger.error(f"Error in on-demand file search: {e}")
-            return {
-                "error": f"Error searching files: {str(e)}",
-                "results": [],
-                "unified_context": ""
-            }
