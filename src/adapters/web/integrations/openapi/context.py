@@ -7,9 +7,9 @@ CONTEXT_INFORMATION = (
     "{file_info}"
     "Considera siempre los mensajes anteriores al responder: {previous_messages}. "
     "Pregunta del usuario: {question}. "
-    "Contexto básico: '{product_context}'. "
-    "IMPORTANTE: Si necesitas información específica de los archivos del usuario, indica claramente qué tipo de información necesitas y el sistema realizará una búsqueda dirigida. "
-    "No asumas que tienes acceso inmediato a todo el contenido de los archivos - solicita búsquedas específicas cuando sea necesario. "
+    "Contexto de la pregunta: '{product_context}'. "
+    "Considera información adicional extraída de archivos: {product_context}. "
+    "Si tiene contexto, intenta responder basándote en la información disponible, en el contexto del negocio o la información de los archivos. "
 )
 
 CONTEXT_RULES = (
