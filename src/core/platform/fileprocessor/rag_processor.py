@@ -451,11 +451,19 @@ class RAGDocumentProcessor:
             top_results = all_results[:max_results]
 
             context_parts = []
+            MAX_CHUNK_LENGTH = 2000  # Limitar cada chunk a 2000 caracteres
+            
             for result in top_results:
+                content = result["content"]
+                # Truncar contenido muy largo
+                if len(content) > MAX_CHUNK_LENGTH:
+                    content = content[:MAX_CHUNK_LENGTH] + "...[truncado]"
+                    logger.debug(f"Truncated chunk from {len(result['content'])} to {len(content)} characters")
+                
                 context_parts.append(
                     f"[Fuente: {result['metadata'].get('source', 'desconocida')}]"
                 )
-                context_parts.append(result["content"])
+                context_parts.append(content)
                 context_parts.append("---")
 
             unified_context = "\n".join(context_parts)
