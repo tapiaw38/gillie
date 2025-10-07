@@ -1,6 +1,6 @@
 from typing import List
 from pymongo.errors import PyMongoError
-from src.core.domain.model import Message
+from src.core.domain import Message
 
 
 def update_messages_by_id(client, id: str, messages: List[Message]) -> None:

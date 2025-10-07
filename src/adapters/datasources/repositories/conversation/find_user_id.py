@@ -1,6 +1,6 @@
 from typing import List
 from pymongo.errors import PyMongoError
-from src.core.domain.model import Conversation
+from src.core.domain import Conversation
 
 
 def find_conversations_by_user_id(client, user_id: str) -> List[Conversation]:

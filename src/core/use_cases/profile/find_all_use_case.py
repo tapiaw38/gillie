@@ -1,6 +1,6 @@
 from src.core.platform.appcontext.appcontext import Factory
 from typing import List
-from src.core.domain.model import Profile
+from src.core.domain import Profile
 
 class FindAllUseCase:
     def __init__(self, context_factory: Factory):

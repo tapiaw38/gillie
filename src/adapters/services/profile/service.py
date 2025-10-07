@@ -1,12 +1,12 @@
 from fastapi import HTTPException, status
 from typing import List, Optional
-from src.schemas.schemas import (
+from src.schemas import (
     ProfileInput,
     ApiKeyInput,
     FileInput,
 )
 from src.core.use_cases.use_cases import Profile
-from src.core.domain.model import Profile as ProfileModel
+from src.core.domain import Profile as ProfileModel
 
 
 class ProfileService:

@@ -1,5 +1,5 @@
 from typing import List
-from src.core.domain.model import Profile
+from src.core.domain import Profile
 from src.core.platform.nosql.client import Client
 
 

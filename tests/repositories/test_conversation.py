@@ -3,7 +3,7 @@ from unittest.mock import MagicMock
 from datetime import datetime
 from uuid import uuid4
 from src.adapters.repositories.repositories import Repository
-from src.core.domain.model import Conversation
+from src.core.domain import Conversation
 
 
 @pytest.fixture

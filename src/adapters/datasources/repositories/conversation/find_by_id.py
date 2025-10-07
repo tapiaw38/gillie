@@ -1,6 +1,6 @@
 from typing import Optional
 from pymongo.errors import PyMongoError
-from src.core.domain.model import Conversation
+from src.core.domain import Conversation
 
 
 def find_conversation_by_id(client, id: str) -> Optional[Conversation]:

@@ -1,6 +1,6 @@
 from typing import List
 from pymongo.errors import PyMongoError
-from src.core.domain.model import File
+from src.core.domain import File
 
 
 def update_files(client, user_id: str, files: List[File]) -> None:

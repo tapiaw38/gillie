@@ -1,6 +1,6 @@
 from typing import List, Optional
 from pymongo.errors import PyMongoError
-from src.core.domain.model import ApiKey
+from src.core.domain import ApiKey
 
 
 def update_api_keys(client, user_id: str, api_keys: List[ApiKey]) -> None:

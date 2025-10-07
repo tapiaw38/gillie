@@ -1,6 +1,6 @@
 from typing import Optional
 from pymongo.errors import PyMongoError
-from src.core.domain.model import File
+from src.core.domain import File
 
 
 def get_file_by_id(client, user_id: str, file_id: str) -> Optional[File]:

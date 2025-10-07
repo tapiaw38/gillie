@@ -1,9 +1,9 @@
-from src.schemas.schemas import (
+from src.schemas import (
     ApiKeyInput,
     ApiKeyListOutput,
     ApiKeyDeleteOutput,
 )
-from src.core.domain.model import ApiKey
+from src.core.domain import ApiKey
 from datetime import datetime, timezone, timedelta
 from pymongo.errors import PyMongoError
 from src.core.platform.appcontext.appcontext import Factory

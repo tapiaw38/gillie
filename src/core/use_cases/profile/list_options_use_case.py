@@ -1,4 +1,4 @@
-from src.schemas.schemas import (
+from src.schemas import (
     ListOptionsOutput,
     ListOptionsOutputData,
     RoleOutputData,

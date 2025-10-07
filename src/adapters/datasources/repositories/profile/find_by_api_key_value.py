@@ -1,5 +1,5 @@
 from pymongo.errors import PyMongoError
-from src.core.domain.model import ApiKey
+from src.core.domain import ApiKey
 
 
 def find_by_api_key_value(client, user_id: str, api_key_value: str) -> ApiKey:

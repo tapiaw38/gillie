@@ -1,5 +1,5 @@
 from pymongo.errors import PyMongoError
-from src.core.domain.model import Conversation
+from src.core.domain import Conversation
 
 
 def create_conversation(client, conversation: Conversation) -> str:

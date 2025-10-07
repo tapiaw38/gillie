@@ -1,9 +1,9 @@
 from fastapi import HTTPException, status
-from src.schemas.schemas import (
+from src.schemas import (
     ConversationInput,
     MessageInput,
 )
-from src.core.domain.model import (
+from src.core.domain import (
     SenderEnum,
 )
 from src.core.use_cases.use_cases import Conversation

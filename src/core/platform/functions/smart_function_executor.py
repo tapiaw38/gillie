@@ -20,7 +20,7 @@ from src.core.platform.functions.function_executor import (
     FunctionDefinition,
 )
 from src.core.services.configuration_service import ConfigurationService
-from src.core.domain.model import Profile
+from src.core.domain import Profile
 
 logger = logging.getLogger(__name__)
 

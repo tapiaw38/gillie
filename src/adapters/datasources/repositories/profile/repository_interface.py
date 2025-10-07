@@ -1,6 +1,6 @@
 from abc import ABC, abstractmethod
 from typing import List, Optional
-from src.core.domain.model import (
+from src.core.domain import (
     Profile,
     ApiKey,
     File,

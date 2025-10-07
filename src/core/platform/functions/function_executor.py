@@ -6,7 +6,7 @@ from langchain_community.chat_models import ChatOpenAI
 from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
 from langchain_core.messages import SystemMessage, HumanMessage
 from src.core.platform.config.service import ConfigurationService
-from src.core.domain.model import Profile
+from src.core.domain import Profile
 from src.core.platform.functions.workflow_executor import workflow_executor
 import json
 import logging

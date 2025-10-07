@@ -1,8 +1,8 @@
-from src.schemas.schemas import (
+from src.schemas import (
     IntegrationInput,
     IntegrationListOutput,
 )
-from src.core.domain.model import Integration
+from src.core.domain import Integration
 from datetime import datetime, timezone
 from pymongo.errors import PyMongoError
 from src.core.platform.appcontext.appcontext import Factory

@@ -1,6 +1,6 @@
 from src.adapters.datasources.datasources import Datasources
 from .repository_interface import RepositoryInterface
-from src.core.domain.model import (
+from src.core.domain import (
     Profile,
     ApiKey,
     File,

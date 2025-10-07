@@ -1,4 +1,4 @@
-from src.schemas.schemas import ProfileOutput
+from src.schemas import ProfileOutput
 from pymongo.errors import PyMongoError
 from src.core.platform.appcontext.appcontext import Factory
 

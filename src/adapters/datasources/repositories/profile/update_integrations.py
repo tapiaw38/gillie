@@ -1,6 +1,6 @@
 from typing import List
 from pymongo.errors import PyMongoError
-from src.core.domain.model import Integration
+from src.core.domain import Integration
 
 
 def update_integrations(client, user_id: str, integrations: List[Integration]) -> None:

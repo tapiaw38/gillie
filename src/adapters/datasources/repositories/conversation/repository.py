@@ -1,5 +1,5 @@
 from typing import List, Optional
-from src.core.domain.model import (
+from src.core.domain import (
     Conversation,
     Message,
     Profile,

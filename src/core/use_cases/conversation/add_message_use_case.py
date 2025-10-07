@@ -1,136 +1,51 @@
+"""
+Add Message Use Case
+
+This use case orchestrates the process of adding a message to a conversation,
+following SOLID principles and hexagonal architecture.
+
+Responsibilities:
+- Orchestrate the message addition workflow
+- Coordinate between different services
+- Manage conversation state and validation
+- Handle repository operations
+
+The heavy lifting is delegated to specialized services:
+- VoiceTranscriptionService: Voice-to-text conversion
+- AIResponseService: AI response generation
+- ImageProcessingService: Image search and processing
+- TextToSpeechService: Text-to-speech conversion
+- MessageHistoryService: Message history management
+"""
+
 import logging
-from src.schemas.schemas import MessageInput, MessageListOutput
-from src.core.domain.model import Message, SenderEnum
 from datetime import datetime, timezone
-from pymongo.errors import PyMongoError
-from src.core.platform.appcontext.appcontext import Factory
-from src.adapters.web.utils.image_formatter import format_images_for_chat_response
 from typing import Optional
-from src.core.platform.functions.smart_function_executor import SmartFunctionExecutor
+from pymongo.errors import PyMongoError
 
-# Set up logger
+from src.schemas import MessageInput, MessageListOutput
+from src.core.domain import Message, SenderEnum
+from src.core.platform.appcontext.appcontext import Factory
+
 logger = logging.getLogger(__name__)
-
-# Module-level constants
-IMAGE_CONFIDENCE_THRESHOLD = 0.3
-MAX_IMAGES_TO_SHOW = 3
-ENABLE_FAST_IMAGE_PROCESSING = True
 
 
 class AddMessageUseCase:
+    """
+    Use case for adding messages to conversations.
+
+    This class follows the Single Responsibility Principle by focusing
+    on orchestration while delegating specific concerns to services.
+    """
+
     def __init__(self, context_factory: Factory):
+        """
+        Initialize the add message use case.
+
+        Args:
+            context_factory: Factory for creating context instances
+        """
         self.context_factory = context_factory()
-        self.smart_function_executor = SmartFunctionExecutor(
-            self.context_factory.config_service
-        )
-
-    def convert_messages_to_string(self, messages: list[Message]) -> str:
-        """
-        Converts a list of Message objects to a single string for context.
-        """
-        message_objects = [
-            f"{message.sender}: {message.content}" for message in messages
-        ]
-        return " - ".join(message_objects)
-
-    async def _get_spanish_female_voice_id(self) -> Optional[int]:
-        """
-        Searches for a female Spanish voice among the available voices.
-        Returns the voice ID or None if a suitable one is not found.
-        Improved error handling to avoid configuration issues.
-        """
-        try:
-            voices = await self.context_factory.integrations.tts.get_available_voices()
-            logger.info(f"Voices found: {len(voices)}")
-
-            if not voices:
-                logger.warning("No available voices found")
-                return None
-
-            for i, voice in enumerate(voices):
-                logger.info(
-                    f"Voice {i}: {voice.get('name', 'No name')} - Gender: {voice.get('gender', 'Unknown')} - Languages: {voice.get('languages', [])}"
-                )
-
-            for voice in voices:
-                voice_name = voice.get("name", "").lower()
-                languages = voice.get("languages", [])
-                gender = voice.get("gender", "").lower()
-
-                spanish_indicators = [
-                    "spanish",
-                    "español",
-                    "es_",
-                    "es-",
-                    "helena",
-                    "sabina",
-                    "monica",
-                    "paloma",
-                    "carmen",
-                ]
-                female_indicators = ["female", "mujer", "femenina", "woman"]
-
-                is_spanish = any(
-                    indicator in voice_name for indicator in spanish_indicators
-                ) or any("es" in str(lang).lower() for lang in languages if lang)
-                is_female = gender in ["female", "mujer"] or any(
-                    indicator in voice_name for indicator in female_indicators
-                )
-
-                if is_spanish and is_female:
-                    logger.info(f"Voice found: {voice['name']} (ID: {voice['id']}) - ")
-                    return voice["id"]
-
-            logger.info("Not found a specific voice, searching")
-            for voice in voices:
-                gender = voice.get("gender", "").lower()
-                if gender in ["female", "mujer"]:
-                    logger.info(
-                        f"Female voice found: {voice['name']} (ID: {voice['id']}"
-                    )
-                    return voice["id"]
-
-            logger.warning(
-                "Not found a voice that matches the criteria, using default system voice."
-            )
-            return None
-
-        except Exception as e:
-            logger.error(f"Error while fetching voices: {e}")
-            return None  # Use default voice if there's an error
-
-    async def _upload_audio_to_s3(
-        self, audio_data: bytes, user_id: str, conversation_id: str
-    ) -> str:
-        """
-        Uploads audio data to S3 and returns the public URL.
-        """
-        try:
-            import io
-            from datetime import datetime
-
-            # Create a BytesIO object from the audio data
-            audio_file = io.BytesIO(audio_data)
-
-            # Generate a unique filename using message ID and timestamp
-            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-            filename = f"tts_audio_{conversation_id}_{timestamp}.wav"
-
-            s3_key = self.context_factory.store_service.put_object(
-                file=audio_file,
-                user_file=user_id,
-                filename=filename,
-                size=len(audio_data),
-                object_id=conversation_id,
-            )
-
-            audio_url = self.context_factory.store_service.generate_url(s3_key)
-
-            return audio_url
-
-        except Exception as e:
-            logger.error(f"Error uploading audio to S3: {e}")
-            raise e
 
     async def execute(
         self,
@@ -142,268 +57,426 @@ class AddMessageUseCase:
         has_text_to_voice: Optional[str] = None,
     ) -> list[Message]:
         """
-        Adds a message to a conversation and processes image extraction if enabled.
-        If image processing is activated, first asks OpenAI for the keyword to search in images,
-        then uses that keyword for image search instead of the original message content.
-        Also processes voice_content if provided to enhance the message content.
+        Executes the add message workflow.
+
+        Workflow:
+        1. Process voice content if provided (transcription)
+        2. Create and validate user message
+        3. Retrieve and validate conversation
+        4. Generate AI response
+        5. Process images if enabled
+        6. Generate audio if enabled
+        7. Save messages to conversation
+        8. Return updated messages
+
+        Args:
+            conversation_id: ID of the conversation
+            message: Input message data
+            sender: Message sender (user/assistant)
+            user_id: ID of the user
+            has_image_processor: Flag to enable image processing
+            has_text_to_voice: Flag to enable text-to-speech
+
+        Returns:
+            List of messages in the conversation
+
+        Raises:
+            Exception: If conversation not found, unauthorized, or database error
         """
-        # Process voice_content if provided
-        enhanced_content = message.content
-        voice_transcription = ""
-
-        if message.voice_content:
-            try:
-                logger.info("Processing voice context...")
-
-                # Read the audio file content
-                audio_content = await message.voice_content.read()
-
-                # Use STT integration to transcribe the audio
-                stt_result = await self.context_factory.integrations.stt.audio_bytes_to_text(
-                    audio_bytes=audio_content,
-                    audio_format=(
-                        message.voice_content.filename.split(".")[-1]
-                        if message.voice_content.filename
-                        else "wav"
-                    ),
-                    settings={
-                        "language": "es-ES",  # Default to Spanish
-                        "model": "base",  # Use base model for balance of speed/accuracy
-                    },
-                )
-
-                if (
-                    stt_result.get("success", False)
-                    and stt_result.get("text", "").strip()
-                ):
-                    voice_transcription = stt_result["text"].strip()
-                    logger.info(
-                        f"Voice transcription successful: '{voice_transcription[:100]}...'"
-                    )
-
-                    # Enhance the message content with voice context
-                    if voice_transcription:
-                        print(f"Voice transcription: {voice_transcription}")
-                        enhanced_content = f"{message.content}\n\n[Contexto de voz]: {voice_transcription}"
-                else:
-                    logger.warning(
-                        f"Voice transcription failed: {stt_result.get('error', 'Unknown error')}"
-                    )
-
-            except Exception as e:
-                logger.error(f"Error processing voice context: {e}")
-                # Continue with original content if voice processing fails
-
-        new_message = Message(
-            content=enhanced_content,
-            sender=sender,
-            created_at=datetime.now(timezone.utc),
-        )
-
         try:
-            search_conversation = (
-                self.context_factory.repositories.conversation.find_by_id(
-                    conversation_id
-                )
-            )
-            if not search_conversation:
-                logger.error("Conversation not found")
-                raise Exception("Conversation not found")
+            # Step 1: Process voice content if provided
+            enhanced_content = await self._process_voice_content(message)
 
-            if user_id != search_conversation.profile.user_id:
-                logger.error("User not authorized to add message")
-                raise Exception("User not authorized to add message")
+            # Step 2: Create user message
+            user_message = self._create_user_message(enhanced_content, sender)
 
-            if (
-                not hasattr(search_conversation, "messages")
-                or search_conversation.messages is None
-            ):
-                search_conversation.messages = []
-
-            if any(msg.id == new_message.id for msg in search_conversation.messages):
-                logger.error(
-                    "Message with the same ID already exists in the conversation"
-                )
-                raise Exception(
-                    "Message with the same ID already exists in the conversation"
-                )
-
-            search_conversation.messages.append(new_message)
-
-            response = ""
-            if search_conversation.profile.functions:
-                try:
-                    logger.info("Using LangChain smart function executor")
-
-                    chat_history = []
-                    if search_conversation.messages:
-                        for msg in search_conversation.messages[
-                            -5:
-                        ]:  # Últimos 5 mensajes
-                            chat_history.append(f"{msg.sender}: {msg.content}")
-
-                    function_response = (
-                        await self.smart_function_executor.execute_function(
-                            user_message=new_message.content,
-                            profile=search_conversation.profile,
-                            chat_history=chat_history,
-                        )
-                    )
-
-                    if function_response and not function_response.startswith(
-                        "No encontré una función"
-                    ):
-                        response = function_response
-                        logger.info("Function executed successfully")
-                    else:
-                        # Si no se encontró función, usar respuesta normal de IA
-                        logger.info("No function found, using normal AI response")
-                        response = await self.context_factory.integrations.openai.ask(
-                            new_message.content,
-                            message.context,
-                            self.convert_messages_to_string(
-                                search_conversation.messages
-                            ),
-                            search_conversation.profile,
-                        )
-
-                except Exception as function_error:
-                    logger.error(
-                        f"Error in LangChain smart function execution: {function_error}"
-                    )
-                    # Fallback a respuesta normal si falla la ejecución de funciones
-                    try:
-                        response = await self.context_factory.integrations.openai.ask(
-                            new_message.content,
-                            message.context,
-                            self.convert_messages_to_string(
-                                search_conversation.messages
-                            ),
-                            search_conversation.profile,
-                        )
-                    except Exception as fallback_error:
-                        logger.error(f"Error in fallback AI response: {fallback_error}")
-                        response = f"¡Hola! Soy {search_conversation.profile.assistant_name} 😊 Disculpa, estoy teniendo algunos problemas técnicos en este momento. ¿Podrías intentarlo de nuevo en unos minutos?"
-            else:
-                # Respuesta normal si no hay funciones configuradas
-                try:
-                    response = await self.context_factory.integrations.openai.ask(
-                        new_message.content,
-                        message.context,
-                        self.convert_messages_to_string(search_conversation.messages),
-                        search_conversation.profile,
-                    )
-                except Exception as no_functions_error:
-                    logger.error(
-                        f"Error in normal AI response (no functions): {no_functions_error}"
-                    )
-                    # Respuesta genérica si la IA falla completamente
-                    response = f"¡Hola! Soy {search_conversation.profile.assistant_name} 😊 Disculpa, estoy teniendo algunos problemas técnicos en este momento. ¿Podrías intentarlo de nuevo en unos minutos?"
-
-            file_images = []
-            formatted_images_list = []
-            image_search_keyword = new_message.content
-
-            if has_image_processor == "activate":
-                # Ask OpenAI for the keyword to search in images
-                logger.info("Requesting image search keyword from OpenAI...")
-                keyword_prompt = (
-                    "Given the following user message, what is the best single keyword or phrase to use to search for relevant images in the user's files? "
-                    "Respond ONLY with the keyword or phrase, no explanation.\n\n"
-                    f"User message: {new_message.content}"
-                )
-                image_search_keyword = (
-                    await self.context_factory.integrations.openai.ask(
-                        keyword_prompt,
-                        message.context,
-                        self.convert_messages_to_string(search_conversation.messages),
-                        search_conversation.profile,
-                    )
-                )
-                logger.info(f"Image search keyword received: '{image_search_keyword}'")
-
-                # Use optimized image search with reduced API calls
-                if ENABLE_FAST_IMAGE_PROCESSING:
-                    logger.info("Using optimized fast image processing mode")
-                    # Limit to fewer results to reduce processing time
-                    max_results_for_search = min(MAX_IMAGES_TO_SHOW, 2)
-                else:
-                    max_results_for_search = MAX_IMAGES_TO_SHOW
-
-                file_images = await self.context_factory.integrations.openai.search_images_in_files(
-                    image_search_keyword,
-                    search_conversation.profile,
-                    max_results_for_search,
-                )
-
-                logger.info(f"File images found: {len(file_images)}")
-
-                # Filter by confidence threshold
-                file_images = [
-                    img
-                    for img in file_images
-                    if getattr(img, "confidence", 1.0) >= IMAGE_CONFIDENCE_THRESHOLD
-                ]
-
-                if file_images:
-                    formatted_images = format_images_for_chat_response(
-                        file_images,
-                        image_search_keyword,
-                        max_images_to_show=MAX_IMAGES_TO_SHOW,
-                    )
-                    formatted_images_list.append(formatted_images)
-
-            audio_url = None
-            if has_text_to_voice == "activate":
-                try:
-                    logger.info("Generating audio response...")
-
-                    tts_settings = {
-                        "rate": 150,  # Moderate speed
-                        "volume": 0.8,  # High volume
-                        # DO NOT include voice_id to avoid configuration errors
-                    }
-
-                    audio_data = await self.context_factory.integrations.tts.text_to_speech_stream(
-                        text=response, settings=tts_settings
-                    )
-
-                    audio_url = await self._upload_audio_to_s3(
-                        audio_data, user_id, conversation_id
-                    )
-
-                except Exception as e:
-                    logger.error(f"Error generating audio: {e}")
-                    raise Exception(f"Error generating audio: {e}")
-
-            response_message = Message(
-                content=response,
-                audio_url=audio_url,
-                sender="assistant",
-                created_at=datetime.now(timezone.utc),
+            # Step 3: Retrieve and validate conversation
+            conversation = self._get_and_validate_conversation(
+                conversation_id, user_id
             )
 
-            search_conversation.messages.append(response_message)
+            # Step 4: Add user message to conversation
+            self._add_message_to_conversation(conversation, user_message)
 
-            self.context_factory.repositories.conversation.update_messages_by_id(
-                conversation_id,
-                search_conversation.messages,
+            # Step 5: Generate AI response
+            ai_response_text = await self._generate_ai_response(
+                user_message=user_message,
+                conversation=conversation,
+                message_context=message.context
             )
 
-            response_with_images = response
-            if has_image_processor == "activate" and formatted_images_list:
-                formatted_images = "\n".join(formatted_images_list)
-                if formatted_images:
-                    response_with_images += f"\n\n{formatted_images}"
-                    response_message.content = response_with_images
-                    search_conversation.messages[-1] = response_message
+            # Step 6: Process images if enabled
+            formatted_images = await self._process_images_if_enabled(
+                has_image_processor=has_image_processor,
+                user_message=user_message,
+                conversation=conversation,
+                message_context=message.context
+            )
 
-            return MessageListOutput.from_output(search_conversation.messages)
+            # Step 7: Generate audio if enabled
+            audio_url = await self._generate_audio_if_enabled(
+                has_text_to_voice=has_text_to_voice,
+                text=ai_response_text,
+                user_id=user_id,
+                conversation_id=conversation_id
+            )
+
+            # Step 8: Create assistant response message
+            assistant_message = self._create_assistant_message(
+                content=ai_response_text,
+                audio_url=audio_url
+            )
+
+            # Step 9: Append images to assistant message if available
+            if formatted_images:
+                assistant_message.content = f"{ai_response_text}\n\n{formatted_images}"
+
+            # Step 10: Add assistant message to conversation
+            self._add_message_to_conversation(conversation, assistant_message)
+
+            # Step 11: Persist messages to database
+            self._save_messages(conversation_id, conversation.messages)
+
+            # Step 12: Return messages
+            return MessageListOutput.from_output(conversation.messages)
 
         except PyMongoError as e:
-            logger.error(f"Error interacting with the database: {e}")
+            logger.error(f"Database error in AddMessageUseCase: {e}")
             raise Exception(f"Error interacting with the database: {e}")
 
         except Exception as e:
             logger.error(f"Error executing AddMessageUseCase: {e}")
-            raise Exception(f"Error executing AddMessageUseCase: {e}")
+            raise
+
+    async def _process_voice_content(self, message: MessageInput) -> str:
+        """
+        Processes voice content and enhances message text.
+
+        Args:
+            message: Input message with optional voice content
+
+        Returns:
+            Enhanced content with voice transcription if available
+        """
+        if not message.voice_content:
+            return message.content
+
+        if not self.context_factory.platform_managers:
+            logger.warning("Platform managers not available, skipping voice processing")
+            return message.content
+
+        try:
+            logger.info("Processing voice content...")
+
+            transcription = await self.context_factory.platform_managers.voice_transcription.transcribe_audio_file(
+                audio_file=message.voice_content
+            )
+
+            if transcription:
+                enhanced_content = self.context_factory.platform_managers.voice_transcription.enhance_message_with_transcription(
+                    original_message=message.content,
+                    transcription=transcription
+                )
+                logger.info(f"Voice transcription successful: '{transcription[:100]}...'")
+                return enhanced_content
+            else:
+                logger.warning("Voice transcription failed, using original content")
+                return message.content
+
+        except Exception as e:
+            logger.error(f"Error processing voice content: {e}")
+            return message.content
+
+    def _create_user_message(self, content: str, sender: SenderEnum) -> Message:
+        """
+        Creates a user message domain object.
+
+        Args:
+            content: Message content
+            sender: Message sender
+
+        Returns:
+            Message domain object
+        """
+        return Message(
+            content=content,
+            sender=sender,
+            created_at=datetime.now(timezone.utc),
+        )
+
+    def _create_assistant_message(
+        self,
+        content: str,
+        audio_url: Optional[str] = None
+    ) -> Message:
+        """
+        Creates an assistant message domain object.
+
+        Args:
+            content: Message content
+            audio_url: Optional audio URL
+
+        Returns:
+            Message domain object
+        """
+        return Message(
+            content=content,
+            audio_url=audio_url,
+            sender="assistant",
+            created_at=datetime.now(timezone.utc),
+        )
+
+    def _get_and_validate_conversation(self, conversation_id: str, user_id: str):
+        """
+        Retrieves and validates a conversation.
+
+        Args:
+            conversation_id: ID of the conversation
+            user_id: ID of the user
+
+        Returns:
+            Conversation domain object
+
+        Raises:
+            Exception: If conversation not found or user unauthorized
+        """
+        conversation = self.context_factory.repositories.conversation.find_by_id(
+            conversation_id
+        )
+
+        if not conversation:
+            logger.error(f"Conversation not found: {conversation_id}")
+            raise Exception("Conversation not found")
+
+        if user_id != conversation.profile.user_id:
+            logger.error(
+                f"User {user_id} not authorized for conversation {conversation_id}"
+            )
+            raise Exception("User not authorized to add message")
+
+        # Initialize messages list if not present
+        if not hasattr(conversation, "messages") or conversation.messages is None:
+            conversation.messages = []
+
+        return conversation
+
+    def _add_message_to_conversation(self, conversation, message: Message) -> None:
+        """
+        Adds a message to the conversation with validation.
+
+        Args:
+            conversation: Conversation domain object
+            message: Message to add
+
+        Raises:
+            Exception: If message with same ID already exists
+        """
+        if any(msg.id == message.id for msg in conversation.messages):
+            logger.error(f"Duplicate message ID: {message.id}")
+            raise Exception("Message with the same ID already exists in the conversation")
+
+        conversation.messages.append(message)
+
+    async def _generate_ai_response(
+        self,
+        user_message: Message,
+        conversation,
+        message_context: Optional[str]
+    ) -> str:
+        """
+        Generates AI response using the AI response service.
+
+        Args:
+            user_message: User's message
+            conversation: Conversation object
+            message_context: Optional message context
+
+        Returns:
+            Generated AI response text
+        """
+        if not self.context_factory.platform_managers:
+            logger.warning("Platform services not available, using fallback")
+            return await self._generate_ai_response_fallback(
+                user_message, conversation, message_context
+            )
+
+        try:
+            # Build chat history for function execution
+            chat_history = self.context_factory.platform_managers.message_history.build_chat_history(
+                messages=conversation.messages,
+                max_messages=5
+            )
+
+            # Convert messages to string for conversation context
+            conversation_history = self.context_factory.platform_managers.message_history.convert_messages_to_string(
+                conversation.messages
+            )
+
+            # Generate response using AI response service
+            response = await self.context_factory.platform_managers.ai_response.generate_response(
+                user_message=user_message.content,
+                profile=conversation.profile,
+                message_context=message_context,
+                conversation_history=conversation_history,
+                chat_history=chat_history
+            )
+
+            return response
+
+        except Exception as e:
+            logger.error(f"Error generating AI response: {e}")
+            return self._get_fallback_error_message(conversation.profile)
+
+    async def _generate_ai_response_fallback(
+        self,
+        user_message: Message,
+        conversation,
+        message_context: Optional[str]
+    ) -> str:
+        """
+        Fallback method for generating AI response without platform services.
+
+        Args:
+            user_message: User's message
+            conversation: Conversation object
+            message_context: Optional message context
+
+        Returns:
+            Generated AI response text
+        """
+        try:
+            # Manual conversion of messages to string
+            conversation_history = " - ".join([
+                f"{msg.sender}: {msg.content}"
+                for msg in conversation.messages
+            ])
+
+            response = await self.context_factory.integrations.openai.ask(
+                user_message.content,
+                message_context,
+                conversation_history,
+                conversation.profile
+            )
+
+            return response
+
+        except Exception as e:
+            logger.error(f"Error in fallback AI response: {e}")
+            return self._get_fallback_error_message(conversation.profile)
+
+    async def _process_images_if_enabled(
+        self,
+        has_image_processor: Optional[str],
+        user_message: Message,
+        conversation,
+        message_context: Optional[str]
+    ) -> Optional[str]:
+        """
+        Processes images if image processor is enabled.
+
+        Args:
+            has_image_processor: Flag to enable image processing
+            user_message: User's message
+            conversation: Conversation object
+            message_context: Optional message context
+
+        Returns:
+            Formatted images string or None
+        """
+        if has_image_processor != "activate":
+            return None
+
+        if not self.context_factory.platform_managers:
+            logger.warning("Platform services not available, skipping image processing")
+            return None
+
+        try:
+            logger.info("Image processing activated")
+
+            conversation_history = self.context_factory.platform_managers.message_history.convert_messages_to_string(
+                conversation.messages
+            )
+
+            formatted_images = await self.context_factory.platform_managers.image_processing.search_and_format_images(
+                user_message=user_message.content,
+                profile=conversation.profile,
+                message_context=message_context,
+                conversation_history=conversation_history
+            )
+
+            return formatted_images
+
+        except Exception as e:
+            logger.error(f"Error processing images: {e}")
+            return None
+
+    async def _generate_audio_if_enabled(
+        self,
+        has_text_to_voice: Optional[str],
+        text: str,
+        user_id: str,
+        conversation_id: str
+    ) -> Optional[str]:
+        """
+        Generates audio if text-to-voice is enabled.
+
+        Args:
+            has_text_to_voice: Flag to enable text-to-speech
+            text: Text to convert to speech
+            user_id: User ID
+            conversation_id: Conversation ID
+
+        Returns:
+            Audio URL or None
+        """
+        if has_text_to_voice != "activate":
+            return None
+
+        if not self.context_factory.platform_managers:
+            logger.warning("Platform services not available, skipping audio generation")
+            return None
+
+        try:
+            logger.info("Generating audio response...")
+
+            audio_url = await self.context_factory.platform_managers.text_to_speech.generate_and_store_audio(
+                text=text,
+                user_id=user_id,
+                conversation_id=conversation_id
+            )
+
+            return audio_url
+
+        except Exception as e:
+            logger.error(f"Error generating audio: {e}")
+            raise Exception(f"Error generating audio: {e}")
+
+    def _save_messages(self, conversation_id: str, messages: list[Message]) -> None:
+        """
+        Persists messages to the database.
+
+        Args:
+            conversation_id: ID of the conversation
+            messages: List of messages to save
+        """
+        self.context_factory.repositories.conversation.update_messages_by_id(
+            conversation_id,
+            messages,
+        )
+
+    def _get_fallback_error_message(self, profile) -> str:
+        """
+        Returns a friendly fallback error message.
+
+        Args:
+            profile: User profile
+
+        Returns:
+            Friendly error message
+        """
+        assistant_name = getattr(profile, "assistant_name", "Asistente")
+        return (
+            f"¡Hola! Soy {assistant_name} 😊 Disculpa, estoy teniendo algunos "
+            f"problemas técnicos en este momento. ¿Podrías intentarlo de nuevo "
+            f"en unos minutos?"
+        )

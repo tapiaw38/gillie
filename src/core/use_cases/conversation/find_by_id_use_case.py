@@ -1,5 +1,5 @@
-from src.schemas.schemas import ConversationOutput
-from src.core.domain.model import Conversation
+from src.schemas import ConversationOutput
+from src.core.domain import Conversation
 from pymongo.errors import PyMongoError
 from src.core.platform.appcontext.appcontext import Factory
 from typing import Optional

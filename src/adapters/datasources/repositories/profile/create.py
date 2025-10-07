@@ -1,4 +1,4 @@
-from src.core.domain.model import Profile
+from src.core.domain import Profile
 from pymongo.errors import DuplicateKeyError, PyMongoError
 
 

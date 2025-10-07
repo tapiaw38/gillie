@@ -1,5 +1,5 @@
-from src.schemas.schemas import ProfileOutput
-from src.core.domain.model import Profile
+from src.schemas import ProfileOutput
+from src.core.domain import Profile
 from datetime import datetime, timezone
 from pymongo.errors import PyMongoError
 from src.core.platform.appcontext.appcontext import Factory

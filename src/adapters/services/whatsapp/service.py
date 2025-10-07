@@ -1,6 +1,6 @@
 from fastapi import HTTPException, status
-from src.schemas.schemas import MessageInput
-from src.core.domain.model import SenderEnum, Profile
+from src.schemas import MessageInput
+from src.core.domain import SenderEnum, Profile
 from src.adapters.web.integrations.whatsapp.whatsapp import WhatsAppIntegration
 from src.adapters.services.conversation.service import ConversationService
 from src.core.platform.logging import get_logger
@@ -74,7 +74,7 @@ class WhatsAppService:
 
                 if not conversation_id:
 
-                    from src.schemas.schemas import ConversationInput
+                    from src.schemas import ConversationInput
 
                     conversation_input = ConversationInput(
                         title=f"WhatsApp-{sender_phone}"

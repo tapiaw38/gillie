@@ -1,9 +1,9 @@
-from src.schemas.schemas import (
+from src.schemas import (
     FileListOutput,
     FileInput,
     FileDeleteOutput,
 )
-from src.core.domain.model import File
+from src.core.domain import File
 from datetime import datetime, timezone
 from pymongo.errors import PyMongoError
 from src.core.platform.appcontext.appcontext import Factory

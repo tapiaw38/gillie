@@ -8,7 +8,7 @@ from src.adapters.web.integrations.openapi.context import (
     CONTEXT_ROLE_TUTOR,
     CONTEXT_RULES,
 )
-from src.core.domain.model import Profile
+from src.core.domain import Profile
 from src.core.platform.fileprocessor.pdf_processor import FileImageProcessor
 from src.core.platform.fileprocessor.xlsx_processor import ExcelImageProcessor
 from src.core.platform.fileprocessor.processor import ImageSearchResult

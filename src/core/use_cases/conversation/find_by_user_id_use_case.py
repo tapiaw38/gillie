@@ -1,4 +1,4 @@
-from src.schemas.schemas import ConversationListOutput
+from src.schemas import ConversationListOutput
 from pymongo.errors import PyMongoError
 from src.core.platform.appcontext.appcontext import Factory
 

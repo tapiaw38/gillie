@@ -1,10 +1,10 @@
 
 from fastapi import APIRouter, status, Depends, Request, Query, HTTPException, Form, File, UploadFile
-from src.schemas.schemas import (
+from src.schemas import (
     ConversationInput,
     MessageInput,
 )
-from src.core.domain.model import (
+from src.core.domain import (
     SenderEnum,
 )
 from src.adapters.services.services import Services

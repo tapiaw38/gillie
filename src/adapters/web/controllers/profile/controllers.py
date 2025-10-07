@@ -1,5 +1,5 @@
 from fastapi import APIRouter, status, Depends, Request, UploadFile, File
-from src.schemas.schemas import (
+from src.schemas import (
     ProfileInput,
     ProfileStatusInput,
     ApiKeyInput,

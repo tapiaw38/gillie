@@ -1,5 +1,5 @@
-from src.schemas.schemas import ConversationInput, ConversationOutput
-from src.core.domain.model import Conversation, Profile
+from src.schemas import ConversationInput, ConversationOutput
+from src.core.domain import Conversation, Profile
 from datetime import datetime, timezone
 from pymongo.errors import PyMongoError
 from src.core.platform.appcontext.appcontext import Factory

@@ -1,5 +1,5 @@
 from pymongo.errors import PyMongoError
-from src.core.domain.model import Profile
+from src.core.domain import Profile
 
 
 def find_profile_by_user_id(client, user_id: str) -> Profile:

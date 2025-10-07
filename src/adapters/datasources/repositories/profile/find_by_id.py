@@ -1,6 +1,6 @@
 from typing import Optional
 from pymongo.errors import PyMongoError
-from src.core.domain.model import Profile
+from src.core.domain import Profile
 
 
 def find_profile_by_id(client, id: str) -> Optional[Profile]:

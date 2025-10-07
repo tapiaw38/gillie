@@ -1,4 +1,4 @@
-from src.schemas.schemas import MessageListOutput
+from src.schemas import MessageListOutput
 from pymongo.errors import PyMongoError
 from src.core.platform.appcontext.appcontext import Factory
 

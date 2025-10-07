@@ -1,5 +1,5 @@
 from pymongo.errors import PyMongoError
-from src.core.domain.model import Profile
+from src.core.domain import Profile
 
 
 def update_profile(client, id: str, profile: Profile) -> str:

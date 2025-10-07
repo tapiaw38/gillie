@@ -15,6 +15,7 @@ from src.core.use_cases.use_cases import create_usecases
 from src.core.platform.nosql.migrations import execute_profile_migrations
 from src.core.platform.objectstorange.s3_session import get_s3_session
 from src.adapters.storeservice.storeservice import StoreServiceImpl
+from src.core.platform.services.platform_services import PlatformServices
 
 
 app = FastAPI(
@@ -72,7 +73,21 @@ datasources = Datasources.create_datasources(
     no_sql_locations_client=profiles_client,
 )
 integrations = create_integrations(config_service)
-context_factory = new_factory(datasources, integrations, store_service, config_service)
+
+# Create platform services with their dependencies
+platform_services = PlatformServices.create_services(
+    integrations=integrations,
+    store_service=store_service,
+    config_service=config_service
+)
+
+context_factory = new_factory(
+    datasources,
+    integrations,
+    store_service,
+    config_service,
+    platform_services
+)
 usecases = create_usecases(context_factory)
 
 routes_manager = RoutesManager(app, usecases, config_service)
