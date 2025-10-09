@@ -138,6 +138,11 @@ CRITICAL RULES:
 
                 parsed_functions.append(config)
 
+                # Si es un workflow, registrarlo en el WorkflowExecutor
+                if config.type == "workflow":
+                    self.workflow_executor.register_workflow(config.name, func)
+                    logger.info(f"Registered workflow: {config.name}")
+
                 logger.debug(f"Successfully parsed function: {config.name}")
 
             return parsed_functions
@@ -148,7 +153,7 @@ CRITICAL RULES:
             return []
 
     async def _analyze_user_intent(
-        self, user_question: str, available_functions: List[FunctionConfig]
+        self, user_question: str, available_functions: List[FunctionConfig], chat_history: List[str] = None
     ) -> Dict[str, Any]:
         """Usar IA para analizar la intención del usuario y encontrar coincidencias"""
         try:
@@ -172,11 +177,22 @@ CRITICAL RULES:
 
                 functions_info.append(function_info)
 
+            # Preparar contexto del historial si está disponible
+            history_context = ""
+            if chat_history and len(chat_history) > 0:
+                # Tomar los últimos 4 mensajes para contexto
+                recent_messages = chat_history[-4:] if len(chat_history) > 4 else chat_history
+                history_context = "\n\nCONVERSATION HISTORY (recent messages):\n" + "\n".join(recent_messages)
+                history_context += "\n\nIMPORTANT: Use the conversation history to understand context. For example:"
+                history_context += "\n- If a booking was just created and user says a number, it might be the booking_id"
+                history_context += "\n- If user says 'confirmar' or 'confirm', look for booking_id in previous messages"
+                history_context += "\n- Extract any relevant IDs, dates, or parameters from the history"
+
             # Crear prompt con funciones disponibles
             prompt = self.intent_prompt.format(
                 available_functions=json.dumps(functions_info, indent=2),
                 user_question=user_question,
-            )
+            ) + history_context
 
             # Obtener respuesta de la IA
             response = await self.llm.ainvoke([HumanMessage(content=prompt)])
@@ -337,30 +353,13 @@ Responde de manera amigable y útil, explicando qué información necesitas."""
     ) -> Dict[str, Any]:
         """Ejecutar workflow"""
         try:
-            # Crear definición de workflow desde la configuración
-            workflow_steps = []
+            # Ejecutar workflow usando el nombre y parámetros
+            # El workflow ya debería estar registrado en workflow_executor
+            logger.info(f"Executing workflow: {function_config.name} with params: {params}")
 
-            # Por ahora, asumimos que el workflow tiene un solo paso
-            # En el futuro, esto se puede expandir para manejar workflows complejos
-            step = WorkflowStep(
-                name=function_config.name,
-                description=f"Execute {function_config.name}",
-                url=function_config.url,
-                method=function_config.method,
-                required_params=list(params.keys()),
-            )
-            workflow_steps.append(step)
-
-            workflow_def = WorkflowDefinition(
-                name=function_config.name,
-                description=f"Workflow for {function_config.name}",
-                steps=workflow_steps,
-                input_params=list(params.keys()),
-            )
-
-            # Ejecutar workflow
             result = await self.workflow_executor.execute_workflow(
-                workflow=workflow_def, user_params=params, context={}
+                workflow_name=function_config.name,
+                input_params=params
             )
 
             return {"success": True, "result": result, "type": "workflow"}
@@ -388,15 +387,21 @@ Responde de manera amigable y útil, explicando qué información necesitas."""
             # Verificar si el usuario está proporcionando parámetros para una función en progreso
             ongoing_function = self._detect_ongoing_function(user_id, user_message)
             if ongoing_function:
+                logger.info(f"Ongoing function detected: {ongoing_function}, processing user response")
                 # El usuario está proporcionando parámetros, procesarlos
                 return await self._process_ongoing_function(
                     user_id, ongoing_function, user_message, available_functions
                 )
+            else:
+                logger.info("No ongoing function detected, analyzing as new request")
 
             # Analizar intención del usuario con IA
+            logger.info(f"Analyzing user intent for message: {user_message[:100]}...")
             intent_analysis = await self._analyze_user_intent(
-                user_message, available_functions
+                user_message, available_functions, chat_history
             )
+
+            logger.info(f"Intent analysis result: {intent_analysis}")
 
             # Verificar que el análisis de intención sea válido
             if not isinstance(intent_analysis, dict):
@@ -408,23 +413,29 @@ Responde de manera amigable y útil, explicando qué información necesitas."""
                     "reasoning",
                     "No se encontró una función que coincida con tu solicitud.",
                 )
+                logger.info(f"No function match found. Reasoning: {reasoning}")
                 return f"No encontré una función que coincida con tu solicitud. {reasoning}"
 
             # Encontrar la función coincidente
             matched_function_name = intent_analysis.get("function_name")
+            logger.info(f"Matched function name: {matched_function_name}")
             matched_function = None
 
             for func in available_functions:
                 if func.name == matched_function_name:
                     matched_function = func
+                    logger.info(f"Found matched function: {func.name}, type: {func.type}")
                     break
 
             if not matched_function:
+                logger.error(f"Function '{matched_function_name}' not found in configuration")
                 return f"Error: No se pudo encontrar la función '{matched_function_name}' en la configuración."
 
             # Verificar parámetros faltantes
             missing_params = intent_analysis.get("missing_params", [])
             extracted_params = intent_analysis.get("extracted_params", {})
+
+            logger.info(f"Missing params: {missing_params}, Extracted params: {extracted_params}")
 
             # Combinar parámetros extraídos con los almacenados previamente
             stored_params = self._get_stored_function_params(
@@ -447,25 +458,36 @@ Responde de manera amigable y útil, explicando qué información necesitas."""
                 return param_request["message"]
 
             # Ejecutar función según su tipo
+            logger.info(f"Executing function type: {matched_function.type}, name: {matched_function.name}")
             if matched_function.type == "simple":
+                logger.info(f"Calling _execute_simple_function with params: {all_params}")
                 execution_result = await self._execute_simple_function(
                     matched_function, all_params
                 )
             elif matched_function.type == "workflow":
+                logger.info(f"Calling _execute_workflow with params: {all_params}")
                 execution_result = await self._execute_workflow(
                     matched_function, all_params
                 )
+                logger.info(f"Workflow execution result: {execution_result}")
             else:
+                logger.error(f"Unsupported function type: {matched_function.type}")
                 return f"Tipo de función no soportado: {matched_function.type}"
 
             if not execution_result.get("success", False):
+                logger.error(f"Function execution failed: {execution_result}")
                 return f"Error ejecutando {matched_function.name}: {execution_result.get('error', 'Error desconocido')}"
 
-            # Generar respuesta amigable
-            if matched_function.type == "simple":
-                return f"✅ Función '{matched_function.name}' ejecutada exitosamente.\n\nResultado: {execution_result.get('result', 'Sin resultado')}"
-            else:
-                return f"✅ Workflow '{matched_function.name}' ejecutado exitosamente.\n\nResultado: {execution_result.get('result', 'Sin resultado')}"
+            logger.info(f"Function executed successfully: {matched_function.name}")
+
+            # Generar respuesta amigable usando IA
+            friendly_response = await self._generate_friendly_response(
+                matched_function.name,
+                matched_function.type,
+                execution_result,
+                all_params
+            )
+            return friendly_response
 
         except Exception as e:
             logger.error(f"Error in smart function execution: {e}")
@@ -566,12 +588,11 @@ Responde de manera amigable y útil, explicando qué información necesitas."""
     ) -> Optional[str]:
         """Detecta si el usuario está proporcionando parámetros para una función en progreso"""
         if user_id in self.function_params_storage:
-            for function_name in self.function_params_storage[user_id]:
-                # Verificar si el mensaje contiene números que podrían ser coordenadas
-                import re
-
-                numbers = re.findall(r"-?\d+\.?\d*", user_message)
-                if len(numbers) >= 2:  # Al menos 2 números (lat, lon)
+            # Si hay parámetros almacenados, significa que hay una función en progreso
+            # Retornar la primera función que tenga parámetros almacenados
+            for function_name, params in self.function_params_storage[user_id].items():
+                if params:  # Si hay parámetros almacenados
+                    logger.info(f"Detected ongoing function: {function_name} with stored params: {params}")
                     return function_name
         return None
 
@@ -584,6 +605,7 @@ Responde de manera amigable y útil, explicando qué información necesitas."""
     ) -> str:
         """Procesa parámetros proporcionados para una función en progreso"""
         try:
+            logger.info(f"Processing ongoing function: {function_name}")
             # Encontrar la función
             matched_function = None
             for func in available_functions:
@@ -592,31 +614,61 @@ Responde de manera amigable y útil, explicando qué información necesitas."""
                     break
 
             if not matched_function:
+                logger.error(f"Function {function_name} not found in available functions")
                 return f"Error: No se pudo encontrar la función '{function_name}'"
+
+            # Obtener parámetros almacenados
+            stored_params = self._get_stored_function_params(user_id, function_name)
+            logger.info(f"Stored params for {function_name}: {stored_params}")
 
             # Extraer parámetros del mensaje
             extracted_params = self._extract_basic_params(
                 user_message, matched_function
             )
+            logger.info(f"Extracted params from message: {extracted_params}")
 
-            # Combinar con parámetros almacenados previamente
-            stored_params = self._get_stored_function_params(user_id, function_name)
+            # Determinar parámetros requeridos según el tipo de función
+            if matched_function.type == "workflow":
+                # Para workflows, obtener del registro
+                if function_name in self.workflow_executor.workflows:
+                    workflow = self.workflow_executor.workflows[function_name]
+                    required_params = workflow.get("input_params", [])
+                else:
+                    required_params = []
+            else:
+                required_params = self._extract_url_params(matched_function.url)
+
+            logger.info(f"Required params: {required_params}")
+
+            # Combinar parámetros
             all_params = {**stored_params, **extracted_params}
+
+            # Calcular parámetros faltantes
+            missing_params = [
+                param for param in required_params if param not in all_params
+            ]
+            logger.info(f"Missing params: {missing_params}, All params: {all_params}")
+
+            # Si solo falta un parámetro y no se extrajo nada, asumir que el mensaje es ese parámetro
+            if len(missing_params) == 1 and not extracted_params:
+                missing_param = missing_params[0]
+                # Intentar usar el mensaje como valor del parámetro faltante
+                extracted_params[missing_param] = user_message.strip()
+                all_params[missing_param] = user_message.strip()
+                logger.info(f"Assumed message is for missing param '{missing_param}': {user_message.strip()}")
+                missing_params = []
 
             # Almacenar los nuevos parámetros
             if extracted_params:
                 self._store_function_params(user_id, function_name, extracted_params)
-
-            # Verificar si tenemos todos los parámetros requeridos
-            required_params = self._extract_url_params(matched_function.url)
-            missing_params = [
-                param for param in required_params if param not in all_params
-            ]
+                logger.info(f"Stored new params: {extracted_params}")
 
             if missing_params:
                 # Aún faltan parámetros
+                logger.info(f"Still missing params: {missing_params}")
                 return f"Gracias por proporcionar esa información. Aún necesito: {', '.join(missing_params)}"
             else:
+                logger.info(f"All params collected, executing {matched_function.type}: {function_name}")
                 # Tenemos todos los parámetros, ejecutar la función
                 if matched_function.type == "simple":
                     execution_result = await self._execute_simple_function(
@@ -667,6 +719,90 @@ Responde de manera amigable y útil, explicando qué información necesitas."""
                 extracted_params["lat"] = numbers[0]
                 extracted_params["lon"] = numbers[1]
 
+            # Buscar fechas - múltiples formatos
+            # Patrón para check-in / checkin / entrada / llegada
+            checkin_patterns = [
+                r'check[\s-]?in[:\s]+(\d{1,2}[/\-\.]\d{1,2}[/\-\.]\d{4})',
+                r'entrada[:\s]+(\d{1,2}[/\-\.]\d{1,2}[/\-\.]\d{4})',
+                r'llegada[:\s]+(\d{1,2}[/\-\.]\d{1,2}[/\-\.]\d{4})',
+            ]
+            for pattern in checkin_patterns:
+                match = re.search(pattern, user_question_lower)
+                if match:
+                    extracted_params["check_in"] = match.group(1)
+                    logger.debug(f"Extracted check_in date: {match.group(1)}")
+                    break
+
+            # Patrón para check-out / checkout / salida
+            checkout_patterns = [
+                r'check[\s-]?out[:\s]+(\d{1,2}[/\-\.]\d{1,2}[/\-\.]\d{4})',
+                r'salida[:\s]+(\d{1,2}[/\-\.]\d{1,2}[/\-\.]\d{4})',
+            ]
+            for pattern in checkout_patterns:
+                match = re.search(pattern, user_question_lower)
+                if match:
+                    extracted_params["check_out"] = match.group(1)
+                    logger.debug(f"Extracted check_out date: {match.group(1)}")
+                    break
+
+            # Buscar número de huéspedes / guests
+            guests_patterns = [
+                r'hu[eé]spedes?[:\s]+(\d+)',
+                r'guests?[:\s]+(\d+)',
+                r'personas?[:\s]+(\d+)',
+                r'(\d+)\s+hu[eé]spedes?',
+                r'(\d+)\s+guests?',
+                r'(\d+)\s+personas?',
+            ]
+            for pattern in guests_patterns:
+                match = re.search(pattern, user_question_lower)
+                if match:
+                    extracted_params["guests"] = match.group(1)
+                    logger.debug(f"Extracted guests: {match.group(1)}")
+                    break
+
+            # Buscar room_id / habitación
+            room_patterns = [
+                r'habitaci[oó]n[:\s]+n[uú]mero[:\s]+(\d+)',
+                r'habitaci[oó]n[:\s]+(\d+)',
+                r'room[:\s]+(\d+)',
+                r'room[\s_]id[:\s]+(\d+)',
+            ]
+            for pattern in room_patterns:
+                match = re.search(pattern, user_question_lower)
+                if match:
+                    extracted_params["room_id"] = match.group(1)
+                    logger.debug(f"Extracted room_id: {match.group(1)}")
+                    break
+
+            # Buscar nombre (guest_name) - extraer palabras antes del email o teléfono
+            # Patrón simple: nombre apellido seguido de email o teléfono
+            name_patterns = [
+                r'^([A-ZÑÁÉÍÓÚ][a-zñáéíóú]+(?:\s+[A-ZÑÁÉÍÓÚ][a-zñáéíóú]+)+)',  # Nombre Apellido capitalizado
+                r'nombre[:\s]+([A-ZÑÁÉÍÓÚ][a-zñáéíóú]+(?:\s+[A-ZÑÁÉÍÓÚ][a-zñáéíóú]+)*)',
+                r'llamo[:\s]+([A-ZÑÁÉÍÓÚ][a-zñáéíóú]+(?:\s+[A-ZÑÁÉÍÓÚ][a-zñáéíóú]+)*)',
+            ]
+            for pattern in name_patterns:
+                match = re.search(pattern, user_question)
+                if match:
+                    extracted_params["guest_name"] = match.group(1).strip()
+                    logger.debug(f"Extracted guest_name: {match.group(1)}")
+                    break
+
+            # Buscar email
+            email_pattern = r'\b([a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,})\b'
+            email_match = re.search(email_pattern, user_question)
+            if email_match:
+                extracted_params["email"] = email_match.group(1)
+                logger.debug(f"Extracted email: {email_match.group(1)}")
+
+            # Buscar teléfono
+            phone_pattern = r'(\+?\d{1,3}[\s-]?\d{3,4}[\s-]?\d{6,7})'
+            phone_match = re.search(phone_pattern, user_question)
+            if phone_match:
+                extracted_params["phone"] = phone_match.group(1).replace(" ", "").replace("-", "")
+                logger.debug(f"Extracted phone: {phone_match.group(1)}")
+
             # Buscar idioma
             if "español" in user_question_lower or "spanish" in user_question_lower:
                 extracted_params["accept-language"] = "es"
@@ -679,11 +815,107 @@ Responde de manera amigable y útil, explicando qué información necesitas."""
             if "detalle" in user_question_lower or "detail" in user_question_lower:
                 extracted_params["addressdetails"] = "1"
 
+            # Buscar booking_id / reserva id
+            booking_id_patterns = [
+                r'reserva[:\s]+n[uú]mero[:\s]+(\d+)',
+                r'reserva[:\s]+(\d+)',
+                r'booking[:\s]+(\d+)',
+                r'booking[\s_]id[:\s]+(\d+)',
+                r'id[:\s]+(\d+)',
+            ]
+            for pattern in booking_id_patterns:
+                match = re.search(pattern, user_question_lower)
+                if match:
+                    extracted_params["booking_id"] = match.group(1)
+                    logger.debug(f"Extracted booking_id: {match.group(1)}")
+                    break
+
             return extracted_params
 
         except Exception as e:
             logger.error(f"Error extracting basic params: {e}")
             return {}
+
+    async def _generate_friendly_response(
+        self,
+        function_name: str,
+        function_type: str,
+        execution_result: Dict[str, Any],
+        params: Dict[str, str]
+    ) -> str:
+        """Genera una respuesta amigable y natural usando IA basada en el resultado de la ejecución"""
+        try:
+            logger.info(f"[FRIENDLY_RESPONSE] Generating friendly response for {function_name}")
+
+            # Preparar el contexto de ejecución para el LLM
+            result_data = execution_result.get('result', {})
+
+            # Si es un workflow, extraer información relevante
+            if function_type == "workflow":
+                context_data = result_data.get('context', {})
+                steps_executed = result_data.get('steps_executed', [])
+                status = result_data.get('status', 'unknown')
+                final_result = result_data.get('final_result', {})
+
+                # Determinar si hubo un error real
+                has_error = not steps_executed or len(final_result) == 0
+
+                context_str = f"""
+Tipo: Workflow
+Nombre: {function_name}
+Estado: {status}
+Pasos ejecutados exitosamente: {', '.join(steps_executed) if steps_executed else 'NINGUNO - ERROR'}
+Resultados de pasos: {json.dumps(final_result, indent=2, ensure_ascii=False) if final_result else 'VACÍO - ERROR'}
+Parámetros utilizados: {json.dumps(params, indent=2, ensure_ascii=False)}
+Error detectado: {'SÍ - No se ejecutaron pasos correctamente' if has_error else 'NO - Ejecución exitosa'}
+"""
+            else:
+                # Función simple
+                context_str = f"""
+Tipo: Función simple
+Nombre: {function_name}
+Parámetros utilizados: {json.dumps(params, indent=2, ensure_ascii=False)}
+Resultado: {json.dumps(result_data, indent=2, ensure_ascii=False)}
+"""
+
+            # Crear prompt para generar respuesta amigable
+            prompt = f"""Eres un asistente que genera respuestas naturales y amigables basadas en los resultados de operaciones técnicas.
+
+Operación ejecutada:
+{context_str}
+
+INSTRUCCIONES CRÍTICAS:
+1. PRIMERO revisa si dice "Error detectado: SÍ" o si "Pasos ejecutados" es "NINGUNO - ERROR"
+2. Si hay error: Genera una respuesta que informe al usuario que hubo un problema técnico y no se pudo completar la operación
+3. Si NO hay error y hay pasos ejecutados exitosos: Confirma el éxito de manera clara y concisa
+4. Incluye los detalles más relevantes de forma conversacional
+5. No incluyas JSON ni datos técnicos crudos
+6. La respuesta debe ser directa, sin introducciones innecesarias
+
+EJEMPLOS DE RESPUESTAS PARA ÉXITO:
+- "¡Reserva confirmada! He procesado tu reserva para Walter Tapia del 1 al 3 de enero de 2026 en la habitación 2 para 2 huéspedes."
+- "He buscado la ubicación de San Salvador de Jujuy. Se encuentra en las coordenadas -24.1857, -65.2995."
+
+EJEMPLOS DE RESPUESTAS PARA ERROR:
+- "Lo siento, hubo un problema técnico al intentar procesar la reserva. Por favor intenta nuevamente en unos momentos."
+- "No pude completar la operación debido a un error de conexión. Por favor verifica los datos e intenta nuevamente."
+
+Genera la respuesta amigable ahora:"""
+
+            # Generar respuesta usando el LLM
+            response = await self.llm.ainvoke([HumanMessage(content=prompt)])
+            friendly_text = response.content.strip()
+
+            logger.info(f"[FRIENDLY_RESPONSE] Generated: {friendly_text}")
+            return friendly_text
+
+        except Exception as e:
+            logger.error(f"[FRIENDLY_RESPONSE] Error generating friendly response: {e}", exc_info=True)
+            # Fallback a respuesta básica
+            if function_type == "workflow":
+                return f"✅ Operación '{function_name}' completada exitosamente."
+            else:
+                return f"✅ Función '{function_name}' ejecutada exitosamente."
 
     def _store_function_params(
         self, user_id: str, function_name: str, params: Dict[str, str]
