@@ -52,12 +52,22 @@ class WhatsAppConfig:
 
 
 @dataclass
+class QdrantConfig:
+    host: str
+    port: int
+    grpc_port: int
+    use_grpc: bool
+    api_key: Optional[str] = None
+
+
+@dataclass
 class ConfigurationService:
     server_config: ServerConfig
     nosql_config: NoSQLConfig
     openai_config: OpenAIConfig
     aws_config: AWSConfig
     whatsapp_config: WhatsAppConfig
+    qdrant_config: QdrantConfig
 
 _config_service: Optional[ConfigurationService] = None
 
@@ -123,12 +133,21 @@ def read_config() -> ConfigurationService:
         verify_token=get_env("WHATSAPP_VERIFY_TOKEN", "assistant_ia_whatsapp_verification_token"),
     )
 
+    qdrant_config = QdrantConfig(
+        host=get_env("QDRANT_HOST", "localhost"),
+        port=int(get_env("QDRANT_PORT", "6333")),
+        grpc_port=int(get_env("QDRANT_GRPC_PORT", "6334")),
+        use_grpc=get_env("QDRANT_USE_GRPC", "false").lower() == "true",
+        api_key=get_env("QDRANT_API_KEY", None),
+    )
+
     return ConfigurationService(
-        server_config=server_config, 
+        server_config=server_config,
         nosql_config=nosql_config,
         openai_config=openai_config,
         aws_config=aws_config,
         whatsapp_config=whatsapp_config,
+        qdrant_config=qdrant_config,
     )
 
 

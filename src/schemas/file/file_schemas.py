@@ -27,9 +27,9 @@ class FileInput:
                 and hasattr(self.file._file, "tell")
             ):
                 current_pos = self.file._file.tell()
-                self.file._file.seek(0, 2)  # Ir al final
+                self.file._file.seek(0, 2)
                 self.filesize = self.file._file.tell()
-                self.file._file.seek(current_pos)  # Volver a la posición original
+                self.file._file.seek(current_pos)
                 print(f"FileInput init - size from file._file.tell(): {self.filesize}")
             else:
                 self.filesize = 0
