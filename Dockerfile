@@ -18,6 +18,7 @@ RUN apt-get update && apt-get install -y \
     tesseract-ocr-spa \
     tesseract-ocr-eng \
     poppler-utils \
+    libmagic1 \
     git \
     && apt-get clean \
     && rm -rf /var/lib/apt/lists/*

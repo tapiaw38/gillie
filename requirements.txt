@@ -44,5 +44,5 @@ langchain-qdrant>=0.2.0
 faiss-cpu
 sentence-transformers
 unstructured
-python-magic-bin
+python-magic
 qdrant-client>=1.11.0
