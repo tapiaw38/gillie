@@ -41,8 +41,12 @@ langchain>=0.3.0
 langchain-openai>=0.2.0
 langchain-community>=0.3.0
 langchain-qdrant>=0.2.0
+langchain-unstructured>=0.1.0
 faiss-cpu
 sentence-transformers
-unstructured
+unstructured[pdf]
 python-magic
 qdrant-client>=1.11.0
+pdfminer.six
+pypdf
+pikepdf

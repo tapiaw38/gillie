@@ -85,12 +85,12 @@ class OpenAIIntegration:
 
                     if file_type != "unknown":
                         result = await self.rag_processor.process_and_store_document(
-                            file.url, file_type
+                            file.url, file_type, profile_id=profile.user_id
                         )
                         if "document_id" in result:
                             document_ids.append(result["document_id"])
                             self.logger.info(
-                                f"Document processed for RAG: {file.url} -> {result['document_id']}"
+                                f"Document processed for RAG: {file.url} -> {result['document_id']} (profile: {profile.user_id})"
                             )
                         else:
                             self.logger.error(f"Failed to process document: {result}")
@@ -105,11 +105,11 @@ class OpenAIIntegration:
         if document_ids:
             try:
                 search_result = await self.rag_processor.search_relevant_content(
-                    query=question, document_ids=document_ids, max_results=5
+                    query=question, document_ids=document_ids, max_results=5, profile_id=profile.user_id
                 )
                 relevant_context = search_result.get("unified_context", "")
                 self.logger.info(
-                    f"Found {len(search_result.get('results', []))} relevant chunks for question"
+                    f"Found {len(search_result.get('results', []))} relevant chunks for question (profile: {profile.user_id})"
                 )
             except Exception as e:
                 self.logger.error(f"Error searching relevant content: {e}")
