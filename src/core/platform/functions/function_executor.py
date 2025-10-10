@@ -93,9 +93,9 @@ class WorkflowTool(BaseTool):
         self.workflow_type = workflow_type
 
     def _run(self, **kwargs) -> str:
-        """Ejecuta el workflow de forma síncrona (fallback)"""
+        """Execute the workflow synchronously (fallback)"""
         try:
-            # Para compatibilidad con LangChain, ejecutamos de forma síncrona
+            # For LangChain compatibility, we execute synchronously
             import asyncio
 
             loop = asyncio.new_event_loop()
@@ -106,23 +106,23 @@ class WorkflowTool(BaseTool):
             )
             loop.close()
 
-            return f"Workflow ejecutado exitosamente. Resultado: {json.dumps(result, indent=2)}"
+            return f"Workflow executed successfully. Result: {json.dumps(result, indent=2)}"
 
         except Exception as e:
-            logger.error(f"Error ejecutando workflow {self.workflow_type}: {e}")
-            return f"Error ejecutando workflow: {str(e)}"
+            logger.error(f"Error executing workflow {self.workflow_type}: {e}")
+            return f"Error executing workflow: {str(e)}"
 
     async def _arun(self, **kwargs) -> str:
-        """Ejecuta el workflow de forma asíncrona"""
+        """Execute the workflow asynchronously"""
         try:
             result = await workflow_executor.execute_workflow(
                 self.workflow_type, kwargs
             )
-            return f"Workflow ejecutado exitosamente. Resultado: {json.dumps(result, indent=2)}"
+            return f"Workflow executed successfully. Result: {json.dumps(result, indent=2)}"
 
         except Exception as e:
-            logger.error(f"Error ejecutando workflow {self.workflow_type}: {e}")
-            return f"Error ejecutando workflow: {str(e)}"
+            logger.error(f"Error executing workflow {self.workflow_type}: {e}")
+            return f"Error executing workflow: {str(e)}"
 
 
 class CustomWorkflowTool(BaseTool):
@@ -145,9 +145,8 @@ class CustomWorkflowTool(BaseTool):
         self.workflow_config = workflow_config
 
     def _run(self, **kwargs) -> str:
-        """Ejecuta el workflow personalizado de forma síncrona"""
+        """Execute the custom workflow synchronously"""
         try:
-            # Para compatibilidad con LangChain, ejecutamos de forma síncrona
             import asyncio
 
             loop = asyncio.new_event_loop()
@@ -156,24 +155,24 @@ class CustomWorkflowTool(BaseTool):
             result = loop.run_until_complete(self._execute_custom_workflow(kwargs))
             loop.close()
 
-            return f"Workflow personalizado ejecutado exitosamente. Resultado: {json.dumps(result, indent=2)}"
+            return f"Custom workflow executed successfully. Result: {json.dumps(result, indent=2)}"
 
         except Exception as e:
-            logger.error(f"Error ejecutando workflow personalizado: {e}")
-            return f"Error ejecutando workflow: {str(e)}"
+            logger.error(f"Error executing custom workflow: {e}")
+            return f"Error executing workflow: {str(e)}"
 
     async def _arun(self, **kwargs) -> str:
-        """Ejecuta el workflow personalizado de forma asíncrona"""
+        """Execute the custom workflow asynchronously"""
         try:
             result = await self._execute_custom_workflow(kwargs)
-            return f"Workflow personalizado ejecutado exitosamente. Resultado: {json.dumps(result, indent=2)}"
+            return f"Custom workflow executed successfully. Result: {json.dumps(result, indent=2)}"
 
         except Exception as e:
-            logger.error(f"Error ejecutando workflow personalizado: {e}")
-            return f"Error ejecutando workflow: {str(e)}"
+            logger.error(f"Error executing custom workflow: {e}")
+            return f"Error executing workflow: {str(e)}"
 
     async def _execute_custom_workflow(self, input_params: dict) -> dict:
-        """Ejecuta un workflow personalizado paso a paso"""
+        """Execute a custom workflow step by step"""
         execution_context = input_params.copy()
         results = {}
 
@@ -182,20 +181,19 @@ class CustomWorkflowTool(BaseTool):
                 step_result = await self._execute_custom_step(step, execution_context)
                 if step_result:
                     results[step["name"]] = step_result
-                    # Actualizar contexto con resultados del paso
+
                     self._update_custom_context(
                         step_result, step.get("response_mapping", {}), execution_context
                     )
 
-                # Verificar condición para continuar
                 if step.get("condition") and not self._evaluate_custom_condition(
                     step["condition"], execution_context
                 ):
-                    logger.info(f"Condición no cumplida en paso: {step['name']}")
+                    logger.info(f"Condition not met in step: {step['name']}")
                     break
 
         except Exception as e:
-            logger.error(f"Error ejecutando workflow personalizado: {e}")
+            logger.error(f"Error executing custom workflow: {e}")
             raise e
 
         return {
@@ -209,21 +207,18 @@ class CustomWorkflowTool(BaseTool):
     async def _execute_custom_step(
         self, step: dict, execution_context: dict
     ) -> Optional[dict]:
-        """Ejecuta un paso individual del workflow personalizado"""
+        """Execute an individual step of the custom workflow"""
         try:
-            # Preparar parámetros para la URL
             url = step["url"]
             for param, value in execution_context.items():
                 url = url.replace(f"{{{param}}}", str(value))
 
-            # Preparar body si es necesario
             body = None
             if step.get("body_template"):
                 body = self._prepare_custom_body(
                     step["body_template"], execution_context
                 )
 
-            # Ejecutar request HTTP
             async with aiohttp.ClientSession() as session:
                 if step["method"].upper() == "GET":
                     async with session.get(url) as response:
@@ -234,17 +229,17 @@ class CustomWorkflowTool(BaseTool):
                         response.raise_for_status()
                         result = await response.json()
                 else:
-                    raise ValueError(f"Método HTTP no soportado: {step['method']}")
+                    raise ValueError(f"Unsupported HTTP method: {step['method']}")
 
-            logger.info(f"Paso '{step['name']}' ejecutado exitosamente")
+            logger.info(f"Step '{step['name']}' executed successfully")
             return result
 
         except Exception as e:
-            logger.error(f"Error ejecutando paso '{step['name']}': {e}")
+            logger.error(f"Error executing step '{step['name']}': {e}")
             return None
 
     def _prepare_custom_body(self, body_template: str, execution_context: dict) -> dict:
-        """Prepara el body del request reemplazando variables del contexto"""
+        """Prepare the request body by replacing context variables"""
         try:
             body_str = body_template
             for param, value in execution_context.items():
@@ -252,22 +247,22 @@ class CustomWorkflowTool(BaseTool):
 
             return json.loads(body_str)
         except Exception as e:
-            logger.error(f"Error preparando body: {e}")
+            logger.error(f"Error preparing body: {e}")
             return {}
 
     def _update_custom_context(
         self, step_result: dict, response_mapping: dict, execution_context: dict
     ):
-        """Actualiza el contexto de ejecución con los resultados del paso"""
+        """Update the execution context with step results"""
         for context_key, response_path in response_mapping.items():
             try:
                 value = self._extract_nested_value(step_result, response_path)
                 execution_context[context_key] = value
             except Exception as e:
-                logger.warning(f"No se pudo extraer {response_path}: {e}")
+                logger.warning(f"Could not extract {response_path}: {e}")
 
     def _extract_nested_value(self, data: dict, path: str) -> Any:
-        """Extrae valor anidado usando path con puntos (ej: 'customer.name')"""
+        """Extract nested value using dot path (e.g. 'customer.name')"""
         keys = path.split(".")
         current = data
 
@@ -275,14 +270,14 @@ class CustomWorkflowTool(BaseTool):
             if isinstance(current, dict) and key in current:
                 current = current[key]
             else:
-                raise KeyError(f"Path '{path}' no válido en datos")
+                raise KeyError(f"Path '{path}' not valid in data")
 
         return current
 
     def _evaluate_custom_condition(
         self, condition: str, execution_context: dict
     ) -> bool:
-        """Evalúa una condición del workflow personalizado"""
+        """Evaluate a custom workflow condition"""
         try:
             if condition.startswith("equals:"):
                 key_value = condition.split(":", 1)[1]
@@ -301,11 +296,11 @@ class CustomWorkflowTool(BaseTool):
                 return actual_value and float(actual_value) > float(threshold)
 
             else:
-                logger.warning(f"Condición no reconocida: {condition}")
+                logger.warning(f"Unrecognized condition: {condition}")
                 return True
 
         except Exception as e:
-            logger.error(f"Error evaluando condición '{condition}': {e}")
+            logger.error(f"Error evaluating condition '{condition}': {e}")
             return True
 
     def _run(self, **kwargs) -> str:
@@ -417,13 +412,11 @@ If a function fails, explain what went wrong and suggest alternatives."""
             return tools
 
         try:
-            # Parse functions configuration
             if isinstance(profile.functions, str):
                 functions_config = json.loads(profile.functions)
             else:
                 functions_config = profile.functions
 
-            # Handle single function or list of functions
             if isinstance(functions_config, dict):
                 functions_list = [functions_config]
             elif isinstance(functions_config, list):
@@ -459,7 +452,7 @@ If a function fails, explain what went wrong and suggest alternatives."""
             elif item_type == "function":
                 return self._create_function_tool(item_config)
             else:
-                logger.warning(f"Tipo de item no reconocido: {item_type}")
+                logger.warning(f"Unrecognized item type: {item_type}")
                 return None
 
         except Exception as e:
@@ -467,29 +460,24 @@ If a function fails, explain what went wrong and suggest alternatives."""
             return None
 
     def _create_function_tool(self, config: dict) -> Optional[GenericHTTPTool]:
-        """Crea una herramienta para funciones HTTP comunes"""
+        """Create a tool for common HTTP functions"""
         try:
-            # Extraer parámetros requeridos de la URL template
             import re
 
             url_template = config.get("url", "")
             required_params = re.findall(r"\{(\w+)\}", url_template)
 
-            # Usar tipos y descripciones personalizadas si están definidos en la configuración
             custom_param_types = config.get("param_types", {})
             custom_param_descriptions = config.get("param_descriptions", {})
 
-            # Combinar tipos personalizados con inferencia automática
             inferred_types = self._infer_param_types(required_params, config)
             param_types = {**inferred_types, **custom_param_types}
 
-            # Combinar descripciones personalizadas con generación automática
             inferred_descriptions = self._create_param_descriptions(
                 required_params, config
             )
             param_descriptions = {**inferred_descriptions, **custom_param_descriptions}
 
-            # Crear definición de función
             function_def = FunctionDefinition(
                 name=config.get("name", "unknown_function"),
                 description=config.get("description", "No description available"),
@@ -510,25 +498,21 @@ If a function fails, explain what went wrong and suggest alternatives."""
             return None
 
     def _create_workflow_tool(self, config: dict) -> Optional[WorkflowTool]:
-        """Crea una herramienta para ejecutar workflows"""
+        """Create a tool for executing workflows"""
         try:
-            # Verificar si tiene steps definidos (workflow personalizado)
             if "steps" in config:
                 return self._create_custom_workflow_tool(config)
 
-            # Workflow predefinido del sistema
             workflow_type = config.get("workflow_type")
             if not workflow_type:
-                logger.error("No se pudo determinar el tipo de workflow")
+                logger.error("Could not determine workflow type")
                 return None
 
-            # Obtener información del workflow predefinido
             workflow_info = workflow_executor.get_workflow_info(workflow_type)
             if not workflow_info:
-                logger.error(f"Workflow '{workflow_type}' no encontrado")
+                logger.error(f"Workflow '{workflow_type}' not found")
                 return None
 
-            # Crear definición de función para el workflow
             function_def = FunctionDefinition(
                 name=config.get("name", workflow_info["name"]),
                 description=config.get("description", workflow_info["description"]),
@@ -542,7 +526,7 @@ If a function fails, explain what went wrong and suggest alternatives."""
                 param_descriptions=config.get(
                     "param_descriptions",
                     {
-                        param: f"Parámetro de entrada: {param}"
+                        param: f"Input parameter: {param}"
                         for param in workflow_info["input_params"]
                     },
                 ),
@@ -558,12 +542,11 @@ If a function fails, explain what went wrong and suggest alternatives."""
             return None
 
     def _create_custom_workflow_tool(self, config: dict) -> Optional[WorkflowTool]:
-        """Crea una herramienta para workflows personalizados"""
+        """Create a tool for custom workflows"""
         try:
-            # Crear definición de función para el workflow personalizado
             function_def = FunctionDefinition(
                 name=config.get("name", "custom_workflow"),
-                description=config.get("description", "Workflow personalizado"),
+                description=config.get("description", "Custom workflow"),
                 url_template="workflow://custom",
                 method="WORKFLOW",
                 required_params=config.get("input_params", []),
@@ -587,7 +570,6 @@ If a function fails, explain what went wrong and suggest alternatives."""
         for param in params:
             param_lower = param.lower()
 
-            # Enhanced generic type inference
             if param_lower in [
                 "price",
                 "amount",
@@ -670,7 +652,6 @@ If a function fails, explain what went wrong and suggest alternatives."""
         for param in params:
             param_lower = param.lower()
 
-            # Enhanced generic descriptions
             if param_lower in [
                 "price",
                 "amount",
@@ -769,20 +750,17 @@ If a function fails, explain what went wrong and suggest alternatives."""
     ) -> str:
         """Execute function based on user message"""
         try:
-            # Setup executor for this profile if not already done
             if not self.tools or not self.executor:
                 self.setup_for_profile(profile)
 
             if not self.tools:
                 return "No functions are currently available for your profile."
 
-            # Prepare chat history
             history_messages = []
             if chat_history:
-                for msg in chat_history[-5:]:  # Keep last 5 messages for context
+                for msg in chat_history[-5:]:
                     history_messages.append(HumanMessage(content=msg))
 
-            # Execute with LangChain
             result = await self.executor.ainvoke(
                 {"input": user_message, "chat_history": history_messages}
             )
@@ -792,7 +770,7 @@ If a function fails, explain what went wrong and suggest alternatives."""
         except Exception as e:
             logger.error(f"Error executing function: {e}")
             return (
-                f"Lo siento, tuve un problema al procesar tu solicitud. Error: {str(e)}"
+                f"Sorry, I had a problem processing your request. Error: {str(e)}"
             )
 
     def get_available_functions(self) -> List[Dict[str, Any]]:

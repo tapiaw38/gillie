@@ -106,13 +106,12 @@ CRITICAL RULES:
             else:
                 functions_list = functions_string
 
-            # Asegurar que sea una lista
             if isinstance(functions_list, dict):
                 functions_list = [functions_list]
 
             parsed_functions = []
             for func in functions_list:
-                # Log para debugging
+
                 logger.debug(f"Parsing function: {func.get('name', 'unnamed')}")
 
                 config = FunctionConfig(
@@ -125,10 +124,9 @@ CRITICAL RULES:
                     headers=func.get("headers", ""),
                     url=func.get(
                         "url_template", func.get("url", "")
-                    ),  # Usar url_template si está disponible
+                    ),
                 )
 
-                # Agregar campos adicionales que podrían ser útiles
                 if hasattr(config, "keywords"):
                     config.keywords = func.get("keywords", [])
                 if hasattr(config, "examples"):
