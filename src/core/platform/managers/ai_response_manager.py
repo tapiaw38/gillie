@@ -15,6 +15,7 @@ Responsibilities:
 import logging
 from typing import Optional, List
 from src.core.platform.functions.smart_function_executor import SmartFunctionExecutor
+from src.core.platform.managers.faq_context_manager import FAQContextManager
 
 logger = logging.getLogger(__name__)
 
@@ -31,7 +32,8 @@ class AIResponseService:
         self,
         openai_integration,
         config_service,
-        smart_function_executor: Optional[SmartFunctionExecutor] = None
+        smart_function_executor: Optional[SmartFunctionExecutor] = None,
+        faq_context_manager: Optional[FAQContextManager] = None
     ):
         """
         Initialize the AI response service.
@@ -40,12 +42,14 @@ class AIResponseService:
             openai_integration: OpenAI integration instance
             config_service: Configuration service instance
             smart_function_executor: Optional smart function executor
+            faq_context_manager: Optional FAQ context manager
         """
         self.openai_integration = openai_integration
         self.config_service = config_service
         self.smart_function_executor = smart_function_executor or SmartFunctionExecutor(
             config_service
         )
+        self.faq_context_manager = faq_context_manager
 
     async def generate_response(
         self,
@@ -172,9 +176,24 @@ class AIResponseService:
             Generated AI response
         """
         try:
+            # Inject FAQ context if FAQ manager is available
+            enhanced_context = message_context
+            if self.faq_context_manager:
+                try:
+                    faq_context = self.faq_context_manager.get_faq_context()
+                    if faq_context:
+                        # Prepend FAQ context to the message context
+                        if enhanced_context:
+                            enhanced_context = f"{faq_context}\n\n{enhanced_context}"
+                        else:
+                            enhanced_context = faq_context
+                        logger.info("FAQ context injected into LLM prompt")
+                except Exception as faq_error:
+                    logger.warning(f"Error getting FAQ context, continuing without it: {faq_error}")
+
             response = await self.openai_integration.ask(
                 user_message,
-                message_context,
+                enhanced_context,
                 conversation_history,
                 profile
             )

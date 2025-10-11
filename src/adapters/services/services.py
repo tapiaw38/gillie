@@ -1,6 +1,7 @@
 from src.adapters.services.conversation.service import ConversationService
 from src.adapters.services.profile.service import ProfileService
 from src.adapters.services.whatsapp.service import WhatsAppService
+from src.adapters.services.faq.service import FAQService
 
 class Services:
     _instance = None
@@ -9,9 +10,11 @@ class Services:
         self,
         profile: ProfileService,
         conversation: ConversationService,
+        faq: FAQService,
     ):
         self.profile = profile
         self.conversation = conversation
+        self.faq = faq
         self._whatsapp = None
 
     @property
@@ -25,11 +28,13 @@ class Services:
         cls,
         profile: ProfileService,
         conversation: ConversationService,
+        faq: FAQService,
     ) -> "Services":
         if cls._instance is None:
             cls._instance = cls(
                 profile=profile,
                 conversation=conversation,
+                faq=faq,
             )
         return cls._instance
 

@@ -3,9 +3,11 @@ from src.adapters.web.controllers.conversation.controllers import router as conv
 from src.adapters.web.controllers.profile.controllers import router as profile_router
 from src.adapters.web.controllers.nosql.controllers import router as nosql_router
 from src.adapters.web.controllers.whatsapp.controllers import router as whatsapp_router
+from src.adapters.web.controllers.faq.controllers import router as faq_router
 from src.core.use_cases.use_cases import Usecases
 from src.adapters.services.conversation.service import ConversationService
 from src.adapters.services.profile.service import ProfileService
+from src.adapters.services.faq.service import FAQService
 from src.adapters.services.services import (
     Services
 )
@@ -22,10 +24,12 @@ class RoutesManager:
     def include_routes(self):
         conversation_service = ConversationService(self.usecases.conversation)
         profile_service = ProfileService(self.usecases.profile)
+        faq_service = FAQService(self.usecases.faq)
 
         services = Services.create_services(
             conversation=conversation_service,
             profile=profile_service,
+            faq=faq_service,
         )
 
         self.app.dependency_overrides[Services.get_instance] = lambda: services
@@ -36,3 +40,4 @@ class RoutesManager:
         self.app.include_router(conversation_router)
         self.app.include_router(nosql_router)
         self.app.include_router(whatsapp_router)
+        self.app.include_router(faq_router)

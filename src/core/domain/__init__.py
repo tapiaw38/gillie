@@ -3,6 +3,7 @@ from .profile import Profile, ApiKey
 from .conversation import Conversation, Message
 from .file import File
 from .integration import Integration
+from .faq import FAQ
 
 __all__ = [
     "SenderEnum",
@@ -12,4 +13,5 @@ __all__ = [
     "Profile",
     "Message",
     "Conversation",
+    "FAQ",
 ]

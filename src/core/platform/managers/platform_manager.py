@@ -14,6 +14,7 @@ from src.core.platform.services.text_to_speech_service import TextToSpeechServic
 from src.core.platform.services.image_processing_service import ImageProcessingService
 from src.core.platform.services.ai_response_service import AIResponseService
 from src.core.platform.services.message_history_service import MessageHistoryService
+from src.core.platform.managers.faq_context_manager import FAQContextManager
 
 
 class PlatformServices:
@@ -49,7 +50,7 @@ class PlatformServices:
         self.message_history = message_history
 
     @staticmethod
-    def create_services(integrations, store_service, config_service) -> "PlatformServices":
+    def create_services(integrations, store_service, config_service, faq_repository=None) -> "PlatformServices":
         """
         Factory method to create all platform services.
 
@@ -60,6 +61,7 @@ class PlatformServices:
             integrations: Integrations instance (OpenAI, TTS, STT)
             store_service: Storage service instance
             config_service: Configuration service instance
+            faq_repository: Optional FAQ repository for FAQ context injection
 
         Returns:
             PlatformServices instance with all services initialized
@@ -77,9 +79,14 @@ class PlatformServices:
             openai_integration=integrations.openai
         )
 
+        faq_context_manager = None
+        if faq_repository:
+            faq_context_manager = FAQContextManager(faq_repository=faq_repository)
+
         ai_response = AIResponseService(
             openai_integration=integrations.openai,
-            config_service=config_service
+            config_service=config_service,
+            faq_context_manager=faq_context_manager
         )
 
         message_history = MessageHistoryService()

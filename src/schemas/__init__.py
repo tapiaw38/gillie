@@ -54,6 +54,13 @@ from .audio import (
     STTValidationData,
     STTValidationOutput,
 )
+from .faq import (
+    FAQInput,
+    FAQUpdate,
+    FAQOutput,
+    FAQOutputData,
+    FAQListOutput,
+)
 
 __all__ = [
     # Profile schemas
@@ -107,4 +114,10 @@ __all__ = [
     "STTLanguagesOutput",
     "STTValidationData",
     "STTValidationOutput",
+    # FAQ schemas
+    "FAQInput",
+    "FAQUpdate",
+    "FAQOutput",
+    "FAQOutputData",
+    "FAQListOutput",
 ]

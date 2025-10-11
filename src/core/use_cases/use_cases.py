@@ -23,6 +23,14 @@ from src.core.use_cases.profile import (
     AddIntegrationUseCase as ProfileAddIntegrationUseCase,
     ListOptionsUseCase as ProfileListOptionsUseCase
 )
+from src.core.use_cases.faq import (
+    CreateUseCase as FAQCreateUseCase,
+    FindByIdUseCase as FAQFindByIdUseCase,
+    FindAllUseCase as FAQFindAllUseCase,
+    UpdateUseCase as FAQUpdateUseCase,
+    DeleteUseCase as FAQDeleteUseCase,
+    FindByCategoryUseCase as FAQFindByCategoryUseCase
+)
 
 
 @dataclass
@@ -53,9 +61,20 @@ class Conversation:
 
 
 @dataclass
+class FAQ:
+    create_usecase: FAQCreateUseCase
+    find_by_id_usecase: FAQFindByIdUseCase
+    find_all_usecase: FAQFindAllUseCase
+    update_usecase: FAQUpdateUseCase
+    delete_usecase: FAQDeleteUseCase
+    find_by_category_usecase: FAQFindByCategoryUseCase
+
+
+@dataclass
 class Usecases:
     profile: Profile
     conversation: Conversation
+    faq: FAQ
 
 
 def create_usecases(context_factory: Factory) -> Usecases:
@@ -82,5 +101,13 @@ def create_usecases(context_factory: Factory) -> Usecases:
             find_by_id_usecase=ConversationFindByIdUseCase(context_factory),
             add_message_usecase=ConversationAddMessageUseCase(context_factory),
             delete_all_messages_usecase=ConversationDeleteAllMessagesUseCase(context_factory),
+        ),
+        faq=FAQ(
+            create_usecase=FAQCreateUseCase(context_factory),
+            find_by_id_usecase=FAQFindByIdUseCase(context_factory),
+            find_all_usecase=FAQFindAllUseCase(context_factory),
+            update_usecase=FAQUpdateUseCase(context_factory),
+            delete_usecase=FAQDeleteUseCase(context_factory),
+            find_by_category_usecase=FAQFindByCategoryUseCase(context_factory),
         ),
     )

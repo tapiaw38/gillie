@@ -59,6 +59,11 @@ profiles_client = MongoDBClient(
     config_service.nosql_config.profiles.database,
     config_service.nosql_config.profiles.collection,
 )
+faqs_client = MongoDBClient(
+    config_service.nosql_config.faqs.database_uri,
+    config_service.nosql_config.faqs.database,
+    config_service.nosql_config.faqs.collection,
+)
 
 profiles_client.run_migrations(migrations_client.get_collection(), execute_profile_migrations())
 
@@ -69,16 +74,21 @@ store_service = StoreServiceImpl(
 )
 
 datasources = Datasources.create_datasources(
-    no_sql_hotel_client=conversations_client,
-    no_sql_locations_client=profiles_client,
+    no_sql_conversations_client=conversations_client,
+    no_sql_profiles_client=profiles_client,
+    no_sql_faqs_client=faqs_client,
 )
+
+from src.adapters.datasources.repositories.repositories import Repositories
+repositories = Repositories.create_repositories(datasources)
+
 integrations = create_integrations(config_service)
 
-# Create platform services with their dependencies
 platform_services = PlatformServices.create_services(
     integrations=integrations,
     store_service=store_service,
-    config_service=config_service
+    config_service=config_service,
+    faq_repository=repositories.faq
 )
 
 context_factory = new_factory(

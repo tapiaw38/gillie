@@ -21,6 +21,7 @@ class NoSQLConfig:
     migrations: Optional[NoSQLCollectionConfig] = None
     conversations: Optional[NoSQLCollectionConfig] = None
     profiles: Optional[NoSQLCollectionConfig] = None
+    faqs: Optional[NoSQLCollectionConfig] = None
 
 @dataclass
 class ServerConfig:
@@ -112,6 +113,11 @@ def read_config() -> ConfigurationService:
             database_uri=database_uri,
             database=get_env("DB_NAME", "assistant-ia-db"),
             collection=get_env("DB_COLLECTION_PROFILES", "profiles"),
+        ),
+        faqs=NoSQLCollectionConfig(
+            database_uri=database_uri,
+            database=get_env("DB_NAME", "assistant-ia-db"),
+            collection=get_env("DB_COLLECTION_FAQS", "faqs"),
         ),
     )
 
