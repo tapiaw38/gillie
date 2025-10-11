@@ -40,11 +40,12 @@ class QdrantVectorStoreAdapter:
         self.config_service = config_service
         self.embeddings = embeddings
 
-        # Get Qdrant configuration from environment
-        qdrant_host = self._get_env("QDRANT_HOST", "localhost")
-        qdrant_port = int(self._get_env("QDRANT_PORT", "6333"))
-        qdrant_grpc_port = int(self._get_env("QDRANT_GRPC_PORT", "6334"))
-        use_grpc = self._get_env("QDRANT_USE_GRPC", "false").lower() == "true"
+        # Get Qdrant configuration from config service
+        qdrant_config = config_service.qdrant_config
+        qdrant_host = qdrant_config.host
+        qdrant_port = qdrant_config.port
+        qdrant_grpc_port = qdrant_config.grpc_port
+        use_grpc = qdrant_config.use_grpc
 
         # Initialize Qdrant client
         try:
@@ -59,11 +60,6 @@ class QdrantVectorStoreAdapter:
         except Exception as e:
             logger.error(f"Failed to initialize Qdrant client: {e}")
             raise
-
-    def _get_env(self, key: str, default: str) -> str:
-        """Get environment variable with fallback"""
-        import os
-        return os.getenv(key, default)
 
     def create_collection(
         self,

@@ -22,6 +22,10 @@ class Integrations:
         self.mercadolibre = MercadoLibreIntegration(access_token, user_id)
         return self.mercadolibre
 
+    def initialize_faq_service(self, faq_repository):
+        """Initialize FAQ repository for LangChain tools"""
+        self.openai.set_faq_repository(faq_repository)
+
     @classmethod
     def get_instance(cls) -> "Integrations":
         if cls._instance is None:

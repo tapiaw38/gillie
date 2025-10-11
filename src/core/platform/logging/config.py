@@ -57,6 +57,11 @@ class EnvironmentLoggerConfig:
 
 
 def get_environment_config() -> Dict[str, Any]:
+    """
+    Get logging configuration based on environment.
+
+    Note: This uses os.getenv() because logging is initialized before ConfigurationService.
+    """
     env = os.getenv("ENVIRONMENT", "development").lower()
 
     if env == "production":
@@ -70,9 +75,19 @@ def get_environment_config() -> Dict[str, Any]:
 
 
 def get_log_level_from_env() -> str:
+    """
+    Get log level from environment.
+
+    Note: This uses os.getenv() because logging is initialized before ConfigurationService.
+    """
     return os.getenv("LOG_LEVEL", LoggerConfig.DEFAULT_LOG_LEVEL).upper()
 
 
 def should_log_to_file() -> bool:
+    """
+    Determine if logging to file should be enabled.
+
+    Note: This uses os.getenv() because logging is initialized before ConfigurationService.
+    """
     env = os.getenv("ENVIRONMENT", "development").lower()
     return env not in ["testing", "docker"]

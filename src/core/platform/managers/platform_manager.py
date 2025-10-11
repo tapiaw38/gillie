@@ -31,7 +31,8 @@ class PlatformServices:
         text_to_speech: TextToSpeechService,
         image_processing: ImageProcessingService,
         ai_response: AIResponseService,
-        message_history: MessageHistoryService
+        message_history: MessageHistoryService,
+        faq_context: FAQContextManager = None
     ):
         """
         Initialize platform services container.
@@ -42,12 +43,14 @@ class PlatformServices:
             image_processing: Image processing service
             ai_response: AI response service
             message_history: Message history service
+            faq_context: FAQ context manager (optional)
         """
         self.voice_transcription = voice_transcription
         self.text_to_speech = text_to_speech
         self.image_processing = image_processing
         self.ai_response = ai_response
         self.message_history = message_history
+        self.faq_context = faq_context
 
     @staticmethod
     def create_services(integrations, store_service, config_service, faq_repository=None) -> "PlatformServices":
@@ -96,5 +99,6 @@ class PlatformServices:
             text_to_speech=text_to_speech,
             image_processing=image_processing,
             ai_response=ai_response,
-            message_history=message_history
+            message_history=message_history,
+            faq_context=faq_context_manager
         )

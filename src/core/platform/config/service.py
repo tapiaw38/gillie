@@ -62,6 +62,66 @@ class QdrantConfig:
 
 
 @dataclass
+class LangChainConfig:
+    service_enabled: bool
+    max_concurrent_requests: int
+    memory_max_messages: int
+    chunk_size: int
+    chunk_overlap: int
+    max_pages: int
+    enable_vectors: bool
+    vector_store: str
+    similarity_k: int
+    enable_fallback: bool
+    log_level: str
+
+
+@dataclass
+class LangSmithConfig:
+    api_key: Optional[str]
+    project: str
+    endpoint: Optional[str]
+    tracing_enabled: bool
+
+
+@dataclass
+class EmbeddingsConfig:
+    provider: str  # openai, huggingface, sentence_transformers
+    batch_size: int
+    device: str  # cpu, cuda, mps
+    # OpenAI specific
+    openai_model: str
+    openai_dimension: int
+    # HuggingFace specific
+    hf_model: str
+    hf_dimension: int
+
+
+@dataclass
+class LLMExtendedConfig:
+    provider: str  # openai, anthropic
+    # OpenAI extended
+    openai_temperature: float
+    openai_max_tokens: int
+    openai_timeout: float
+    openai_max_retries: int
+    # Anthropic
+    anthropic_api_key: Optional[str]
+    anthropic_model: str
+    anthropic_temperature: float
+    anthropic_max_tokens: int
+    anthropic_timeout: float
+    anthropic_max_retries: int
+
+
+@dataclass
+class LoggingConfig:
+    environment: str  # development, production, testing, docker
+    log_level: str
+    scope: str  # prod, test, (empty for local)
+
+
+@dataclass
 class ConfigurationService:
     server_config: ServerConfig
     nosql_config: NoSQLConfig
@@ -69,6 +129,11 @@ class ConfigurationService:
     aws_config: AWSConfig
     whatsapp_config: WhatsAppConfig
     qdrant_config: QdrantConfig
+    langchain_config: LangChainConfig
+    langsmith_config: LangSmithConfig
+    embeddings_config: EmbeddingsConfig
+    llm_extended_config: LLMExtendedConfig
+    logging_config: LoggingConfig
 
 _config_service: Optional[ConfigurationService] = None
 
@@ -147,6 +212,57 @@ def read_config() -> ConfigurationService:
         api_key=get_env("QDRANT_API_KEY", None),
     )
 
+    langchain_config = LangChainConfig(
+        service_enabled=get_env("LANGCHAIN_SERVICE_ENABLED", "false").lower() == "true",
+        max_concurrent_requests=int(get_env("LANGCHAIN_MAX_CONCURRENT_REQUESTS", "3")),
+        memory_max_messages=int(get_env("LANGCHAIN_MEMORY_MAX_MESSAGES", "20")),
+        chunk_size=int(get_env("LANGCHAIN_CHUNK_SIZE", "1000")),
+        chunk_overlap=int(get_env("LANGCHAIN_CHUNK_OVERLAP", "200")),
+        max_pages=int(get_env("LANGCHAIN_MAX_PAGES", "50")),
+        enable_vectors=get_env("LANGCHAIN_ENABLE_VECTORS", "true").lower() == "true",
+        vector_store=get_env("LANGCHAIN_VECTOR_STORE", "qdrant"),
+        similarity_k=int(get_env("LANGCHAIN_SIMILARITY_K", "5")),
+        enable_fallback=get_env("LANGCHAIN_ENABLE_FALLBACK", "true").lower() == "true",
+        log_level=get_env("LANGCHAIN_LOG_LEVEL", "INFO"),
+    )
+
+    langsmith_config = LangSmithConfig(
+        api_key=get_env("LANGSMITH_API_KEY", None),
+        project=get_env("LANGSMITH_PROJECT", "assistant-ia-api"),
+        endpoint=get_env("LANGSMITH_ENDPOINT", None),
+        tracing_enabled=get_env("LANGSMITH_TRACING_ENABLED", "false").lower() == "true",
+    )
+
+    embeddings_config = EmbeddingsConfig(
+        provider=get_env("EMBEDDING_PROVIDER", "huggingface"),
+        batch_size=int(get_env("EMBEDDING_BATCH_SIZE", "32")),
+        device=get_env("EMBEDDING_DEVICE", "cpu"),
+        openai_model=get_env("OPENAI_EMBEDDING_MODEL", "text-embedding-3-small"),
+        openai_dimension=int(get_env("OPENAI_EMBEDDING_DIMENSION", "1536")),
+        hf_model=get_env("HF_EMBEDDING_MODEL", "sentence-transformers/all-MiniLM-L6-v2"),
+        hf_dimension=int(get_env("HF_EMBEDDING_DIMENSION", "384")),
+    )
+
+    llm_extended_config = LLMExtendedConfig(
+        provider=get_env("LLM_PROVIDER", "openai"),
+        openai_temperature=float(get_env("OPENAI_TEMPERATURE", "0.7")),
+        openai_max_tokens=int(get_env("OPENAI_MAX_TOKENS", "2000")),
+        openai_timeout=float(get_env("OPENAI_TIMEOUT", "45.0")),
+        openai_max_retries=int(get_env("OPENAI_MAX_RETRIES", "3")),
+        anthropic_api_key=get_env("ANTHROPIC_API_KEY", None),
+        anthropic_model=get_env("ANTHROPIC_MODEL", "claude-3-opus-20240229"),
+        anthropic_temperature=float(get_env("ANTHROPIC_TEMPERATURE", "0.7")),
+        anthropic_max_tokens=int(get_env("ANTHROPIC_MAX_TOKENS", "4096")),
+        anthropic_timeout=float(get_env("ANTHROPIC_TIMEOUT", "45.0")),
+        anthropic_max_retries=int(get_env("ANTHROPIC_MAX_RETRIES", "3")),
+    )
+
+    logging_config = LoggingConfig(
+        environment=get_env("ENVIRONMENT", "development"),
+        log_level=get_env("LOG_LEVEL", "INFO"),
+        scope=get_env("SCOPE", ""),
+    )
+
     return ConfigurationService(
         server_config=server_config,
         nosql_config=nosql_config,
@@ -154,6 +270,11 @@ def read_config() -> ConfigurationService:
         aws_config=aws_config,
         whatsapp_config=whatsapp_config,
         qdrant_config=qdrant_config,
+        langchain_config=langchain_config,
+        langsmith_config=langsmith_config,
+        embeddings_config=embeddings_config,
+        llm_extended_config=llm_extended_config,
+        logging_config=logging_config,
     )
 
 

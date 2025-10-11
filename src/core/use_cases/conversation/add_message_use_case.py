@@ -301,6 +301,9 @@ class AddMessageUseCase:
             )
 
         try:
+            # Inject FAQ context BEFORE any AI processing (highest priority)
+            enhanced_context = self._inject_faq_context(message_context)
+
             # Build chat history for function execution
             chat_history = self.context_factory.platform_managers.message_history.build_chat_history(
                 messages=conversation.messages,
@@ -316,7 +319,7 @@ class AddMessageUseCase:
             response = await self.context_factory.platform_managers.ai_response.generate_response(
                 user_message=user_message.content,
                 profile=conversation.profile,
-                message_context=message_context,
+                message_context=enhanced_context,
                 conversation_history=conversation_history,
                 chat_history=chat_history
             )
@@ -326,6 +329,40 @@ class AddMessageUseCase:
         except Exception as e:
             logger.error(f"Error generating AI response: {e}")
             return self._get_fallback_error_message(conversation.profile)
+
+    def _inject_faq_context(self, message_context: Optional[str]) -> str:
+        """
+        Inject FAQ context into message context using early return pattern.
+
+        Args:
+            message_context: Original message context
+
+        Returns:
+            Enhanced context with FAQs prepended (or original if no FAQs)
+        """
+        # Early return if no platform managers
+        if not self.context_factory.platform_managers:
+            return message_context
+
+        # Early return if no FAQ context manager
+        if not self.context_factory.platform_managers.faq_context:
+            return message_context
+
+        try:
+            faq_context = self.context_factory.platform_managers.faq_context.get_faq_context()
+
+            # Early return if no FAQ context available
+            if not faq_context:
+                return message_context
+
+            # Prepend FAQ context to ensure it's seen first
+            enhanced_context = f"{faq_context}\n\n{message_context}" if message_context else faq_context
+            logger.info("FAQ context injected into message context (highest priority)")
+            return enhanced_context
+
+        except Exception as faq_error:
+            logger.warning(f"Error getting FAQ context, continuing without it: {faq_error}")
+            return message_context
 
     async def _generate_ai_response_fallback(
         self,
@@ -345,6 +382,9 @@ class AddMessageUseCase:
             Generated AI response text
         """
         try:
+            # Inject FAQ context even in fallback mode
+            enhanced_context = self._inject_faq_context(message_context)
+
             # Manual conversion of messages to string
             conversation_history = " - ".join([
                 f"{msg.sender}: {msg.content}"
@@ -353,7 +393,7 @@ class AddMessageUseCase:
 
             response = await self.context_factory.integrations.openai.ask(
                 user_message.content,
-                message_context,
+                enhanced_context,
                 conversation_history,
                 conversation.profile
             )

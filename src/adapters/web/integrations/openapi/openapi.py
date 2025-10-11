@@ -1,6 +1,7 @@
 from src.core.platform.config.service import ConfigurationService
 from openai import AsyncOpenAI
 from typing import Optional, List, Dict, Any, Tuple
+import os
 from src.adapters.web.integrations.openapi.context import (
     CONTEXT_INFORMATION,
     CONTEXT_ROLE_ASSISTANT,
@@ -24,7 +25,6 @@ import asyncio
 import aiohttp
 import aiofiles
 import tempfile
-import os
 from pathlib import Path
 
 
@@ -37,6 +37,7 @@ class OpenAIIntegration:
         self.base_url = config.base_url
         self.model = config.model
         self.role = config.role
+        self.faq_repository = None  # Will be set later via set_faq_repository()
 
         self.client = AsyncOpenAI(
             api_key=self.api_key,
@@ -56,8 +57,40 @@ class OpenAIIntegration:
         self._consecutive_failures = 0
         self._max_failures = 3
         self._circuit_open_until = None
+        self.langchain_service = None
+
+        langchain_config = config_service.langchain_config
+        if langchain_config.service_enabled:
+            try:
+                from src.core.platform.ai import LangChainService
+
+                self.langchain_service = LangChainService(
+                    config_service=config_service,
+                    openai_integration=self,
+                    max_concurrent_requests=langchain_config.max_concurrent_requests,
+                    enable_langsmith=config_service.langsmith_config.tracing_enabled,
+                )
+                self.logger.info(f"LangChain service enabled with LangSmith={config_service.langsmith_config.tracing_enabled}")
+            except Exception as e:
+                self.logger.error(f"Failed to initialize LangChain service: {e}")
+                self.langchain_service = None
 
         self.logger.info(f"OpenAI integration initialized with model: {self.model}")
+
+    def set_faq_repository(self, faq_repository):
+        """
+        Set FAQ repository for LangChain service tools.
+        This must be called after initialization when FAQ repository becomes available.
+
+        Args:
+            faq_repository: FAQ repository instance
+        """
+        # Only configure if not already set (idempotent)
+        if self.faq_repository is None:
+            self.faq_repository = faq_repository
+            if self.langchain_service:
+                self.langchain_service.faq_repository = faq_repository
+                self.logger.info("FAQ repository configured for LangChain service")
 
     @log_function_call
     async def ask(
@@ -66,8 +99,26 @@ class OpenAIIntegration:
         context: Optional[str],
         previous_messages: str,
         profile: Profile,
+        conversation_id: Optional[str] = None,
     ) -> str:
         self.logger.info(f"Processing question for profile: {profile.user_id}")
+
+        if self.langchain_service is not None:
+            try:
+                self.logger.info("Using LangChain service for response generation")
+                messages_list = self._parse_previous_messages(previous_messages)
+
+                response = await self.langchain_service.generate_response(
+                    question=question,
+                    context=context,
+                    previous_messages=messages_list,
+                    profile=profile,
+                    conversation_id=conversation_id or profile.user_id,
+                    use_tools=bool(profile.files),
+                )
+                return response
+            except Exception as e:
+                self.logger.error(f"LangChain service failed, falling back to OpenAI: {e}")
 
         document_ids = []
         if profile.files:
@@ -892,3 +943,36 @@ RESPUESTA (solo JSON):
         except Exception as e:
             self.logger.error(f"Error in hybrid text extraction: {e}")
             return f"Error extracting text: {str(e)}"
+
+    def _parse_previous_messages(self, previous_messages: str) -> List[Dict[str, Any]]:
+        """
+        Parse previous messages string into list format for LangChain.
+
+        Args:
+            previous_messages: String with format "sender: content - sender: content"
+
+        Returns:
+            List of message dictionaries
+        """
+        if not previous_messages or previous_messages.strip() == "":
+            return []
+
+        messages = []
+        try:
+            # Split by " - " to get individual messages
+            message_parts = previous_messages.split(" - ")
+
+            for part in message_parts:
+                if ":" in part:
+                    sender, content = part.split(":", 1)
+                    messages.append({
+                        "sender": sender.strip(),
+                        "content": content.strip()
+                    })
+        except Exception as e:
+            self.logger.warning(f"Error parsing previous messages: {e}")
+            # Return empty list to avoid breaking the flow
+            return []
+
+        return messages
+
