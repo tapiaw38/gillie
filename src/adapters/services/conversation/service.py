@@ -33,9 +33,11 @@ class ConversationService:
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(e)
             )
 
-    async def find_by_user_id(self, user_id: str):
+    async def find_by_user_id(self, user_id: str, include_sandbox: bool = False):
         try:
-            conversations = self.usecase.find_by_user_id_usecase.execute(user_id)
+            conversations = self.usecase.find_by_user_id_usecase.execute(
+                user_id, include_sandbox
+            )
             return conversations
         except Exception as e:
             raise HTTPException(
@@ -86,6 +88,17 @@ class ConversationService:
                 conversation_id, user_id
             )
             return messages
+        except Exception as e:
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(e)
+            )
+
+    async def delete(self, conversation_id: str, user_id: str):
+        try:
+            result = await self.usecase.delete_usecase.execute(
+                conversation_id, user_id
+            )
+            return result
         except Exception as e:
             raise HTTPException(
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(e)

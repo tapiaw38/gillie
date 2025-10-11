@@ -37,12 +37,19 @@ def execute_profile_migrations() -> List[Migration]:
                 {},
                 {"$set": {"client_id": str(uuid4())}}
             )
-        ),Migration(
+        ),
+        Migration(
             version=5,
             up=lambda db: db["profiles"].update_many(
                 {},
                 {"$set": {"role": "seller"}}
             )
         ),
-        # Add more migrations here
+        Migration(
+            version=6,
+            up=lambda db: db["conversations"].update_many(
+                {"is_sandbox": {"$exists": False}},
+                {"$set": {"is_sandbox": False}}
+            )
+        ),
     ]

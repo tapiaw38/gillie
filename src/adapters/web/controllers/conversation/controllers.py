@@ -32,10 +32,14 @@ async def create_conversation(
 @router.get("/user", status_code=status.HTTP_200_OK)
 async def find_conversations_by_user_id(
     request: Request,
-    service: Services = Depends(get_instance)
+    service: Services = Depends(get_instance),
+    include_sandbox: bool = Query(
+        default=False,
+        description="If True, returns ONLY sandbox conversations. If False, returns ONLY production conversations."
+    )
 ):
     user_id = request.state.user.get("user_id")
-    conversations = await service.conversation.find_by_user_id(user_id)
+    conversations = await service.conversation.find_by_user_id(user_id, include_sandbox)
     return conversations
 
 @router.get("/{conversation_id}", status_code=status.HTTP_200_OK)
@@ -87,3 +91,13 @@ async def delete_all_messages(
     user_id = request.state.user.get("user_id")
     messages = await service.conversation.delete_all_messages(conversation_id, user_id)
     return messages
+
+@router.delete("/{conversation_id}", status_code=status.HTTP_200_OK)
+async def delete_conversation(
+    conversation_id: str,
+    request: Request,
+    service: Services = Depends(get_instance)
+):
+    user_id = request.state.user.get("user_id")
+    result = await service.conversation.delete(conversation_id, user_id)
+    return result

@@ -32,6 +32,7 @@ class CreateUseCase:
                 title=conversation.title,
                 created_at=datetime.now(timezone.utc),
                 client_id=generated_client_id,
+                is_sandbox=conversation.is_sandbox,
             )
 
             conversation_id = self.context_factory.repositories.conversation.create(

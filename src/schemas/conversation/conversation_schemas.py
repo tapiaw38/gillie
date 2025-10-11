@@ -6,6 +6,7 @@ from src.core.domain import Conversation, Message, Profile
 
 class ConversationInput(BaseModel):
     title: str
+    is_sandbox: bool = False
 
 
 class ConversationOutputData(BaseModel):
@@ -15,6 +16,7 @@ class ConversationOutputData(BaseModel):
     client_id: str
     profile: Profile
     messages: Optional[List[Message]]
+    is_sandbox: bool = False
 
 
 class ConversationOutput(BaseModel):
@@ -30,6 +32,7 @@ class ConversationOutput(BaseModel):
                 client_id=conversation.client_id,
                 profile=conversation.profile,
                 messages=conversation.messages,
+                is_sandbox=conversation.is_sandbox,
             )
         )
 
