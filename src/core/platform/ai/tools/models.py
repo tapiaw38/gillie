@@ -284,7 +284,7 @@ def create_langchain_tools(openai_integration, profile, faq_repository=None) -> 
             name="search_documents",
             description=(
                 "Search for specific information in the user's uploaded documents (PDFs and Excel files). "
-                "⚠️ Use this tool ONLY if search_faqs didn't find the answer. "
+                "Use this tool ONLY if search_faqs didn't find the answer. "
                 "This searches through uploaded PDF catalogs, price lists, and Excel files. "
                 "Returns relevant text chunks with product details, prices, specifications, etc."
             ),
