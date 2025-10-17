@@ -118,11 +118,17 @@ class FAQContextManager:
 
         formatted_parts = [
             "\n" + "="*60,
-            "PREGUNTAS FRECUENTES (FAQs)",
+            "🔥 PREGUNTAS FRECUENTES (FAQs) - MÁXIMA PRIORIDAD 🔥",
             "="*60,
-            "\nA continuación se encuentran las preguntas frecuentes que debes usar",
-            "como referencia PRIORITARIA para responder consultas del usuario.",
-            "Si la pregunta del usuario coincide con alguna FAQ, usa esa respuesta.\n"
+            "\n⚠️ INSTRUCCIONES OBLIGATORIAS:",
+            "1. Estas son las preguntas frecuentes oficiales con respuestas PRE-APROBADAS",
+            "2. SIEMPRE busca PRIMERO en estas FAQs antes de usar cualquier otra fuente",
+            "3. Si encuentras una FAQ que responde la pregunta del usuario:",
+            "   - USA ESA RESPUESTA DIRECTAMENTE (es la respuesta oficial)",
+            "   - NO busques en documentos adicionales",
+            "   - NO modifiques la respuesta de la FAQ",
+            "4. SOLO si NO hay una FAQ relevante, entonces busca en otros documentos",
+            "5. Las FAQs tienen PRIORIDAD ABSOLUTA sobre cualquier información de documentos\n"
         ]
 
         # Group FAQs by category if they have categories
@@ -193,15 +199,39 @@ class FAQContextManager:
             if not all_faqs:
                 return ""
 
-            # Simple keyword matching (can be enhanced with embeddings)
+            # Improved keyword matching - bidirectional search
             query_lower = user_query.lower()
+            # Extract keywords from query (filter out common words)
+            stop_words = {'el', 'la', 'los', 'las', 'un', 'una', 'de', 'del', 'a', 'en', 'por', 'para', 'con', 'se', 'es', 'que', 'como', 'y', 'o', 'pero'}
+            query_keywords = [word for word in query_lower.split() if word not in stop_words and len(word) > 2]
+
             relevant_faqs = []
 
             for faq in all_faqs:
-                # Check if query keywords appear in question or tags
-                if (query_lower in faq.question.lower() or
-                    any(tag.lower() in query_lower for tag in (faq.tags or []))):
-                    relevant_faqs.append(faq)
+                faq_question_lower = faq.question.lower()
+                faq_answer_lower = faq.answer.lower()
+
+                # Check if any query keyword appears in question, answer, or tags
+                keyword_matches = 0
+                for keyword in query_keywords:
+                    if (keyword in faq_question_lower or
+                        keyword in faq_answer_lower or
+                        any(keyword in tag.lower() for tag in (faq.tags or []))):
+                        keyword_matches += 1
+
+                # Also check if FAQ question words appear in query (bidirectional)
+                faq_keywords = [word for word in faq_question_lower.split() if word not in stop_words and len(word) > 2]
+                for faq_keyword in faq_keywords:
+                    if faq_keyword in query_lower:
+                        keyword_matches += 1
+
+                # If at least 2 keywords match, consider it relevant
+                if keyword_matches >= 2:
+                    relevant_faqs.append((faq, keyword_matches))
+
+            # Sort by number of matches (highest first)
+            relevant_faqs.sort(key=lambda x: x[1], reverse=True)
+            relevant_faqs = [faq for faq, _ in relevant_faqs]
 
             # Limit results
             relevant_faqs = relevant_faqs[:max_results]

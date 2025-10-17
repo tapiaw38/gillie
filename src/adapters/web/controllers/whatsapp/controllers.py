@@ -294,9 +294,9 @@ async def verify_webhook(request: Request):
         logger.error("Missing parameters in verification request")
         return f"Missing verification parameters: mode={hub_mode}, token={hub_verify_token}, challenge={hub_challenge}"
 
-    verify_token = os.getenv(
-        "WHATSAPP_VERIFY_TOKEN", "assistant_ia_whatsapp_verification_token"
-    )
+    from src.core.platform.config.service import get_config_service
+    config = get_config_service()
+    verify_token = config.whatsapp_config.verify_token
     logger.info(f"Verification token configured: {verify_token}")
 
     if hub_mode == "subscribe" and hub_verify_token == verify_token:

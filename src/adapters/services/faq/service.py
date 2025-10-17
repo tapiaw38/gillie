@@ -79,7 +79,6 @@ class FAQService:
                     detail=f"FAQ with id {faq_id} not found"
                 )
 
-            # Crear FAQ con los valores actualizados
             updated_data = existing_faq.dict()
             update_dict = faq_update.dict(exclude_unset=True, exclude_none=True)
             updated_data.update(update_dict)

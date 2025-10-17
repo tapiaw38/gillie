@@ -14,16 +14,15 @@ class Role:
         return self.code
 
 
-# Predefined role instances
 ASSISTANT_ROLE = Role("1", "assistant")
 SELLER_ROLE = Role("2", "seller")
 TUTOR_ROLE = Role("3", "tutor")
+
 
 class RoleRepository:
     """Repository for managing roles with predefined data"""
     
     def __init__(self):
-        # Initialize with predefined roles
         self._predefined_roles: List[Role] = [
             ASSISTANT_ROLE,
             SELLER_ROLE, 
@@ -56,5 +55,4 @@ class RoleRepository:
         return code in ["1", "2", "3"]
 
 
-# Singleton instance for easy access
 role_repository = RoleRepository()

@@ -169,31 +169,18 @@ class AIResponseService:
         Args:
             user_message: User's message
             profile: User profile
-            message_context: Message context
+            message_context: Message context (FAQ already injected in add_message_use_case)
             conversation_history: Conversation history
 
         Returns:
             Generated AI response
         """
         try:
-            # Inject FAQ context if FAQ manager is available
-            enhanced_context = message_context
-            if self.faq_context_manager:
-                try:
-                    faq_context = self.faq_context_manager.get_faq_context()
-                    if faq_context:
-                        # Prepend FAQ context to the message context
-                        if enhanced_context:
-                            enhanced_context = f"{faq_context}\n\n{enhanced_context}"
-                        else:
-                            enhanced_context = faq_context
-                        logger.info("FAQ context injected into LLM prompt")
-                except Exception as faq_error:
-                    logger.warning(f"Error getting FAQ context, continuing without it: {faq_error}")
-
+            # FAQ context is injected upstream in add_message_use_case
+            # to ensure all paths (functions, langchain, standard) receive it
             response = await self.openai_integration.ask(
                 user_message,
-                enhanced_context,
+                message_context,
                 conversation_history,
                 profile
             )

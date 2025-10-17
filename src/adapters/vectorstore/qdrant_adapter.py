@@ -40,13 +40,12 @@ class QdrantVectorStoreAdapter:
         self.config_service = config_service
         self.embeddings = embeddings
 
-        # Get Qdrant configuration from environment
-        qdrant_host = self._get_env("QDRANT_HOST", "localhost")
-        qdrant_port = int(self._get_env("QDRANT_PORT", "6333"))
-        qdrant_grpc_port = int(self._get_env("QDRANT_GRPC_PORT", "6334"))
-        use_grpc = self._get_env("QDRANT_USE_GRPC", "false").lower() == "true"
+        qdrant_config = config_service.qdrant_config
+        qdrant_host = qdrant_config.host
+        qdrant_port = qdrant_config.port
+        qdrant_grpc_port = qdrant_config.grpc_port
+        use_grpc = qdrant_config.use_grpc
 
-        # Initialize Qdrant client
         try:
             self.client = QdrantClient(
                 host=qdrant_host,
@@ -59,11 +58,6 @@ class QdrantVectorStoreAdapter:
         except Exception as e:
             logger.error(f"Failed to initialize Qdrant client: {e}")
             raise
-
-    def _get_env(self, key: str, default: str) -> str:
-        """Get environment variable with fallback"""
-        import os
-        return os.getenv(key, default)
 
     def create_collection(
         self,
@@ -83,7 +77,6 @@ class QdrantVectorStoreAdapter:
             True if collection was created or already exists, False otherwise
         """
         try:
-            # Check if collection exists
             collections = self.client.get_collections().collections
             collection_names = [c.name for c in collections]
 
@@ -91,7 +84,6 @@ class QdrantVectorStoreAdapter:
                 logger.info(f"Collection '{collection_name}' already exists")
                 return True
 
-            # Create collection
             self.client.create_collection(
                 collection_name=collection_name,
                 vectors_config=VectorParams(
@@ -166,7 +158,6 @@ class QdrantVectorStoreAdapter:
             if vectorstore is None:
                 return False
 
-            # Add metadata to documents if provided
             if metadata:
                 for i, doc in enumerate(documents):
                     if i < len(metadata):
@@ -206,19 +197,16 @@ class QdrantVectorStoreAdapter:
             if vectorstore is None:
                 return []
 
-            # Build filter if provided
             qdrant_filter = None
             if filter_dict:
                 qdrant_filter = self._build_filter(filter_dict)
 
-            # Perform similarity search
             if score_threshold is not None:
                 results = vectorstore.similarity_search_with_score(
                     query,
                     k=k,
                     filter=qdrant_filter
                 )
-                # Filter by score threshold
                 results = [(doc, score) for doc, score in results if score >= score_threshold]
             else:
                 results = vectorstore.similarity_search_with_score(
