@@ -3,6 +3,14 @@ from src.core.domain import Conversation, Profile
 from datetime import datetime, timezone
 from pymongo.errors import PyMongoError
 from src.core.platform.appcontext.appcontext import Factory
+from src.core.platform.errors import NewApplicationError
+from src.core.platform.errors.mappings.conversation import (
+    ConversationCreateQueryError,
+    ConversationCreateTitleRequiredError,
+    ConversationCreateProfileNotFoundError,
+    ConversationCreateNotFoundAfterCreationError
+)
+from src.core.platform.errors.mappings.profile import ProfileGetNotFoundError
 from uuid import uuid4
 
 
@@ -11,8 +19,15 @@ class CreateUseCase:
         self.context_factory = context_factory()
 
     def execute(self, conversation: ConversationInput, user_id: str) -> Conversation:
+        # Validation
+        if not conversation.title or conversation.title.strip() == "":
+            raise NewApplicationError(ConversationCreateTitleRequiredError)
+
         try:
             profile = self.context_factory.repositories.profile.find_by_user_id(user_id)
+            if not profile:
+                raise NewApplicationError(ConversationCreateProfileNotFoundError)
+
             generated_id = str(uuid4())
             generated_client_id = str(uuid4())
             new_conversation = Conversation(
@@ -46,12 +61,9 @@ class CreateUseCase:
             )
 
             if not created_conversation:
-                raise Exception("Error: conversation not found after creation")
+                raise NewApplicationError(ConversationCreateNotFoundAfterCreationError)
 
             return ConversationOutput.from_output(created_conversation)
 
         except PyMongoError as e:
-            raise Exception(f"Error interacting with database: {e}")
-
-        except Exception as e:
-            raise Exception(f"Error executing CreateUseCase: {e}")
+            raise NewApplicationError(ConversationCreateQueryError, e)

@@ -3,6 +3,13 @@ from src.core.domain import Profile
 from datetime import datetime, timezone
 from pymongo.errors import PyMongoError
 from src.core.platform.appcontext.appcontext import Factory
+from src.core.platform.errors import NewApplicationError
+from src.core.platform.errors.mappings.profile import (
+    ProfileCreateQueryError,
+    ProfileCreateNameRequiredError,
+    ProfileCreateBusinessNameRequiredError,
+    ProfileCreateNotFoundAfterCreationError
+)
 from uuid import uuid4
 
 
@@ -11,6 +18,13 @@ class CreateUseCase:
         self.context_factory = context_factory()
 
     def execute(self, profile: ProfileInput, user_id: str):
+        # Validation
+        if not profile.assistant_name or profile.assistant_name.strip() == "":
+            raise NewApplicationError(ProfileCreateNameRequiredError)
+
+        if not profile.business_name or profile.business_name.strip() == "":
+            raise NewApplicationError(ProfileCreateBusinessNameRequiredError)
+
         try:
             generated_id = str(uuid4())
             iteration_limit = 100
@@ -32,12 +46,9 @@ class CreateUseCase:
             )
 
             if not created_profile:
-                raise Exception("Error profile not found after creation")
+                raise NewApplicationError(ProfileCreateNotFoundAfterCreationError)
 
             return ProfileOutput.from_output(created_profile)
 
         except PyMongoError as e:
-            raise Exception(f"Error interacting with database: {e}")
-
-        except Exception as e:
-            raise Exception(f"Error executing CreateUseCase: {e}")
+            raise NewApplicationError(ProfileCreateQueryError, e)

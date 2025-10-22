@@ -16,6 +16,7 @@ from src.core.platform.nosql.migrations import execute_profile_migrations
 from src.core.platform.objectstorange.s3_session import get_s3_session
 from src.adapters.storeservice.storeservice import StoreServiceImpl
 from src.core.platform.services.platform_services import PlatformServices
+from src.core.platform.errors.exception_handler import register_exception_handlers
 
 
 app = FastAPI(
@@ -23,6 +24,8 @@ app = FastAPI(
     description="API for the Assistant IA",
     version="1.0.0"
 )
+
+register_exception_handlers(app)
 
 origins = [
     "*"

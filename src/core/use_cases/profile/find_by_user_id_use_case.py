@@ -1,6 +1,11 @@
 from src.schemas import ProfileOutput
 from pymongo.errors import PyMongoError
 from src.core.platform.appcontext.appcontext import Factory
+from src.core.platform.errors import NewApplicationError
+from src.core.platform.errors.mappings.profile import (
+    ProfileGetQueryError,
+    ProfileGetNotFoundError
+)
 
 
 class FindByUserIdUseCase:
@@ -11,11 +16,8 @@ class FindByUserIdUseCase:
         try:
             profile = self.context_factory.repositories.profile.find_by_user_id(user_id)
             if not profile:
-                raise Exception(f"No profile found with user_id: {user_id}")
+                raise NewApplicationError(ProfileGetNotFoundError)
             return ProfileOutput.from_output(profile)
 
         except PyMongoError as e:
-            raise Exception(f"Error interacting with database: {e}")
-
-        except Exception as e:
-            raise Exception(f"Error executing FindByUserIdUseCase: {e}")
+            raise NewApplicationError(ProfileGetQueryError, e)
