@@ -10,9 +10,6 @@ class FindAllUseCase:
         """
         Encuentra todos los perfiles
         """
-        try:
-            repository = self.context_factory.repositories.profile
-            profiles = repository.find_all()
-            return profiles
-        except Exception as e:
-            raise Exception(f"Error al buscar todos los perfiles: {e}")
+        repository = self.context_factory.repositories.profile
+        profiles = repository.find_all()
+        return profiles

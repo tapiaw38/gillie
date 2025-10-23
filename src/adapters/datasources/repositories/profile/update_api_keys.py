@@ -1,6 +1,11 @@
 from typing import List, Optional
 from pymongo.errors import PyMongoError
 from src.core.domain import ApiKey
+from src.core.platform.errors import NewApplicationError
+from src.core.platform.errors.mappings.profile import (
+    ProfileApiKeyCreateError,
+    ProfileUpdateNotFoundError
+)
 
 
 def update_api_keys(client, user_id: str, api_keys: List[ApiKey]) -> None:
@@ -12,7 +17,7 @@ def update_api_keys(client, user_id: str, api_keys: List[ApiKey]) -> None:
         )
 
         if result.matched_count == 0:
-            raise Exception(f"No profile found with user_id: {user_id}")
+            raise NewApplicationError(ProfileUpdateNotFoundError)
 
     except PyMongoError as e:
-        raise Exception(f"Error updating profile api_keys: {e}")
+        raise NewApplicationError(ProfileApiKeyCreateError, e)

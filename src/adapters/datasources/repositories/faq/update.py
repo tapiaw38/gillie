@@ -1,6 +1,11 @@
 from pymongo.errors import PyMongoError
 from src.core.domain import FAQ
 from datetime import datetime
+from src.core.platform.errors import NewApplicationError
+from src.core.platform.errors.mappings.faq import (
+    FAQUpdateQueryError,
+    FAQUpdateNotFoundError
+)
 
 
 def update_faq(client, id: str, faq: FAQ) -> str:
@@ -15,8 +20,8 @@ def update_faq(client, id: str, faq: FAQ) -> str:
         )
 
         if result.matched_count == 0:
-            raise Exception(f"FAQ with id {id} not found")
+            raise NewApplicationError(FAQUpdateNotFoundError)
 
         return id
     except PyMongoError as e:
-        raise Exception(f"Error updating FAQ: {e}")
+        raise NewApplicationError(FAQUpdateQueryError, e)

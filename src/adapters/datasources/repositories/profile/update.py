@@ -1,5 +1,10 @@
 from pymongo.errors import PyMongoError
 from src.core.domain import Profile
+from src.core.platform.errors import NewApplicationError
+from src.core.platform.errors.mappings.profile import (
+    ProfileUpdateQueryError,
+    ProfileUpdateNotFoundError
+)
 
 
 def update_profile(client, id: str, profile: Profile) -> str:
@@ -14,9 +19,9 @@ def update_profile(client, id: str, profile: Profile) -> str:
         )
 
         if result.matched_count == 0:
-            raise Exception(f"No profile found with id: {id}")
+            raise NewApplicationError(ProfileUpdateNotFoundError)
 
         return id
 
     except PyMongoError as e:
-        raise Exception(f"Error updating profile: {e}")
+        raise NewApplicationError(ProfileUpdateQueryError, e)

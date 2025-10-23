@@ -5,8 +5,13 @@ from src.schemas import (
 )
 from src.core.domain import File
 from datetime import datetime, timezone
-from pymongo.errors import PyMongoError
 from src.core.platform.appcontext.appcontext import Factory
+from src.core.platform.errors import NewApplicationError
+from src.core.platform.errors.mappings.profile import (
+    ProfileGetNotFoundError,
+    ProfileFileNotFoundError,
+    ProfileFileUploadError
+)
 from uuid import uuid4
 from typing import List, Tuple, Optional
 from asyncio import to_thread, gather
@@ -60,37 +65,29 @@ class AddFilesUseCase:
                 results.append(result)
 
         if errors:
-            raise Exception(f"Error processing files: {errors}")
+            raise NewApplicationError(ProfileFileUploadError, errors[0])
 
-        try:
-            profile = app.repositories.profile.find_by_user_id(user_id)
-            if not profile:
-                raise Exception(f"No profile found with user_id: {user_id}")
+        profile = app.repositories.profile.find_by_user_id(user_id)
+        if not profile:
+            raise NewApplicationError(ProfileGetNotFoundError)
 
-            if not hasattr(profile, "files") or profile.files is None:
-                profile.files = []
+        if not hasattr(profile, "files") or profile.files is None:
+            profile.files = []
 
-            profile.files.extend(results)
+        profile.files.extend(results)
 
-            app.repositories.profile.update_files(user_id, profile.files)
+        app.repositories.profile.update_files(user_id, profile.files)
 
-            updated_profile = app.repositories.profile.find_by_user_id(user_id)
-            if not updated_profile:
-                raise Exception(
-                    f"No profile found with user_id: {user_id} after update"
-                )
+        updated_profile = app.repositories.profile.find_by_user_id(user_id)
+        if not updated_profile:
+            raise NewApplicationError(ProfileGetNotFoundError)
 
-            app.repositories.conversation.update_profile_by_user_id(
-                user_id,
-                profile=updated_profile,
-            )
+        app.repositories.conversation.update_profile_by_user_id(
+            user_id,
+            profile=updated_profile,
+        )
 
-            return FileListOutput.from_output(updated_profile.files)
-
-        except PyMongoError as e:
-            raise Exception(f"Error interacting with database: {e}")
-        except Exception as e:
-            raise Exception(f"Error executing AddFilesUseCase: {e}")
+        return FileListOutput.from_output(updated_profile.files)
 
 
 class DeleteFileByIdUseCase:
@@ -98,31 +95,24 @@ class DeleteFileByIdUseCase:
         self.context_factory = context_factory()
 
     async def execute(self, user_id: str, file_id: str):
-        try:
-            file = self.context_factory.repositories.profile.get_file_by_id(
-                user_id, file_id
-            )
-            if not file:
-                raise Exception(f"No file found with id: {file_id}")
+        file = self.context_factory.repositories.profile.get_file_by_id(
+            user_id, file_id
+        )
+        if not file:
+            raise NewApplicationError(ProfileFileNotFoundError)
 
-            self.context_factory.repositories.profile.delete_file_by_id(
-                user_id, file_id
-            )
-            self.context_factory.store_service.delete_object(file.name)
+        self.context_factory.repositories.profile.delete_file_by_id(
+            user_id, file_id
+        )
+        self.context_factory.store_service.delete_object(file.name)
 
-            profile = self.context_factory.repositories.profile.find_by_user_id(user_id)
-            if not profile:
-                raise Exception(f"No profile found with user_id: {user_id}")
+        profile = self.context_factory.repositories.profile.find_by_user_id(user_id)
+        if not profile:
+            raise NewApplicationError(ProfileGetNotFoundError)
 
-            self.context_factory.repositories.conversation.update_profile_by_user_id(
-                user_id,
-                profile=profile,
-            )
+        self.context_factory.repositories.conversation.update_profile_by_user_id(
+            user_id,
+            profile=profile,
+        )
 
-            return FileDeleteOutput.from_output(file_id)
-
-        except PyMongoError as e:
-            raise Exception(f"Error interacting with database: {e}")
-
-        except Exception as e:
-            raise Exception(f"Error executing DeleteFileByIdUseCase: {e}")
+        return FileDeleteOutput.from_output(file_id)

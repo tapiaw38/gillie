@@ -1,5 +1,6 @@
-from pymongo.errors import PyMongoError
 from src.core.platform.appcontext.appcontext import Factory
+from src.core.platform.errors import NewApplicationError
+from src.core.platform.errors.mappings.faq import FAQDeleteNotFoundError
 
 
 class DeleteUseCase:
@@ -7,16 +8,9 @@ class DeleteUseCase:
         self.context_factory = context_factory()
 
     def execute(self, faq_id: str) -> bool:
-        try:
-            existing_faq = self.context_factory.repositories.faq.find_by_id(faq_id)
-            if not existing_faq:
-                raise Exception(f"FAQ with id {faq_id} not found")
+        existing_faq = self.context_factory.repositories.faq.find_by_id(faq_id)
+        if not existing_faq:
+            raise NewApplicationError(FAQDeleteNotFoundError)
 
-            deleted = self.context_factory.repositories.faq.delete(faq_id)
-            return deleted
-
-        except PyMongoError as e:
-            raise Exception(f"Error interacting with database: {e}")
-
-        except Exception as e:
-            raise Exception(f"Error executing DeleteUseCase: {e}")
+        deleted = self.context_factory.repositories.faq.delete(faq_id)
+        return deleted

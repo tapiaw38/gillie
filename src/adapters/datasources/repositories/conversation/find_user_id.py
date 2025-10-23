@@ -1,6 +1,8 @@
 from typing import List
 from pymongo.errors import PyMongoError
 from src.core.domain import Conversation
+from src.core.platform.errors import NewApplicationError
+from src.core.platform.errors.mappings.conversation import ConversationListQueryError
 
 
 def find_conversations_by_user_id(
@@ -40,7 +42,7 @@ def find_conversations_by_user_id(
             for doc in documents
         ]
     except PyMongoError as e:
-        raise Exception(f"Error finding conversations by user_id: {e}")
+        raise NewApplicationError(ConversationListQueryError, e)
 
 
 def find_sandbox_conversations_by_user_id(client, user_id: str) -> List[Conversation]:
@@ -74,4 +76,4 @@ def find_sandbox_conversations_by_user_id(client, user_id: str) -> List[Conversa
             for doc in documents
         ]
     except PyMongoError as e:
-        raise Exception(f"Error finding sandbox conversations by user_id: {e}")
+        raise NewApplicationError(ConversationListQueryError, e)

@@ -1,5 +1,10 @@
 from src.core.domain import Profile
 from pymongo.errors import DuplicateKeyError, PyMongoError
+from src.core.platform.errors import NewApplicationError
+from src.core.platform.errors.mappings.profile import (
+    ProfileCreateQueryError,
+    ProfileCreateDuplicateError
+)
 
 
 def create_profile(client, profile: Profile) -> str:
@@ -10,7 +15,7 @@ def create_profile(client, profile: Profile) -> str:
         return profile_id
 
     except DuplicateKeyError as e:
-        raise Exception(f"Error creating profile: User ID already exists")
+        raise NewApplicationError(ProfileCreateDuplicateError, e)
 
     except PyMongoError as e:
-        raise Exception(f"Error creating profile: {e}")
+        raise NewApplicationError(ProfileCreateQueryError, e)

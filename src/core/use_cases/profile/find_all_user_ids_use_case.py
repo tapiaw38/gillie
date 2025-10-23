@@ -1,4 +1,3 @@
-from pymongo.errors import PyMongoError
 from src.core.platform.appcontext.appcontext import Factory
 
 
@@ -7,11 +6,5 @@ class FindAllUserIdsUseCase:
         self.context_factory = context_factory()
 
     def execute(self):
-        try:
-            user_ids = self.context_factory.repositories.profile.find_all_user_ids()
-            return user_ids
-        except PyMongoError as e:
-            raise Exception(f"Error interacting with database: {e}")
-
-        except Exception as e:
-            raise Exception(f"Error executing FindAllUserIdsUseCase: {e}")
+        user_ids = self.context_factory.repositories.profile.find_all_user_ids()
+        return user_ids

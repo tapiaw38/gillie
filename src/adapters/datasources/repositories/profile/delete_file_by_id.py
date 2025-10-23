@@ -1,4 +1,9 @@
 from pymongo.errors import PyMongoError
+from src.core.platform.errors import NewApplicationError
+from src.core.platform.errors.mappings.profile import (
+    ProfileFileDeleteError,
+    ProfileUpdateNotFoundError
+)
 
 
 def delete_file_by_id(client, user_id: str, file_id: str) -> None:
@@ -9,9 +14,7 @@ def delete_file_by_id(client, user_id: str, file_id: str) -> None:
         )
 
         if result.matched_count == 0:
-            raise Exception(f"No profile found with user_id: {user_id}")
+            raise NewApplicationError(ProfileUpdateNotFoundError)
 
     except PyMongoError as e:
-        raise Exception(f"Error deleting file by ID: {e}")
-    except Exception as e:
-        raise Exception(f"Unexpected error: {e}")
+        raise NewApplicationError(ProfileFileDeleteError, e)

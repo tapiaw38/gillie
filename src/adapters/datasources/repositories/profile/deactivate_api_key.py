@@ -1,5 +1,10 @@
 from typing import Optional
 from pymongo.errors import PyMongoError
+from src.core.platform.errors import NewApplicationError
+from src.core.platform.errors.mappings.profile import (
+    ProfileApiKeyDeleteError,
+    ProfileApiKeyNotFoundError
+)
 
 
 def deactivate_api_key(client, user_id: str, api_key_id: str) -> Optional[str]:
@@ -17,9 +22,9 @@ def deactivate_api_key(client, user_id: str, api_key_id: str) -> Optional[str]:
         )
 
         if result.modified_count == 0:
-            raise Exception("API key not found or already inactive.")
+            raise NewApplicationError(ProfileApiKeyNotFoundError)
 
         return api_key_id
 
     except PyMongoError as e:
-        raise Exception(f"Error deactivating API key: {e}")
+        raise NewApplicationError(ProfileApiKeyDeleteError, e)

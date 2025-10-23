@@ -1,6 +1,8 @@
 from pymongo.errors import PyMongoError
 from src.core.domain import FAQ
 from typing import List
+from src.core.platform.errors import NewApplicationError
+from src.core.platform.errors.mappings.faq import FAQListQueryError
 
 
 def find_faqs_by_category(client, category: str) -> List[FAQ]:
@@ -12,4 +14,4 @@ def find_faqs_by_category(client, category: str) -> List[FAQ]:
             faq_list.append(FAQ(**faq))
         return faq_list
     except PyMongoError as e:
-        raise Exception(f"Error finding FAQs by category: {e}")
+        raise NewApplicationError(FAQListQueryError, e)

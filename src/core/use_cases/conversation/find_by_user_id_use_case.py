@@ -1,5 +1,4 @@
 from src.schemas import ConversationListOutput
-from pymongo.errors import PyMongoError
 from src.core.platform.appcontext.appcontext import Factory
 
 
@@ -36,17 +35,8 @@ class FindByUserIdUseCase:
 
         Returns:
             ConversationListOutput with matching conversations
-
-        Raises:
-            Exception: If database error occurs
         """
-        try:
-            conversations = self.context_factory.repositories.conversation.find_user_id(
-                user_id, include_sandbox
-            )
-            return ConversationListOutput.from_output(conversations)
-        except PyMongoError as e:
-            raise Exception(f"Error interacting with database: {e}")
-
-        except Exception as e:
-            raise Exception(f"Error executing FindByUserIdUseCase: {e}")
+        conversations = self.context_factory.repositories.conversation.find_user_id(
+            user_id, include_sandbox
+        )
+        return ConversationListOutput.from_output(conversations)

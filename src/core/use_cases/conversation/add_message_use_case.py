@@ -21,11 +21,16 @@ The heavy lifting is delegated to specialized services:
 import logging
 from datetime import datetime, timezone
 from typing import Optional
-from pymongo.errors import PyMongoError
 
 from src.schemas import MessageInput, MessageListOutput
 from src.core.domain import Message, SenderEnum
 from src.core.platform.appcontext.appcontext import Factory
+from src.core.platform.errors import NewApplicationError
+from src.core.platform.errors.mappings.conversation import (
+    ConversationGetNotFoundError,
+    ConversationMessageValidationError
+)
+from src.core.platform.errors.mappings.common import ForbiddenError
 
 logger = logging.getLogger(__name__)
 
@@ -81,72 +86,63 @@ class AddMessageUseCase:
             List of messages in the conversation
 
         Raises:
-            Exception: If conversation not found, unauthorized, or database error
+            ApplicationError: If conversation not found, unauthorized, or validation error
         """
-        try:
-            # Step 1: Process voice content if provided
-            enhanced_content = await self._process_voice_content(message)
+        # Step 1: Process voice content if provided
+        enhanced_content = await self._process_voice_content(message)
 
-            # Step 2: Create user message
-            user_message = self._create_user_message(enhanced_content, sender)
+        # Step 2: Create user message
+        user_message = self._create_user_message(enhanced_content, sender)
 
-            # Step 3: Retrieve and validate conversation
-            conversation = self._get_and_validate_conversation(
-                conversation_id, user_id
-            )
+        # Step 3: Retrieve and validate conversation
+        conversation = self._get_and_validate_conversation(
+            conversation_id, user_id
+        )
 
-            # Step 4: Add user message to conversation
-            self._add_message_to_conversation(conversation, user_message)
+        # Step 4: Add user message to conversation
+        self._add_message_to_conversation(conversation, user_message)
 
-            # Step 5: Generate AI response
-            ai_response_text = await self._generate_ai_response(
-                user_message=user_message,
-                conversation=conversation,
-                message_context=message.context
-            )
+        # Step 5: Generate AI response
+        ai_response_text = await self._generate_ai_response(
+            user_message=user_message,
+            conversation=conversation,
+            message_context=message.context
+        )
 
-            # Step 6: Process images if enabled
-            formatted_images = await self._process_images_if_enabled(
-                has_image_processor=has_image_processor,
-                user_message=user_message,
-                conversation=conversation,
-                message_context=message.context
-            )
+        # Step 6: Process images if enabled
+        formatted_images = await self._process_images_if_enabled(
+            has_image_processor=has_image_processor,
+            user_message=user_message,
+            conversation=conversation,
+            message_context=message.context
+        )
 
-            # Step 7: Generate audio if enabled
-            audio_url = await self._generate_audio_if_enabled(
-                has_text_to_voice=has_text_to_voice,
-                text=ai_response_text,
-                user_id=user_id,
-                conversation_id=conversation_id
-            )
+        # Step 7: Generate audio if enabled
+        audio_url = await self._generate_audio_if_enabled(
+            has_text_to_voice=has_text_to_voice,
+            text=ai_response_text,
+            user_id=user_id,
+            conversation_id=conversation_id
+        )
 
-            # Step 8: Create assistant response message
-            assistant_message = self._create_assistant_message(
-                content=ai_response_text,
-                audio_url=audio_url
-            )
+        # Step 8: Create assistant response message
+        assistant_message = self._create_assistant_message(
+            content=ai_response_text,
+            audio_url=audio_url
+        )
 
-            # Step 9: Append images to assistant message if available
-            if formatted_images:
-                assistant_message.content = f"{ai_response_text}\n\n{formatted_images}"
+        # Step 9: Append images to assistant message if available
+        if formatted_images:
+            assistant_message.content = f"{ai_response_text}\n\n{formatted_images}"
 
-            # Step 10: Add assistant message to conversation
-            self._add_message_to_conversation(conversation, assistant_message)
+        # Step 10: Add assistant message to conversation
+        self._add_message_to_conversation(conversation, assistant_message)
 
-            # Step 11: Persist messages to database
-            self._save_messages(conversation_id, conversation.messages)
+        # Step 11: Persist messages to database
+        self._save_messages(conversation_id, conversation.messages)
 
-            # Step 12: Return messages
-            return MessageListOutput.from_output(conversation.messages)
-
-        except PyMongoError as e:
-            logger.error(f"Database error in AddMessageUseCase: {e}")
-            raise Exception(f"Error interacting with the database: {e}")
-
-        except Exception as e:
-            logger.error(f"Error executing AddMessageUseCase: {e}")
-            raise
+        # Step 12: Return messages
+        return MessageListOutput.from_output(conversation.messages)
 
     async def _process_voice_content(self, message: MessageInput) -> str:
         """
@@ -238,7 +234,7 @@ class AddMessageUseCase:
             Conversation domain object
 
         Raises:
-            Exception: If conversation not found or user unauthorized
+            ApplicationError: If conversation not found or user unauthorized
         """
         conversation = self.context_factory.repositories.conversation.find_by_id(
             conversation_id
@@ -246,13 +242,13 @@ class AddMessageUseCase:
 
         if not conversation:
             logger.error(f"Conversation not found: {conversation_id}")
-            raise Exception("Conversation not found")
+            raise NewApplicationError(ConversationGetNotFoundError)
 
         if user_id != conversation.profile.user_id:
             logger.error(
                 f"User {user_id} not authorized for conversation {conversation_id}"
             )
-            raise Exception("User not authorized to add message")
+            raise NewApplicationError(ForbiddenError)
 
         # Initialize messages list if not present
         if not hasattr(conversation, "messages") or conversation.messages is None:
@@ -269,11 +265,11 @@ class AddMessageUseCase:
             message: Message to add
 
         Raises:
-            Exception: If message with same ID already exists
+            ApplicationError: If message with same ID already exists
         """
         if any(msg.id == message.id for msg in conversation.messages):
             logger.error(f"Duplicate message ID: {message.id}")
-            raise Exception("Message with the same ID already exists in the conversation")
+            raise NewApplicationError(ConversationMessageValidationError)
 
         conversation.messages.append(message)
 

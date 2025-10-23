@@ -1,6 +1,8 @@
 from src.schemas import MessageListOutput
-from pymongo.errors import PyMongoError
 from src.core.platform.appcontext.appcontext import Factory
+from src.core.platform.errors import NewApplicationError
+from src.core.platform.errors.mappings.conversation import ConversationGetNotFoundError
+from src.core.platform.errors.mappings.common import ForbiddenError
 
 
 class DeleteAllMessagesUseCase:
@@ -8,29 +10,22 @@ class DeleteAllMessagesUseCase:
         self.context_factory = context_factory()
 
     async def execute(self, conversation_id: str, user_id: str):
-        try:
-            search_conversation = (
-                self.context_factory.repositories.conversation.find_by_id(
-                    conversation_id
-                )
+        search_conversation = (
+            self.context_factory.repositories.conversation.find_by_id(
+                conversation_id
             )
-            if not search_conversation:
-                raise Exception("Conversation not found")
+        )
+        if not search_conversation:
+            raise NewApplicationError(ConversationGetNotFoundError)
 
-            if user_id != search_conversation.profile.user_id:
-                raise Exception("User not authorized to delete messages")
+        if user_id != search_conversation.profile.user_id:
+            raise NewApplicationError(ForbiddenError)
 
-            self.context_factory.repositories.conversation.update_messages_by_id(
-                conversation_id,
-                [],
-            )
+        self.context_factory.repositories.conversation.update_messages_by_id(
+            conversation_id,
+            [],
+        )
 
-            search_conversation.messages = []
+        search_conversation.messages = []
 
-            return MessageListOutput.from_output(search_conversation.messages)
-
-        except PyMongoError as e:
-            raise Exception(f"Error interacting with the database: {e}")
-
-        except Exception as e:
-            raise Exception(f"Error executing DeleteAllMessagesUseCase: {e}")
+        return MessageListOutput.from_output(search_conversation.messages)

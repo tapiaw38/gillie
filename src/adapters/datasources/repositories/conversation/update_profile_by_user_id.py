@@ -1,5 +1,7 @@
 from pymongo.errors import PyMongoError
 from src.core.domain import Profile
+from src.core.platform.errors import NewApplicationError
+from src.core.platform.errors.mappings.conversation import ConversationUpdateQueryError
 
 
 def update_profile_by_user_id(client, user_id: str, profile: Profile) -> str:
@@ -17,4 +19,4 @@ def update_profile_by_user_id(client, user_id: str, profile: Profile) -> str:
         return user_id
 
     except PyMongoError as e:
-        raise Exception(f"Error updating conversation: {e}")
+        raise NewApplicationError(ConversationUpdateQueryError, e)

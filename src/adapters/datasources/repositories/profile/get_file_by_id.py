@@ -1,6 +1,11 @@
 from typing import Optional
 from pymongo.errors import PyMongoError
 from src.core.domain import File
+from src.core.platform.errors import NewApplicationError
+from src.core.platform.errors.mappings.profile import (
+    ProfileFileNotFoundError,
+    ProfileGetQueryError
+)
 
 
 def get_file_by_id(client, user_id: str, file_id: str) -> Optional[File]:
@@ -17,11 +22,9 @@ def get_file_by_id(client, user_id: str, file_id: str) -> Optional[File]:
             }
         )
         if not document or "files" not in document or not document["files"]:
-            raise Exception(f"No file found with id: {file_id}")
+            raise NewApplicationError(ProfileFileNotFoundError)
 
         return File(**document["files"][0])
 
     except PyMongoError as e:
-        raise Exception(f"Error finding file by ID: {e}")
-    except Exception as e:
-        raise Exception(f"Unexpected error: {e}")
+        raise NewApplicationError(ProfileGetQueryError, e)

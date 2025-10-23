@@ -1,6 +1,11 @@
 from typing import List
 from pymongo.errors import PyMongoError
 from src.core.domain import Message
+from src.core.platform.errors import NewApplicationError
+from src.core.platform.errors.mappings.conversation import (
+    ConversationUpdateQueryError,
+    ConversationUpdateNotFoundError
+)
 
 
 def update_messages_by_id(client, id: str, messages: List[Message]) -> None:
@@ -12,7 +17,7 @@ def update_messages_by_id(client, id: str, messages: List[Message]) -> None:
         )
 
         if result.matched_count == 0:
-            raise Exception(f"No conversation found with id: {id}")
+            raise NewApplicationError(ConversationUpdateNotFoundError)
 
     except PyMongoError as e:
-        raise Exception(f"Error updating conversation: {e}")
+        raise NewApplicationError(ConversationUpdateQueryError, e)

@@ -1,5 +1,7 @@
 from pymongo.errors import PyMongoError
 from src.core.domain import FAQ
+from src.core.platform.errors import NewApplicationError
+from src.core.platform.errors.mappings.faq import FAQCreateQueryError
 
 
 def create_faq(client, faq: FAQ) -> str:
@@ -9,4 +11,4 @@ def create_faq(client, faq: FAQ) -> str:
         faq_id = str(result.inserted_id)
         return faq_id
     except PyMongoError as e:
-        raise Exception(f"Error creating FAQ: {e}")
+        raise NewApplicationError(FAQCreateQueryError, e)

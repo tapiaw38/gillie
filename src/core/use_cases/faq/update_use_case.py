@@ -1,6 +1,10 @@
 from src.core.domain import FAQ
-from pymongo.errors import PyMongoError
 from src.core.platform.appcontext.appcontext import Factory
+from src.core.platform.errors import NewApplicationError
+from src.core.platform.errors.mappings.faq import (
+    FAQUpdateNotFoundError,
+    FAQGetNotFoundError
+)
 
 
 class UpdateUseCase:
@@ -8,21 +12,14 @@ class UpdateUseCase:
         self.context_factory = context_factory()
 
     def execute(self, faq_id: str, faq: FAQ) -> FAQ:
-        try:
-            existing_faq = self.context_factory.repositories.faq.find_by_id(faq_id)
-            if not existing_faq:
-                raise Exception(f"FAQ with id {faq_id} not found")
+        existing_faq = self.context_factory.repositories.faq.find_by_id(faq_id)
+        if not existing_faq:
+            raise NewApplicationError(FAQUpdateNotFoundError)
 
-            self.context_factory.repositories.faq.update(faq_id, faq)
+        self.context_factory.repositories.faq.update(faq_id, faq)
 
-            updated_faq = self.context_factory.repositories.faq.find_by_id(faq_id)
-            if not updated_faq:
-                raise Exception("Error: FAQ not found after update")
+        updated_faq = self.context_factory.repositories.faq.find_by_id(faq_id)
+        if not updated_faq:
+            raise NewApplicationError(FAQGetNotFoundError)
 
-            return updated_faq
-
-        except PyMongoError as e:
-            raise Exception(f"Error interacting with database: {e}")
-
-        except Exception as e:
-            raise Exception(f"Error executing UpdateUseCase: {e}")
+        return updated_faq

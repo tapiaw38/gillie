@@ -1,5 +1,7 @@
 from pymongo.errors import PyMongoError
 from src.core.domain import Conversation
+from src.core.platform.errors import NewApplicationError
+from src.core.platform.errors.mappings.conversation import ConversationCreateQueryError
 
 
 def create_conversation(client, conversation: Conversation) -> str:
@@ -9,4 +11,4 @@ def create_conversation(client, conversation: Conversation) -> str:
         conversation_id = str(result.inserted_id)
         return conversation_id
     except PyMongoError as e:
-        raise Exception(f"Error creating conversation: {e}")
+        raise NewApplicationError(ConversationCreateQueryError, e)
