@@ -5,9 +5,9 @@ from src.core.platform.errors import NewApplicationError
 from src.core.platform.errors.mappings.faq import FAQListQueryError
 
 
-def find_faqs_by_category(client, category: str) -> List[FAQ]:
+def find_faqs_by_category(client, profile_id: str, category: str) -> List[FAQ]:
     try:
-        faqs = client.find({"category": category, "is_active": True}).sort("order", 1)
+        faqs = client.find({"profile_id": profile_id, "category": category, "is_active": True}).sort("order", 1)
         faq_list = []
         for faq in faqs:
             faq["_id"] = str(faq["_id"])

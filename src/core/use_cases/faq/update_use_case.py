@@ -5,21 +5,38 @@ from src.core.platform.errors.mappings.faq import (
     FAQUpdateNotFoundError,
     FAQGetNotFoundError
 )
+from src.core.platform.errors.mappings.profile import ProfileGetNotFoundError
+from src.core.platform.errors.mappings.common import UnauthorizedError
+from pymongo.errors import PyMongoError
 
 
 class UpdateUseCase:
     def __init__(self, context_factory: Factory):
         self.context_factory = context_factory()
 
-    def execute(self, faq_id: str, faq: FAQ) -> FAQ:
-        existing_faq = self.context_factory.repositories.faq.find_by_id(faq_id)
-        if not existing_faq:
-            raise NewApplicationError(FAQUpdateNotFoundError)
+    def execute(self, faq_id: str, faq: FAQ, user_id: str) -> FAQ:
+        try:
+            # Get profile from user_id
+            profile = self.context_factory.repositories.profile.find_by_user_id(user_id)
+            if not profile:
+                raise NewApplicationError(ProfileGetNotFoundError)
 
-        self.context_factory.repositories.faq.update(faq_id, faq)
+            existing_faq = self.context_factory.repositories.faq.find_by_id(faq_id)
+            if not existing_faq:
+                raise NewApplicationError(FAQUpdateNotFoundError)
 
-        updated_faq = self.context_factory.repositories.faq.find_by_id(faq_id)
-        if not updated_faq:
-            raise NewApplicationError(FAQGetNotFoundError)
+            # Verify FAQ belongs to user
+            if existing_faq.profile_id != profile.id:
+                raise NewApplicationError(UnauthorizedError)
 
-        return updated_faq
+            self.context_factory.repositories.faq.update(faq_id, faq)
+
+            updated_faq = self.context_factory.repositories.faq.find_by_id(faq_id)
+            if not updated_faq:
+                raise NewApplicationError(FAQGetNotFoundError)
+
+            return updated_faq
+
+        except PyMongoError as e:
+            from src.core.platform.errors.mappings.faq import FAQUpdateQueryError
+            raise NewApplicationError(FAQUpdateQueryError, e)

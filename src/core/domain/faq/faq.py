@@ -5,6 +5,7 @@ from datetime import datetime
 
 class FAQ(BaseModel):
     id: Optional[str] = Field(alias="_id", default=None)
+    profile_id: str
     question: str
     answer: str
     category: Optional[str] = None

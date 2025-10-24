@@ -8,7 +8,7 @@ class Migration:
         self.up = up
 
 
-def execute_profile_migrations() -> List[Migration]:
+def execute_migrations() -> List[Migration]:
     return [
         Migration(
             version=1,
@@ -50,6 +50,13 @@ def execute_profile_migrations() -> List[Migration]:
             up=lambda db: db["conversations"].update_many(
                 {"is_sandbox": {"$exists": False}},
                 {"$set": {"is_sandbox": False}}
+            )
+        ),
+        Migration(
+            version=7,
+            up=lambda db: db["faqs"].update_many(
+                {"profile_id": {"$exists": False}},
+                {"$set": {"profile_id": None}}
             )
         ),
     ]

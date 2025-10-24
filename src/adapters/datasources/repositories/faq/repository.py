@@ -15,6 +15,7 @@ from .find_by_category import find_faqs_by_category
 class Repository(RepositoryInterface):
     def __init__(self, datasources: Datasources):
         self.client = datasources.no_sql_faqs_client
+        self.client.create_index("profile_id")
         self.client.create_index("category")
         self.client.create_index("order")
         self.client.create_index("is_active")
@@ -25,8 +26,8 @@ class Repository(RepositoryInterface):
     def find_by_id(self, id: str) -> Optional[FAQ]:
         return find_faq_by_id(self.client, id)
 
-    def find_all(self, category: Optional[str] = None, is_active: Optional[bool] = None) -> List[FAQ]:
-        return find_all_faqs(self.client, category, is_active)
+    def find_all(self, profile_id: str, category: Optional[str] = None, is_active: Optional[bool] = None) -> List[FAQ]:
+        return find_all_faqs(self.client, profile_id, category, is_active)
 
     def update(self, id: str, faq: FAQ) -> str:
         return update_faq(self.client, id, faq)
@@ -34,5 +35,5 @@ class Repository(RepositoryInterface):
     def delete(self, id: str) -> bool:
         return delete_faq(self.client, id)
 
-    def find_by_category(self, category: str) -> List[FAQ]:
-        return find_faqs_by_category(self.client, category)
+    def find_by_category(self, profile_id: str, category: str) -> List[FAQ]:
+        return find_faqs_by_category(self.client, profile_id, category)

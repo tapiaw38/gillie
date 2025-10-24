@@ -24,6 +24,7 @@ class FAQUpdate(BaseModel):
 
 class FAQOutputData(BaseModel):
     id: Optional[str]
+    profile_id: str
     question: str
     answer: str
     category: Optional[str]
@@ -42,6 +43,7 @@ class FAQOutput(BaseModel):
         return FAQOutput(
             data=FAQOutputData(
                 id=faq.id,
+                profile_id=faq.profile_id,
                 question=faq.question,
                 answer=faq.answer,
                 category=faq.category,

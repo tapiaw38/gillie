@@ -5,9 +5,9 @@ from src.core.platform.errors import NewApplicationError
 from src.core.platform.errors.mappings.faq import FAQListQueryError
 
 
-def find_all_faqs(client, category: Optional[str] = None, is_active: Optional[bool] = None) -> List[FAQ]:
+def find_all_faqs(client, profile_id: str, category: Optional[str] = None, is_active: Optional[bool] = None) -> List[FAQ]:
     try:
-        query = {}
+        query = {"profile_id": profile_id}
         if category:
             query["category"] = category
         if is_active is not None:

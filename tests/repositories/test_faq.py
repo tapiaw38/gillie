@@ -27,6 +27,7 @@ def repository(mock_datasources):
 def build_faq(**kwargs):
     defaults = {
         "id": str(uuid4()),
+        "profile_id": str(uuid4()),
         "question": "What is Python?",
         "answer": "Python is a programming language",
         "category": "Programming",
@@ -84,9 +85,10 @@ def test_find_by_id_not_found(repository, mock_client):
 
 
 def test_find_all_success(repository, mock_client):
-    """Test finding all FAQs"""
-    faq1 = build_faq(question="Question 1")
-    faq2 = build_faq(question="Question 2")
+    """Test finding all FAQs for a profile"""
+    profile_id = str(uuid4())
+    faq1 = build_faq(profile_id=profile_id, question="Question 1")
+    faq2 = build_faq(profile_id=profile_id, question="Question 2")
 
     mock_faqs = [
         {**faq1.dict(by_alias=True), "_id": faq1.id},
@@ -98,7 +100,7 @@ def test_find_all_success(repository, mock_client):
     mock_cursor.sort.return_value = mock_cursor
     mock_client.find.return_value = mock_cursor
 
-    result = repository.find_all()
+    result = repository.find_all(profile_id)
 
     assert len(result) == 2
     assert result[0].question == "Question 1"
@@ -106,16 +108,18 @@ def test_find_all_success(repository, mock_client):
 
 
 def test_find_all_with_filters(repository, mock_client):
-    """Test finding FAQs with category and is_active filters"""
+    """Test finding FAQs with profile_id, category and is_active filters"""
     mock_cursor = MagicMock()
     mock_cursor.__iter__.return_value = iter([])
     mock_cursor.sort.return_value = mock_cursor
     mock_client.find.return_value = mock_cursor
 
-    repository.find_all(category="Programming", is_active=True)
+    profile_id = str(uuid4())
+    repository.find_all(profile_id=profile_id, category="Programming", is_active=True)
 
     mock_client.find.assert_called_once()
     call_args = mock_client.find.call_args[0][0]
+    assert call_args["profile_id"] == profile_id
     assert call_args["category"] == "Programming"
     assert call_args["is_active"] is True
 
@@ -164,9 +168,10 @@ def test_delete_faq_not_found(repository, mock_client):
 
 
 def test_find_by_category_success(repository, mock_client):
-    """Test finding FAQs by category"""
-    faq1 = build_faq(category="Python")
-    faq2 = build_faq(category="Python")
+    """Test finding FAQs by profile_id and category"""
+    profile_id = str(uuid4())
+    faq1 = build_faq(profile_id=profile_id, category="Python")
+    faq2 = build_faq(profile_id=profile_id, category="Python")
 
     mock_faqs = [
         {**faq1.dict(by_alias=True), "_id": faq1.id},
@@ -178,7 +183,7 @@ def test_find_by_category_success(repository, mock_client):
     mock_cursor.sort.return_value = mock_cursor
     mock_client.find.return_value = mock_cursor
 
-    result = repository.find_by_category("Python")
+    result = repository.find_by_category(profile_id, "Python")
 
     assert len(result) == 2
     assert all(faq.category == "Python" for faq in result)

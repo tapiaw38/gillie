@@ -24,10 +24,8 @@ def find_conversations_by_user_id(
         Exception: If database error occurs
     """
     try:
-        # Build query filter
         query_filter = {"profile.user_id": user_id}
 
-        # Exclude sandbox conversations by default (production mode)
         if not include_sandbox:
             query_filter["is_sandbox"] = {"$ne": True}
 

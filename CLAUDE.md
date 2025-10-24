@@ -359,7 +359,7 @@ This registers handlers for:
 - The application requires Tesseract OCR to be installed (included in Docker image)
 - PDF processing supports both text-based and scanned (OCR) documents
 - MercadoLibre integration is initialized per-user with access tokens (not at startup)
-- MongoDB migrations run automatically on startup via `execute_profile_migrations()`
+- MongoDB migrations run automatically on startup via `execute_migrations()`
 - The API uses dependency injection through FastAPI's `dependency_overrides`
 - All MongoDB clients are initialized with separate collections for conversations, profiles, and migrations
 - Error handling is centralized through exception handlers - controllers should let ApplicationErrors propagate

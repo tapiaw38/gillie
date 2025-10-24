@@ -38,6 +38,7 @@ class FAQContextManager:
 
     def get_faq_context(
         self,
+        profile_id: str,
         category: Optional[str] = None,
         max_faqs: int = 20
     ) -> str:
@@ -45,6 +46,7 @@ class FAQContextManager:
         Retrieves and formats FAQs for LLM context.
 
         Args:
+            profile_id: User's profile ID to filter FAQs
             category: Optional category to filter FAQs
             max_faqs: Maximum number of FAQs to include (default: 20)
 
@@ -52,8 +54,9 @@ class FAQContextManager:
             Formatted FAQ context string ready for LLM injection
         """
         try:
-            # Retrieve active FAQs
+            # Retrieve active FAQs for this user
             faqs = self.faq_repository.find_all(
+                profile_id=profile_id,
                 category=category,
                 is_active=True
             )
@@ -75,18 +78,19 @@ class FAQContextManager:
             logger.error(f"Error retrieving FAQ context: {e}")
             return ""
 
-    def get_faqs_by_category(self, category: str) -> str:
+    def get_faqs_by_category(self, profile_id: str, category: str) -> str:
         """
         Retrieves and formats FAQs for a specific category.
 
         Args:
+            profile_id: User's profile ID to filter FAQs
             category: Category to filter FAQs
 
         Returns:
             Formatted FAQ context string for the category
         """
         try:
-            faqs = self.faq_repository.find_by_category(category)
+            faqs = self.faq_repository.find_by_category(profile_id, category)
 
             if not faqs:
                 return ""
@@ -176,6 +180,7 @@ class FAQContextManager:
 
     def search_relevant_faqs(
         self,
+        profile_id: str,
         user_query: str,
         max_results: int = 5
     ) -> str:
@@ -186,6 +191,7 @@ class FAQContextManager:
         you might want to implement semantic search using embeddings.
 
         Args:
+            profile_id: User's profile ID to filter FAQs
             user_query: User's question or message
             max_results: Maximum number of relevant FAQs to return
 
@@ -193,8 +199,8 @@ class FAQContextManager:
             Formatted string with relevant FAQs
         """
         try:
-            # Get all active FAQs
-            all_faqs = self.faq_repository.find_all(is_active=True)
+            # Get all active FAQs for this user
+            all_faqs = self.faq_repository.find_all(profile_id=profile_id, is_active=True)
 
             if not all_faqs:
                 return ""

@@ -13,7 +13,7 @@ class RepositoryInterface(ABC):
         pass
 
     @abstractmethod
-    def find_all(self, category: Optional[str] = None, is_active: Optional[bool] = None) -> List[FAQ]:
+    def find_all(self, profile_id: str, category: Optional[str] = None, is_active: Optional[bool] = None) -> List[FAQ]:
         pass
 
     @abstractmethod
@@ -25,5 +25,5 @@ class RepositoryInterface(ABC):
         pass
 
     @abstractmethod
-    def find_by_category(self, category: str) -> List[FAQ]:
+    def find_by_category(self, profile_id: str, category: str) -> List[FAQ]:
         pass

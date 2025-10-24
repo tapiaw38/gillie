@@ -12,7 +12,7 @@ from src.core.platform.nosql.client import MongoDBClient
 from src.adapters.datasources.datasources import Datasources
 from src.core.platform.appcontext.appcontext import new_factory
 from src.core.use_cases.use_cases import create_usecases
-from src.core.platform.nosql.migrations import execute_profile_migrations
+from src.core.platform.nosql.migrations import execute_migrations
 from src.core.platform.objectstorange.s3_session import get_s3_session
 from src.adapters.storeservice.storeservice import StoreServiceImpl
 from src.core.platform.services.platform_services import PlatformServices
@@ -68,7 +68,7 @@ faqs_client = MongoDBClient(
     config_service.nosql_config.faqs.collection,
 )
 
-profiles_client.run_migrations(migrations_client.get_collection(), execute_profile_migrations())
+profiles_client.run_migrations(migrations_client.get_collection(), execute_migrations())
 
 s3_session = get_s3_session()
 store_service = StoreServiceImpl(
