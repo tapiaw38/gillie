@@ -1,8 +1,11 @@
+from typing import Optional
 from pymongo.errors import PyMongoError
 from src.core.domain import ApiKey
+from src.core.platform.errors import NewApplicationError
+from src.core.platform.errors.mappings.profile import ProfileApiKeyNotFoundError, ProfileGetQueryError
 
 
-def find_by_api_key_value(client, user_id: str, api_key_value: str) -> ApiKey:
+def find_by_api_key_value(client, user_id: str, api_key_value: str) -> Optional[ApiKey]:
     try:
         document = client.find_one(
             {
@@ -16,9 +19,9 @@ def find_by_api_key_value(client, user_id: str, api_key_value: str) -> ApiKey:
             }
         )
         if not document or "api_keys" not in document or not document["api_keys"]:
-            raise Exception(f"No API key found for user_id: {user_id}")
+            return None
 
         return ApiKey(**document["api_keys"][0])
 
     except PyMongoError as e:
-        raise Exception(f"Error finding API key: {e}")
+        raise NewApplicationError(ProfileGetQueryError, e)

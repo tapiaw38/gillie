@@ -485,7 +485,7 @@ class AddMessageUseCase:
 
         except Exception as e:
             logger.error(f"Error generating audio: {e}")
-            raise Exception(f"Error generating audio: {e}")
+            return None
 
     def _save_messages(self, conversation_id: str, messages: list[Message]) -> None:
         """

@@ -5,12 +5,16 @@ from src.schemas import (
 )
 from src.core.domain import ApiKey
 from datetime import datetime, timezone, timedelta
+from pymongo.errors import PyMongoError
 from src.core.platform.appcontext.appcontext import Factory
 from src.core.platform.errors import NewApplicationError
 from src.core.platform.errors.mappings.profile import (
     ProfileGetNotFoundError,
+    ProfileGetQueryError,
     ProfileApiKeyNotFoundError,
-    ProfileApiKeyValidationError
+    ProfileApiKeyValidationError,
+    ProfileApiKeyCreateError,
+    ProfileApiKeyDeleteError
 )
 from uuid import uuid4
 import jwt
@@ -34,40 +38,44 @@ class AddApiKeyUseCase:
         return token
 
     async def execute(self, api_key: ApiKeyInput, user_id: str):
-        default_limit = 1000
-        generated_id = str(uuid4())
-        new_api_key = ApiKey(
-            _id=generated_id,
-            user_id=user_id,
-            value=self.generate_api_key(user_id),
-            description=api_key.description,
-            limit=default_limit,
-            is_active=True,
-            created_at=datetime.now(timezone.utc),
-        )
+        try:
+            default_limit = 1000
+            generated_id = str(uuid4())
+            new_api_key = ApiKey(
+                _id=generated_id,
+                user_id=user_id,
+                value=self.generate_api_key(user_id),
+                description=api_key.description,
+                limit=default_limit,
+                is_active=True,
+                created_at=datetime.now(timezone.utc),
+            )
 
-        profile = self.context_factory.repositories.profile.find_by_user_id(user_id)
-        if not profile:
-            raise NewApplicationError(ProfileGetNotFoundError)
+            profile = self.context_factory.repositories.profile.find_by_user_id(user_id)
+            if not profile:
+                raise NewApplicationError(ProfileGetNotFoundError)
 
-        if not hasattr(profile, "api_keys") or profile.api_keys is None:
-            profile.api_keys = []
+            if not hasattr(profile, "api_keys") or profile.api_keys is None:
+                profile.api_keys = []
 
-        if any(api_key.id == new_api_key.id for api_key in profile.api_keys):
-            raise NewApplicationError(ProfileApiKeyValidationError)
+            if any(api_key.id == new_api_key.id for api_key in profile.api_keys):
+                raise NewApplicationError(ProfileApiKeyValidationError)
 
-        profile.api_keys.append(new_api_key)
+            profile.api_keys.append(new_api_key)
 
-        self.context_factory.repositories.profile.update_api_keys(
-            user_id, profile.api_keys
-        )
+            self.context_factory.repositories.profile.update_api_keys(
+                user_id, profile.api_keys
+            )
 
-        self.context_factory.repositories.conversation.update_profile_by_user_id(
-            user_id,
-            profile=profile,
-        )
+            self.context_factory.repositories.conversation.update_profile_by_user_id(
+                user_id,
+                profile=profile,
+            )
 
-        return ApiKeyListOutput.from_output(profile.api_keys)
+            return ApiKeyListOutput.from_output(profile.api_keys)
+
+        except PyMongoError as e:
+            raise NewApplicationError(ProfileApiKeyCreateError, e)
 
 
 class DeleteApiKeyUseCase:
@@ -75,18 +83,22 @@ class DeleteApiKeyUseCase:
         self.context_factory = context_factory()
 
     async def execute(self, user_id: str, api_key_id: str):
-        self.context_factory.repositories.profile.deactivate_api_key(
-            user_id, api_key_id
-        )
+        try:
+            self.context_factory.repositories.profile.deactivate_api_key(
+                user_id, api_key_id
+            )
 
-        profile = self.context_factory.repositories.profile.find_by_user_id(user_id)
+            profile = self.context_factory.repositories.profile.find_by_user_id(user_id)
 
-        self.context_factory.repositories.conversation.update_profile_by_user_id(
-            user_id,
-            profile=profile,
-        )
+            self.context_factory.repositories.conversation.update_profile_by_user_id(
+                user_id,
+                profile=profile,
+            )
 
-        return ApiKeyDeleteOutput.from_output(api_key_id)
+            return ApiKeyDeleteOutput.from_output(api_key_id)
+
+        except PyMongoError as e:
+            raise NewApplicationError(ProfileApiKeyDeleteError, e)
 
 
 class FindByApiKeyValueUseCase:
@@ -94,9 +106,13 @@ class FindByApiKeyValueUseCase:
         self.context_factory = context_factory()
 
     async def execute(self, user_id: str, api_key_value: str):
-        api_key = self.context_factory.repositories.profile.find_by_api_key_value(
-            user_id, api_key_value
-        )
-        if not api_key:
-            raise NewApplicationError(ProfileApiKeyNotFoundError)
-        return api_key
+        try:
+            api_key = self.context_factory.repositories.profile.find_by_api_key_value(
+                user_id, api_key_value
+            )
+            if not api_key:
+                raise NewApplicationError(ProfileApiKeyNotFoundError)
+            return api_key
+
+        except PyMongoError as e:
+            raise NewApplicationError(ProfileGetQueryError, e)

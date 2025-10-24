@@ -3,7 +3,10 @@ from src.schemas import (
     ListOptionsOutputData,
     RoleOutputData,
 )
+from pymongo.errors import PyMongoError
 from src.core.platform.appcontext.appcontext import Factory
+from src.core.platform.errors import NewApplicationError
+from src.core.platform.errors.mappings.common import DatabaseQueryError
 
 
 class ListOptionsUseCase:
@@ -11,17 +14,21 @@ class ListOptionsUseCase:
         self.context_factory = context_factory()
 
     def execute(self) -> ListOptionsOutput:
-        roles = self.context_factory.repositories.role.get_all_roles()
+        try:
+            roles = self.context_factory.repositories.role.get_all_roles()
 
-        print(f"Roles found: {len(roles)}")
-        role_data = []
-        for role in roles:
-            role_data.append(
-                RoleOutputData(
-                    code=role.code,
-                    name=role.name,
+            print(f"Roles found: {len(roles)}")
+            role_data = []
+            for role in roles:
+                role_data.append(
+                    RoleOutputData(
+                        code=role.code,
+                        name=role.name,
+                    )
                 )
-            )
-        list_options_data = ListOptionsOutputData(roles=role_data)
+            list_options_data = ListOptionsOutputData(roles=role_data)
 
-        return ListOptionsOutput(data=list_options_data)
+            return ListOptionsOutput(data=list_options_data)
+
+        except PyMongoError as e:
+            raise NewApplicationError(DatabaseQueryError, e)
