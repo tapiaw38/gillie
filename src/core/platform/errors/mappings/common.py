@@ -20,6 +20,12 @@ RequestBodyValidationError = ErrorDetails(
     message="request validation failed"
 )
 
+ValidationError = ErrorDetails(
+    internal_code="common:validation-error",
+    status_code=400,
+    message="validation failed"
+)
+
 # Database Errors (500)
 DatabaseConnectionError = ErrorDetails(
     internal_code="common:database-connection-error",

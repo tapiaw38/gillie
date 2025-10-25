@@ -5,7 +5,7 @@ import jwt
 from jwt import PyJWTError
 import logging
 from src.core.platform.config.service import get_config_service
-from src.adapters.services.services import Services
+from src.core.use_cases.use_cases import Usecases
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -16,7 +16,9 @@ EXCLUDED_PATHS = {
     "/openapi.json",
     "/redoc",
     "/redoc/",
+    "/health",
     "/api/whatsapp/webhook",
+    "/api/whatsapp/process-external-message",
 }
 
 async def decode_token(token: str):
@@ -32,7 +34,7 @@ async def decode_token(token: str):
         logger.warning(f"Token decoding error: {str(e)}")
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail=f"Invalid token: {str(e)}")
 
-async def validate_api_key(token: str, services: Services, method: str):
+async def validate_api_key(token: str, usecases: Usecases, method: str):
     secret_key = get_config_service().server_config.jwt_secret
     try:
         payload = jwt.decode(token, secret_key, algorithms=["HS256"])
@@ -43,7 +45,7 @@ async def validate_api_key(token: str, services: Services, method: str):
             return {"valid": False, "error": None}
 
         user_id = payload.get("user_id")
-        api_key = await services.profile.find_by_api_key_value(user_id, token)
+        api_key = await usecases.profile.find_by_api_key_value_usecase.execute(user_id, token)
 
         if not api_key:
             logger.warning(f"API key not found for user {user_id}")
@@ -53,7 +55,7 @@ async def validate_api_key(token: str, services: Services, method: str):
             logger.warning(f"Inactive API key for user {user_id}")
             return {"valid": False, "error": None}
 
-        profile = await services.profile.find_by_user_id(user_id)
+        profile = usecases.profile.find_by_user_id_usecase.execute(user_id)
 
         if not profile:
             logger.warning(f"Profile not found for user {user_id}")
@@ -76,7 +78,7 @@ async def validate_api_key(token: str, services: Services, method: str):
         # Decrement iteration limit only for specific methods if needed
         if method == "POST" and profile.data.iteration_limit is not None:
             updated_iteration_limit = profile.data.iteration_limit - 1
-            await services.profile.update_iteration_limit(user_id, updated_iteration_limit)
+            await usecases.profile.update_iteration_limit_usecase.execute(user_id, updated_iteration_limit)
 
         return {"valid": True, "payload": payload, "error": None}
 
@@ -88,9 +90,9 @@ async def validate_api_key(token: str, services: Services, method: str):
         return {"valid": False, "error": None}
 
 class AuthorizationMiddleware(BaseHTTPMiddleware):
-    def __init__(self, app, services: Services):
+    def __init__(self, app, usecases: Usecases):
         super().__init__(app)
-        self.services = services
+        self.usecases = usecases
 
     async def dispatch(self, request: Request, call_next):
         path = request.url.path
@@ -114,7 +116,7 @@ class AuthorizationMiddleware(BaseHTTPMiddleware):
 
         api_key = request.headers.get("x-api-key")
         if api_key:
-            validation_result = await validate_api_key(api_key, self.services, method)
+            validation_result = await validate_api_key(api_key, self.usecases, method)
             if validation_result["valid"]:
                 request.state.user = validation_result["payload"]
                 return await call_next(request)

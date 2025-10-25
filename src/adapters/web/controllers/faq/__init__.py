@@ -1,3 +1,3 @@
-from .controllers import router
+from . import controllers
 
-__all__ = ["router"]
+__all__ = ["controllers"]

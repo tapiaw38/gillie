@@ -1,8 +1,13 @@
 from fastapi import APIRouter, Depends, Body, HTTPException, status, Request
 from fastapi.responses import PlainTextResponse, JSONResponse
-from src.adapters.services.services import Services
-from src.adapters.services.whatsapp.service import WhatsAppService
-from src.adapters.services.profile.service import ProfileService
+from src.core.use_cases.use_cases import Usecases
+from src.schemas import (
+    ProcessExternalMessageRequest,
+    ProcessExternalMessageResponse,
+    ConversationInput,
+    MessageInput,
+)
+from src.core.domain import SenderEnum
 from typing import Dict, Any, List, Deque
 import logging
 import os
@@ -14,6 +19,19 @@ last_payloads = deque(maxlen=10)
 
 router = APIRouter(prefix="/api/whatsapp", tags=["WhatsApp"])
 
+_usecases_instance = None
+
+def set_usecases(usecases: Usecases):
+    """Set the usecases instance (called during app initialization)"""
+    global _usecases_instance
+    _usecases_instance = usecases
+
+def get_usecases() -> Usecases:
+    """Get the usecases instance for dependency injection"""
+    if _usecases_instance is None:
+        raise Exception("Usecases not initialized. Call set_usecases first.")
+    return _usecases_instance
+
 
 @router.get("/verify", response_class=PlainTextResponse)
 async def verify_endpoint():
@@ -22,17 +40,24 @@ async def verify_endpoint():
     return "WhatsApp webhook server is running"
 
 
-@router.post("/test-send")
+@router.post("/test-send", deprecated=True)
 async def test_send_message(
     phone_number: str = Body(..., embed=True),
     message: str = Body(..., embed=True),
-    services: Services = Depends(Services.get_instance),
+    usecases: Usecases = Depends(get_usecases),
 ):
+    """
+    ⚠️ DEPRECATED: This endpoint is deprecated and will be removed in a future version.
+
+    Use whatsapp-api-be service instead for WhatsApp message handling.
+    See WHATSAPP_MIGRATION.md for migration guide.
+    """
     logger = logging.getLogger(__name__)
+    logger.warning("DEPRECATED: test-send endpoint called. Please migrate to whatsapp-api-be")
     try:
         logger.info(f"Test send request to {phone_number}: {message}")
 
-        profile = await services.profile.find_with_active_whatsapp_integration()
+        profile = usecases.profile.find_with_active_whatsapp_integration_usecase.execute()
 
         if not profile:
             return JSONResponse(
@@ -80,7 +105,7 @@ async def test_send_message(
             ]
         }
 
-        result = await services.whatsapp.process_message(test_payload, profile)
+        result = await usecases.whatsapp.process_message_usecase.execute(test_payload, profile)
 
         return {
             "status": "success",
@@ -100,6 +125,168 @@ async def test_send_message(
         )
 
 
+@router.post("/process-external-message", response_model=ProcessExternalMessageResponse)
+async def process_external_message(
+    request: ProcessExternalMessageRequest,
+    usecases: Usecases = Depends(get_usecases),
+) -> ProcessExternalMessageResponse:
+    """
+    Process a WhatsApp message from whatsapp-api-be service.
+
+    This endpoint receives messages from the Go-based whatsapp-api-be service,
+    processes them with AI, and returns the assistant's response.
+
+    The endpoint will:
+    1. Find or create a conversation with format: "WhatsApp-{sender}"
+    2. Add the user message to the conversation
+    3. Get the AI response (auto-generated when conversation is fetched)
+    4. Return the AI response to whatsapp-api-be
+
+    Args:
+        request: External message data (source, sender, content, conversation_id, device_id, user_id)
+        services: Injected services container
+
+    Returns:
+        ProcessExternalMessageResponse with conversation_id and assistant_response
+
+    Raises:
+        HTTPException: If processing fails
+    """
+    logger = logging.getLogger(__name__)
+
+    try:
+        logger.info(
+            f"Processing external WhatsApp message from {request.sender} for user {request.user_id}"
+        )
+
+        # Create conversation title with standard format
+        conversation_title = f"WhatsApp-{request.sender}"
+
+        # Determine conversation ID: use provided or find/create by title
+        conversation_id = None
+
+        if request.conversation_id:
+            # Verify the conversation exists
+            try:
+                conversation = usecases.conversation.find_by_id_usecase.execute(
+                    request.conversation_id
+                )
+                conversation_id = request.conversation_id
+                logger.info(
+                    f"Using existing conversation: {conversation_id}"
+                )
+            except HTTPException as e:
+                if e.status_code == 404:
+                    logger.warning(
+                        f"Conversation {request.conversation_id} not found, will create new one"
+                    )
+                else:
+                    raise
+
+        # If no conversation_id yet, search by title or create new
+        if not conversation_id:
+            # Search for existing conversation by title
+            conversation_list = usecases.conversation.find_by_user_id_usecase.execute(
+                request.user_id
+            )
+
+            for conversation_data in conversation_list.data:
+                if conversation_title == conversation_data.title:
+                    conversation_id = conversation_data.id
+                    logger.info(
+                        f"Found existing conversation by title: {conversation_id}"
+                    )
+                    break
+
+        # Create new conversation if not found
+        if not conversation_id:
+            logger.info(f"Creating new conversation: {conversation_title}")
+
+            conversation_input = ConversationInput(
+                title=conversation_title
+            )
+
+            new_conversation = usecases.conversation.create_usecase.execute(
+                conversation_input, request.user_id
+            )
+
+            conversation_id = new_conversation.data.id
+            logger.info(f"Created new conversation: {conversation_id}")
+
+        # Add user message to conversation
+        logger.info(f"Adding user message to conversation {conversation_id}")
+
+        message_input = MessageInput(content=request.content, context=None)
+
+        await usecases.conversation.add_message_usecase.execute(
+            conversation_id=conversation_id,
+            message=message_input,
+            sender=SenderEnum.user,
+            user_id=request.user_id,
+        )
+
+        logger.info("User message added successfully")
+
+        # Get updated conversation (triggers AI response generation)
+        updated_conversation = usecases.conversation.find_by_id_usecase.execute(
+            conversation_id
+        )
+
+        # Extract the latest assistant message
+        assistant_response = ""
+
+        if updated_conversation and updated_conversation.data.messages:
+            # Get last assistant message
+            assistant_messages = [
+                msg
+                for msg in updated_conversation.data.messages
+                if msg.sender == SenderEnum.assistant
+            ]
+
+            if assistant_messages:
+                last_assistant_message = assistant_messages[-1]
+                assistant_response = last_assistant_message.content
+                logger.info(
+                    f"AI response generated: {assistant_response[:100]}..."
+                    if len(assistant_response) > 100
+                    else f"AI response generated: {assistant_response}"
+                )
+            else:
+                logger.warning(
+                    f"No assistant messages found in conversation {conversation_id}"
+                )
+                assistant_response = "I apologize, but I couldn't generate a response at this moment."
+        else:
+            logger.error(
+                f"Could not retrieve updated conversation {conversation_id}"
+            )
+            raise HTTPException(
+                status_code=500,
+                detail="Failed to retrieve conversation after processing message"
+            )
+
+        logger.info(
+            f"External message processed successfully for conversation {conversation_id}"
+        )
+
+        return ProcessExternalMessageResponse(
+            conversation_id=conversation_id,
+            assistant_response=assistant_response,
+            status="success"
+        )
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(
+            f"Error processing external message: {str(e)}", exc_info=True
+        )
+        raise HTTPException(
+            status_code=500,
+            detail=f"Failed to process message: {str(e)}"
+        )
+
+
 @router.get("/debug")
 async def debug_payloads():
     logger = logging.getLogger(__name__)
@@ -113,12 +300,24 @@ async def debug_payloads():
     return {"count": len(payload_list), "payloads": payload_list}
 
 
-@router.post("/webhook")
+@router.post("/webhook", deprecated=True)
 async def whatsapp_webhook(
     payload: Dict[Any, Any] = Body(...),
-    services: Services = Depends(Services.get_instance),
+    usecases: Usecases = Depends(get_usecases),
 ):
+    """
+    ⚠️ DEPRECATED: Meta WhatsApp Business API webhook endpoint is deprecated.
+
+    This endpoint was used for Meta's WhatsApp Business API integration.
+    The service has migrated to whatsapp-api-be which uses whatsmeow.
+
+    For new implementations, use the /process-external-message endpoint
+    which receives messages from whatsapp-api-be.
+
+    See WHATSAPP_MIGRATION.md for complete migration guide.
+    """
     logger = logging.getLogger(__name__)
+    logger.warning("DEPRECATED: Meta webhook endpoint called. Consider migrating to whatsapp-api-be")
     try:
         timestamp = datetime.now().isoformat()
         sanitized_payload = json.loads(json.dumps(payload))
@@ -211,9 +410,9 @@ async def whatsapp_webhook(
                 logger.info(
                     "Looking for a profile with any active WhatsApp integration"
                 )
-                profile = await services.profile.find_with_active_whatsapp_integration()
+                profile = usecases.profile.find_with_active_whatsapp_integration_usecase.execute()
             else:
-                profile = await services.profile.find_by_whatsapp_business_id(
+                profile = usecases.profile.find_by_whatsapp_business_id_usecase.execute(
                     business_account_id
                 )
 
@@ -222,9 +421,7 @@ async def whatsapp_webhook(
                     logger.warning(
                         f"No profile found with business_account_id: {business_account_id}, searching for profiles with active WhatsApp"
                     )
-                    profile = (
-                        await services.profile.find_with_active_whatsapp_integration()
-                    )
+                    profile = usecases.profile.find_with_active_whatsapp_integration_usecase.execute()
 
                 if not profile:
                     logger.warning(
@@ -242,7 +439,7 @@ async def whatsapp_webhook(
                 f"Profile found for business_account_id {business_account_id}: {profile.id}"
             )
 
-            result = await services.whatsapp.process_message(payload, profile)
+            result = await usecases.whatsapp.process_message_usecase.execute(payload, profile)
 
             logger.info(f"Message processed successfully: {result}")
             return result
@@ -269,9 +466,18 @@ async def whatsapp_webhook(
         )
 
 
-@router.get("/webhook", response_class=PlainTextResponse)
+@router.get("/webhook", response_class=PlainTextResponse, deprecated=True)
 async def verify_webhook(request: Request):
+    """
+    ⚠️ DEPRECATED: Meta WhatsApp Business API webhook verification is deprecated.
+
+    This endpoint was used for Meta's webhook verification.
+    The service has migrated to whatsapp-api-be which doesn't require webhook verification.
+
+    See WHATSAPP_MIGRATION.md for complete migration guide.
+    """
     logger = logging.getLogger(__name__)
+    logger.warning("DEPRECATED: Meta webhook verification called. Consider migrating to whatsapp-api-be")
 
     url = str(request.url)
     logger.info(f"Complete URL received: {url}")

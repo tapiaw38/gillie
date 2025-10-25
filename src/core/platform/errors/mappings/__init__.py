@@ -13,6 +13,7 @@ __all__ = [
     # Common errors
     "RequestBodyParsingError",
     "RequestBodyValidationError",
+    "ValidationError",
     "DatabaseConnectionError",
     "DatabaseQueryError",
     "ExternalServiceError",

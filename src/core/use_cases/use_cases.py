@@ -22,7 +22,9 @@ from src.core.use_cases.profile import (
     AddFilesUseCase as ProfileAddFilesUseCase,
     DeleteFileByIdUseCase as ProfileDeleteFileByIdUseCase,
     AddIntegrationUseCase as ProfileAddIntegrationUseCase,
-    ListOptionsUseCase as ProfileListOptionsUseCase
+    ListOptionsUseCase as ProfileListOptionsUseCase,
+    FindByWhatsAppBusinessIdUseCase as ProfileFindByWhatsAppBusinessIdUseCase,
+    FindWithActiveWhatsAppIntegrationUseCase as ProfileFindWithActiveWhatsAppIntegrationUseCase
 )
 from src.core.use_cases.faq import (
     CreateUseCase as FAQCreateUseCase,
@@ -31,6 +33,9 @@ from src.core.use_cases.faq import (
     UpdateUseCase as FAQUpdateUseCase,
     DeleteUseCase as FAQDeleteUseCase,
     FindByCategoryUseCase as FAQFindByCategoryUseCase
+)
+from src.core.use_cases.whatsapp import (
+    ProcessWhatsAppMessageUseCase
 )
 
 
@@ -50,6 +55,8 @@ class Profile:
     delete_file_by_id_usecase: ProfileDeleteFileByIdUseCase
     add_integration_usecase: ProfileAddIntegrationUseCase
     list_options_usecase: ProfileListOptionsUseCase
+    find_by_whatsapp_business_id_usecase: ProfileFindByWhatsAppBusinessIdUseCase
+    find_with_active_whatsapp_integration_usecase: ProfileFindWithActiveWhatsAppIntegrationUseCase
 
 
 @dataclass
@@ -73,10 +80,16 @@ class FAQ:
 
 
 @dataclass
+class WhatsApp:
+    process_message_usecase: ProcessWhatsAppMessageUseCase
+
+
+@dataclass
 class Usecases:
     profile: Profile
     conversation: Conversation
     faq: FAQ
+    whatsapp: WhatsApp
 
 
 def create_usecases(context_factory: Factory) -> Usecases:
@@ -96,6 +109,8 @@ def create_usecases(context_factory: Factory) -> Usecases:
             delete_file_by_id_usecase=ProfileDeleteFileByIdUseCase(context_factory),
             add_integration_usecase=ProfileAddIntegrationUseCase(context_factory),
             list_options_usecase=ProfileListOptionsUseCase(context_factory),
+            find_by_whatsapp_business_id_usecase=ProfileFindByWhatsAppBusinessIdUseCase(context_factory),
+            find_with_active_whatsapp_integration_usecase=ProfileFindWithActiveWhatsAppIntegrationUseCase(context_factory),
         ),
         conversation=Conversation(
             create_usecase=ConversationCreateUseCase(context_factory),
@@ -112,5 +127,8 @@ def create_usecases(context_factory: Factory) -> Usecases:
             update_usecase=FAQUpdateUseCase(context_factory),
             delete_usecase=FAQDeleteUseCase(context_factory),
             find_by_category_usecase=FAQFindByCategoryUseCase(context_factory),
+        ),
+        whatsapp=WhatsApp(
+            process_message_usecase=ProcessWhatsAppMessageUseCase(context_factory),
         ),
     )
