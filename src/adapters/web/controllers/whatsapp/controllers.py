@@ -40,20 +40,18 @@ async def verify_endpoint():
     return "WhatsApp webhook server is running"
 
 
-@router.post("/test-send", deprecated=True)
+@router.post("/test-send")
 async def test_send_message(
     phone_number: str = Body(..., embed=True),
     message: str = Body(..., embed=True),
     usecases: Usecases = Depends(get_usecases),
 ):
     """
-    ⚠️ DEPRECATED: This endpoint is deprecated and will be removed in a future version.
+    Test endpoint for sending WhatsApp messages using Meta Business API.
 
-    Use whatsapp-api-be service instead for WhatsApp message handling.
-    See WHATSAPP_MIGRATION.md for migration guide.
+    This endpoint allows testing the Meta WhatsApp Business API integration.
     """
     logger = logging.getLogger(__name__)
-    logger.warning("DEPRECATED: test-send endpoint called. Please migrate to whatsapp-api-be")
     try:
         logger.info(f"Test send request to {phone_number}: {message}")
 
@@ -300,24 +298,22 @@ async def debug_payloads():
     return {"count": len(payload_list), "payloads": payload_list}
 
 
-@router.post("/webhook", deprecated=True)
+@router.post("/webhook")
 async def whatsapp_webhook(
     payload: Dict[Any, Any] = Body(...),
     usecases: Usecases = Depends(get_usecases),
 ):
     """
-    ⚠️ DEPRECATED: Meta WhatsApp Business API webhook endpoint is deprecated.
+    Meta WhatsApp Business API webhook endpoint.
 
-    This endpoint was used for Meta's WhatsApp Business API integration.
-    The service has migrated to whatsapp-api-be which uses whatsmeow.
+    This endpoint receives webhooks from Meta's WhatsApp Business API,
+    processes incoming messages, and responds with AI-generated replies.
 
-    For new implementations, use the /process-external-message endpoint
-    which receives messages from whatsapp-api-be.
-
-    See WHATSAPP_MIGRATION.md for complete migration guide.
+    The service supports both Meta Business API and whatsmeow integrations:
+    - Meta Business API: Uses this webhook endpoint
+    - Whatsmeow: Uses /process-external-message endpoint via whatsapp-api-be
     """
     logger = logging.getLogger(__name__)
-    logger.warning("DEPRECATED: Meta webhook endpoint called. Consider migrating to whatsapp-api-be")
     try:
         timestamp = datetime.now().isoformat()
         sanitized_payload = json.loads(json.dumps(payload))
@@ -466,18 +462,15 @@ async def whatsapp_webhook(
         )
 
 
-@router.get("/webhook", response_class=PlainTextResponse, deprecated=True)
+@router.get("/webhook", response_class=PlainTextResponse)
 async def verify_webhook(request: Request):
     """
-    ⚠️ DEPRECATED: Meta WhatsApp Business API webhook verification is deprecated.
+    Meta WhatsApp Business API webhook verification endpoint.
 
-    This endpoint was used for Meta's webhook verification.
-    The service has migrated to whatsapp-api-be which doesn't require webhook verification.
-
-    See WHATSAPP_MIGRATION.md for complete migration guide.
+    This endpoint handles Meta's webhook verification challenge when setting up
+    the WhatsApp Business API integration.
     """
     logger = logging.getLogger(__name__)
-    logger.warning("DEPRECATED: Meta webhook verification called. Consider migrating to whatsapp-api-be")
 
     url = str(request.url)
     logger.info(f"Complete URL received: {url}")
