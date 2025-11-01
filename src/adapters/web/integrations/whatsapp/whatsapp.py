@@ -76,6 +76,8 @@ class WhatsAppIntegration:
                             msg_type = msg.get("type")
 
                             msg_text = None
+                            audio_data = None
+
                             if msg_type == "text" and "text" in msg:
                                 msg_text = msg.get("text", {}).get("body")
                             elif msg_type == "button" and "button" in msg:
@@ -90,6 +92,16 @@ class WhatsAppIntegration:
                                     msg_text = interactive_data.get(
                                         "list_reply", {}
                                     ).get("title")
+                            elif msg_type == "audio" and "audio" in msg:
+                                # Extract audio message metadata
+                                audio = msg.get("audio", {})
+                                audio_data = {
+                                    "id": audio.get("id"),
+                                    "mime_type": audio.get("mime_type", "audio/ogg"),
+                                    "sha256": audio.get("sha256"),
+                                    "voice": audio.get("voice", False)
+                                }
+                                logger.info(f"Audio message detected: {audio_data}")
 
                             message_data = {
                                 "from": msg_from,
@@ -97,6 +109,7 @@ class WhatsAppIntegration:
                                 "timestamp": msg_timestamp,
                                 "type": msg_type,
                                 "text": msg_text,
+                                "audio": audio_data,
                                 "raw": msg,
                             }
 
@@ -142,3 +155,46 @@ class WhatsAppIntegration:
             )
 
         return messages
+
+    async def download_audio(self, audio_id: str) -> bytes:
+        """
+        Download audio file from Meta WhatsApp servers
+        """
+        import logging
+
+        logger = logging.getLogger(__name__)
+
+        try:
+            media_url = f"https://graph.facebook.com/v18.0/{audio_id}"
+            headers = {"Authorization": f"Bearer {self.access_token}"}
+
+            logger.info(f"Fetching audio metadata from: {media_url}")
+
+            response = requests.get(media_url, headers=headers, timeout=30)
+            response.raise_for_status()
+
+            media_info = response.json()
+            download_url = media_info.get("url")
+
+            if not download_url:
+                raise Exception(f"No download URL found in media info: {media_info}")
+
+            logger.info(f"Downloading audio from: {download_url}")
+
+            audio_response = requests.get(download_url, headers=headers, timeout=60)
+            audio_response.raise_for_status()
+
+            logger.info(
+                f"Successfully downloaded audio: {audio_id}, "
+                f"size: {len(audio_response.content)} bytes, "
+                f"content-type: {audio_response.headers.get('Content-Type')}"
+            )
+
+            return audio_response.content
+
+        except requests.exceptions.RequestException as e:
+            logger.error(f"Request error downloading audio {audio_id}: {str(e)}")
+            raise Exception(f"Failed to download audio: {str(e)}")
+        except Exception as e:
+            logger.error(f"Error downloading audio {audio_id}: {str(e)}")
+            raise

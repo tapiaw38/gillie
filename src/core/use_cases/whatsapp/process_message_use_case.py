@@ -21,18 +21,10 @@ class ProcessWhatsAppMessageUseCase:
     async def execute(self, payload: Dict[Any, Any], profile: Profile):
         """
         Execute the use case to process WhatsApp webhook messages.
-
-        Args:
-            payload: WhatsApp webhook payload
-            profile: User profile with WhatsApp integration
-
-        Returns:
-            Dict with processing status and results
         """
         logger = get_logger(__name__)
         context = self.context_factory.create()
 
-        # Find active WhatsApp integration
         whatsapp_integration = None
         if profile.integrations:
             for integration in profile.integrations:
@@ -46,7 +38,6 @@ class ProcessWhatsAppMessageUseCase:
                 Exception("WhatsApp integration is not activated")
             )
 
-        # Validate required configuration
         required_configs = ["accessToken", "phoneNumberId"]
         for config in required_configs:
             if (
@@ -59,7 +50,6 @@ class ProcessWhatsAppMessageUseCase:
                     Exception(f"WhatsApp configuration is not valid: missing {config}")
                 )
 
-        # Import conversation use cases
         from src.core.use_cases.use_cases import Usecases
 
         try:
@@ -76,14 +66,50 @@ class ProcessWhatsAppMessageUseCase:
             responses = []
 
             for msg in messages:
-                if msg["type"] != "text" or not msg["text"]:
+                sender_phone = msg["from"]
+                message_id = msg["id"]
+                msg_type = msg["type"]
+                message_text = None
+
+                if msg_type == "audio" and msg.get("audio"):
+                    try:
+                        logger.info(f"Processing audio message from {sender_phone}")
+
+                        audio_id = msg["audio"]["id"]
+                        audio_bytes = await wa_client.download_audio(audio_id)
+
+                        stt_integration = context.integrations.stt
+                        transcription_result = await stt_integration.audio_bytes_to_text(
+                            audio_bytes=audio_bytes,
+                            audio_format="ogg",  # WhatsApp uses OGG Opus format
+                            settings={"language": "es-ES"}
+                        )
+
+                        if not transcription_result.get("success", False):
+                            logger.warning(f"Transcription failed for audio {audio_id}")
+                            message_text = "[Audio no pudo ser transcrito]"
+                        else:
+                            message_text = transcription_result["text"]
+                            logger.info(
+                                f"Audio transcribed successfully: '{message_text[:50]}...', "
+                                f"method: {transcription_result.get('method')}"
+                            )
+
+                    except Exception as e:
+                        logger.error(f"Error processing audio message: {str(e)}", exc_info=True)
+                        message_text = "[Error procesando audio]"
+
+                elif msg_type == "text" and msg.get("text"):
+                    message_text = msg["text"]
+
+                else:
+                    logger.debug(f"Skipping unsupported message type: {msg_type}")
                     continue
 
-                sender_phone = msg["from"]
-                message_text = msg["text"]
-                message_id = msg["id"]
+                if not message_text:
+                    logger.warning(f"No text content for message {message_id}")
+                    continue
 
-                # Find or create conversation
                 conversation_list = context.repositories.conversation.find_by_user_id(
                     profile.user_id
                 )
@@ -106,12 +132,10 @@ class ProcessWhatsAppMessageUseCase:
 
                     conversation_id = new_conversation
 
-                # Import use cases for message handling
                 from src.core.use_cases.conversation import AddMessageUseCase
 
                 add_message_usecase = AddMessageUseCase(self.context_factory)
 
-                # Add user message and get AI response
                 message_input = MessageInput(content=message_text, context=None)
                 await add_message_usecase.execute(
                     conversation_id=conversation_id,
@@ -120,12 +144,10 @@ class ProcessWhatsAppMessageUseCase:
                     user_id=profile.user_id,
                 )
 
-                # Get updated conversation with AI response
                 updated_conversation = context.repositories.conversation.find_by_id(
                     conversation_id
                 )
 
-                # Find last assistant message
                 assistant_messages = [
                     msg
                     for msg in updated_conversation.messages

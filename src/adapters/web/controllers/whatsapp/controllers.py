@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, Body, HTTPException, status, Request
+from fastapi import APIRouter, Depends, Body, HTTPException, status, Request, UploadFile, File, Form
 from fastapi.responses import PlainTextResponse, JSONResponse
 from src.core.use_cases.use_cases import Usecases
 from src.schemas import (
@@ -8,7 +8,7 @@ from src.schemas import (
     MessageInput,
 )
 from src.core.domain import SenderEnum
-from typing import Dict, Any, List, Deque
+from typing import Dict, Any, List, Deque, Optional
 import logging
 import os
 import json
@@ -38,6 +38,34 @@ async def verify_endpoint():
     logger = logging.getLogger(__name__)
     logger.info("Simple verification request received")
     return "WhatsApp webhook server is running"
+
+
+@router.post("/transcribe-audio")
+async def transcribe_audio(
+    audio: UploadFile = File(...),
+    language: str = Form("es-ES"),
+    usecases: Usecases = Depends(get_usecases),
+):
+    """
+    Transcribe audio file to text using STT service.
+
+    This endpoint is used by whatsapp-api-be to transcribe voice messages
+    before sending them to the AI for processing. It uses Google Speech
+    Recognition as the primary method.
+    """
+    audio_content = await audio.read()
+
+    audio_format = "ogg"  # WhatsApp default
+    if audio.filename and "." in audio.filename:
+        audio_format = audio.filename.split(".")[-1].lower()
+
+    result = await usecases.whatsapp.transcribe_audio_usecase.execute(
+        audio_bytes=audio_content,
+        audio_format=audio_format,
+        language=language
+    )
+
+    return result
 
 
 @router.post("/test-send")
@@ -139,16 +167,6 @@ async def process_external_message(
     2. Add the user message to the conversation
     3. Get the AI response (auto-generated when conversation is fetched)
     4. Return the AI response to whatsapp-api-be
-
-    Args:
-        request: External message data (source, sender, content, conversation_id, device_id, user_id)
-        services: Injected services container
-
-    Returns:
-        ProcessExternalMessageResponse with conversation_id and assistant_response
-
-    Raises:
-        HTTPException: If processing fails
     """
     logger = logging.getLogger(__name__)
 
@@ -157,10 +175,8 @@ async def process_external_message(
             f"Processing external WhatsApp message from {request.sender} for user {request.user_id}"
         )
 
-        # Create conversation title with standard format
         conversation_title = f"WhatsApp-{request.sender}"
 
-        # Determine conversation ID: use provided or find/create by title
         conversation_id = None
 
         if request.conversation_id:
@@ -181,9 +197,7 @@ async def process_external_message(
                 else:
                     raise
 
-        # If no conversation_id yet, search by title or create new
         if not conversation_id:
-            # Search for existing conversation by title
             conversation_list = usecases.conversation.find_by_user_id_usecase.execute(
                 request.user_id
             )
@@ -196,7 +210,6 @@ async def process_external_message(
                     )
                     break
 
-        # Create new conversation if not found
         if not conversation_id:
             logger.info(f"Creating new conversation: {conversation_title}")
 
@@ -225,16 +238,13 @@ async def process_external_message(
 
         logger.info("User message added successfully")
 
-        # Get updated conversation (triggers AI response generation)
         updated_conversation = usecases.conversation.find_by_id_usecase.execute(
             conversation_id
         )
 
-        # Extract the latest assistant message
         assistant_response = ""
 
         if updated_conversation and updated_conversation.data.messages:
-            # Get last assistant message
             assistant_messages = [
                 msg
                 for msg in updated_conversation.data.messages

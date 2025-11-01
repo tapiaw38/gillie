@@ -35,7 +35,8 @@ from src.core.use_cases.faq import (
     FindByCategoryUseCase as FAQFindByCategoryUseCase
 )
 from src.core.use_cases.whatsapp import (
-    ProcessWhatsAppMessageUseCase
+    ProcessWhatsAppMessageUseCase,
+    TranscribeAudioUseCase
 )
 
 
@@ -82,6 +83,7 @@ class FAQ:
 @dataclass
 class WhatsApp:
     process_message_usecase: ProcessWhatsAppMessageUseCase
+    transcribe_audio_usecase: TranscribeAudioUseCase
 
 
 @dataclass
@@ -130,5 +132,6 @@ def create_usecases(context_factory: Factory) -> Usecases:
         ),
         whatsapp=WhatsApp(
             process_message_usecase=ProcessWhatsAppMessageUseCase(context_factory),
+            transcribe_audio_usecase=TranscribeAudioUseCase(context_factory),
         ),
     )
