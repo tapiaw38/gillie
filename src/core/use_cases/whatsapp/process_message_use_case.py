@@ -1,21 +1,39 @@
-from fastapi import HTTPException, status
-from src.schemas import MessageInput
-from src.core.domain import SenderEnum, Profile
-from src.adapters.web.integrations.whatsapp.whatsapp import WhatsAppIntegration
-from src.adapters.services.conversation.service import ConversationService
+from typing import Dict, Any, List
+from src.core.platform.appcontext.appcontext import Factory
+from src.core.domain import Profile, SenderEnum
+from src.core.platform.errors import NewApplicationError
+from src.core.platform.errors.mappings.common import ValidationError
 from src.core.platform.logging import get_logger
-from typing import Dict, Any, List, Optional
+from src.adapters.web.integrations.whatsapp.whatsapp import WhatsAppIntegration
+from src.schemas import ConversationInput, MessageInput
 
 
-class WhatsAppService:
-    def __init__(self, conversation_service: ConversationService):
-        self.conversation_service = conversation_service
+class ProcessWhatsAppMessageUseCase:
+    """
+    Process incoming WhatsApp messages.
+    Handles webhook payloads, creates/finds conversations, sends messages to AI,
+    and returns responses to WhatsApp.
+    """
 
-    async def process_message(self, payload: Dict[Any, Any], profile: Profile):
+    def __init__(self, context_factory: Factory):
+        self.context_factory = context_factory
+
+    async def execute(self, payload: Dict[Any, Any], profile: Profile):
+        """
+        Execute the use case to process WhatsApp webhook messages.
+
+        Args:
+            payload: WhatsApp webhook payload
+            profile: User profile with WhatsApp integration
+
+        Returns:
+            Dict with processing status and results
+        """
         logger = get_logger(__name__)
+        context = self.context_factory.create()
 
+        # Find active WhatsApp integration
         whatsapp_integration = None
-
         if profile.integrations:
             for integration in profile.integrations:
                 if integration.name == "whatsapp" and integration.activated:
@@ -23,11 +41,12 @@ class WhatsAppService:
                     break
 
         if not whatsapp_integration:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail="WhatsApp integration is not activated",
+            raise NewApplicationError(
+                ValidationError,
+                Exception("WhatsApp integration is not activated")
             )
 
+        # Validate required configuration
         required_configs = ["accessToken", "phoneNumberId"]
         for config in required_configs:
             if (
@@ -35,10 +54,13 @@ class WhatsAppService:
                 or not whatsapp_integration.config[config]
             ):
                 logger.error(f"WhatsApp configuration incomplete: missing {config}")
-                raise HTTPException(
-                    status_code=status.HTTP_400_BAD_REQUEST,
-                    detail=f"WhatsApp configuration is not valid: missing {config}",
+                raise NewApplicationError(
+                    ValidationError,
+                    Exception(f"WhatsApp configuration is not valid: missing {config}")
                 )
+
+        # Import conversation use cases
+        from src.core.use_cases.use_cases import Usecases
 
         try:
             wa_client = WhatsAppIntegration(
@@ -61,48 +83,55 @@ class WhatsAppService:
                 message_text = msg["text"]
                 message_id = msg["id"]
 
-                conversation_list = await self.conversation_service.find_by_user_id(
+                # Find or create conversation
+                conversation_list = context.repositories.conversation.find_by_user_id(
                     profile.user_id
                 )
 
                 conversation_id = None
 
-                for conversation_data in conversation_list.data:
+                for conversation_data in conversation_list:
                     if f"WhatsApp-{sender_phone}" in conversation_data.title:
                         conversation_id = conversation_data.id
                         break
 
                 if not conversation_id:
-
-                    from src.schemas import ConversationInput
-
                     conversation_input = ConversationInput(
                         title=f"WhatsApp-{sender_phone}"
                     )
 
-                    new_conversation = await self.conversation_service.create(
-                        conversation_input, profile.user_id
+                    new_conversation = context.repositories.conversation.create(
+                        conversation_input.dict(), profile.user_id
                     )
 
-                    conversation_id = new_conversation.data.id
+                    conversation_id = new_conversation
 
+                # Import use cases for message handling
+                from src.core.use_cases.conversation import AddMessageUseCase
+
+                add_message_usecase = AddMessageUseCase(self.context_factory)
+
+                # Add user message and get AI response
                 message_input = MessageInput(content=message_text, context=None)
-                await self.conversation_service.add_message(
+                await add_message_usecase.execute(
                     conversation_id=conversation_id,
                     message=message_input,
                     sender=SenderEnum.user,
                     user_id=profile.user_id,
                 )
 
-                updated_conversation = await self.conversation_service.find_by_id(
+                # Get updated conversation with AI response
+                updated_conversation = context.repositories.conversation.find_by_id(
                     conversation_id
                 )
 
+                # Find last assistant message
                 assistant_messages = [
                     msg
-                    for msg in updated_conversation.data.messages
+                    for msg in updated_conversation.messages
                     if msg.sender == SenderEnum.assistant
                 ]
+
                 if assistant_messages:
                     last_assistant_message = assistant_messages[-1]
 
@@ -143,7 +172,5 @@ class WhatsAppService:
             return {"status": "success", "processed_messages": responses}
 
         except Exception as e:
-            raise HTTPException(
-                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                detail=f"Error processing WhatsApp messages: {str(e)}",
-            )
+            logger.error(f"Error processing WhatsApp messages: {str(e)}")
+            raise NewApplicationError(ValidationError, e)

@@ -9,20 +9,24 @@ from .update_iteration_limit_use_case import UpdateIterationLimitUseCase
 from .file_use_cases import AddFilesUseCase, DeleteFileByIdUseCase
 from .integration_use_cases import AddIntegrationUseCase
 from .list_options_use_case import ListOptionsUseCase
+from .find_by_whatsapp_business_id_use_case import FindByWhatsAppBusinessIdUseCase
+from .find_with_active_whatsapp_integration_use_case import FindWithActiveWhatsAppIntegrationUseCase
 
 __all__ = [
     "CreateUseCase",
-    "FindByUserIdUseCase", 
+    "FindByUserIdUseCase",
     "FindAllUserIdsUseCase",
     "FindAllUseCase",
     "UpdateUseCase",
     "ChangeStatusUseCase",
     "AddApiKeyUseCase",
-    "DeleteApiKeyUseCase", 
+    "DeleteApiKeyUseCase",
     "FindByApiKeyValueUseCase",
     "UpdateIterationLimitUseCase",
     "AddFilesUseCase",
     "DeleteFileByIdUseCase",
     "AddIntegrationUseCase",
-    "ListOptionsUseCase"
+    "ListOptionsUseCase",
+    "FindByWhatsAppBusinessIdUseCase",
+    "FindWithActiveWhatsAppIntegrationUseCase"
 ]

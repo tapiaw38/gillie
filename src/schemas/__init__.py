@@ -61,6 +61,10 @@ from .faq import (
     FAQOutputData,
     FAQListOutput,
 )
+from .whatsapp import (
+    ProcessExternalMessageRequest,
+    ProcessExternalMessageResponse,
+)
 
 __all__ = [
     # Profile schemas
@@ -120,4 +124,7 @@ __all__ = [
     "FAQOutput",
     "FAQOutputData",
     "FAQListOutput",
+    # WhatsApp schemas
+    "ProcessExternalMessageRequest",
+    "ProcessExternalMessageResponse",
 ]
