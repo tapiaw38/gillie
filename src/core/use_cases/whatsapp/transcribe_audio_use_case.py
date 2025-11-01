@@ -14,7 +14,7 @@ class TranscribeAudioUseCase:
     """
 
     def __init__(self, context_factory: Factory):
-        self.context_factory = context_factory
+        self.context_factory = context_factory()
 
     async def execute(
         self,
@@ -26,7 +26,7 @@ class TranscribeAudioUseCase:
         Execute the use case to transcribe audio to text.
         """
         logger = get_logger(__name__)
-        context = self.context_factory.create()
+        context = self.context_factory
 
         try:
             logger.info(f"Transcribing audio: format={audio_format}, language={language}, size={len(audio_bytes)} bytes")
