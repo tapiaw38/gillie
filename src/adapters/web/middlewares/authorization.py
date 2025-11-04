@@ -102,17 +102,22 @@ class AuthorizationMiddleware(BaseHTTPMiddleware):
         authorization: Optional[str] = request.headers.get("Authorization")
         method = request.method
 
+        logger.info(f"Authorization header for {path}: {authorization[:50] if authorization else 'None'}...")
+
         if authorization:
             parts = authorization.split()
+            logger.info(f"Authorization parts: {len(parts)} parts, first part: {parts[0] if parts else 'empty'}")
             if len(parts) == 2 and parts[0].lower() == "bearer":
                 token = parts[1]
+                logger.info(f"Attempting to decode Bearer token for {path}")
                 try:
                     user_id = await decode_token(token)
+                    logger.info(f"Token decoded successfully for {path}, user_id: {user_id}")
                     request.state.user = user_id
                     return await call_next(request)
-                except HTTPException:
+                except HTTPException as e:
                     # Log bearer token failure for debugging
-                    logger.warning(f"Bearer token authentication failed for {path}")
+                    logger.warning(f"Bearer token authentication failed for {path}: {str(e)}")
 
         api_key = request.headers.get("x-api-key")
         if api_key:

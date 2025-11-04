@@ -62,7 +62,7 @@ class WorkflowExecutor:
         return None
 
     async def execute_workflow(
-        self, workflow_name: str, input_params: Dict[str, Any]
+        self, workflow_name: str, input_params: Dict[str, Any], profile=None, auth_token: str = None
     ) -> Dict[str, Any]:
         """Ejecuta un workflow completo paso a paso"""
 
@@ -77,6 +77,23 @@ class WorkflowExecutor:
         workflow = self.workflows[workflow_name]
         logger.info(f"[WORKFLOW] Workflow found with {len(workflow.get('steps', []))} steps")
         self.execution_context = input_params.copy()
+
+        if profile:
+            if hasattr(profile, 'user_id') and profile.user_id:
+                self.execution_context.setdefault('user_id', profile.user_id)
+                logger.info(f"[WORKFLOW] Auto-injected user_id: {profile.user_id}")
+
+            if hasattr(profile, 'id') and profile.id:
+                self.execution_context.setdefault('profile_id', profile.id)
+                logger.info(f"[WORKFLOW] Auto-injected profile_id: {profile.id}")
+
+        if auth_token:
+            self.execution_context.setdefault('auth_token', auth_token)
+            logger.info(f"[WORKFLOW] Auto-injected auth_token")
+
+        if workflow_name == "crear_evento_calendario":
+            self._apply_calendar_defaults(profile)
+
         results = {}
 
         logger.info(f"[WORKFLOW] Ejecutando workflow: {workflow_name}")
@@ -157,36 +174,44 @@ class WorkflowExecutor:
 
             logger.info(f"[STEP] Final URL: {url}")
 
-            # Preparar body si es necesario
             body = None
             if step.get("body_template"):
                 logger.info(f"[STEP] Preparing body from template")
                 body = self._prepare_body(step["body_template"])
                 logger.info(f"[STEP] Request body: {body}")
 
+            headers = {}
+            if step.get("headers"):
+                logger.info(f"[STEP] Preparing headers from template")
+                for header_key, header_value in step["headers"].items():
+                    for param, value in self.execution_context.items():
+                        header_value = header_value.replace(f"{{{param}}}", str(value))
+                    headers[header_key] = header_value
+                logger.info(f"[STEP] Request headers: {headers}")
+
             # Ejecutar request HTTP
             logger.info(f"[STEP] Making HTTP {step['method'].upper()} request to {url}")
             async with aiohttp.ClientSession() as session:
                 if step["method"].upper() == "GET":
-                    async with session.get(url) as response:
+                    async with session.get(url, headers=headers) as response:
                         logger.info(f"[STEP] GET response status: {response.status}")
                         response.raise_for_status()
                         result = await response.json()
                         logger.info(f"[STEP] GET response: {result}")
                 elif step["method"].upper() == "POST":
-                    async with session.post(url, json=body) as response:
+                    async with session.post(url, json=body, headers=headers) as response:
                         logger.info(f"[STEP] POST response status: {response.status}")
                         response.raise_for_status()
                         result = await response.json()
                         logger.info(f"[STEP] POST response: {result}")
                 elif step["method"].upper() == "PUT":
-                    async with session.put(url, json=body) as response:
+                    async with session.put(url, json=body, headers=headers) as response:
                         logger.info(f"[STEP] PUT response status: {response.status}")
                         response.raise_for_status()
                         result = await response.json()
                         logger.info(f"[STEP] PUT response: {result}")
                 elif step["method"].upper() == "DELETE":
-                    async with session.delete(url) as response:
+                    async with session.delete(url, headers=headers) as response:
                         logger.info(f"[STEP] DELETE response status: {response.status}")
                         response.raise_for_status()
                         result = await response.json()
@@ -354,6 +379,43 @@ class WorkflowExecutor:
         except Exception as e:
             logger.error(f"Error evaluando condición '{condition}': {e}")
             return True
+
+    def _apply_calendar_defaults(self, profile=None):
+        """Aplica valores por defecto para eventos de calendario"""
+        from datetime import datetime, timedelta
+
+        if 'start_time' in self.execution_context and 'end_time' not in self.execution_context:
+            try:
+                start_time_str = self.execution_context['start_time']
+                # Parse ISO format
+                start_dt = datetime.fromisoformat(start_time_str.replace('Z', '+00:00'))
+                end_dt = start_dt + timedelta(hours=1)
+                self.execution_context['end_time'] = end_dt.isoformat()
+                logger.info(f"[WORKFLOW] Auto-calculated end_time: {self.execution_context['end_time']}")
+            except Exception as e:
+                logger.warning(f"[WORKFLOW] Could not calculate end_time: {e}")
+
+        if 'location' not in self.execution_context:
+            self.execution_context['location'] = 'Virtual'
+            logger.info(f"[WORKFLOW] Auto-set location: Virtual")
+
+        if 'description' not in self.execution_context:
+            self.execution_context['description'] = ''
+            logger.info(f"[WORKFLOW] Auto-set description: empty")
+
+        if 'time_zone' not in self.execution_context:
+            self.execution_context['time_zone'] = 'America/Argentina/Buenos_Aires'
+            logger.info(f"[WORKFLOW] Auto-set time_zone: America/Argentina/Buenos_Aires")
+
+        if 'attendees' not in self.execution_context:
+            self.execution_context['attendees'] = []
+            logger.info(f"[WORKFLOW] Auto-set attendees: []")
+
+        if 'reminders' not in self.execution_context:
+            self.execution_context['reminders'] = [
+                {"method": "popup", "minutes": 30}
+            ]
+            logger.info(f"[WORKFLOW] Auto-set reminders: 30 minutes before")
 
     def convert_workflow_to_function(self, workflow_name: str) -> Dict[str, Any]:
         """Convierte un workflow en una función compatible con el sistema"""

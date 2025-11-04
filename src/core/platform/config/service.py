@@ -53,6 +53,18 @@ class WhatsAppConfig:
 
 
 @dataclass
+class CalendarConfig:
+    api_url: str
+
+
+@dataclass
+class MCPConfig:
+    server_url: str
+    timeout: int
+    enabled: bool
+
+
+@dataclass
 class QdrantConfig:
     host: str
     port: int
@@ -128,6 +140,8 @@ class ConfigurationService:
     openai_config: OpenAIConfig
     aws_config: AWSConfig
     whatsapp_config: WhatsAppConfig
+    calendar_config: CalendarConfig
+    mcp_config: MCPConfig
     qdrant_config: QdrantConfig
     langchain_config: LangChainConfig
     langsmith_config: LangSmithConfig
@@ -204,6 +218,16 @@ def read_config() -> ConfigurationService:
         verify_token=get_env("WHATSAPP_VERIFY_TOKEN", "assistant_ia_whatsapp_verification_token"),
     )
 
+    calendar_config = CalendarConfig(
+        api_url=get_env("CALENDAR_API_URL", "http://calendar-api-be:8084"),
+    )
+
+    mcp_config = MCPConfig(
+        server_url=get_env("MCP_SERVER_URL", "http://mcp-context-server:8085"),
+        timeout=int(get_env("MCP_TIMEOUT", "30")),
+        enabled=get_env("MCP_ENABLED", "true").lower() == "true",
+    )
+
     qdrant_config = QdrantConfig(
         host=get_env("QDRANT_HOST", "localhost"),
         port=int(get_env("QDRANT_PORT", "6333")),
@@ -269,6 +293,8 @@ def read_config() -> ConfigurationService:
         openai_config=openai_config,
         aws_config=aws_config,
         whatsapp_config=whatsapp_config,
+        calendar_config=calendar_config,
+        mcp_config=mcp_config,
         qdrant_config=qdrant_config,
         langchain_config=langchain_config,
         langsmith_config=langsmith_config,

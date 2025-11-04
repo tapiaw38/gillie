@@ -38,6 +38,14 @@ from src.core.use_cases.whatsapp import (
     ProcessWhatsAppMessageUseCase,
     TranscribeAudioUseCase
 )
+from src.core.use_cases.calendar import (
+    GetAuthorizationUrlUseCase as CalendarGetAuthorizationUrlUseCase,
+    CheckSessionStatusUseCase as CalendarCheckSessionStatusUseCase,
+    CreateEventUseCase as CalendarCreateEventUseCase,
+    ListEventsUseCase as CalendarListEventsUseCase,
+    UpdateEventUseCase as CalendarUpdateEventUseCase,
+    DeleteEventUseCase as CalendarDeleteEventUseCase
+)
 
 
 @dataclass
@@ -87,11 +95,22 @@ class WhatsApp:
 
 
 @dataclass
+class Calendar:
+    get_authorization_url_usecase: CalendarGetAuthorizationUrlUseCase
+    check_session_status_usecase: CalendarCheckSessionStatusUseCase
+    create_event_usecase: CalendarCreateEventUseCase
+    list_events_usecase: CalendarListEventsUseCase
+    update_event_usecase: CalendarUpdateEventUseCase
+    delete_event_usecase: CalendarDeleteEventUseCase
+
+
+@dataclass
 class Usecases:
     profile: Profile
     conversation: Conversation
     faq: FAQ
     whatsapp: WhatsApp
+    calendar: Calendar
 
 
 def create_usecases(context_factory: Factory) -> Usecases:
@@ -133,5 +152,13 @@ def create_usecases(context_factory: Factory) -> Usecases:
         whatsapp=WhatsApp(
             process_message_usecase=ProcessWhatsAppMessageUseCase(context_factory),
             transcribe_audio_usecase=TranscribeAudioUseCase(context_factory),
+        ),
+        calendar=Calendar(
+            get_authorization_url_usecase=CalendarGetAuthorizationUrlUseCase(context_factory),
+            check_session_status_usecase=CalendarCheckSessionStatusUseCase(context_factory),
+            create_event_usecase=CalendarCreateEventUseCase(context_factory),
+            list_events_usecase=CalendarListEventsUseCase(context_factory),
+            update_event_usecase=CalendarUpdateEventUseCase(context_factory),
+            delete_event_usecase=CalendarDeleteEventUseCase(context_factory),
         ),
     )

@@ -19,6 +19,7 @@ from src.core.platform.functions.function_executor import (
     GenericHTTPTool,
     FunctionDefinition,
 )
+from src.core.platform.functions.global_workflows import get_available_workflows
 from src.core.services.configuration_service import ConfigurationService
 from src.core.domain import Profile
 
@@ -45,9 +46,10 @@ class FunctionConfig:
 class SmartFunctionExecutor:
     """Ejecutor inteligente que analiza preguntas del usuario y ejecuta funciones o workflows"""
 
-    def __init__(self, config_service: ConfigurationService):
+    def __init__(self, config_service: ConfigurationService, mcp_client=None):
         self.config_service = config_service
         self.workflow_executor = WorkflowExecutor(config_service)
+        self.mcp_client = mcp_client  # MCP Client for datetime parsing
         self.llm = ChatOpenAI(
             api_key=config_service.openai_config.api_key,
             base_url=config_service.openai_config.base_url,
@@ -80,6 +82,10 @@ IMPORTANT: You must respond ONLY with valid JSON in this exact format:
     "extracted_params": {{"param1": "value1"}}
 }}
 
+CRITICAL: A parameter CANNOT be both in "missing_params" AND "extracted_params" at the same time.
+- If you successfully extracted a parameter value, put it ONLY in "extracted_params"
+- If you could NOT extract a parameter value, put it ONLY in "missing_params"
+
 ANALYSIS GUIDELINES:
 - Look for exact matches in function names first
 - Check if user's question contains keywords from the function
@@ -87,12 +93,26 @@ ANALYSIS GUIDELINES:
 - If the user asks about location, coordinates, or maps, look for location-related functions
 - If the user asks about weather or climate, look for weather-related functions
 
+DATE AND TIME EXTRACTION RULES (CRITICAL):
+When extracting date/time parameters (like start_time, end_time, date, datetime):
+1. ALWAYS convert dates to RFC3339 format: YYYY-MM-DDTHH:MM:SSZ
+2. Examples of correct conversions:
+   - "04/11/2025 10am" → "2025-11-04T10:00:00Z"
+   - "15 de octubre a las 3:00 PM" → "2025-10-15T15:00:00Z"
+   - "mañana a las 2pm" → "2025-11-04T14:00:00Z" (calculate tomorrow's date)
+   - "5 de noviembre 9:30am" → "2025-11-05T09:30:00Z"
+3. If only date is provided (no time), use 09:00:00 as default time
+4. Always use 24-hour format (convert PM to +12 hours)
+5. Always add "Z" suffix to indicate UTC timezone
+6. Current date reference: 2025-11-03 (use this to calculate "mañana", "hoy", "próximo lunes", etc.)
+
 CRITICAL RULES:
 - Respond ONLY with the JSON, no additional text before or after
 - Use double quotes for all strings
 - Use true/false (not "true"/"false") for boolean values
 - If no match is found, set match_found to false and provide reasoning
-- Do not include any explanations outside the JSON structure"""
+- Do not include any explanations outside the JSON structure
+- NEVER extract dates as coordinates (lat/lon) - dates must be in RFC3339 format"""
 
         self.intent_prompt = ChatPromptTemplate.from_messages(
             [("system", system_message), ("human", "User question: {user_question}")]
@@ -149,6 +169,41 @@ CRITICAL RULES:
             logger.error(f"Error parsing functions configuration: {e}")
             logger.error(f"Functions string: {functions_string}")
             return []
+
+    def _get_all_available_functions(self, profile: Profile) -> List[FunctionConfig]:
+        """
+        Obtiene todas las funciones disponibles:
+        - Funciones del perfil (Profile.functions)
+        - Workflows globales según integraciones activas
+
+        Args:
+            profile: Perfil del usuario
+
+        Returns:
+            Lista de FunctionConfig con todas las funciones disponibles
+        """
+        all_functions = []
+
+        if profile.functions:
+            profile_functions = self._parse_functions_config(profile.functions)
+            all_functions.extend(profile_functions)
+            logger.info(f"Cargadas {len(profile_functions)} funciones del perfil")
+
+        try:
+            global_workflows = get_available_workflows(profile)
+
+            if global_workflows:
+                for workflow in global_workflows:
+                    workflow_configs = self._parse_functions_config([workflow])
+                    all_functions.extend(workflow_configs)
+
+                logger.info(f"Cargados {len(global_workflows)} workflows globales")
+        except Exception as e:
+            logger.warning(f"Error cargando workflows globales: {e}")
+
+        logger.info(f"Total de funciones disponibles: {len(all_functions)}")
+
+        return all_functions
 
     async def _analyze_user_intent(
         self, user_question: str, available_functions: List[FunctionConfig], chat_history: List[str] = None
@@ -347,7 +402,7 @@ Responde de manera amigable y útil, explicando qué información necesitas."""
             return {"success": False, "error": str(e), "type": "simple_function"}
 
     async def _execute_workflow(
-        self, function_config: FunctionConfig, params: Dict[str, str]
+        self, function_config: FunctionConfig, params: Dict[str, str], profile=None, auth_token: str = None
     ) -> Dict[str, Any]:
         """Ejecutar workflow"""
         try:
@@ -357,7 +412,9 @@ Responde de manera amigable y útil, explicando qué información necesitas."""
 
             result = await self.workflow_executor.execute_workflow(
                 workflow_name=function_config.name,
-                input_params=params
+                input_params=params,
+                profile=profile,
+                auth_token=auth_token
             )
 
             return {"success": True, "result": result, "type": "workflow"}
@@ -367,17 +424,15 @@ Responde de manera amigable y útil, explicando qué información necesitas."""
             return {"success": False, "error": str(e), "type": "workflow"}
 
     async def execute_function(
-        self, user_message: str, profile: Profile, chat_history: List[str] = None
+        self, user_message: str, profile: Profile, chat_history: List[str] = None, auth_token: str = None
     ) -> str:
         """Ejecutar función basada en el mensaje del usuario"""
         try:
-            if not profile.functions:
-                return "No hay funciones configuradas para tu perfil."
+            # Obtener todas las funciones disponibles (perfil + globales)
+            available_functions = self._get_all_available_functions(profile)
 
-            # Parsear configuración de funciones
-            available_functions = self._parse_functions_config(profile.functions)
             if not available_functions:
-                return "Error al parsear la configuración de funciones."
+                return "No hay funciones configuradas para tu perfil."
 
             # Usar user_id del perfil para almacenamiento
             user_id = profile.user_id or "default_user"
@@ -388,7 +443,7 @@ Responde de manera amigable y útil, explicando qué información necesitas."""
                 logger.info(f"Ongoing function detected: {ongoing_function}, processing user response")
                 # El usuario está proporcionando parámetros, procesarlos
                 return await self._process_ongoing_function(
-                    user_id, ongoing_function, user_message, available_functions
+                    user_id, ongoing_function, user_message, available_functions, profile=profile, auth_token=auth_token
                 )
             else:
                 logger.info("No ongoing function detected, analyzing as new request")
@@ -441,13 +496,28 @@ Responde de manera amigable y útil, explicando qué información necesitas."""
             )
             all_params = {**stored_params, **extracted_params}
 
-            # Verificar si tenemos todos los parámetros requeridos
+            if self.mcp_client:
+                try:
+                    user_timezone = profile.timezone if hasattr(profile, 'timezone') and profile.timezone else "America/Argentina/Buenos_Aires"
+                    all_params = await self._enrich_params_with_mcp(all_params, user_timezone)
+                    logger.info(f"Parameters enriched with MCP: {all_params}")
+                except Exception as e:
+                    logger.error(f"Error enriching params with MCP: {str(e)}")
+
+            if "start_time" in all_params and f"__start_time_has_time" in all_params:
+                if not all_params["__start_time_has_time"]:
+                    logger.info(f"start_time has date but NO time specified: {all_params.get('__start_time_original')}")
+                    missing_params.append("time")
+
             if missing_params:
-                # Almacenar los parámetros que ya tenemos
                 if extracted_params:
                     self._store_function_params(
                         user_id, matched_function.name, extracted_params
                     )
+
+                if "time" in missing_params:
+                    original_date = all_params.get("__start_time_original", "la fecha indicada")
+                    return f"¿A qué hora quieres la reunión? (Has indicado: {original_date})"
 
                 # Solicitar parámetros faltantes
                 param_request = await self._get_missing_params_from_user(
@@ -455,17 +525,18 @@ Responde de manera amigable y útil, explicando qué información necesitas."""
                 )
                 return param_request["message"]
 
-            # Ejecutar función según su tipo
+            clean_params = self._clean_metadata_params(all_params)
+
             logger.info(f"Executing function type: {matched_function.type}, name: {matched_function.name}")
             if matched_function.type == "simple":
-                logger.info(f"Calling _execute_simple_function with params: {all_params}")
+                logger.info(f"Calling _execute_simple_function with params: {clean_params}")
                 execution_result = await self._execute_simple_function(
-                    matched_function, all_params
+                    matched_function, clean_params
                 )
             elif matched_function.type == "workflow":
-                logger.info(f"Calling _execute_workflow with params: {all_params}")
+                logger.info(f"Calling _execute_workflow with params: {clean_params}")
                 execution_result = await self._execute_workflow(
-                    matched_function, all_params
+                    matched_function, clean_params, profile=profile, auth_token=auth_token
                 )
                 logger.info(f"Workflow execution result: {execution_result}")
             else:
@@ -600,6 +671,8 @@ Responde de manera amigable y útil, explicando qué información necesitas."""
         function_name: str,
         user_message: str,
         available_functions: List[FunctionConfig],
+        profile=None,
+        auth_token: str = None,
     ) -> str:
         """Procesa parámetros proporcionados para una función en progreso"""
         try:
@@ -638,51 +711,86 @@ Responde de manera amigable y útil, explicando qué información necesitas."""
 
             logger.info(f"Required params: {required_params}")
 
-            # Combinar parámetros
             all_params = {**stored_params, **extracted_params}
 
-            # Calcular parámetros faltantes
             missing_params = [
                 param for param in required_params if param not in all_params
             ]
+
+            if "start_time" in all_params and f"__start_time_has_time" in all_params:
+                if not all_params["__start_time_has_time"]:
+                    logger.info(f"start_time has date but NO time specified: {all_params.get('__start_time_original')}")
+                    missing_params.append("time")
+
             logger.info(f"Missing params: {missing_params}, All params: {all_params}")
 
-            # Si solo falta un parámetro y no se extrajo nada, asumir que el mensaje es ese parámetro
             if len(missing_params) == 1 and not extracted_params:
                 missing_param = missing_params[0]
-                # Intentar usar el mensaje como valor del parámetro faltante
-                extracted_params[missing_param] = user_message.strip()
-                all_params[missing_param] = user_message.strip()
-                logger.info(f"Assumed message is for missing param '{missing_param}': {user_message.strip()}")
-                missing_params = []
 
-            # Almacenar los nuevos parámetros
+                if missing_param == "time":
+                    time_text = user_message.strip()
+                    original_date = all_params.get("__start_time_original", "")
+
+                    combined_text = f"{original_date} {time_text}"
+                    logger.info(f"Combining date + time: '{original_date}' + '{time_text}' = '{combined_text}'")
+
+                    user_timezone = profile.timezone if profile and hasattr(profile, 'timezone') else "America/Argentina/Buenos_Aires"
+                    parsed_result = await self._parse_date_with_mcp(combined_text, user_timezone)
+
+                    if parsed_result and parsed_result["has_time"]:
+                        all_params["start_time"] = parsed_result["rfc3339"]
+                        all_params["__start_time_has_time"] = True
+                        extracted_params["start_time"] = parsed_result["rfc3339"]
+                        logger.info(f"Updated start_time with hour: {parsed_result['rfc3339']}")
+                        missing_params = []
+                    else:
+                        logger.warning(f"Failed to parse time '{time_text}'")
+                        return f"No pude entender la hora '{time_text}'. Por favor especifica una hora válida (ej: '10am', '15:00', '3 de la tarde')"
+                else:
+                    extracted_params[missing_param] = user_message.strip()
+                    all_params[missing_param] = user_message.strip()
+                    logger.info(f"Assumed message is for missing param '{missing_param}': {user_message.strip()}")
+                    missing_params = []
+
             if extracted_params:
                 self._store_function_params(user_id, function_name, extracted_params)
                 logger.info(f"Stored new params: {extracted_params}")
 
             if missing_params:
-                # Aún faltan parámetros
                 logger.info(f"Still missing params: {missing_params}")
+
+                if "time" in missing_params:
+                    original_date = all_params.get("__start_time_original", "la fecha indicada")
+                    return f"¿A qué hora quieres la reunión? (Has indicado: {original_date})"
+
                 return f"Gracias por proporcionar esa información. Aún necesito: {', '.join(missing_params)}"
             else:
                 logger.info(f"All params collected, executing {matched_function.type}: {function_name}")
+
+                clean_params = self._clean_metadata_params(all_params)
+
                 # Tenemos todos los parámetros, ejecutar la función
                 if matched_function.type == "simple":
                     execution_result = await self._execute_simple_function(
-                        matched_function, all_params
+                        matched_function, clean_params
                     )
                 elif matched_function.type == "workflow":
                     execution_result = await self._execute_workflow(
-                        matched_function, all_params
+                        matched_function, clean_params, profile=profile, auth_token=auth_token
                     )
                 else:
                     return f"Tipo de función no soportado: {matched_function.type}"
 
                 if execution_result.get("success", False):
-                    # Limpiar parámetros almacenados después de ejecutar exitosamente
                     self._clear_function_params(user_id, function_name)
-                    return f"✅ Función '{function_name}' ejecutada exitosamente.\n\nResultado: {execution_result.get('result', 'Sin resultado')}"
+
+                    friendly_response = await self._generate_friendly_response(
+                        function_name,
+                        matched_function.type,
+                        execution_result,
+                        all_params
+                    )
+                    return friendly_response
                 else:
                     return f"Error ejecutando {function_name}: {execution_result.get('error', 'Error desconocido')}"
 
@@ -834,6 +942,168 @@ Responde de manera amigable y útil, explicando qué información necesitas."""
             logger.error(f"Error extracting basic params: {e}")
             return {}
 
+    def _has_time_specified(self, date_text: str) -> bool:
+        """
+        Detecta si el texto tiene una hora específica mencionada
+
+        Args:
+            date_text: Texto en lenguaje natural (ej: "mañana", "mañana a las 3pm")
+
+        Returns:
+            True si tiene hora especificada, False si solo tiene fecha
+        """
+        date_lower = date_text.lower().strip()
+
+        # Patrones que indican hora específica
+        time_patterns = [
+            # Formatos con hora explícita
+            r'\d{1,2}:\d{2}',  # 10:30, 3:45
+            r'\d{1,2}\s*(am|pm|a\.m\.|p\.m\.)',  # 3pm, 10 am, 3 p.m.
+            r'\d{1,2}\s*(hs|horas)',  # 10hs, 3 horas
+            # Expresiones de hora
+            r'a\s+las\s+\d',  # a las 3, a las 10
+            r'at\s+\d',  # at 3, at 10
+            r'às\s+\d',  # às 3 (portugués)
+            # Momentos del día específicos con contexto de hora
+            r'(mediodía|medianoche|noon|midnight)',
+            # Frases que implican hora
+            r'(de la mañana|de la tarde|de la noche)',
+            r'(in the morning|in the afternoon|in the evening)',
+        ]
+
+        import re
+        for pattern in time_patterns:
+            if re.search(pattern, date_lower):
+                return True
+
+        return False
+
+    async def _parse_date_with_mcp(
+        self,
+        date_text: str,
+        user_timezone: str = "America/Argentina/Buenos_Aires"
+    ) -> Optional[Dict[str, Any]]:
+        """
+        Parse natural language date using MCP server
+
+        Args:
+            date_text: Natural language date (e.g., "tomorrow at 3pm", "next Monday")
+            user_timezone: User's timezone for interpretation
+
+        Returns:
+            Dictionary with parsed date and metadata, or None if parsing fails
+            Format: {
+                "rfc3339": "2025-11-05T15:00:00-0300",
+                "has_time": True/False
+            }
+        """
+        if not self.mcp_client:
+            logger.warning("MCP client not available for date parsing")
+            return None
+
+        try:
+            # Detectar si tiene hora especificada
+            has_time_specified = self._has_time_specified(date_text)
+
+            result = await self.mcp_client.parse_natural_date(
+                text=date_text,
+                timezone=user_timezone
+            )
+
+            if result.get("success"):
+                rfc3339_date = result["parsed_datetime"]["rfc3339"]
+                logger.info(f"MCP parsed '{date_text}' to '{rfc3339_date}' (has_time: {has_time_specified})")
+
+                return {
+                    "rfc3339": rfc3339_date,
+                    "has_time": has_time_specified,
+                    "original": date_text
+                }
+            else:
+                logger.warning(f"MCP failed to parse '{date_text}': {result.get('message')}")
+                return None
+
+        except Exception as e:
+            logger.error(f"Error using MCP for date parsing: {str(e)}")
+            return None
+
+    async def _enrich_params_with_mcp(
+        self,
+        params: Dict[str, Any],
+        user_timezone: str = "America/Argentina/Buenos_Aires"
+    ) -> Dict[str, Any]:
+        """
+        Enrich extracted parameters with MCP date parsing
+        Looks for date-related parameters and converts them to RFC3339 format
+
+        Also stores metadata about whether time was specified for validation later
+
+        Args:
+            params: Dictionary of extracted parameters
+            user_timezone: User's timezone
+
+        Returns:
+            Enhanced parameters dictionary with parsed dates and metadata
+        """
+        if not self.mcp_client:
+            return params
+
+        # Date-related parameter names to check
+        date_params = [
+            "start_time", "end_time", "date", "datetime",
+            "check_in", "check_out", "start_date", "end_date",
+            "from_date", "to_date", "scheduled_time"
+        ]
+
+        enriched_params = params.copy()
+
+        for param_name in date_params:
+            if param_name in params:
+                param_value = str(params[param_name])
+
+                # Check if it's already in RFC3339 format
+                if self._is_rfc3339_format(param_value):
+                    continue
+
+                # Try to parse with MCP
+                parsed_result = await self._parse_date_with_mcp(param_value, user_timezone)
+                if parsed_result:
+                    # Store the RFC3339 date
+                    enriched_params[param_name] = parsed_result["rfc3339"]
+
+                    # Store metadata about whether time was specified
+                    # This will be used to determine if we need to ask for time
+                    enriched_params[f"__{param_name}_has_time"] = parsed_result["has_time"]
+                    enriched_params[f"__{param_name}_original"] = parsed_result["original"]
+
+                    logger.info(f"Enriched {param_name}: '{param_value}' → '{parsed_result['rfc3339']}' (has_time: {parsed_result['has_time']})")
+
+        return enriched_params
+
+    def _is_rfc3339_format(self, date_str: str) -> bool:
+        """Check if string is already in RFC3339 format"""
+        import re
+        rfc3339_pattern = r'^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}([+-]\d{2}:\d{2}|Z)$'
+        return bool(re.match(rfc3339_pattern, date_str))
+
+    def _clean_metadata_params(self, params: Dict[str, Any]) -> Dict[str, Any]:
+        """
+        Limpia parámetros de metadata internos antes de enviar a funciones/workflows
+
+        Los parámetros que empiezan con '__' son metadata interna y deben ser removidos
+
+        Args:
+            params: Diccionario con parámetros (puede incluir metadata)
+
+        Returns:
+            Diccionario limpio sin metadata
+        """
+        return {
+            key: value
+            for key, value in params.items()
+            if not key.startswith("__")
+        }
+
     async def _generate_friendly_response(
         self,
         function_name: str,
@@ -855,8 +1125,22 @@ Responde de manera amigable y útil, explicando qué información necesitas."""
                 status = result_data.get('status', 'unknown')
                 final_result = result_data.get('final_result', {})
 
+                # Detectar caso específico: integración de calendario no conectada
+                is_calendar_not_connected = False
+                if 'is_connected' in context_data and context_data.get('is_connected') == False:
+                    is_calendar_not_connected = True
+                elif final_result and 'verificar_integracion_calendario' in final_result:
+                    verification_result = final_result['verificar_integracion_calendario']
+                    if isinstance(verification_result, dict) and verification_result.get('is_active') == False:
+                        is_calendar_not_connected = True
+
                 # Determinar si hubo un error real
                 has_error = not steps_executed or len(final_result) == 0
+
+                # Mensaje específico para calendar not connected
+                calendar_status = ""
+                if is_calendar_not_connected:
+                    calendar_status = "\nATENCIÓN ESPECIAL: El usuario NO tiene Google Calendar conectado (is_active: false). Workflow se detuvo porque requiere integración activa."
 
                 context_str = f"""
 Tipo: Workflow
@@ -865,7 +1149,7 @@ Estado: {status}
 Pasos ejecutados exitosamente: {', '.join(steps_executed) if steps_executed else 'NINGUNO - ERROR'}
 Resultados de pasos: {json.dumps(final_result, indent=2, ensure_ascii=False) if final_result else 'VACÍO - ERROR'}
 Parámetros utilizados: {json.dumps(params, indent=2, ensure_ascii=False)}
-Error detectado: {'SÍ - No se ejecutaron pasos correctamente' if has_error else 'NO - Ejecución exitosa'}
+Error detectado: {'SÍ - No se ejecutaron pasos correctamente' if has_error else 'NO - Ejecución exitosa'}{calendar_status}
 """
             else:
                 # Función simple
@@ -883,19 +1167,25 @@ Operación ejecutada:
 {context_str}
 
 INSTRUCCIONES CRÍTICAS:
-1. PRIMERO revisa si dice "Error detectado: SÍ" o si "Pasos ejecutados" es "NINGUNO - ERROR"
-2. Si hay error: Genera una respuesta que informe al usuario que hubo un problema técnico y no se pudo completar la operación
+1. PRIMERO revisa si dice "ATENCIÓN ESPECIAL: El usuario NO tiene Google Calendar conectado"
+   - Si aparece esto, DEBES informar que necesita conectar su cuenta de Google Calendar primero
+   - Ofrece ayuda para conectar la integración
+2. Si dice "Error detectado: SÍ" o "Pasos ejecutados" es "NINGUNO - ERROR": Informa el error
 3. Si NO hay error y hay pasos ejecutados exitosos: Confirma el éxito de manera clara y concisa
 4. Incluye los detalles más relevantes de forma conversacional
 5. No incluyas JSON ni datos técnicos crudos
 6. La respuesta debe ser directa, sin introducciones innecesarias
 
-EJEMPLOS DE RESPUESTAS PARA ÉXITO:
-- "¡Reserva confirmada! He procesado tu reserva para Walter Tapia del 1 al 3 de enero de 2026 en la habitación 2 para 2 huéspedes."
-- "He buscado la ubicación de San Salvador de Jujuy. Se encuentra en las coordenadas -24.1857, -65.2995."
+EJEMPLOS DE RESPUESTAS PARA CALENDARIO NO CONECTADO:
+- "Para poder crear eventos en tu calendario, primero necesito que conectes tu cuenta de Google Calendar. ¿Te gustaría que te ayude a configurar la integración?"
+- "Veo que aún no has conectado tu Google Calendar. Necesitas activar esta integración para que pueda crear eventos. ¿Quieres que te muestre cómo hacerlo?"
 
-EJEMPLOS DE RESPUESTAS PARA ERROR:
-- "Lo siento, hubo un problema técnico al intentar procesar la reserva. Por favor intenta nuevamente en unos momentos."
+EJEMPLOS DE RESPUESTAS PARA ÉXITO:
+- "¡Listo! He creado el evento 'Reunión para vender Nymia' en tu calendario para mañana a las 9:00 AM."
+- "Evento agendado exitosamente. Te he programado 'Presentación de producto' para el 5 de noviembre a las 15:00."
+
+EJEMPLOS DE RESPUESTAS PARA ERROR TÉCNICO:
+- "Lo siento, hubo un problema técnico al intentar crear el evento. Por favor intenta nuevamente en unos momentos."
 - "No pude completar la operación debido a un error de conexión. Por favor verifica los datos e intenta nuevamente."
 
 Genera la respuesta amigable ahora:"""

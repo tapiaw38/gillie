@@ -1,5 +1,5 @@
 from fastapi import FastAPI
-from src.adapters.web.controllers import conversation, profile, faq, whatsapp
+from src.adapters.web.controllers import conversation, profile, faq, whatsapp, calendar
 from src.adapters.web.controllers.nosql.controllers import router as nosql_router
 from src.core.use_cases.use_cases import Usecases
 from src.core.platform.config.service import ConfigurationService
@@ -18,6 +18,7 @@ class RoutesManager:
         profile.controllers.set_usecases(self.usecases)
         faq.controllers.set_usecases(self.usecases)
         whatsapp.controllers.set_usecases(self.usecases)
+        calendar.controllers.set_usecases(self.usecases)
 
         # Override config service dependency
         self.app.dependency_overrides[ConfigurationService] = lambda: self.config_service
@@ -31,3 +32,4 @@ class RoutesManager:
         self.app.include_router(conversation.controllers.router)
         self.app.include_router(whatsapp.controllers.router)
         self.app.include_router(faq.controllers.router)
+        self.app.include_router(calendar.controllers.router)

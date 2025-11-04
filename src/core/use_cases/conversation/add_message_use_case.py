@@ -60,6 +60,7 @@ class AddMessageUseCase:
         user_id: str,
         has_image_processor: Optional[str] = None,
         has_text_to_voice: Optional[str] = None,
+        auth_token: Optional[str] = None,
     ) -> list[Message]:
         """
         Executes the add message workflow.
@@ -106,7 +107,8 @@ class AddMessageUseCase:
         ai_response_text = await self._generate_ai_response(
             user_message=user_message,
             conversation=conversation,
-            message_context=message.context
+            message_context=message.context,
+            auth_token=auth_token
         )
 
         # Step 6: Process images if enabled
@@ -250,7 +252,15 @@ class AddMessageUseCase:
             )
             raise NewApplicationError(ForbiddenError)
 
-        # Initialize messages list if not present
+        full_profile = self.context_factory.repositories.profile.find_by_id(
+            conversation.profile.id
+        )
+        if full_profile:
+            conversation.profile = full_profile
+            logger.info(f"Loaded full profile with integrations for profile_id: {full_profile.id}")
+        else:
+            logger.warning(f"Could not load full profile for profile_id: {conversation.profile.id}")
+
         if not hasattr(conversation, "messages") or conversation.messages is None:
             conversation.messages = []
 
@@ -277,7 +287,8 @@ class AddMessageUseCase:
         self,
         user_message: Message,
         conversation,
-        message_context: Optional[str]
+        message_context: Optional[str],
+        auth_token: Optional[str] = None
     ) -> str:
         """
         Generates AI response using the AI response service.
@@ -317,7 +328,8 @@ class AddMessageUseCase:
                 profile=conversation.profile,
                 message_context=enhanced_context,
                 conversation_history=conversation_history,
-                chat_history=chat_history
+                chat_history=chat_history,
+                auth_token=auth_token
             )
 
             return response

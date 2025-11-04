@@ -86,10 +86,13 @@ class PlatformServices:
         if faq_repository:
             faq_context_manager = FAQContextManager(faq_repository=faq_repository)
 
+        mcp_client = getattr(integrations, 'mcp', None)
+
         ai_response = AIResponseService(
             openai_integration=integrations.openai,
             config_service=config_service,
-            faq_context_manager=faq_context_manager
+            faq_context_manager=faq_context_manager,
+            mcp_client=mcp_client
         )
 
         message_history = MessageHistoryService()

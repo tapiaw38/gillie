@@ -76,6 +76,11 @@ async def add_message(
     sender = SenderEnum.user
     user_id = request.state.user.get("user_id")
 
+    auth_token = None
+    auth_header = request.headers.get("Authorization")
+    if auth_header and auth_header.startswith("Bearer "):
+        auth_token = auth_header.replace("Bearer ", "")
+
     message = MessageInput(
         content=content,
         context=context,
@@ -88,7 +93,8 @@ async def add_message(
         sender,
         user_id,
         has_image_processor,
-        has_text_to_voice
+        has_text_to_voice,
+        auth_token
     )
     return messages
 
