@@ -153,6 +153,7 @@ async def test_send_message(
 
 @router.post("/process-external-message", response_model=ProcessExternalMessageResponse)
 async def process_external_message(
+    req: Request,
     request: ProcessExternalMessageRequest,
     usecases: Usecases = Depends(get_usecases),
 ) -> ProcessExternalMessageResponse:
@@ -227,6 +228,13 @@ async def process_external_message(
         # Add user message to conversation
         logger.info(f"Adding user message to conversation {conversation_id}")
 
+        # Extract auth token from request headers
+        auth_token = None
+        auth_header = req.headers.get("Authorization", "")
+        if auth_header.startswith("Bearer "):
+            auth_token = auth_header.replace("Bearer ", "")
+            logger.info("Auth token extracted from request")
+
         message_input = MessageInput(content=request.content, context=None)
 
         await usecases.conversation.add_message_usecase.execute(
@@ -234,6 +242,7 @@ async def process_external_message(
             message=message_input,
             sender=SenderEnum.user,
             user_id=request.user_id,
+            auth_token=auth_token,
         )
 
         logger.info("User message added successfully")
@@ -310,6 +319,7 @@ async def debug_payloads():
 
 @router.post("/webhook")
 async def whatsapp_webhook(
+    req: Request,
     payload: Dict[Any, Any] = Body(...),
     usecases: Usecases = Depends(get_usecases),
 ):
@@ -445,7 +455,14 @@ async def whatsapp_webhook(
                 f"Profile found for business_account_id {business_account_id}: {profile.id}"
             )
 
-            result = await usecases.whatsapp.process_message_usecase.execute(payload, profile)
+            # Extract auth token from request headers
+            auth_token = None
+            auth_header = req.headers.get("Authorization", "")
+            if auth_header.startswith("Bearer "):
+                auth_token = auth_header.replace("Bearer ", "")
+                logger.info("Auth token extracted from webhook request")
+
+            result = await usecases.whatsapp.process_message_usecase.execute(payload, profile, auth_token)
 
             logger.info(f"Message processed successfully: {result}")
             return result

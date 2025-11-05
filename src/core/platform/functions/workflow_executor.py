@@ -440,6 +440,4 @@ class WorkflowExecutor:
             "workflow_type": workflow_name,
         }
 
-
-# Instancia global del ejecutor de workflows
 workflow_executor = WorkflowExecutor()

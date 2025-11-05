@@ -20,6 +20,7 @@ __all__ = [
     "NotFoundError",
     "UnauthorizedError",
     "ForbiddenError",
+    "CommonInternalServerError",
 
     # Profile errors
     "ProfileCreateQueryError",

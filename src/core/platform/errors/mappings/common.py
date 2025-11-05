@@ -65,3 +65,10 @@ ForbiddenError = ErrorDetails(
     status_code=403,
     message="access forbidden"
 )
+
+# Internal Server Errors (500)
+CommonInternalServerError = ErrorDetails(
+    internal_code="common:internal-server-error",
+    status_code=500,
+    message="internal server error"
+)

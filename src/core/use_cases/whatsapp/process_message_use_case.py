@@ -18,9 +18,14 @@ class ProcessWhatsAppMessageUseCase:
     def __init__(self, context_factory: Factory):
         self.context_factory = context_factory
 
-    async def execute(self, payload: Dict[Any, Any], profile: Profile):
+    async def execute(self, payload: Dict[Any, Any], profile: Profile, auth_token: str = None):
         """
         Execute the use case to process WhatsApp webhook messages.
+
+        Args:
+            payload: WhatsApp webhook payload
+            profile: User profile
+            auth_token: Optional JWT auth token for calendar API calls
         """
         logger = get_logger(__name__)
         context = self.context_factory.create()
@@ -142,6 +147,7 @@ class ProcessWhatsAppMessageUseCase:
                     message=message_input,
                     sender=SenderEnum.user,
                     user_id=profile.user_id,
+                    auth_token=auth_token,
                 )
 
                 updated_conversation = context.repositories.conversation.find_by_id(
