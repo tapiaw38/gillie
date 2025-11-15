@@ -9,7 +9,7 @@ class FindWithActiveWhatsAppIntegrationUseCase:
     """
 
     def __init__(self, context_factory: Factory):
-        self.context_factory = context_factory
+        self.context_factory = context_factory()
 
     def execute(self) -> Optional[Profile]:
         """
@@ -18,7 +18,7 @@ class FindWithActiveWhatsAppIntegrationUseCase:
         Returns:
             Profile if found, None otherwise
         """
-        context = self.context_factory.create()
+        context = self.context_factory
 
         profiles = context.repositories.profile.find_all()
 
