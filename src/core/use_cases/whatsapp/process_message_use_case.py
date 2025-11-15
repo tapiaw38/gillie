@@ -30,8 +30,6 @@ class ProcessWhatsAppMessageUseCase:
         logger = get_logger(__name__)
         context = self.context_factory.create()
 
-        # Find WhatsApp integration in profile
-
         whatsapp_integration = None
         if profile.integrations:
             for integration in profile.integrations:
