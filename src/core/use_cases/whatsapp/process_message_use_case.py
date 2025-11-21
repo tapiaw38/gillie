@@ -16,7 +16,7 @@ class ProcessWhatsAppMessageUseCase:
     """
 
     def __init__(self, context_factory: Factory):
-        self.context_factory = context_factory()
+        self.context_factory = context_factory
 
     async def execute(self, payload: Dict[Any, Any], profile: Profile, auth_token: str = None):
         """
@@ -28,7 +28,7 @@ class ProcessWhatsAppMessageUseCase:
             auth_token: Optional JWT auth token for calendar API calls
         """
         logger = get_logger(__name__)
-        context = self.context_factory
+        context = self.context_factory()
 
         whatsapp_integration = None
         if profile.integrations:
