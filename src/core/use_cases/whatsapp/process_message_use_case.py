@@ -115,7 +115,7 @@ class ProcessWhatsAppMessageUseCase:
                     logger.warning(f"No text content for message {message_id}")
                     continue
 
-                conversation_list = context.repositories.conversation.find_by_user_id(
+                conversation_list = context.repositories.conversation.find_user_id(
                     profile.user_id
                 )
 
