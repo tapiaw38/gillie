@@ -205,6 +205,52 @@ def skills_show(name: str = typer.Argument(..., help="Skill name (without .skill
     console.print()
 
 
+@skills_app.command("edit")
+def skills_edit(name: str = typer.Argument(..., help="Skill name (without .skill.md)")):
+    """Create or edit a .skill.md file in $EDITOR (or nano)."""
+    _require_config()
+
+    skill_path = MEMORY_DIR / f"{name}.skill.md"
+    MEMORY_DIR.mkdir(parents=True, exist_ok=True)
+
+    current_content = skill_path.read_text(encoding="utf-8") if skill_path.exists() else ""
+
+    editor = os.environ.get("EDITOR", "nano")
+
+    with tempfile.NamedTemporaryFile(
+        mode="w",
+        suffix=".md",
+        prefix=f"gillie_skill_{name}_",
+        delete=False,
+        encoding="utf-8",
+    ) as tmp:
+        tmp.write(current_content)
+        tmp_path = tmp.name
+
+    try:
+        subprocess.run([editor, tmp_path], check=True)
+        new_content = Path(tmp_path).read_text(encoding="utf-8")
+    except subprocess.CalledProcessError:
+        console.print("[red]✗[/red] Editor exited with an error.")
+        raise typer.Exit(1)
+    finally:
+        Path(tmp_path).unlink(missing_ok=True)
+
+    if new_content == current_content:
+        console.print("[yellow]•[/yellow] No changes made.")
+        return
+
+    skill_path.write_text(new_content, encoding="utf-8")
+    action = "updated" if current_content else "created"
+    console.print(f"[green]✓[/green] {name}.skill.md {action}.")
+
+    # If new skill, remind user to reference it in memory.md
+    if not current_content:
+        console.print(
+            f"[dim]Tip: add [bold]ver {name}.skill.md[/bold] in memory.md to include it in the AI context.[/dim]"
+        )
+
+
 # ─── Extract command ──────────────────────────────────────────────────────────
 
 @app.command("extract")

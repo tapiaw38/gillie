@@ -18,6 +18,7 @@ from src.core.platform.nosql.migrations import execute_migrations
 from src.core.platform.objectstorange.s3_session import get_s3_session
 from src.adapters.storeservice.storeservice import StoreServiceImpl
 from src.core.platform.services.platform_services import PlatformServices
+from src.core.platform.managers.skill_manager import SkillManager
 from src.core.platform.errors.exception_handler import register_exception_handlers
 from src.adapters.web.middlewares.authorization import SingleUserMiddleware
 
@@ -130,6 +131,7 @@ platform_services = PlatformServices.create_services(
     integrations=integrations,
     store_service=store_service,
     config_service=config_service,
+    skill_manager=SkillManager(),
 )
 
 context_factory = new_factory(

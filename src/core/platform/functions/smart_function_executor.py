@@ -32,6 +32,10 @@ class FunctionConfig:
     keywords: List[str] = field(default_factory=list)
     examples: List[str] = field(default_factory=list)
     param_descriptions: Dict[str, str] = field(default_factory=dict)
+    response_field: Optional[str] = None
+    description: str = ""
+    body_mode: str = "template"  # "template" | "llm"
+    body_prompt: Optional[str] = None
 
 
 class SmartFunctionExecutor:
@@ -142,6 +146,10 @@ CRITICAL OUTPUT RULES:
                     keywords=func.get("keywords", []),
                     examples=func.get("examples", []),
                     param_descriptions=func.get("param_descriptions", {}),
+                    response_field=func.get("response_field"),
+                    description=func.get("description", ""),
+                    body_mode=func.get("body_mode", "template"),
+                    body_prompt=func.get("body_prompt"),
                 )
                 parsed.append(config)
 
@@ -192,7 +200,7 @@ CRITICAL OUTPUT RULES:
             for func in available_functions:
                 info: Dict[str, Any] = {
                     "name": func.name,
-                    "description": f"{func.type} — {func.url}",
+                    "description": func.description or f"{func.type} — {func.url}",
                     "type": func.type,
                 }
                 if func.keywords:
@@ -345,8 +353,53 @@ CRITICAL OUTPUT RULES:
             url_template = url_template.replace(f"{{{param}}}", str(value))
         return url_template
 
+    async def _build_body_with_llm(
+        self,
+        function_config: "FunctionConfig",
+        user_message: str,
+        params: Dict[str, Any],
+    ) -> Optional[Dict[str, Any]]:
+        """
+        Use the LLM to build a complex JSON body (e.g. a shopping cart) from
+        the user message, the body_prompt catalog/instructions, and already-
+        extracted params.  Returns a dict/list or None on failure.
+        """
+        try:
+            prompt = (
+                f"{function_config.body_prompt}\n\n"
+                f"User request: \"{user_message}\"\n"
+                f"Already extracted params: {json.dumps(params, ensure_ascii=False)}\n\n"
+                "Build the complete JSON body for the API call based on the user's request "
+                "and the instructions above.\n"
+                "CRITICAL: Respond ONLY with valid JSON — no extra text, no markdown fences."
+            )
+            response = await self.llm.ainvoke([HumanMessage(content=prompt)])
+            content = response.content.strip()
+
+            # Strip optional markdown fences
+            content = re.sub(r"^```(?:json)?\s*", "", content)
+            content = re.sub(r"\s*```$", "", content)
+            content = content.strip()
+
+            # Try object first, then array
+            for start_char, end_char in [("{", "}"), ("[", "]")]:
+                start = content.find(start_char)
+                end = content.rfind(end_char) + 1
+                if start != -1 and end > start:
+                    return json.loads(content[start:end])
+
+            logger.error(f"_build_body_with_llm: no valid JSON in response: {content[:200]}")
+            return None
+
+        except Exception as e:
+            logger.error(f"Error building body with LLM: {e}", exc_info=True)
+            return None
+
     async def _execute_simple_function(
-        self, function_config: FunctionConfig, params: Dict[str, str]
+        self,
+        function_config: FunctionConfig,
+        params: Dict[str, str],
+        prebuilt_body: Optional[Dict[str, Any]] = None,
     ) -> Dict[str, Any]:
         """Execute a simple HTTP function."""
         try:
@@ -363,7 +416,9 @@ CRITICAL OUTPUT RULES:
                     pass
 
             body = None
-            if function_config.body:
+            if prebuilt_body is not None:
+                body = prebuilt_body
+            elif function_config.body:
                 try:
                     raw_body = function_config.body if isinstance(function_config.body, str) else json.dumps(function_config.body)
                     body = json.loads(self._build_url(raw_body, params))
@@ -415,6 +470,26 @@ CRITICAL OUTPUT RULES:
     # ------------------------------------------------------------------
     # Friendly response generation
     # ------------------------------------------------------------------
+
+    def _extract_response_field(
+        self, execution_result: Dict[str, Any], function_type: str, field_name: str
+    ) -> Optional[str]:
+        """Extract a specific field from the execution result, returns None if not found."""
+        result_data = execution_result.get("result", {})
+
+        if function_type == "workflow":
+            # Try final_result first, then context
+            final_result = result_data.get("final_result", {})
+            if isinstance(final_result, dict) and field_name in final_result:
+                return str(final_result[field_name])
+            context = result_data.get("context", {})
+            if isinstance(context, dict) and field_name in context:
+                return str(context[field_name])
+        else:
+            if isinstance(result_data, dict) and field_name in result_data:
+                return str(result_data[field_name])
+
+        return None
 
     async def _generate_friendly_response(
         self,
@@ -524,7 +599,12 @@ CRITICAL OUTPUT RULES:
             clean_params = self._strip_metadata(all_params)
 
             if matched_function.type == "simple":
-                result = await self._execute_simple_function(matched_function, clean_params)
+                prebuilt_body = None
+                if matched_function.body_mode == "llm" and matched_function.body_prompt:
+                    prebuilt_body = await self._build_body_with_llm(
+                        matched_function, user_message, clean_params
+                    )
+                result = await self._execute_simple_function(matched_function, clean_params, prebuilt_body)
             elif matched_function.type == "workflow":
                 result = await self._execute_workflow(matched_function, clean_params, profile, auth_token)
             else:
@@ -532,6 +612,11 @@ CRITICAL OUTPUT RULES:
 
             if not result.get("success", False):
                 return f"Error running '{matched_name}': {result.get('error', 'Unknown error')}"
+
+            if matched_function.response_field:
+                extracted = self._extract_response_field(result, matched_function.type, matched_function.response_field)
+                if extracted is not None:
+                    return extracted
 
             return await self._generate_friendly_response(
                 matched_name, matched_function.type, result, all_params
@@ -598,7 +683,12 @@ CRITICAL OUTPUT RULES:
             # All params collected — execute
             clean_params = self._strip_metadata(all_params)
             if matched_function.type == "simple":
-                result = await self._execute_simple_function(matched_function, clean_params)
+                prebuilt_body = None
+                if matched_function.body_mode == "llm" and matched_function.body_prompt:
+                    prebuilt_body = await self._build_body_with_llm(
+                        matched_function, user_message, clean_params
+                    )
+                result = await self._execute_simple_function(matched_function, clean_params, prebuilt_body)
             elif matched_function.type == "workflow":
                 result = await self._execute_workflow(matched_function, clean_params, profile, auth_token)
             else:
@@ -606,6 +696,10 @@ CRITICAL OUTPUT RULES:
 
             if result.get("success", False):
                 self._clear_params(user_id, function_name)
+                if matched_function.response_field:
+                    extracted = self._extract_response_field(result, matched_function.type, matched_function.response_field)
+                    if extracted is not None:
+                        return extracted
                 return await self._generate_friendly_response(
                     function_name, matched_function.type, result, all_params
                 )
