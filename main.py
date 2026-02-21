@@ -174,7 +174,7 @@ else:
     user_id = "default-user"
 
 # ─── Neonize (WhatsApp device integration) ────────────────────────────────────
-neonize_integration = NeonizeIntegration(sessions_dir="./data/whatsapp")
+neonize_integration = NeonizeIntegration(sessions_dir="./data/whatsapp", stt_integration=integrations.stt)
 
 
 # ─── Routes & Middleware ──────────────────────────────────────────────────────

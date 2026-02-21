@@ -29,6 +29,11 @@ Thumbs.db
 # Vector stores (RAG)
 vector_stores/
 
+# WhatsApp session files (neonize/whatsmeow SQLite DBs)
+data/whatsapp/*.db
+data/whatsapp/*.db-wal
+data/whatsapp/*.db-shm
+
 # UI specific
 
 # Logs

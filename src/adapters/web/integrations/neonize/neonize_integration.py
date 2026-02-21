@@ -54,10 +54,11 @@ class NeonizeIntegration:
         await integration.disconnect(device_id)
     """
 
-    def __init__(self, sessions_dir: str = "./data/whatsapp"):
+    def __init__(self, sessions_dir: str = "./data/whatsapp", stt_integration=None):
         self.sessions_dir = sessions_dir
         os.makedirs(sessions_dir, exist_ok=True)
         self._clients: Dict[str, object] = {}  # device_id → NewAClient
+        self._stt_integration = stt_integration  # optional STT for audio transcription
         _ensure_neonize_loop()
 
     def _session_path(self, device_id: str) -> str:
@@ -317,6 +318,62 @@ class NeonizeIntegration:
     def _is_running(self, device_id: str) -> bool:
         return device_id in self._clients
 
+    async def _transcribe_audio(self, device_id: str, msg_event, audio_msg) -> str:
+        """Download a WhatsApp audio message and transcribe it via STT.
+
+        Returns the transcribed text, or empty string if STT is unavailable or fails.
+        """
+        if self._stt_integration is None:
+            logger.debug("[neonize] STT not configured — skipping audio transcription")
+            return ""
+
+        try:
+            client = await self.get_client(device_id)
+            # download_any expects the inner waE2E.Message (msg_event.Message),
+            # not the outer neonize MessageEv wrapper
+            wa_msg = getattr(msg_event, "Message", None)
+            if wa_msg is None:
+                return ""
+            audio_bytes = await client.download_any(wa_msg)
+            if not audio_bytes:
+                logger.warning(f"[neonize] download_any returned empty for device {device_id}")
+                return ""
+
+            # Determine format from mimetype (WhatsApp typically sends audio/ogg; codecs=opus)
+            mimetype = getattr(audio_msg, "mimetype", "audio/ogg")
+            if "ogg" in mimetype:
+                audio_format = "ogg"
+            elif "mp4" in mimetype or "m4a" in mimetype or "aac" in mimetype:
+                audio_format = "mp4"
+            elif "mp3" in mimetype or "mpeg" in mimetype:
+                audio_format = "mp3"
+            else:
+                audio_format = "ogg"
+
+            duration = getattr(audio_msg, "seconds", 0)
+            logger.info(
+                f"[neonize] Transcribing audio ({duration}s, {audio_format}) for device {device_id}"
+            )
+
+            result = await self._stt_integration.audio_bytes_to_text(
+                audio_bytes=audio_bytes,
+                audio_format=audio_format,
+            )
+
+            if result.get("success") and result.get("text"):
+                text = result["text"]
+                logger.info(f"[neonize] Audio transcribed for device {device_id}: {text[:80]!r}")
+                return text
+
+            logger.warning(
+                f"[neonize] STT failed for device {device_id}: {result.get('error', 'unknown')}"
+            )
+            return ""
+
+        except Exception as e:
+            logger.error(f"[neonize] Audio transcription error for device {device_id}: {e}", exc_info=True)
+            return ""
+
     async def _dispatch_message(
         self,
         device_id: str,
@@ -362,6 +419,11 @@ class NeonizeIntegration:
                     getattr(wa_msg, "conversation", "")
                     or getattr(getattr(wa_msg, "extendedTextMessage", None), "text", "")
                 )
+
+                if not text:
+                    audio_msg = getattr(wa_msg, "audioMessage", None)
+                    if audio_msg and getattr(audio_msg, "seconds", 0) > 0:
+                        text = await self._transcribe_audio(device_id, msg_event, audio_msg)
 
             if not text:
                 logger.debug(
