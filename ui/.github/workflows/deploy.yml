@@ -1,0 +1,79 @@
+name: Deploy Vue to S3
+
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+  build-and-deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - name: Crate .env.production
+        run: |
+          echo "VITE_AUTH_BASE_URL=${{ secrets.VITE_AUTH_BASE_URL }}" >> .env.production
+          echo "VITE_ASSISTANT_BASE_URL=${{ secrets.VITE_ASSISTANT_BASE_URL }}" >> .env.production
+          echo "VITE_GOOGLE_CLIENT_ID=${{ secrets.VITE_GOOGLE_CLIENT_ID }}" >> .env.production
+          echo "VITE_ASSISTANT_API_KEY=${{ secrets.VITE_ASSISTANT_API_KEY }}" >> .env.production
+          echo "VITE_ASSISTANT_API_BASE_URL=${{ secrets.VITE_ASSISTANT_API_BASE_URL }}" >> .env.production
+          echo "VITE_WHATSAPP_API_BASE_URL=${{ secrets.VITE_WHATSAPP_API_BASE_URL }}" >> .env.production
+          echo "VITE_CALENDAR_BASE_URL=${{ secrets.VITE_CALENDAR_BASE_URL }}" >> .env.production
+          echo "VITE_EMAILJS_SERVICE_ID=${{ secrets.VITE_EMAILJS_SERVICE_ID }}" >> .env.production
+          echo "VITE_EMAILJS_TEMPLATE_ID=${{ secrets.VITE_EMAILJS_TEMPLATE_ID }}" >> .env.production
+          echo "VITE_EMAILJS_PUBLIC_KEY=${{ secrets.VITE_EMAILJS_PUBLIC_KEY }}" >> .env.production
+
+      - name: Install dependencies
+        run: yarn install
+
+      - name: Build Vue app
+        run: yarn build
+
+      - name: Install AWS CLI
+        run: |
+          python3 -m pip install --upgrade pip
+          pip install awscli
+
+      - name: Clean S3 bucket
+        run: |
+          aws s3 rm s3://gillie.com.ar/ --recursive
+        env:
+          AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          AWS_REGION: 'sa-east-1'
+
+      - name: Upload assets with long-term cache
+        run: |
+          aws s3 cp dist/ s3://gillie.com.ar/ --recursive \
+            --exclude "index.html" \
+            --cache-control "public, max-age=31536000, immutable"
+        env:
+          AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          AWS_REGION: 'sa-east-1'
+
+      - name: Upload index.html with no cache
+        run: |
+          aws s3 cp dist/index.html s3://gillie.com.ar/index.html \
+            --cache-control "no-cache, no-store, must-revalidate"
+        env:
+          AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          AWS_REGION: 'sa-east-1'
+
+      - name: Invalidate CloudFront cache
+        run: |
+          aws cloudfront create-invalidation \
+            --distribution-id ${{ secrets.CLOUDFRONT_DISTRIBUTION_ID }} \
+            --paths "/*"
+        env:
+          AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          AWS_REGION: 'global'

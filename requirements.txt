@@ -1,5 +1,8 @@
 fastapi
 uvicorn
+typer[all]>=0.12.0
+rich>=13.0.0
+inquirerpy>=0.3.4
 sqlalchemy
 python-dotenv
 pydantic[email]
@@ -33,9 +36,6 @@ scikit-learn
 aiohttp
 aiofiles
 SpeechRecognition
-openai-whisper
-vosk
-pocketsphinx
 pydub
 langchain>=0.3.0
 langchain-openai>=0.2.0
@@ -53,3 +53,8 @@ qdrant-client>=1.11.0
 pdfminer.six
 pypdf
 pikepdf
+google-api-python-client>=2.100.0
+google-auth>=2.23.0
+google-auth-oauthlib>=1.1.0
+google-auth-httplib2>=0.1.0
+dateparser>=1.1.8

@@ -9,10 +9,10 @@ from io import BytesIO
 
 from langchain_community.document_loaders import UnstructuredFileLoader
 from langchain_community.document_loaders import CSVLoader
-from langchain.text_splitter import RecursiveCharacterTextSplitter
+from langchain_text_splitters import RecursiveCharacterTextSplitter
 from langchain_openai import OpenAIEmbeddings
 from langchain_community.vectorstores import Chroma
-from langchain.schema import Document
+from langchain_core.documents import Document
 
 from src.core.platform.config.service import ConfigurationService
 from src.core.platform.fileprocessor.processor import BaseFileProcessor

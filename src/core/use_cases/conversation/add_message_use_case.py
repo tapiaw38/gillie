@@ -308,8 +308,8 @@ class AddMessageUseCase:
             )
 
         try:
-            # Inject FAQ context BEFORE any AI processing (highest priority)
-            enhanced_context = self._inject_faq_context(message_context)
+            # Inject skill context BEFORE any AI processing (highest priority)
+            enhanced_context = self._inject_skill_context(message_context)
 
             # Build chat history for function execution
             chat_history = self.context_factory.platform_managers.message_history.build_chat_history(
@@ -338,38 +338,34 @@ class AddMessageUseCase:
             logger.error(f"Error generating AI response: {e}")
             return self._get_fallback_error_message(conversation.profile)
 
-    def _inject_faq_context(self, message_context: Optional[str]) -> str:
+    def _inject_skill_context(self, message_context: Optional[str]) -> str:
         """
-        Inject FAQ context into message context using early return pattern.
+        Inject skill context (general.skill.md + faqs.skill.md) into message context.
 
         Args:
             message_context: Original message context
 
         Returns:
-            Enhanced context with FAQs prepended (or original if no FAQs)
+            Enhanced context with skill knowledge prepended (or original if unavailable)
         """
-        # Early return if no platform managers
         if not self.context_factory.platform_managers:
             return message_context
 
-        # Early return if no FAQ context manager
-        if not self.context_factory.platform_managers.faq_context:
+        if not self.context_factory.platform_managers.skill_manager:
             return message_context
 
         try:
-            faq_context = self.context_factory.platform_managers.faq_context.get_faq_context()
+            skill_context = self.context_factory.platform_managers.skill_manager.get_base_context()
 
-            # Early return if no FAQ context available
-            if not faq_context:
+            if not skill_context:
                 return message_context
 
-            # Prepend FAQ context to ensure it's seen first
-            enhanced_context = f"{faq_context}\n\n{message_context}" if message_context else faq_context
-            logger.info("FAQ context injected into message context (highest priority)")
+            enhanced_context = f"{skill_context}\n\n{message_context}" if message_context else skill_context
+            logger.info("Skill context injected into message context")
             return enhanced_context
 
-        except Exception as faq_error:
-            logger.warning(f"Error getting FAQ context, continuing without it: {faq_error}")
+        except Exception as e:
+            logger.warning(f"Error getting skill context, continuing without it: {e}")
             return message_context
 
     async def _generate_ai_response_fallback(
@@ -390,8 +386,8 @@ class AddMessageUseCase:
             Generated AI response text
         """
         try:
-            # Inject FAQ context even in fallback mode
-            enhanced_context = self._inject_faq_context(message_context)
+            # Inject skill context even in fallback mode
+            enhanced_context = self._inject_skill_context(message_context)
 
             # Manual conversion of messages to string
             conversation_history = " - ".join([

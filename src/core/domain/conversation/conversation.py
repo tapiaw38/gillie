@@ -14,6 +14,8 @@ class Conversation(BaseModel):
     messages: Optional[List[Message]] = Field(default=None)
     is_sandbox: bool = Field(default=False)
     message_count: Optional[int] = Field(default=0)
+    summary: Optional[str] = None
+    memory_extracted: bool = Field(default=False)
 
     class Config:
         allow_population_by_field_name = True

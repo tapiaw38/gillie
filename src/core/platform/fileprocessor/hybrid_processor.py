@@ -149,7 +149,7 @@ class HybridDocumentProcessor:
 
             if use_langchain and "vector_store" not in base_result:
                 try:
-                    from langchain.schema import Document
+                    from langchain_core.documents import Document
 
                     chunks = [
                         Document(page_content=chunk, metadata={"source": file_url})
@@ -197,7 +197,7 @@ class HybridDocumentProcessor:
             if not all_chunks:
                 return {"error": "No documents could be processed"}
 
-            from langchain.schema import Document
+            from langchain_core.documents import Document
 
             documents = [
                 Document(page_content=chunk, metadata={"source": source})

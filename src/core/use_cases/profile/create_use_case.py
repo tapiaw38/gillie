@@ -27,7 +27,6 @@ class CreateUseCase:
 
         try:
             generated_id = str(uuid4())
-            iteration_limit = 100
             new_profile = Profile(
                 _id=generated_id,
                 user_id=user_id,
@@ -37,7 +36,6 @@ class CreateUseCase:
                 business_context=profile.business_context,
                 is_active=True,
                 created_at=datetime.now(timezone.utc),
-                iteration_limit=iteration_limit,
             )
 
             profile_id = self.context_factory.repositories.profile.create(new_profile)

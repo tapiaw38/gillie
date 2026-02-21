@@ -54,13 +54,6 @@ from .audio import (
     STTValidationData,
     STTValidationOutput,
 )
-from .faq import (
-    FAQInput,
-    FAQUpdate,
-    FAQOutput,
-    FAQOutputData,
-    FAQListOutput,
-)
 from .whatsapp import (
     ProcessExternalMessageRequest,
     ProcessExternalMessageResponse,
@@ -118,12 +111,6 @@ __all__ = [
     "STTLanguagesOutput",
     "STTValidationData",
     "STTValidationOutput",
-    # FAQ schemas
-    "FAQInput",
-    "FAQUpdate",
-    "FAQOutput",
-    "FAQOutputData",
-    "FAQListOutput",
     # WhatsApp schemas
     "ProcessExternalMessageRequest",
     "ProcessExternalMessageResponse",

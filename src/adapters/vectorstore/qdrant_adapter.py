@@ -11,7 +11,7 @@ specific vector database implementation.
 import logging
 from typing import List, Dict, Any, Optional
 from langchain_community.vectorstores import Qdrant
-from langchain.schema import Document
+from langchain_core.documents import Document
 from qdrant_client import QdrantClient
 from qdrant_client.models import Distance, VectorParams, PointStruct
 from qdrant_client.http import models

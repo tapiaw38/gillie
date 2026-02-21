@@ -2,7 +2,10 @@ import os
 from dotenv import load_dotenv
 from enum import Enum
 from dataclasses import dataclass
-from typing import Optional
+from typing import Optional, TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from cli.config.schema import AssistantConfig
 
 
 class ModeServer(str, Enum):
@@ -22,6 +25,8 @@ class NoSQLConfig:
     conversations: Optional[NoSQLCollectionConfig] = None
     profiles: Optional[NoSQLCollectionConfig] = None
     faqs: Optional[NoSQLCollectionConfig] = None
+    calendar_sessions: Optional[NoSQLCollectionConfig] = None
+    calendar_events: Optional[NoSQLCollectionConfig] = None
 
 @dataclass
 class ServerConfig:
@@ -50,18 +55,6 @@ class AWSConfig:
 @dataclass
 class WhatsAppConfig:
     verify_token: str
-
-
-@dataclass
-class CalendarConfig:
-    api_url: str
-
-
-@dataclass
-class MCPConfig:
-    server_url: str
-    timeout: int
-    enabled: bool
 
 
 @dataclass
@@ -101,10 +94,8 @@ class EmbeddingsConfig:
     provider: str  # openai, huggingface, sentence_transformers
     batch_size: int
     device: str  # cpu, cuda, mps
-    # OpenAI specific
     openai_model: str
     openai_dimension: int
-    # HuggingFace specific
     hf_model: str
     hf_dimension: int
 
@@ -112,12 +103,10 @@ class EmbeddingsConfig:
 @dataclass
 class LLMExtendedConfig:
     provider: str  # openai, anthropic
-    # OpenAI extended
     openai_temperature: float
     openai_max_tokens: int
     openai_timeout: float
     openai_max_retries: int
-    # Anthropic
     anthropic_api_key: Optional[str]
     anthropic_model: str
     anthropic_temperature: float
@@ -128,9 +117,26 @@ class LLMExtendedConfig:
 
 @dataclass
 class LoggingConfig:
-    environment: str  # development, production, testing, docker
+    environment: str
     log_level: str
-    scope: str  # prod, test, (empty for local)
+    scope: str
+
+
+@dataclass
+class GoogleCalendarConfig:
+    enabled: bool = False
+    client_id: str = ""
+    client_secret: str = ""
+    redirect_uri: str = "http://localhost:8000/api/v1/calendar/oauth/callback"
+
+
+@dataclass
+class SingleUserConfig:
+    """Configuration for single-user mode (set by CLI init)."""
+    user_id: str
+    tts_enabled: bool = False
+    stt_enabled: bool = False
+    whatsapp_enabled: bool = False
 
 
 @dataclass
@@ -140,14 +146,15 @@ class ConfigurationService:
     openai_config: OpenAIConfig
     aws_config: AWSConfig
     whatsapp_config: WhatsAppConfig
-    calendar_config: CalendarConfig
-    mcp_config: MCPConfig
     qdrant_config: QdrantConfig
     langchain_config: LangChainConfig
     langsmith_config: LangSmithConfig
     embeddings_config: EmbeddingsConfig
     llm_extended_config: LLMExtendedConfig
     logging_config: LoggingConfig
+    single_user_config: Optional[SingleUserConfig] = None
+    google_calendar_config: Optional[GoogleCalendarConfig] = None
+
 
 _config_service: Optional[ConfigurationService] = None
 
@@ -180,23 +187,33 @@ def read_config() -> ConfigurationService:
     nosql_config = NoSQLConfig(
         migrations=NoSQLCollectionConfig(
             database_uri=database_uri,
-            database=get_env("DB_NAME", "assistant-ia-db"),
+            database=get_env("DB_NAME", "gillie-db"),
             collection=get_env("DB_COLLECTION_MIGRATIONS", "migrations"),
         ),
         conversations=NoSQLCollectionConfig(
             database_uri=database_uri,
-            database=get_env("DB_NAME", "assistant-ia-db"),
+            database=get_env("DB_NAME", "gillie-db"),
             collection=get_env("DB_COLLECTION_CONVERSATIONS", "conversations"),
         ),
         profiles=NoSQLCollectionConfig(
             database_uri=database_uri,
-            database=get_env("DB_NAME", "assistant-ia-db"),
+            database=get_env("DB_NAME", "gillie-db"),
             collection=get_env("DB_COLLECTION_PROFILES", "profiles"),
         ),
         faqs=NoSQLCollectionConfig(
             database_uri=database_uri,
-            database=get_env("DB_NAME", "assistant-ia-db"),
+            database=get_env("DB_NAME", "gillie-db"),
             collection=get_env("DB_COLLECTION_FAQS", "faqs"),
+        ),
+        calendar_sessions=NoSQLCollectionConfig(
+            database_uri=database_uri,
+            database=get_env("DB_NAME", "gillie-db"),
+            collection=get_env("DB_COLLECTION_CALENDAR_SESSIONS", "calendar_sessions"),
+        ),
+        calendar_events=NoSQLCollectionConfig(
+            database_uri=database_uri,
+            database=get_env("DB_NAME", "gillie-db"),
+            collection=get_env("DB_COLLECTION_CALENDAR_EVENTS", "calendar_events"),
         ),
     )
 
@@ -211,21 +228,11 @@ def read_config() -> ConfigurationService:
         access_key_id=get_env("AWS_ACCESS_KEY_ID", ""),
         secret_access_key=get_env("AWS_SECRET_ACCESS_KEY", ""),
         region=get_env("AWS_REGION", "us-east-1"),
-        bucket_name=get_env("AWS_BUCKET_NAME", "assistant-ia-bucket"),
+        bucket_name=get_env("AWS_BUCKET_NAME", "gillie-bucket"),
     )
-    
+
     whatsapp_config = WhatsAppConfig(
-        verify_token=get_env("WHATSAPP_VERIFY_TOKEN", "assistant_ia_whatsapp_verification_token"),
-    )
-
-    calendar_config = CalendarConfig(
-        api_url=get_env("CALENDAR_API_URL", "http://calendar-api-be:8084"),
-    )
-
-    mcp_config = MCPConfig(
-        server_url=get_env("MCP_SERVER_URL", "http://mcp-context-server:8085"),
-        timeout=int(get_env("MCP_TIMEOUT", "30")),
-        enabled=get_env("MCP_ENABLED", "true").lower() == "true",
+        verify_token=get_env("WHATSAPP_VERIFY_TOKEN", "gillie_whatsapp_verification_token"),
     )
 
     qdrant_config = QdrantConfig(
@@ -252,7 +259,7 @@ def read_config() -> ConfigurationService:
 
     langsmith_config = LangSmithConfig(
         api_key=get_env("LANGSMITH_API_KEY", None),
-        project=get_env("LANGSMITH_PROJECT", "assistant-ia-api"),
+        project=get_env("LANGSMITH_PROJECT", "gillie-api"),
         endpoint=get_env("LANGSMITH_ENDPOINT", None),
         tracing_enabled=get_env("LANGSMITH_TRACING_ENABLED", "false").lower() == "true",
     )
@@ -287,23 +294,174 @@ def read_config() -> ConfigurationService:
         scope=get_env("SCOPE", ""),
     )
 
+    # Single-user config from env (optional, set by CLI)
+    single_user_id = get_env("SINGLE_USER_ID", "")
+    single_user_config = None
+    if single_user_id:
+        single_user_config = SingleUserConfig(
+            user_id=single_user_id,
+            tts_enabled=get_env("TTS_ENABLED", "false").lower() == "true",
+            stt_enabled=get_env("STT_ENABLED", "false").lower() == "true",
+            whatsapp_enabled=get_env("WHATSAPP_ENABLED", "false").lower() == "true",
+        )
+
+    google_calendar_config = GoogleCalendarConfig(
+        enabled=get_env("GOOGLE_CALENDAR_ENABLED", "false").lower() == "true",
+        client_id=get_env("GOOGLE_CALENDAR_CLIENT_ID", ""),
+        client_secret=get_env("GOOGLE_CALENDAR_CLIENT_SECRET", ""),
+        redirect_uri=get_env("GOOGLE_CALENDAR_REDIRECT_URI", "http://localhost:8000/api/v1/calendar/oauth/callback"),
+    )
+
     return ConfigurationService(
         server_config=server_config,
         nosql_config=nosql_config,
         openai_config=openai_config,
         aws_config=aws_config,
         whatsapp_config=whatsapp_config,
-        calendar_config=calendar_config,
-        mcp_config=mcp_config,
         qdrant_config=qdrant_config,
         langchain_config=langchain_config,
         langsmith_config=langsmith_config,
         embeddings_config=embeddings_config,
         llm_extended_config=llm_extended_config,
         logging_config=logging_config,
+        single_user_config=single_user_config,
+        google_calendar_config=google_calendar_config,
     )
 
 
 def init_config() -> None:
     config_service = read_config()
     init_config_service(config_service)
+
+
+def init_config_from_json(config_data: "AssistantConfig") -> None:
+    """Initialize ConfigurationService from CLI config.json (single-user mode)."""
+    s = config_data.services
+    db_uri = s.mongodb.uri
+    db_name = s.mongodb.database
+
+    nosql_config = NoSQLConfig(
+        migrations=NoSQLCollectionConfig(
+            database_uri=db_uri,
+            database=db_name,
+            collection="migrations",
+        ),
+        conversations=NoSQLCollectionConfig(
+            database_uri=db_uri,
+            database=db_name,
+            collection="conversations",
+        ),
+        profiles=NoSQLCollectionConfig(
+            database_uri=db_uri,
+            database=db_name,
+            collection="profiles",
+        ),
+        faqs=NoSQLCollectionConfig(
+            database_uri=db_uri,
+            database=db_name,
+            collection="faqs",
+        ),
+        calendar_sessions=NoSQLCollectionConfig(
+            database_uri=db_uri,
+            database=db_name,
+            collection="calendar_sessions",
+        ),
+        calendar_events=NoSQLCollectionConfig(
+            database_uri=db_uri,
+            database=db_name,
+            collection="calendar_events",
+        ),
+    )
+
+    config = ConfigurationService(
+        server_config=ServerConfig(
+            mode=ModeServer(config_data.server.mode),
+            port=str(config_data.server.port),
+            host=config_data.server.host,
+            jwt_secret="single-user-no-auth",
+            encryption_algorithm="HS256",
+        ),
+        nosql_config=nosql_config,
+        openai_config=OpenAIConfig(
+            api_key=s.openai.api_key,
+            base_url=s.openai.base_url,
+            model=s.openai.model,
+            role=s.openai.role,
+        ),
+        aws_config=AWSConfig(
+            access_key_id=s.s3.access_key_id if s.s3.enabled else "",
+            secret_access_key=s.s3.secret_access_key if s.s3.enabled else "",
+            region=s.s3.region,
+            bucket_name=s.s3.bucket_name if s.s3.enabled else "",
+        ),
+        whatsapp_config=WhatsAppConfig(
+            verify_token=s.whatsapp.verify_token if s.whatsapp.enabled else "",
+        ),
+        qdrant_config=QdrantConfig(
+            host=s.qdrant.host,
+            port=s.qdrant.port,
+            grpc_port=s.qdrant.grpc_port,
+            use_grpc=s.qdrant.use_grpc,
+            api_key=s.qdrant.api_key,
+        ),
+        langchain_config=LangChainConfig(
+            service_enabled=s.langchain.enabled,
+            max_concurrent_requests=s.langchain.max_concurrent_requests,
+            memory_max_messages=s.langchain.memory_max_messages,
+            chunk_size=s.langchain.chunk_size,
+            chunk_overlap=s.langchain.chunk_overlap,
+            max_pages=s.langchain.max_pages,
+            enable_vectors=s.langchain.enable_vectors,
+            vector_store=s.langchain.vector_store,
+            similarity_k=s.langchain.similarity_k,
+            enable_fallback=s.langchain.enable_fallback,
+            log_level="INFO",
+        ),
+        langsmith_config=LangSmithConfig(
+            api_key=s.langsmith.api_key if s.langsmith.enabled else None,
+            project=s.langsmith.project,
+            endpoint=s.langsmith.endpoint if s.langsmith.enabled else None,
+            tracing_enabled=s.langsmith.enabled,
+        ),
+        embeddings_config=EmbeddingsConfig(
+            provider=s.embeddings.provider,
+            batch_size=s.embeddings.batch_size,
+            device=s.embeddings.device,
+            openai_model=s.embeddings.openai_model,
+            openai_dimension=s.embeddings.openai_dimension,
+            hf_model=s.embeddings.hf_model,
+            hf_dimension=s.embeddings.hf_dimension,
+        ),
+        llm_extended_config=LLMExtendedConfig(
+            provider=s.llm.provider,
+            openai_temperature=s.openai.temperature,
+            openai_max_tokens=s.openai.max_tokens,
+            openai_timeout=s.openai.timeout,
+            openai_max_retries=s.openai.max_retries,
+            anthropic_api_key=s.llm.anthropic_api_key,
+            anthropic_model=s.llm.anthropic_model,
+            anthropic_temperature=s.llm.anthropic_temperature,
+            anthropic_max_tokens=s.llm.anthropic_max_tokens,
+            anthropic_timeout=s.llm.anthropic_timeout,
+            anthropic_max_retries=s.llm.anthropic_max_retries,
+        ),
+        logging_config=LoggingConfig(
+            environment=config_data.logging.environment,
+            log_level=config_data.logging.log_level,
+            scope="",
+        ),
+        single_user_config=SingleUserConfig(
+            user_id=config_data.user_id,
+            tts_enabled=s.tts.enabled,
+            stt_enabled=s.stt.enabled,
+            whatsapp_enabled=s.whatsapp.enabled,
+        ),
+        google_calendar_config=GoogleCalendarConfig(
+            enabled=s.google_calendar.enabled if hasattr(s, "google_calendar") else False,
+            client_id=s.google_calendar.client_id if hasattr(s, "google_calendar") else "",
+            client_secret=s.google_calendar.client_secret if hasattr(s, "google_calendar") else "",
+            redirect_uri=s.google_calendar.redirect_uri if hasattr(s, "google_calendar") else "http://localhost:8000/api/v1/calendar/oauth/callback",
+        ),
+    )
+
+    init_config_service(config)

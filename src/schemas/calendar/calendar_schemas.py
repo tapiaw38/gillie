@@ -28,7 +28,7 @@ class CalendarEventOutput(BaseModel):
     """Schema for calendar event response"""
     id: str
     user_id: str
-    profile_id: str
+    profile_id: Optional[str] = None
     google_id: Optional[str] = None
     title: str
     description: Optional[str] = None
@@ -52,11 +52,11 @@ class CalendarAuthorizationOutput(BaseModel):
     """Schema for Google Calendar authorization"""
     authorization_url: str
     user_id: str
-    profile_id: str
+    profile_id: Optional[str] = None
 
 
 class CalendarStatusOutput(BaseModel):
     """Schema for calendar session status"""
     is_active: bool
     user_id: str
-    profile_id: str
+    profile_id: Optional[str] = None

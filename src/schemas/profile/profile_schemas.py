@@ -30,7 +30,6 @@ class ProfileOutputData(BaseModel):
     is_active: bool
     created_at: Optional[datetime]
     updated_at: Optional[datetime]
-    iteration_limit: Optional[int]
     api_keys: Optional[List[ApiKeyOutputData]]
     files: Optional[List[FileOutputData]]
     integrations: Optional[List[IntegrationOutputData]]
@@ -53,7 +52,6 @@ class ProfileOutput(BaseModel):
                 role=profile.role,
                 created_at=profile.created_at,
                 updated_at=profile.updated_at,
-                iteration_limit=profile.iteration_limit,
                 api_keys=(
                     [
                         ApiKeyOutput.from_output(api_key).data

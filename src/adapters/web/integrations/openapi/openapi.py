@@ -37,7 +37,6 @@ class OpenAIIntegration:
         self.base_url = config.base_url
         self.model = config.model
         self.role = config.role
-        self.faq_repository = None  # Will be set later via set_faq_repository()
 
         self.client = AsyncOpenAI(
             api_key=self.api_key,
@@ -76,21 +75,6 @@ class OpenAIIntegration:
                 self.langchain_service = None
 
         self.logger.info(f"OpenAI integration initialized with model: {self.model}")
-
-    def set_faq_repository(self, faq_repository):
-        """
-        Set FAQ repository for LangChain service tools.
-        This must be called after initialization when FAQ repository becomes available.
-
-        Args:
-            faq_repository: FAQ repository instance
-        """
-        # Only configure if not already set (idempotent)
-        if self.faq_repository is None:
-            self.faq_repository = faq_repository
-            if self.langchain_service:
-                self.langchain_service.faq_repository = faq_repository
-                self.logger.info("FAQ repository configured for LangChain service")
 
     @log_function_call
     async def ask(

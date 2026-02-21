@@ -1,24 +1,15 @@
 import json
 import logging
 import re
+from datetime import datetime
 from typing import List, Dict, Any, Optional
 from dataclasses import dataclass, field
 
-from langchain_community.chat_models import ChatOpenAI
+from langchain_openai import ChatOpenAI
 from langchain_core.messages import HumanMessage
-from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
-from langchain.agents import AgentExecutor, create_openai_functions_agent
-from langchain_core.tools import BaseTool
 
-from src.core.platform.functions.workflow_executor import (
-    WorkflowExecutor,
-    WorkflowDefinition,
-    WorkflowStep,
-)
-from src.core.platform.functions.function_executor import (
-    GenericHTTPTool,
-    FunctionDefinition,
-)
+from src.core.platform.functions.workflow_executor import WorkflowExecutor
+from src.core.platform.functions.function_executor import GenericHTTPTool, FunctionDefinition
 from src.core.platform.functions.global_workflows import get_available_workflows
 from src.core.services.configuration_service import ConfigurationService
 from src.core.domain import Profile
@@ -28,9 +19,9 @@ logger = logging.getLogger(__name__)
 
 @dataclass
 class FunctionConfig:
-    """Configuración de una función individual"""
+    """Configuration for a single callable function or workflow."""
 
-    type: str  # "simple" or "workflow"
+    type: str  # "simple" | "workflow"
     sequential: bool = False
     sequential_number: Optional[int] = None
     name: str = ""
@@ -44,12 +35,17 @@ class FunctionConfig:
 
 
 class SmartFunctionExecutor:
-    """Ejecutor inteligente que analiza preguntas del usuario y ejecuta funciones o workflows"""
+    """
+    Analyzes user messages with an LLM to detect function intent, extracts
+    parameters, and executes simple HTTP functions or multi-step workflows.
+
+    Supports multi-turn parameter collection when parameters are missing.
+    """
 
     def __init__(self, config_service: ConfigurationService, mcp_client=None):
         self.config_service = config_service
+        self.mcp_client = mcp_client
         self.workflow_executor = WorkflowExecutor(config_service)
-        self.mcp_client = mcp_client  # MCP Client for datetime parsing
         self.llm = ChatOpenAI(
             api_key=config_service.openai_config.api_key,
             base_url=config_service.openai_config.base_url,
@@ -57,69 +53,72 @@ class SmartFunctionExecutor:
             temperature=0.1,
         )
         self._setup_prompt()
-        # Almacenamiento simple para parámetros de funciones
-        self.function_params_storage = {}
+        # In-memory parameter store for multi-turn conversations
+        # Structure: { user_id: { function_name: { param: value } } }
+        self.function_params_storage: Dict[str, Dict[str, Dict[str, Any]]] = {}
+
+    # ------------------------------------------------------------------
+    # Prompt setup
+    # ------------------------------------------------------------------
 
     def _setup_prompt(self):
-        """Configurar prompt para análisis de intención"""
-        system_message = """You are an AI assistant that analyzes user questions to determine if they match any available functions.
+        """Build the intent-analysis prompt template."""
+        current_date = datetime.now().strftime("%Y-%m-%d")
+
+        system_message = f"""You are an AI assistant that analyzes user messages to determine if they match any available functions.
 
 Your task is to:
-1. Analyze the user's question
-2. Check if it matches any function names, descriptions, or keywords from the available list
-3. If there's a match, identify which function and what parameters are needed
+1. Analyze the user's message
+2. Check if it matches any function names, descriptions, keywords, or examples from the available list
+3. If there is a match, identify which function and what parameters are needed
 4. If no match, respond that no suitable function was found
 
-Available functions: {available_functions}
+Available functions: {{available_functions}}
 
-IMPORTANT: You must respond ONLY with valid JSON in this exact format:
-{{
+IMPORTANT: Respond ONLY with valid JSON in this exact format:
+{{{{
     "match_found": true/false,
     "function_name": "name_of_matched_function",
     "confidence": 0.0-1.0,
     "reasoning": "explanation of why this function matches",
     "missing_params": ["param1", "param2"],
-    "extracted_params": {{"param1": "value1"}}
-}}
+    "extracted_params": {{{{"param1": "value1"}}}}
+}}}}
 
-CRITICAL: A parameter CANNOT be both in "missing_params" AND "extracted_params" at the same time.
-- If you successfully extracted a parameter value, put it ONLY in "extracted_params"
-- If you could NOT extract a parameter value, put it ONLY in "missing_params"
+CRITICAL: A parameter cannot be in both "missing_params" AND "extracted_params" simultaneously.
+- Successfully extracted → put in "extracted_params" only
+- Could not extract → put in "missing_params" only
 
 ANALYSIS GUIDELINES:
 - Look for exact matches in function names first
-- Check if user's question contains keywords from the function
-- Consider the function description and examples
-- If the user asks about location, coordinates, or maps, look for location-related functions
-- If the user asks about weather or climate, look for weather-related functions
+- Check if the user's message contains keywords or matches examples from the function
+- Consider function descriptions
+- Extract any parameter values you can directly from the message
 
-DATE AND TIME EXTRACTION RULES (CRITICAL):
-When extracting date/time parameters (like start_time, end_time, date, datetime):
-1. ALWAYS convert dates to RFC3339 format: YYYY-MM-DDTHH:MM:SSZ
-2. Examples of correct conversions:
-   - "04/11/2025 10am" → "2025-11-04T10:00:00Z"
-   - "15 de octubre a las 3:00 PM" → "2025-10-15T15:00:00Z"
-   - "mañana a las 2pm" → "2025-11-04T14:00:00Z" (calculate tomorrow's date)
-   - "5 de noviembre 9:30am" → "2025-11-05T09:30:00Z"
-3. If only date is provided (no time), use 09:00:00 as default time
-4. Always use 24-hour format (convert PM to +12 hours)
-5. Always add "Z" suffix to indicate UTC timezone
-6. Current date reference: 2025-11-03 (use this to calculate "mañana", "hoy", "próximo lunes", etc.)
+DATE AND TIME EXTRACTION:
+When extracting date/time parameters, convert to RFC3339 format: YYYY-MM-DDTHH:MM:SSZ
+- If only a date is provided (no time), use 09:00:00 as default time
+- Use 24-hour format
+- Add "Z" suffix for UTC
+- Current date reference: {current_date}
 
-CRITICAL RULES:
-- Respond ONLY with the JSON, no additional text before or after
+CRITICAL OUTPUT RULES:
+- Respond ONLY with the JSON — no extra text before or after
 - Use double quotes for all strings
-- Use true/false (not "true"/"false") for boolean values
-- If no match is found, set match_found to false and provide reasoning
-- Do not include any explanations outside the JSON structure
-- NEVER extract dates as coordinates (lat/lon) - dates must be in RFC3339 format"""
+- Use true/false (not "true"/"false") for booleans
+- If no match is found, set match_found to false"""
 
+        from langchain_core.prompts import ChatPromptTemplate
         self.intent_prompt = ChatPromptTemplate.from_messages(
-            [("system", system_message), ("human", "User question: {user_question}")]
+            [("system", system_message), ("human", "User message: {{user_question}}")]
         )
 
-    def _parse_functions_config(self, functions_string: str) -> List[FunctionConfig]:
-        """Parsear la configuración de funciones desde string JSON"""
+    # ------------------------------------------------------------------
+    # Function loading
+    # ------------------------------------------------------------------
+
+    def _parse_functions_config(self, functions_string) -> List[FunctionConfig]:
+        """Parse function configurations from a JSON string or list."""
         try:
             if isinstance(functions_string, str):
                 functions_list = json.loads(functions_string)
@@ -129,11 +128,8 @@ CRITICAL RULES:
             if isinstance(functions_list, dict):
                 functions_list = [functions_list]
 
-            parsed_functions = []
+            parsed = []
             for func in functions_list:
-
-                logger.debug(f"Parsing function: {func.get('name', 'unnamed')}")
-
                 config = FunctionConfig(
                     type=func.get("type", "simple"),
                     sequential=func.get("sequential", False),
@@ -142,527 +138,419 @@ CRITICAL RULES:
                     method=func.get("method", "GET"),
                     body=func.get("body"),
                     headers=func.get("headers", ""),
-                    url=func.get(
-                        "url_template", func.get("url", "")
-                    ),
+                    url=func.get("url_template", func.get("url", "")),
+                    keywords=func.get("keywords", []),
+                    examples=func.get("examples", []),
+                    param_descriptions=func.get("param_descriptions", {}),
                 )
+                parsed.append(config)
 
-                if hasattr(config, "keywords"):
-                    config.keywords = func.get("keywords", [])
-                if hasattr(config, "examples"):
-                    config.examples = func.get("examples", [])
-                if hasattr(config, "param_descriptions"):
-                    config.param_descriptions = func.get("param_descriptions", {})
-
-                parsed_functions.append(config)
-
-                # Si es un workflow, registrarlo en el WorkflowExecutor
                 if config.type == "workflow":
                     self.workflow_executor.register_workflow(config.name, func)
                     logger.info(f"Registered workflow: {config.name}")
 
-                logger.debug(f"Successfully parsed function: {config.name}")
-
-            return parsed_functions
+            return parsed
 
         except Exception as e:
-            logger.error(f"Error parsing functions configuration: {e}")
-            logger.error(f"Functions string: {functions_string}")
+            logger.error(f"Error parsing functions config: {e}")
             return []
 
     def _get_all_available_functions(self, profile: Profile) -> List[FunctionConfig]:
-        """
-        Obtiene todas las funciones disponibles:
-        - Funciones del perfil (Profile.functions)
-        - Workflows globales según integraciones activas
-
-        Args:
-            profile: Perfil del usuario
-
-        Returns:
-            Lista de FunctionConfig con todas las funciones disponibles
-        """
-        all_functions = []
+        """Combine profile functions with active global workflows."""
+        all_functions: List[FunctionConfig] = []
 
         if profile.functions:
             profile_functions = self._parse_functions_config(profile.functions)
             all_functions.extend(profile_functions)
-            logger.info(f"Cargadas {len(profile_functions)} funciones del perfil")
+            logger.info(f"Loaded {len(profile_functions)} functions from profile")
 
         try:
             global_workflows = get_available_workflows(profile)
-
             if global_workflows:
                 for workflow in global_workflows:
-                    workflow_configs = self._parse_functions_config([workflow])
-                    all_functions.extend(workflow_configs)
-
-                logger.info(f"Cargados {len(global_workflows)} workflows globales")
+                    all_functions.extend(self._parse_functions_config([workflow]))
+                logger.info(f"Loaded {len(global_workflows)} global workflows")
         except Exception as e:
-            logger.warning(f"Error cargando workflows globales: {e}")
+            logger.warning(f"Error loading global workflows: {e}")
 
-        logger.info(f"Total de funciones disponibles: {len(all_functions)}")
-
+        logger.info(f"Total available functions: {len(all_functions)}")
         return all_functions
 
+    # ------------------------------------------------------------------
+    # Intent analysis
+    # ------------------------------------------------------------------
+
     async def _analyze_user_intent(
-        self, user_question: str, available_functions: List[FunctionConfig], chat_history: List[str] = None
+        self,
+        user_question: str,
+        available_functions: List[FunctionConfig],
+        chat_history: List[str] = None,
     ) -> Dict[str, Any]:
-        """Usar IA para analizar la intención del usuario y encontrar coincidencias"""
+        """Use the LLM to detect which function the user is asking for."""
         try:
-            # Preparar lista de funciones disponibles para el prompt
             functions_info = []
             for func in available_functions:
-                function_info = {
+                info: Dict[str, Any] = {
                     "name": func.name,
-                    "description": f"{func.type} function - {func.url}",
+                    "description": f"{func.type} — {func.url}",
                     "type": func.type,
-                    "sequential": func.sequential,
                 }
+                if func.keywords:
+                    info["keywords"] = func.keywords
+                if func.examples:
+                    info["examples"] = func.examples[:2]
+                functions_info.append(info)
 
-                # Agregar información adicional si está disponible
-                if hasattr(func, "keywords") and func.keywords:
-                    function_info["keywords"] = func.keywords
-                if hasattr(func, "examples") and func.examples:
-                    function_info["examples"] = func.examples[
-                        :2
-                    ]  # Solo los primeros 2 ejemplos
-
-                functions_info.append(function_info)
-
-            # Preparar contexto del historial si está disponible
             history_context = ""
-            if chat_history and len(chat_history) > 0:
-                # Tomar los últimos 4 mensajes para contexto
-                recent_messages = chat_history[-4:] if len(chat_history) > 4 else chat_history
-                history_context = "\n\nCONVERSATION HISTORY (recent messages):\n" + "\n".join(recent_messages)
-                history_context += "\n\nIMPORTANT: Use the conversation history to understand context. For example:"
-                history_context += "\n- If a booking was just created and user says a number, it might be the booking_id"
-                history_context += "\n- If user says 'confirmar' or 'confirm', look for booking_id in previous messages"
-                history_context += "\n- Extract any relevant IDs, dates, or parameters from the history"
+            if chat_history:
+                recent = chat_history[-4:]
+                history_context = (
+                    "\n\nCONVERSATION HISTORY (recent messages):\n"
+                    + "\n".join(recent)
+                    + "\n\nUse the conversation history to resolve context-dependent references "
+                    "(e.g. IDs mentioned in previous messages, confirmation responses, etc.)"
+                )
 
-            # Crear prompt con funciones disponibles
             prompt = self.intent_prompt.format(
                 available_functions=json.dumps(functions_info, indent=2),
                 user_question=user_question,
             ) + history_context
 
-            # Obtener respuesta de la IA
             response = await self.llm.ainvoke([HumanMessage(content=prompt)])
+            content = response.content.strip()
 
-            # Log de la respuesta para debugging
-            logger.debug(f"AI Response: {response.content}")
+            start = content.find("{")
+            end = content.rfind("}") + 1
+            if start != -1 and end > start:
+                analysis = json.loads(content[start:end])
+                analysis.setdefault("match_found", False)
+                return analysis
 
-            # Limpiar y parsear respuesta JSON
-            try:
-                # Limpiar la respuesta para extraer solo el JSON
-                content = response.content.strip()
+            logger.error(f"No valid JSON in AI response: {content}")
+            return {"match_found": False, "reasoning": "No valid JSON in AI response"}
 
-                # Buscar el inicio y fin del JSON
-                start_idx = content.find("{")
-                end_idx = content.rfind("}") + 1
-
-                if start_idx != -1 and end_idx > start_idx:
-                    json_content = content[start_idx:end_idx]
-                    intent_analysis = json.loads(json_content)
-
-                    # Validar que tenga los campos requeridos
-                    if "match_found" not in intent_analysis:
-                        intent_analysis["match_found"] = False
-                    if "reasoning" not in intent_analysis:
-                        intent_analysis["reasoning"] = "Respuesta incompleta del modelo"
-
-                    return intent_analysis
-                else:
-                    logger.error(
-                        f"No se encontró JSON válido en la respuesta: {content}"
-                    )
-                    return {
-                        "match_found": False,
-                        "reasoning": "No se encontró JSON válido en la respuesta",
-                    }
-
-            except json.JSONDecodeError as e:
-                logger.error(f"Failed to parse AI response as JSON: {response.content}")
-                logger.error(f"JSON parsing error: {e}")
-
-                # Intentar extraer información útil de la respuesta
-                content = response.content.lower()
-                if "match_found" in content and "true" in content:
-                    return {
-                        "match_found": True,
-                        "reasoning": "Coincidencia detectada pero respuesta malformada",
-                    }
-                elif "match_found" in content and "false" in content:
-                    return {
-                        "match_found": False,
-                        "reasoning": "No se encontró coincidencia",
-                    }
-                else:
-                    return {
-                        "match_found": False,
-                        "reasoning": "Error parsing AI response - formato inesperado",
-                    }
+        except json.JSONDecodeError as e:
+            logger.error(f"JSON parse error in AI response: {e}")
+            return {"match_found": False, "reasoning": "Failed to parse AI response"}
 
         except Exception as e:
             logger.error(f"Error analyzing user intent: {e}")
-
-            # Intentar análisis de fallback simple
             try:
-                fallback_result = self._fallback_intent_analysis(
-                    user_question, available_functions
-                )
-                if fallback_result:
-                    return fallback_result
-            except Exception as fallback_error:
-                logger.error(f"Fallback analysis also failed: {fallback_error}")
-
-            return {
-                "match_found": False,
-                "reasoning": f"Error in intent analysis: {str(e)}",
-            }
-
-    def _extract_url_params(self, url: str) -> List[str]:
-        """Extraer parámetros requeridos de la URL template"""
-        return re.findall(r"\{(\w+)\}", url)
-
-    async def _get_missing_params_from_user(
-        self, missing_params: List[str], function_name: str
-    ) -> Dict[str, str]:
-        """Solicitar parámetros faltantes al usuario usando IA"""
-        try:
-            # Crear un prompt más específico y útil
-            param_prompt = f"""El usuario necesita proporcionar parámetros para la función '{function_name}'.
-
-Parámetros faltantes: {', '.join(missing_params)}
-
-Por favor, pide al usuario que proporcione los parámetros faltantes de una manera natural y conversacional en español.
-Pide TODOS los parámetros faltantes de una vez para evitar múltiples interacciones.
-
-Función: {function_name}
-Parámetros faltantes: {missing_params}
-
-Responde de manera amigable y útil, explicando qué información necesitas."""
-
-            response = await self.llm.ainvoke([HumanMessage(content=param_prompt)])
-            return {
-                "message": response.content,
-                "next_param": missing_params[0] if missing_params else None,
-                "remaining_params": (
-                    missing_params[1:] if len(missing_params) > 1 else []
-                ),
-            }
-
-        except Exception as e:
-            logger.error(f"Error getting missing params: {e}")
-            return {
-                "message": f"Para ejecutar la función '{function_name}', necesito que me proporciones los siguientes parámetros: {', '.join(missing_params)}. Por favor, proporciona todos los valores necesarios.",
-                "next_param": missing_params[0] if missing_params else None,
-                "remaining_params": (
-                    missing_params[1:] if len(missing_params) > 1 else []
-                ),
-            }
-
-    def _build_complete_url(self, url_template: str, params: Dict[str, str]) -> str:
-        """Construir URL completa reemplazando parámetros"""
-        final_url = url_template
-        for param, value in params.items():
-            final_url = final_url.replace(f"{{{param}}}", str(value))
-        return final_url
-
-    async def _execute_simple_function(
-        self, function_config: FunctionConfig, params: Dict[str, str]
-    ) -> Dict[str, Any]:
-        """Ejecutar función simple"""
-        try:
-            # Construir URL completa
-            final_url = self._build_complete_url(function_config.url, params)
-
-            # Ejecutar función HTTP directamente usando aiohttp
-            import aiohttp
-
-            async with aiohttp.ClientSession() as session:
-                async with session.request(
-                    method=function_config.method,
-                    url=final_url,
-                    headers={"User-Agent": "Assistant-IA-API/1.0"},
-                ) as response:
-                    response.raise_for_status()
-                    result = await response.json()
-
-            return {
-                "success": True,
-                "result": result,
-                "url_executed": final_url,
-                "type": "simple_function",
-            }
-
-        except Exception as e:
-            logger.error(f"Error executing simple function {function_config.name}: {e}")
-            return {"success": False, "error": str(e), "type": "simple_function"}
-
-    async def _execute_workflow(
-        self, function_config: FunctionConfig, params: Dict[str, str], profile=None, auth_token: str = None
-    ) -> Dict[str, Any]:
-        """Ejecutar workflow"""
-        try:
-            # Ejecutar workflow usando el nombre y parámetros
-            # El workflow ya debería estar registrado en workflow_executor
-            logger.info(f"Executing workflow: {function_config.name} with params: {params}")
-
-            result = await self.workflow_executor.execute_workflow(
-                workflow_name=function_config.name,
-                input_params=params,
-                profile=profile,
-                auth_token=auth_token
-            )
-
-            return {"success": True, "result": result, "type": "workflow"}
-
-        except Exception as e:
-            logger.error(f"Error executing workflow {function_config.name}: {e}")
-            return {"success": False, "error": str(e), "type": "workflow"}
-
-    async def execute_function(
-        self, user_message: str, profile: Profile, chat_history: List[str] = None, auth_token: str = None
-    ) -> str:
-        """Ejecutar función basada en el mensaje del usuario"""
-        try:
-            # Obtener todas las funciones disponibles (perfil + globales)
-            available_functions = self._get_all_available_functions(profile)
-
-            if not available_functions:
-                return "No hay funciones configuradas para tu perfil."
-
-            # Usar user_id del perfil para almacenamiento
-            user_id = profile.user_id or "default_user"
-
-            # Verificar si el usuario está proporcionando parámetros para una función en progreso
-            ongoing_function = self._detect_ongoing_function(user_id, user_message)
-            if ongoing_function:
-                logger.info(f"Ongoing function detected: {ongoing_function}, processing user response")
-                # El usuario está proporcionando parámetros, procesarlos
-                return await self._process_ongoing_function(
-                    user_id, ongoing_function, user_message, available_functions, profile=profile, auth_token=auth_token
-                )
-            else:
-                logger.info("No ongoing function detected, analyzing as new request")
-
-            # Analizar intención del usuario con IA
-            logger.info(f"Analyzing user intent for message: {user_message[:100]}...")
-            intent_analysis = await self._analyze_user_intent(
-                user_message, available_functions, chat_history
-            )
-
-            logger.info(f"Intent analysis result: {intent_analysis}")
-
-            # Verificar que el análisis de intención sea válido
-            if not isinstance(intent_analysis, dict):
-                logger.error(f"Invalid intent analysis result: {intent_analysis}")
-                return "Lo siento, tuve un problema al analizar tu solicitud. Por favor, intenta reformular tu pregunta."
-
-            if not intent_analysis.get("match_found", False):
-                reasoning = intent_analysis.get(
-                    "reasoning",
-                    "No se encontró una función que coincida con tu solicitud.",
-                )
-                logger.info(f"No function match found. Reasoning: {reasoning}")
-                return f"No encontré una función que coincida con tu solicitud. {reasoning}"
-
-            # Encontrar la función coincidente
-            matched_function_name = intent_analysis.get("function_name")
-            logger.info(f"Matched function name: {matched_function_name}")
-            matched_function = None
-
-            for func in available_functions:
-                if func.name == matched_function_name:
-                    matched_function = func
-                    logger.info(f"Found matched function: {func.name}, type: {func.type}")
-                    break
-
-            if not matched_function:
-                logger.error(f"Function '{matched_function_name}' not found in configuration")
-                return f"Error: No se pudo encontrar la función '{matched_function_name}' en la configuración."
-
-            # Verificar parámetros faltantes
-            missing_params = intent_analysis.get("missing_params", [])
-            extracted_params = intent_analysis.get("extracted_params", {})
-
-            logger.info(f"Missing params: {missing_params}, Extracted params: {extracted_params}")
-
-            # Combinar parámetros extraídos con los almacenados previamente
-            stored_params = self._get_stored_function_params(
-                user_id, matched_function.name
-            )
-            all_params = {**stored_params, **extracted_params}
-
-            if self.mcp_client:
-                try:
-                    user_timezone = profile.timezone if hasattr(profile, 'timezone') and profile.timezone else "America/Argentina/Buenos_Aires"
-                    all_params = await self._enrich_params_with_mcp(all_params, user_timezone)
-                    logger.info(f"Parameters enriched with MCP: {all_params}")
-                except Exception as e:
-                    logger.error(f"Error enriching params with MCP: {str(e)}")
-
-            if "start_time" in all_params and f"__start_time_has_time" in all_params:
-                if not all_params["__start_time_has_time"]:
-                    logger.info(f"start_time has date but NO time specified: {all_params.get('__start_time_original')}")
-                    missing_params.append("time")
-
-            if missing_params:
-                if extracted_params:
-                    self._store_function_params(
-                        user_id, matched_function.name, extracted_params
-                    )
-
-                if "time" in missing_params:
-                    original_date = all_params.get("__start_time_original", "la fecha indicada")
-                    return f"¿A qué hora quieres la reunión? (Has indicado: {original_date})"
-
-                # Solicitar parámetros faltantes
-                param_request = await self._get_missing_params_from_user(
-                    missing_params, matched_function.name
-                )
-                return param_request["message"]
-
-            clean_params = self._clean_metadata_params(all_params)
-
-            logger.info(f"Executing function type: {matched_function.type}, name: {matched_function.name}")
-            if matched_function.type == "simple":
-                logger.info(f"Calling _execute_simple_function with params: {clean_params}")
-                execution_result = await self._execute_simple_function(
-                    matched_function, clean_params
-                )
-            elif matched_function.type == "workflow":
-                logger.info(f"Calling _execute_workflow with params: {clean_params}")
-                execution_result = await self._execute_workflow(
-                    matched_function, clean_params, profile=profile, auth_token=auth_token
-                )
-                logger.info(f"Workflow execution result: {execution_result}")
-            else:
-                logger.error(f"Unsupported function type: {matched_function.type}")
-                return f"Tipo de función no soportado: {matched_function.type}"
-
-            if not execution_result.get("success", False):
-                logger.error(f"Function execution failed: {execution_result}")
-                return f"Error ejecutando {matched_function.name}: {execution_result.get('error', 'Error desconocido')}"
-
-            logger.info(f"Function executed successfully: {matched_function.name}")
-
-            # Generar respuesta amigable usando IA
-            friendly_response = await self._generate_friendly_response(
-                matched_function.name,
-                matched_function.type,
-                execution_result,
-                all_params
-            )
-            return friendly_response
-
-        except Exception as e:
-            logger.error(f"Error in smart function execution: {e}")
-            return (
-                f"Lo siento, tuve un problema al procesar tu solicitud. Error: {str(e)}"
-            )
-
-    def get_available_functions(self, profile: Profile) -> List[Dict[str, Any]]:
-        """Obtener información sobre funciones disponibles"""
-        try:
-            if not profile.functions:
-                return []
-
-            available_functions = self._parse_functions_config(profile.functions)
-            functions_info = []
-
-            for func in available_functions:
-                info = {
-                    "name": func.name,
-                    "type": func.type,
-                    "sequential": func.sequential,
-                    "sequential_number": func.sequential_number,
-                    "method": func.method,
-                    "url": func.url,
+                return self._fallback_intent_analysis(user_question, available_functions) or {
+                    "match_found": False,
+                    "reasoning": str(e),
                 }
-                functions_info.append(info)
-
-            return functions_info
-
-        except Exception as e:
-            logger.error(f"Error getting available functions: {e}")
-            return []
+            except Exception:
+                return {"match_found": False, "reasoning": str(e)}
 
     def _fallback_intent_analysis(
         self, user_question: str, available_functions: List[FunctionConfig]
     ) -> Optional[Dict[str, Any]]:
-        """Análisis de intención de fallback usando búsqueda simple de palabras clave"""
-        try:
-            user_question_lower = user_question.lower()
+        """Keyword-based fallback when the LLM is unavailable."""
+        lower = user_question.lower()
 
-            # Buscar coincidencias por nombre de función
-            for func in available_functions:
-                if func.name.lower() in user_question_lower:
-                    # Intentar extraer parámetros básicos
-                    extracted_params = self._extract_basic_params(user_question, func)
-
+        for func in available_functions:
+            if func.name.lower() in lower:
+                return {
+                    "match_found": True,
+                    "function_name": func.name,
+                    "confidence": 0.7,
+                    "reasoning": f"Name match: {func.name}",
+                    "missing_params": [],
+                    "extracted_params": self._extract_generic_params(user_question),
+                }
+            for keyword in func.keywords:
+                if keyword.lower() in lower:
                     return {
                         "match_found": True,
                         "function_name": func.name,
-                        "confidence": 0.7,
-                        "reasoning": f"Coincidencia encontrada por nombre de función: {func.name}",
+                        "confidence": 0.6,
+                        "reasoning": f"Keyword match: {keyword}",
                         "missing_params": [],
-                        "extracted_params": extracted_params,
+                        "extracted_params": self._extract_generic_params(user_question),
                     }
 
-                # Buscar por palabras clave
-                if hasattr(func, "keywords") and func.keywords:
-                    for keyword in func.keywords:
-                        if keyword.lower() in user_question_lower:
-                            # Intentar extraer parámetros básicos
-                            extracted_params = self._extract_basic_params(
-                                user_question, func
-                            )
+        return None
 
-                            return {
-                                "match_found": True,
-                                "function_name": func.name,
-                                "confidence": 0.6,
-                                "reasoning": f"Coincidencia encontrada por palabra clave: {keyword}",
-                                "missing_params": [],
-                                "extracted_params": extracted_params,
-                            }
+    # ------------------------------------------------------------------
+    # Generic parameter extraction
+    # ------------------------------------------------------------------
 
-                # Buscar por descripción
-                if hasattr(func, "description") and func.description:
-                    description_lower = func.description.lower()
-                    if any(
-                        word in description_lower
-                        for word in user_question_lower.split()
-                    ):
-                        return {
-                            "match_found": True,
-                            "function_name": func.name,
-                            "confidence": 0.5,
-                            "reasoning": f"Coincidencia encontrada por descripción de la función",
-                            "missing_params": [],
-                            "extracted_params": {},
-                        }
+    def _extract_url_params(self, url: str) -> List[str]:
+        """Return all {param} placeholders found in a URL template."""
+        return re.findall(r"\{(\w+)\}", url)
 
-            return None
+    def _extract_generic_params(self, text: str) -> Dict[str, str]:
+        """
+        Extract format-driven parameters that are unambiguous regardless of domain:
+        - Decimal coordinate pairs  (lat, lon)
+        - Email addresses
+        - Phone numbers
+        """
+        extracted: Dict[str, str] = {}
+
+        # Coordinate pair (e.g. "-34.61, -58.37")
+        coord = re.search(r"(-?\d+\.?\d*)\s*,\s*(-?\d+\.?\d*)", text)
+        if coord:
+            extracted["lat"] = coord.group(1)
+            extracted["lon"] = coord.group(2)
+
+        # Email
+        email = re.search(r"\b([a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,})\b", text)
+        if email:
+            extracted["email"] = email.group(1)
+
+        # Phone (E.164-ish)
+        phone = re.search(r"(\+?\d{1,3}[\s-]?\d{3,4}[\s-]?\d{6,7})", text)
+        if phone:
+            extracted["phone"] = phone.group(1).replace(" ", "").replace("-", "")
+
+        return extracted
+
+    # ------------------------------------------------------------------
+    # Missing-param collection
+    # ------------------------------------------------------------------
+
+    async def _request_missing_params(
+        self, missing_params: List[str], function_name: str
+    ) -> Dict[str, Any]:
+        """Ask the LLM to generate a natural request for missing parameters."""
+        try:
+            prompt = (
+                f"The user wants to use the function '{function_name}' but the following "
+                f"parameters are still needed: {', '.join(missing_params)}.\n\n"
+                "Ask the user to provide all missing parameters in a single, natural, "
+                "conversational message. Match the language the user is using."
+            )
+            response = await self.llm.ainvoke([HumanMessage(content=prompt)])
+            return {
+                "message": response.content,
+                "next_param": missing_params[0] if missing_params else None,
+                "remaining_params": missing_params[1:] if len(missing_params) > 1 else [],
+            }
+        except Exception as e:
+            logger.error(f"Error requesting missing params: {e}")
+            return {
+                "message": f"To run '{function_name}', I still need: {', '.join(missing_params)}. Please provide them.",
+                "next_param": missing_params[0] if missing_params else None,
+                "remaining_params": missing_params[1:] if len(missing_params) > 1 else [],
+            }
+
+    # ------------------------------------------------------------------
+    # Execution
+    # ------------------------------------------------------------------
+
+    def _build_url(self, url_template: str, params: Dict[str, str]) -> str:
+        for param, value in params.items():
+            url_template = url_template.replace(f"{{{param}}}", str(value))
+        return url_template
+
+    async def _execute_simple_function(
+        self, function_config: FunctionConfig, params: Dict[str, str]
+    ) -> Dict[str, Any]:
+        """Execute a simple HTTP function."""
+        try:
+            import aiohttp
+
+            url = self._build_url(function_config.url, params)
+            headers: Dict[str, str] = {}
+            if function_config.headers:
+                try:
+                    raw_headers = json.loads(function_config.headers) if isinstance(function_config.headers, str) else function_config.headers
+                    for k, v in raw_headers.items():
+                        headers[k] = self._build_url(str(v), params)
+                except Exception:
+                    pass
+
+            body = None
+            if function_config.body:
+                try:
+                    raw_body = function_config.body if isinstance(function_config.body, str) else json.dumps(function_config.body)
+                    body = json.loads(self._build_url(raw_body, params))
+                except Exception:
+                    pass
+
+            kwargs: Dict[str, Any] = {}
+            if body and function_config.method.upper() not in ("GET", "DELETE"):
+                kwargs["json"] = body
+
+            timeout = aiohttp.ClientTimeout(total=30)
+            async with aiohttp.ClientSession() as session:
+                async with session.request(
+                    method=function_config.method,
+                    url=url,
+                    headers=headers,
+                    timeout=timeout,
+                    **kwargs,
+                ) as response:
+                    response.raise_for_status()
+                    result = await response.json()
+
+            return {"success": True, "result": result, "url_executed": url, "type": "simple_function"}
 
         except Exception as e:
-            logger.error(f"Error in fallback intent analysis: {e}")
-            return None
+            logger.error(f"Error executing simple function '{function_config.name}': {e}")
+            return {"success": False, "error": str(e), "type": "simple_function"}
 
-    def _detect_ongoing_function(
-        self, user_id: str, user_message: str
-    ) -> Optional[str]:
-        """Detecta si el usuario está proporcionando parámetros para una función en progreso"""
-        if user_id in self.function_params_storage:
-            # Si hay parámetros almacenados, significa que hay una función en progreso
-            # Retornar la primera función que tenga parámetros almacenados
-            for function_name, params in self.function_params_storage[user_id].items():
-                if params:  # Si hay parámetros almacenados
-                    logger.info(f"Detected ongoing function: {function_name} with stored params: {params}")
-                    return function_name
+    async def _execute_workflow(
+        self,
+        function_config: FunctionConfig,
+        params: Dict[str, str],
+        profile=None,
+        auth_token: str = None,
+    ) -> Dict[str, Any]:
+        """Execute a registered workflow."""
+        try:
+            result = await self.workflow_executor.execute_workflow(
+                workflow_name=function_config.name,
+                input_params=params,
+                profile=profile,
+                auth_token=auth_token,
+            )
+            return {"success": True, "result": result, "type": "workflow"}
+        except Exception as e:
+            logger.error(f"Error executing workflow '{function_config.name}': {e}")
+            return {"success": False, "error": str(e), "type": "workflow"}
+
+    # ------------------------------------------------------------------
+    # Friendly response generation
+    # ------------------------------------------------------------------
+
+    async def _generate_friendly_response(
+        self,
+        function_name: str,
+        function_type: str,
+        execution_result: Dict[str, Any],
+        params: Dict[str, str],
+    ) -> str:
+        """Ask the LLM to turn a raw execution result into a user-friendly message."""
+        try:
+            result_data = execution_result.get("result", {})
+
+            if function_type == "workflow":
+                context_data = result_data.get("context", {})
+                steps_executed = result_data.get("steps_executed", [])
+                final_result = result_data.get("final_result", {})
+                has_error = not steps_executed
+
+                context_str = (
+                    f"Type: Workflow\n"
+                    f"Name: {function_name}\n"
+                    f"Steps executed: {', '.join(steps_executed) if steps_executed else 'NONE'}\n"
+                    f"Step results: {json.dumps(final_result, indent=2, ensure_ascii=False)}\n"
+                    f"Parameters used: {json.dumps(params, indent=2, ensure_ascii=False)}\n"
+                    f"Error detected: {'YES' if has_error else 'NO'}"
+                )
+            else:
+                context_str = (
+                    f"Type: Simple function\n"
+                    f"Name: {function_name}\n"
+                    f"Parameters used: {json.dumps(params, indent=2, ensure_ascii=False)}\n"
+                    f"Result: {json.dumps(result_data, indent=2, ensure_ascii=False)}"
+                )
+
+            prompt = (
+                f"You are an assistant generating natural, friendly responses based on the "
+                f"results of technical operations. Match the language the user has been using.\n\n"
+                f"Operation executed:\n{context_str}\n\n"
+                f"Instructions:\n"
+                f"1. If 'Error detected: YES' or no steps were executed, inform the user about the error clearly\n"
+                f"2. If successful, confirm success and include the most relevant details\n"
+                f"3. Be concise and conversational — avoid raw JSON or technical data\n\n"
+                f"Generate the response now:"
+            )
+
+            response = await self.llm.ainvoke([HumanMessage(content=prompt)])
+            return response.content.strip()
+
+        except Exception as e:
+            logger.error(f"Error generating friendly response: {e}", exc_info=True)
+            return (
+                f"✅ '{function_name}' completed successfully."
+                if function_type != "workflow"
+                else f"✅ Workflow '{function_name}' completed successfully."
+            )
+
+    # ------------------------------------------------------------------
+    # Main entry point
+    # ------------------------------------------------------------------
+
+    async def execute_function(
+        self,
+        user_message: str,
+        profile: Profile,
+        chat_history: List[str] = None,
+        auth_token: str = None,
+    ) -> str:
+        """Analyze the user message, find a matching function, and execute it."""
+        try:
+            available_functions = self._get_all_available_functions(profile)
+            if not available_functions:
+                return "No functions are configured for this profile."
+
+            user_id = profile.user_id or "default_user"
+
+            # Check if a multi-turn collection is already in progress
+            ongoing_function = self._detect_ongoing_function(user_id)
+            if ongoing_function:
+                return await self._process_ongoing_function(
+                    user_id, ongoing_function, user_message, available_functions,
+                    profile=profile, auth_token=auth_token,
+                )
+
+            # Analyze intent
+            intent = await self._analyze_user_intent(user_message, available_functions, chat_history)
+
+            if not isinstance(intent, dict) or not intent.get("match_found", False):
+                reasoning = intent.get("reasoning", "") if isinstance(intent, dict) else ""
+                return f"I couldn't find a function that matches your request. {reasoning}".strip()
+
+            matched_name = intent.get("function_name")
+            matched_function = next((f for f in available_functions if f.name == matched_name), None)
+            if not matched_function:
+                return f"Error: function '{matched_name}' not found in configuration."
+
+            missing_params: List[str] = intent.get("missing_params", [])
+            extracted_params: Dict[str, Any] = intent.get("extracted_params", {})
+            stored_params = self._get_stored_params(user_id, matched_name)
+            all_params = {**stored_params, **extracted_params}
+
+            if missing_params:
+                if extracted_params:
+                    self._store_params(user_id, matched_name, extracted_params)
+                param_request = await self._request_missing_params(missing_params, matched_name)
+                return param_request["message"]
+
+            clean_params = self._strip_metadata(all_params)
+
+            if matched_function.type == "simple":
+                result = await self._execute_simple_function(matched_function, clean_params)
+            elif matched_function.type == "workflow":
+                result = await self._execute_workflow(matched_function, clean_params, profile, auth_token)
+            else:
+                return f"Unsupported function type: {matched_function.type}"
+
+            if not result.get("success", False):
+                return f"Error running '{matched_name}': {result.get('error', 'Unknown error')}"
+
+            return await self._generate_friendly_response(
+                matched_name, matched_function.type, result, all_params
+            )
+
+        except Exception as e:
+            logger.error(f"Error in SmartFunctionExecutor: {e}", exc_info=True)
+            return f"Sorry, I had a problem processing your request. Error: {str(e)}"
+
+    # ------------------------------------------------------------------
+    # Multi-turn parameter collection
+    # ------------------------------------------------------------------
+
+    def _detect_ongoing_function(self, user_id: str) -> Optional[str]:
+        """Return the name of the function currently awaiting parameters, or None."""
+        user_storage = self.function_params_storage.get(user_id, {})
+        for function_name, params in user_storage.items():
+            if params:
+                return function_name
         return None
 
     async def _process_ongoing_function(
@@ -674,566 +562,105 @@ Responde de manera amigable y útil, explicando qué información necesitas."""
         profile=None,
         auth_token: str = None,
     ) -> str:
-        """Procesa parámetros proporcionados para una función en progreso"""
+        """Continue collecting parameters for a function already in progress."""
         try:
-            logger.info(f"Processing ongoing function: {function_name}")
-            # Encontrar la función
-            matched_function = None
-            for func in available_functions:
-                if func.name == function_name:
-                    matched_function = func
-                    break
-
+            matched_function = next((f for f in available_functions if f.name == function_name), None)
             if not matched_function:
-                logger.error(f"Function {function_name} not found in available functions")
-                return f"Error: No se pudo encontrar la función '{function_name}'"
+                return f"Error: function '{function_name}' not found."
 
-            # Obtener parámetros almacenados
-            stored_params = self._get_stored_function_params(user_id, function_name)
-            logger.info(f"Stored params for {function_name}: {stored_params}")
+            stored_params = self._get_stored_params(user_id, function_name)
+            new_params = self._extract_generic_params(user_message)
 
-            # Extraer parámetros del mensaje
-            extracted_params = self._extract_basic_params(
-                user_message, matched_function
-            )
-            logger.info(f"Extracted params from message: {extracted_params}")
-
-            # Determinar parámetros requeridos según el tipo de función
-            if matched_function.type == "workflow":
-                # Para workflows, obtener del registro
-                if function_name in self.workflow_executor.workflows:
-                    workflow = self.workflow_executor.workflows[function_name]
-                    required_params = workflow.get("input_params", [])
-                else:
-                    required_params = []
+            # Determine required params
+            if matched_function.type == "workflow" and function_name in self.workflow_executor.workflows:
+                required_params = self.workflow_executor.workflows[function_name].get("input_params", [])
             else:
                 required_params = self._extract_url_params(matched_function.url)
 
-            logger.info(f"Required params: {required_params}")
+            all_params = {**stored_params, **new_params}
 
-            all_params = {**stored_params, **extracted_params}
+            # If no structured params were extracted, assume the whole message is for
+            # the single remaining missing param
+            missing = [p for p in required_params if p not in all_params]
+            if missing and not new_params:
+                all_params[missing[0]] = user_message.strip()
+                new_params[missing[0]] = user_message.strip()
+                missing = missing[1:]
 
-            missing_params = [
-                param for param in required_params if param not in all_params
-            ]
+            if new_params:
+                self._store_params(user_id, function_name, new_params)
 
-            if "start_time" in all_params and f"__start_time_has_time" in all_params:
-                if not all_params["__start_time_has_time"]:
-                    logger.info(f"start_time has date but NO time specified: {all_params.get('__start_time_original')}")
-                    missing_params.append("time")
+            missing = [p for p in required_params if p not in all_params]
+            if missing:
+                param_request = await self._request_missing_params(missing, function_name)
+                return param_request["message"]
 
-            logger.info(f"Missing params: {missing_params}, All params: {all_params}")
-
-            if len(missing_params) == 1 and not extracted_params:
-                missing_param = missing_params[0]
-
-                if missing_param == "time":
-                    time_text = user_message.strip()
-                    original_date = all_params.get("__start_time_original", "")
-
-                    combined_text = f"{original_date} {time_text}"
-                    logger.info(f"Combining date + time: '{original_date}' + '{time_text}' = '{combined_text}'")
-
-                    user_timezone = profile.timezone if profile and hasattr(profile, 'timezone') else "America/Argentina/Buenos_Aires"
-                    parsed_result = await self._parse_date_with_mcp(combined_text, user_timezone)
-
-                    if parsed_result and parsed_result["has_time"]:
-                        all_params["start_time"] = parsed_result["rfc3339"]
-                        all_params["__start_time_has_time"] = True
-                        extracted_params["start_time"] = parsed_result["rfc3339"]
-                        logger.info(f"Updated start_time with hour: {parsed_result['rfc3339']}")
-                        missing_params = []
-                    else:
-                        logger.warning(f"Failed to parse time '{time_text}'")
-                        return f"No pude entender la hora '{time_text}'. Por favor especifica una hora válida (ej: '10am', '15:00', '3 de la tarde')"
-                else:
-                    extracted_params[missing_param] = user_message.strip()
-                    all_params[missing_param] = user_message.strip()
-                    logger.info(f"Assumed message is for missing param '{missing_param}': {user_message.strip()}")
-                    missing_params = []
-
-            if extracted_params:
-                self._store_function_params(user_id, function_name, extracted_params)
-                logger.info(f"Stored new params: {extracted_params}")
-
-            if missing_params:
-                logger.info(f"Still missing params: {missing_params}")
-
-                if "time" in missing_params:
-                    original_date = all_params.get("__start_time_original", "la fecha indicada")
-                    return f"¿A qué hora quieres la reunión? (Has indicado: {original_date})"
-
-                return f"Gracias por proporcionar esa información. Aún necesito: {', '.join(missing_params)}"
+            # All params collected — execute
+            clean_params = self._strip_metadata(all_params)
+            if matched_function.type == "simple":
+                result = await self._execute_simple_function(matched_function, clean_params)
+            elif matched_function.type == "workflow":
+                result = await self._execute_workflow(matched_function, clean_params, profile, auth_token)
             else:
-                logger.info(f"All params collected, executing {matched_function.type}: {function_name}")
+                return f"Unsupported function type: {matched_function.type}"
 
-                clean_params = self._clean_metadata_params(all_params)
-
-                # Tenemos todos los parámetros, ejecutar la función
-                if matched_function.type == "simple":
-                    execution_result = await self._execute_simple_function(
-                        matched_function, clean_params
-                    )
-                elif matched_function.type == "workflow":
-                    execution_result = await self._execute_workflow(
-                        matched_function, clean_params, profile=profile, auth_token=auth_token
-                    )
-                else:
-                    return f"Tipo de función no soportado: {matched_function.type}"
-
-                if execution_result.get("success", False):
-                    self._clear_function_params(user_id, function_name)
-
-                    friendly_response = await self._generate_friendly_response(
-                        function_name,
-                        matched_function.type,
-                        execution_result,
-                        all_params
-                    )
-                    return friendly_response
-                else:
-                    return f"Error ejecutando {function_name}: {execution_result.get('error', 'Error desconocido')}"
+            if result.get("success", False):
+                self._clear_params(user_id, function_name)
+                return await self._generate_friendly_response(
+                    function_name, matched_function.type, result, all_params
+                )
+            else:
+                return f"Error running '{function_name}': {result.get('error', 'Unknown error')}"
 
         except Exception as e:
-            logger.error(f"Error processing ongoing function: {e}")
-            return (
-                f"Lo siento, tuve un problema al procesar la función. Error: {str(e)}"
-            )
+            logger.error(f"Error processing ongoing function: {e}", exc_info=True)
+            return f"Sorry, I had a problem continuing. Error: {str(e)}"
 
-    def _extract_basic_params(
-        self, user_question: str, function_config: FunctionConfig
-    ) -> Dict[str, str]:
-        """Extrae parámetros básicos de la pregunta del usuario usando patrones simples"""
+    # ------------------------------------------------------------------
+    # Parameter storage (in-memory)
+    # ------------------------------------------------------------------
+
+    def _store_params(self, user_id: str, function_name: str, params: Dict[str, Any]):
+        self.function_params_storage.setdefault(user_id, {}).setdefault(function_name, {}).update(params)
+
+    def _get_stored_params(self, user_id: str, function_name: str) -> Dict[str, Any]:
+        return self.function_params_storage.get(user_id, {}).get(function_name, {}).copy()
+
+    def _clear_params(self, user_id: str, function_name: str):
         try:
-            extracted_params = {}
-            user_question_lower = user_question.lower()
-
-            # Buscar coordenadas en formato lat,lon o latitud,longitud
-            import re
-
-            # Patrón para coordenadas decimales
-            coord_pattern = r"(-?\d+\.?\d*)\s*[,]\s*(-?\d+\.?\d*)"
-            coord_match = re.search(coord_pattern, user_question)
-            if coord_match:
-                extracted_params["lat"] = coord_match.group(1)
-                extracted_params["lon"] = coord_match.group(2)
-
-            # Patrón para números individuales que podrían ser coordenadas
-            numbers = re.findall(r"-?\d+\.?\d*", user_question)
-            if len(numbers) >= 2 and "lat" not in extracted_params:
-                # Asumir que los dos primeros números son lat y lon
-                extracted_params["lat"] = numbers[0]
-                extracted_params["lon"] = numbers[1]
-
-            # Buscar fechas - múltiples formatos
-            # Patrón para check-in / checkin / entrada / llegada
-            checkin_patterns = [
-                r'check[\s-]?in[:\s]+(\d{1,2}[/\-\.]\d{1,2}[/\-\.]\d{4})',
-                r'entrada[:\s]+(\d{1,2}[/\-\.]\d{1,2}[/\-\.]\d{4})',
-                r'llegada[:\s]+(\d{1,2}[/\-\.]\d{1,2}[/\-\.]\d{4})',
-            ]
-            for pattern in checkin_patterns:
-                match = re.search(pattern, user_question_lower)
-                if match:
-                    extracted_params["check_in"] = match.group(1)
-                    logger.debug(f"Extracted check_in date: {match.group(1)}")
-                    break
-
-            # Patrón para check-out / checkout / salida
-            checkout_patterns = [
-                r'check[\s-]?out[:\s]+(\d{1,2}[/\-\.]\d{1,2}[/\-\.]\d{4})',
-                r'salida[:\s]+(\d{1,2}[/\-\.]\d{1,2}[/\-\.]\d{4})',
-            ]
-            for pattern in checkout_patterns:
-                match = re.search(pattern, user_question_lower)
-                if match:
-                    extracted_params["check_out"] = match.group(1)
-                    logger.debug(f"Extracted check_out date: {match.group(1)}")
-                    break
-
-            # Buscar número de huéspedes / guests
-            guests_patterns = [
-                r'hu[eé]spedes?[:\s]+(\d+)',
-                r'guests?[:\s]+(\d+)',
-                r'personas?[:\s]+(\d+)',
-                r'(\d+)\s+hu[eé]spedes?',
-                r'(\d+)\s+guests?',
-                r'(\d+)\s+personas?',
-            ]
-            for pattern in guests_patterns:
-                match = re.search(pattern, user_question_lower)
-                if match:
-                    extracted_params["guests"] = match.group(1)
-                    logger.debug(f"Extracted guests: {match.group(1)}")
-                    break
-
-            # Buscar room_id / habitación
-            room_patterns = [
-                r'habitaci[oó]n[:\s]+n[uú]mero[:\s]+(\d+)',
-                r'habitaci[oó]n[:\s]+(\d+)',
-                r'room[:\s]+(\d+)',
-                r'room[\s_]id[:\s]+(\d+)',
-            ]
-            for pattern in room_patterns:
-                match = re.search(pattern, user_question_lower)
-                if match:
-                    extracted_params["room_id"] = match.group(1)
-                    logger.debug(f"Extracted room_id: {match.group(1)}")
-                    break
-
-            # Buscar nombre (guest_name) - extraer palabras antes del email o teléfono
-            # Patrón simple: nombre apellido seguido de email o teléfono
-            name_patterns = [
-                r'^([A-ZÑÁÉÍÓÚ][a-zñáéíóú]+(?:\s+[A-ZÑÁÉÍÓÚ][a-zñáéíóú]+)+)',  # Nombre Apellido capitalizado
-                r'nombre[:\s]+([A-ZÑÁÉÍÓÚ][a-zñáéíóú]+(?:\s+[A-ZÑÁÉÍÓÚ][a-zñáéíóú]+)*)',
-                r'llamo[:\s]+([A-ZÑÁÉÍÓÚ][a-zñáéíóú]+(?:\s+[A-ZÑÁÉÍÓÚ][a-zñáéíóú]+)*)',
-            ]
-            for pattern in name_patterns:
-                match = re.search(pattern, user_question)
-                if match:
-                    extracted_params["guest_name"] = match.group(1).strip()
-                    logger.debug(f"Extracted guest_name: {match.group(1)}")
-                    break
-
-            # Buscar email
-            email_pattern = r'\b([a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,})\b'
-            email_match = re.search(email_pattern, user_question)
-            if email_match:
-                extracted_params["email"] = email_match.group(1)
-                logger.debug(f"Extracted email: {email_match.group(1)}")
-
-            # Buscar teléfono
-            phone_pattern = r'(\+?\d{1,3}[\s-]?\d{3,4}[\s-]?\d{6,7})'
-            phone_match = re.search(phone_pattern, user_question)
-            if phone_match:
-                extracted_params["phone"] = phone_match.group(1).replace(" ", "").replace("-", "")
-                logger.debug(f"Extracted phone: {phone_match.group(1)}")
-
-            # Buscar idioma
-            if "español" in user_question_lower or "spanish" in user_question_lower:
-                extracted_params["accept-language"] = "es"
-            elif "inglés" in user_question_lower or "english" in user_question_lower:
-                extracted_params["accept-language"] = "en"
-            elif "francés" in user_question_lower or "french" in user_question_lower:
-                extracted_params["accept-language"] = "fr"
-
-            # Buscar nivel de zoom
-            if "detalle" in user_question_lower or "detail" in user_question_lower:
-                extracted_params["addressdetails"] = "1"
-
-            # Buscar booking_id / reserva id
-            booking_id_patterns = [
-                r'reserva[:\s]+n[uú]mero[:\s]+(\d+)',
-                r'reserva[:\s]+(\d+)',
-                r'booking[:\s]+(\d+)',
-                r'booking[\s_]id[:\s]+(\d+)',
-                r'id[:\s]+(\d+)',
-            ]
-            for pattern in booking_id_patterns:
-                match = re.search(pattern, user_question_lower)
-                if match:
-                    extracted_params["booking_id"] = match.group(1)
-                    logger.debug(f"Extracted booking_id: {match.group(1)}")
-                    break
-
-            return extracted_params
-
-        except Exception as e:
-            logger.error(f"Error extracting basic params: {e}")
-            return {}
-
-    def _has_time_specified(self, date_text: str) -> bool:
-        """
-        Detecta si el texto tiene una hora específica mencionada
-
-        Args:
-            date_text: Texto en lenguaje natural (ej: "mañana", "mañana a las 3pm")
-
-        Returns:
-            True si tiene hora especificada, False si solo tiene fecha
-        """
-        date_lower = date_text.lower().strip()
-
-        # Patrones que indican hora específica
-        time_patterns = [
-            # Formatos con hora explícita
-            r'\d{1,2}:\d{2}',  # 10:30, 3:45
-            r'\d{1,2}\s*(am|pm|a\.m\.|p\.m\.)',  # 3pm, 10 am, 3 p.m.
-            r'\d{1,2}\s*(hs|horas)',  # 10hs, 3 horas
-            # Expresiones de hora
-            r'a\s+las\s+\d',  # a las 3, a las 10
-            r'at\s+\d',  # at 3, at 10
-            r'às\s+\d',  # às 3 (portugués)
-            # Momentos del día específicos con contexto de hora
-            r'(mediodía|medianoche|noon|midnight)',
-            # Frases que implican hora
-            r'(de la mañana|de la tarde|de la noche)',
-            r'(in the morning|in the afternoon|in the evening)',
-        ]
-
-        import re
-        for pattern in time_patterns:
-            if re.search(pattern, date_lower):
-                return True
-
-        return False
-
-    async def _parse_date_with_mcp(
-        self,
-        date_text: str,
-        user_timezone: str = "America/Argentina/Buenos_Aires"
-    ) -> Optional[Dict[str, Any]]:
-        """
-        Parse natural language date using MCP server
-
-        Args:
-            date_text: Natural language date (e.g., "tomorrow at 3pm", "next Monday")
-            user_timezone: User's timezone for interpretation
-
-        Returns:
-            Dictionary with parsed date and metadata, or None if parsing fails
-            Format: {
-                "rfc3339": "2025-11-05T15:00:00-0300",
-                "has_time": True/False
-            }
-        """
-        if not self.mcp_client:
-            logger.warning("MCP client not available for date parsing")
-            return None
-
-        try:
-            # Detectar si tiene hora especificada
-            has_time_specified = self._has_time_specified(date_text)
-
-            result = await self.mcp_client.parse_natural_date(
-                text=date_text,
-                timezone=user_timezone
-            )
-
-            if result.get("success"):
-                rfc3339_date = result["parsed_datetime"]["rfc3339"]
-                logger.info(f"MCP parsed '{date_text}' to '{rfc3339_date}' (has_time: {has_time_specified})")
-
-                return {
-                    "rfc3339": rfc3339_date,
-                    "has_time": has_time_specified,
-                    "original": date_text
-                }
-            else:
-                logger.warning(f"MCP failed to parse '{date_text}': {result.get('message')}")
-                return None
-
-        except Exception as e:
-            logger.error(f"Error using MCP for date parsing: {str(e)}")
-            return None
-
-    async def _enrich_params_with_mcp(
-        self,
-        params: Dict[str, Any],
-        user_timezone: str = "America/Argentina/Buenos_Aires"
-    ) -> Dict[str, Any]:
-        """
-        Enrich extracted parameters with MCP date parsing
-        Looks for date-related parameters and converts them to RFC3339 format
-
-        Also stores metadata about whether time was specified for validation later
-
-        Args:
-            params: Dictionary of extracted parameters
-            user_timezone: User's timezone
-
-        Returns:
-            Enhanced parameters dictionary with parsed dates and metadata
-        """
-        if not self.mcp_client:
-            return params
-
-        # Date-related parameter names to check
-        date_params = [
-            "start_time", "end_time", "date", "datetime",
-            "check_in", "check_out", "start_date", "end_date",
-            "from_date", "to_date", "scheduled_time"
-        ]
-
-        enriched_params = params.copy()
-
-        for param_name in date_params:
-            if param_name in params:
-                param_value = str(params[param_name])
-
-                # Check if it's already in RFC3339 format
-                if self._is_rfc3339_format(param_value):
-                    continue
-
-                # Try to parse with MCP
-                parsed_result = await self._parse_date_with_mcp(param_value, user_timezone)
-                if parsed_result:
-                    # Store the RFC3339 date
-                    enriched_params[param_name] = parsed_result["rfc3339"]
-
-                    # Store metadata about whether time was specified
-                    # This will be used to determine if we need to ask for time
-                    enriched_params[f"__{param_name}_has_time"] = parsed_result["has_time"]
-                    enriched_params[f"__{param_name}_original"] = parsed_result["original"]
-
-                    logger.info(f"Enriched {param_name}: '{param_value}' → '{parsed_result['rfc3339']}' (has_time: {parsed_result['has_time']})")
-
-        return enriched_params
-
-    def _is_rfc3339_format(self, date_str: str) -> bool:
-        """Check if string is already in RFC3339 format"""
-        import re
-        rfc3339_pattern = r'^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}([+-]\d{2}:\d{2}|Z)$'
-        return bool(re.match(rfc3339_pattern, date_str))
-
-    def _clean_metadata_params(self, params: Dict[str, Any]) -> Dict[str, Any]:
-        """
-        Limpia parámetros de metadata internos antes de enviar a funciones/workflows
-
-        Los parámetros que empiezan con '__' son metadata interna y deben ser removidos
-
-        Args:
-            params: Diccionario con parámetros (puede incluir metadata)
-
-        Returns:
-            Diccionario limpio sin metadata
-        """
-        return {
-            key: value
-            for key, value in params.items()
-            if not key.startswith("__")
-        }
-
-    async def _generate_friendly_response(
-        self,
-        function_name: str,
-        function_type: str,
-        execution_result: Dict[str, Any],
-        params: Dict[str, str]
-    ) -> str:
-        """Genera una respuesta amigable y natural usando IA basada en el resultado de la ejecución"""
-        try:
-            logger.info(f"[FRIENDLY_RESPONSE] Generating friendly response for {function_name}")
-
-            # Preparar el contexto de ejecución para el LLM
-            result_data = execution_result.get('result', {})
-
-            # Si es un workflow, extraer información relevante
-            if function_type == "workflow":
-                context_data = result_data.get('context', {})
-                steps_executed = result_data.get('steps_executed', [])
-                status = result_data.get('status', 'unknown')
-                final_result = result_data.get('final_result', {})
-
-                # Detectar caso específico: integración de calendario no conectada
-                is_calendar_not_connected = False
-                if 'is_connected' in context_data and context_data.get('is_connected') == False:
-                    is_calendar_not_connected = True
-                elif final_result and 'verificar_integracion_calendario' in final_result:
-                    verification_result = final_result['verificar_integracion_calendario']
-                    if isinstance(verification_result, dict) and verification_result.get('is_active') == False:
-                        is_calendar_not_connected = True
-
-                # Determinar si hubo un error real
-                has_error = not steps_executed or len(final_result) == 0
-
-                # Mensaje específico para calendar not connected
-                calendar_status = ""
-                if is_calendar_not_connected:
-                    calendar_status = "\nATENCIÓN ESPECIAL: El usuario NO tiene Google Calendar conectado (is_active: false). Workflow se detuvo porque requiere integración activa."
-
-                context_str = f"""
-Tipo: Workflow
-Nombre: {function_name}
-Estado: {status}
-Pasos ejecutados exitosamente: {', '.join(steps_executed) if steps_executed else 'NINGUNO - ERROR'}
-Resultados de pasos: {json.dumps(final_result, indent=2, ensure_ascii=False) if final_result else 'VACÍO - ERROR'}
-Parámetros utilizados: {json.dumps(params, indent=2, ensure_ascii=False)}
-Error detectado: {'SÍ - No se ejecutaron pasos correctamente' if has_error else 'NO - Ejecución exitosa'}{calendar_status}
-"""
-            else:
-                # Función simple
-                context_str = f"""
-Tipo: Función simple
-Nombre: {function_name}
-Parámetros utilizados: {json.dumps(params, indent=2, ensure_ascii=False)}
-Resultado: {json.dumps(result_data, indent=2, ensure_ascii=False)}
-"""
-
-            # Crear prompt para generar respuesta amigable
-            prompt = f"""Eres un asistente que genera respuestas naturales y amigables basadas en los resultados de operaciones técnicas.
-
-Operación ejecutada:
-{context_str}
-
-INSTRUCCIONES CRÍTICAS:
-1. PRIMERO revisa si dice "ATENCIÓN ESPECIAL: El usuario NO tiene Google Calendar conectado"
-   - Si aparece esto, DEBES informar que necesita conectar su cuenta de Google Calendar primero
-   - Ofrece ayuda para conectar la integración
-2. Si dice "Error detectado: SÍ" o "Pasos ejecutados" es "NINGUNO - ERROR": Informa el error
-3. Si NO hay error y hay pasos ejecutados exitosos: Confirma el éxito de manera clara y concisa
-4. Incluye los detalles más relevantes de forma conversacional
-5. No incluyas JSON ni datos técnicos crudos
-6. La respuesta debe ser directa, sin introducciones innecesarias
-
-EJEMPLOS DE RESPUESTAS PARA CALENDARIO NO CONECTADO:
-- "Para poder crear eventos en tu calendario, primero necesito que conectes tu cuenta de Google Calendar. ¿Te gustaría que te ayude a configurar la integración?"
-- "Veo que aún no has conectado tu Google Calendar. Necesitas activar esta integración para que pueda crear eventos. ¿Quieres que te muestre cómo hacerlo?"
-
-EJEMPLOS DE RESPUESTAS PARA ÉXITO:
-- "¡Listo! He creado el evento 'Reunión para vender Nymia' en tu calendario para mañana a las 9:00 AM."
-- "Evento agendado exitosamente. Te he programado 'Presentación de producto' para el 5 de noviembre a las 15:00."
-
-EJEMPLOS DE RESPUESTAS PARA ERROR TÉCNICO:
-- "Lo siento, hubo un problema técnico al intentar crear el evento. Por favor intenta nuevamente en unos momentos."
-- "No pude completar la operación debido a un error de conexión. Por favor verifica los datos e intenta nuevamente."
-
-Genera la respuesta amigable ahora:"""
-
-            # Generar respuesta usando el LLM
-            response = await self.llm.ainvoke([HumanMessage(content=prompt)])
-            friendly_text = response.content.strip()
-
-            logger.info(f"[FRIENDLY_RESPONSE] Generated: {friendly_text}")
-            return friendly_text
-
-        except Exception as e:
-            logger.error(f"[FRIENDLY_RESPONSE] Error generating friendly response: {e}", exc_info=True)
-            # Fallback a respuesta básica
-            if function_type == "workflow":
-                return f"✅ Operación '{function_name}' completada exitosamente."
-            else:
-                return f"✅ Función '{function_name}' ejecutada exitosamente."
-
-    def _store_function_params(
-        self, user_id: str, function_name: str, params: Dict[str, str]
-    ):
-        """Almacena parámetros de una función para un usuario específico"""
-        if user_id not in self.function_params_storage:
-            self.function_params_storage[user_id] = {}
-        if function_name not in self.function_params_storage[user_id]:
-            self.function_params_storage[user_id][function_name] = {}
-
-        # Actualizar parámetros existentes
-        self.function_params_storage[user_id][function_name].update(params)
-        logger.debug(f"Stored params for {function_name}: {params}")
-
-    def _get_stored_function_params(
-        self, user_id: str, function_name: str
-    ) -> Dict[str, str]:
-        """Obtiene parámetros almacenados de una función para un usuario específico"""
-        if (
-            user_id in self.function_params_storage
-            and function_name in self.function_params_storage[user_id]
-        ):
-            return self.function_params_storage[user_id][function_name].copy()
-        return {}
-
-    def _clear_function_params(self, user_id: str, function_name: str):
-        """Limpia parámetros almacenados de una función para un usuario específico"""
-        if (
-            user_id in self.function_params_storage
-            and function_name in self.function_params_storage[user_id]
-        ):
             del self.function_params_storage[user_id][function_name]
-            logger.debug(f"Cleared params for {function_name}")
+        except KeyError:
+            pass
+
+    # ------------------------------------------------------------------
+    # Metadata filtering
+    # ------------------------------------------------------------------
+
+    @staticmethod
+    def _strip_metadata(params: Dict[str, Any]) -> Dict[str, Any]:
+        """Remove internal metadata keys (prefixed with '__') before sending to a function."""
+        return {k: v for k, v in params.items() if not k.startswith("__")}
+
+    # ------------------------------------------------------------------
+    # Public info
+    # ------------------------------------------------------------------
+
+    def get_available_functions(self, profile: Profile) -> List[Dict[str, Any]]:
+        """Return a summary of all functions available for a given profile."""
+        try:
+            if not profile.functions:
+                return []
+            return [
+                {
+                    "name": f.name,
+                    "type": f.type,
+                    "sequential": f.sequential,
+                    "sequential_number": f.sequential_number,
+                    "method": f.method,
+                    "url": f.url,
+                }
+                for f in self._parse_functions_config(profile.functions)
+            ]
+        except Exception as e:
+            logger.error(f"Error getting available functions: {e}")
+            return []

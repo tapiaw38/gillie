@@ -1,0 +1,163 @@
+/* Digital Ocean-inspired color palette */
+:root {
+  /* Core whites / blacks */
+  --vt-c-white: #ffffff;
+  --vt-c-white-soft: #f8f8f8;
+  --vt-c-white-mute: #f2f2f2;
+
+  --vt-c-black: #181818;
+  --vt-c-black-soft: #222222;
+  --vt-c-black-mute: #282828;
+
+  /* Digital Ocean Brand */
+  --do-blue: #0069FF;
+  --do-blue-dark: #0052CC;
+  --do-blue-darker: #003D99;
+  --do-navy: #1B1F22;
+  --do-bg: #F5F5F5;
+  --do-bg-white: #FFFFFF;
+  --do-border: #D1D5DA;
+  --do-border-light: #E8EBED;
+  --do-text: #1B1F22;
+  --do-text-secondary: #4D5059;
+  --do-text-muted: #8C9098;
+  --do-success: #0ACF83;
+  --do-warning: #F5A623;
+  --do-danger: #FF4444;
+  --do-info: #2F82FF;
+
+  /* Blue palette aliases — keep references from existing views working */
+  --vt-c-blue-primary: #0069FF;
+  --vt-c-blue-secondary: #0052CC;
+  --vt-c-blue-dark: #1B1F22;
+  --vt-c-blue-light: #2F82FF;
+  --vt-c-blue-lighter: #82B4FF;
+
+  /* Success Colors */
+  --vt-c-success: #0ACF83;
+  --vt-c-success-dark: #08A869;
+  --vt-c-success-light: #34DFA0;
+  --vt-c-success-lighter: #7EEFC4;
+
+  /* Warning Colors */
+  --vt-c-warning: #F5A623;
+  --vt-c-warning-dark: #D4891A;
+  --vt-c-warning-light: #F7B84E;
+  --vt-c-warning-lighter: #FAD08B;
+
+  /* Danger/Error Colors */
+  --vt-c-danger: #FF4444;
+  --vt-c-danger-dark: #CC2222;
+  --vt-c-danger-light: #FF7777;
+  --vt-c-danger-lighter: #FFAAAA;
+
+  /* Info Colors */
+  --vt-c-info: #2F82FF;
+  --vt-c-info-dark: #1A6AE0;
+  --vt-c-info-light: #5FA0FF;
+  --vt-c-info-lighter: #A0C4FF;
+
+  /* Gray/Neutral Colors */
+  --vt-c-gray-50: #F9FAFB;
+  --vt-c-gray-100: #F3F4F6;
+  --vt-c-gray-200: #E8EBED;
+  --vt-c-gray-300: #D1D5DA;
+  --vt-c-gray-400: #8C9098;
+  --vt-c-gray-500: #6B7280;
+  --vt-c-gray-600: #4D5059;
+  --vt-c-gray-700: #374151;
+  --vt-c-gray-800: #1B1F22;
+  --vt-c-gray-900: #111827;
+
+  --vt-c-divider-light-1: rgba(60, 60, 60, 0.29);
+  --vt-c-divider-light-2: rgba(60, 60, 60, 0.12);
+  --vt-c-divider-dark-1: rgba(84, 84, 84, 0.65);
+  --vt-c-divider-dark-2: rgba(84, 84, 84, 0.48);
+
+  --vt-c-text-light-1: #1B1F22;
+  --vt-c-text-light-2: rgba(60, 60, 60, 0.66);
+  --vt-c-text-dark-1: var(--vt-c-white);
+  --vt-c-text-dark-2: rgba(235, 235, 235, 0.64);
+}
+
+/* Semantic color variables */
+:root {
+  --color-background: var(--vt-c-white);
+  --color-background-soft: var(--vt-c-white-soft);
+  --color-background-mute: var(--vt-c-white-mute);
+
+  --color-border: var(--vt-c-divider-light-2);
+  --color-border-hover: var(--vt-c-divider-light-1);
+
+  --color-heading: var(--vt-c-text-light-1);
+  --color-text: var(--vt-c-text-light-1);
+
+  /* Gradients */
+  --gradient-primary: linear-gradient(135deg, #0069FF 0%, #0052CC 100%);
+  --gradient-background: linear-gradient(135deg, #0052CC 0%, #1B1F22 100%);
+  --gradient-text: linear-gradient(135deg, #2F82FF 0%, #82B4FF 100%);
+
+  --gradient-success: linear-gradient(135deg, #0ACF83 0%, #08A869 100%);
+  --gradient-warning: linear-gradient(135deg, #F5A623 0%, #D4891A 100%);
+  --gradient-danger: linear-gradient(135deg, #FF4444 0%, #CC2222 100%);
+  --gradient-info: linear-gradient(135deg, #2F82FF 0%, #1A6AE0 100%);
+
+  /* Semantic Colors */
+  --color-success: var(--vt-c-success);
+  --color-success-dark: var(--vt-c-success-dark);
+  --color-success-light: var(--vt-c-success-light);
+
+  --color-warning: var(--vt-c-warning);
+  --color-warning-dark: var(--vt-c-warning-dark);
+  --color-warning-light: var(--vt-c-warning-light);
+
+  --color-danger: var(--vt-c-danger);
+  --color-danger-dark: var(--vt-c-danger-dark);
+  --color-danger-light: var(--vt-c-danger-light);
+
+  --color-info: var(--vt-c-info);
+  --color-info-dark: var(--vt-c-info-dark);
+  --color-info-light: var(--vt-c-info-light);
+
+  /* Primary Brand */
+  --color-primary: var(--vt-c-blue-primary);
+  --color-primary-dark: var(--vt-c-blue-secondary);
+  --color-primary-light: var(--vt-c-blue-light);
+
+  --section-gap: 160px;
+}
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+  margin: 0;
+  font-weight: normal;
+}
+
+body {
+  min-height: 100vh;
+  color: var(--do-text);
+  background: var(--do-bg);
+  transition:
+    color 0.5s,
+    background-color 0.5s;
+  line-height: 1.6;
+  font-family:
+    Inter,
+    -apple-system,
+    BlinkMacSystemFont,
+    'Segoe UI',
+    Roboto,
+    Oxygen,
+    Ubuntu,
+    Cantarell,
+    'Fira Sans',
+    'Droid Sans',
+    'Helvetica Neue',
+    sans-serif;
+  font-size: 14px;
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}

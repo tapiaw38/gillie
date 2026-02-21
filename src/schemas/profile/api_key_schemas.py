@@ -12,7 +12,6 @@ class ApiKeyOutputData(BaseModel):
     id: str
     value: str
     description: str
-    limit: int
     is_active: bool
     created_at: datetime
 
@@ -27,7 +26,6 @@ class ApiKeyOutput(BaseModel):
                 id=api_key.id,
                 value=api_key.value,
                 description=api_key.description,
-                limit=api_key.limit,
                 is_active=api_key.is_active,
                 created_at=api_key.created_at,
             )

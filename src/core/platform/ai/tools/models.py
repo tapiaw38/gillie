@@ -81,14 +81,13 @@ class SearchFAQsArgs(BaseModel):
     )
 
 
-def create_langchain_tools(openai_integration, profile, faq_repository=None) -> List[StructuredTool]:
+def create_langchain_tools(openai_integration, profile) -> List[StructuredTool]:
     """
     Create LangChain StructuredTool instances with Pydantic validation.
 
     Args:
         openai_integration: OpenAI integration instance with tool methods
         profile: User profile for context
-        faq_repository: FAQ repository for searching FAQs (optional)
 
     Returns:
         List of LangChain StructuredTool instances
@@ -130,44 +129,6 @@ def create_langchain_tools(openai_integration, profile, faq_repository=None) -> 
     async def describe_image_tool(image_base64: str) -> str:
         """Describe an image from base64 data"""
         return await openai_integration.describe_image_from_base64(image_base64)
-
-    async def search_faqs_tool(query: str, max_results: int = 5) -> Dict[str, Any]:
-        """Search in frequently asked questions"""
-        import logging
-        logger = logging.getLogger(__name__)
-
-        logger.info(f"search_faqs_tool called with query: {query}")
-
-        try:
-            # Check if FAQ repository is available
-            if not faq_repository:
-                logger.warning("FAQ repository not available")
-                return {"found": False, "message": "FAQ system not configured", "faqs": []}
-
-            # Create FAQ context manager
-            from src.core.platform.managers.faq_context_manager import FAQContextManager
-            faq_manager = FAQContextManager(faq_repository=faq_repository)
-
-            # Search relevant FAQs
-            faq_context = faq_manager.search_relevant_faqs(query, max_results=max_results)
-
-            if faq_context:
-                logger.info(f"Found relevant FAQs for query: {query}")
-                return {
-                    "found": True,
-                    "faqs_context": faq_context,
-                    "message": "Found relevant FAQs. Use these answers as priority."
-                }
-            else:
-                logger.info("No relevant FAQs found")
-                return {
-                    "found": False,
-                    "message": "No relevant FAQs found. You can search in documents if needed.",
-                    "faqs": []
-                }
-        except Exception as e:
-            logger.error(f"Error searching FAQs: {e}", exc_info=True)
-            return {"found": False, "error": str(e), "faqs": []}
 
     async def search_documents_tool(query: str, max_results: int = 5) -> Dict[str, Any]:
         """Search for relevant content in user's uploaded documents"""
@@ -221,10 +182,6 @@ def create_langchain_tools(openai_integration, profile, faq_repository=None) -> 
 
         logger.warning("No documents processed, returning empty result")
         return {"found": False, "context": "No documents available", "results": []}
-
-    # NOTE: search_faqs tool is NOT included because FAQs are already injected
-    # into the context in add_message_use_case.py with highest priority.
-    # Including the tool would be redundant and confuses the LLM.
 
     tools = [
         StructuredTool(

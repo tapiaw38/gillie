@@ -34,10 +34,6 @@ def new_factory(
     def factory(*opts: Option) -> Context:
         repositories = Repositories.create_repositories(datasources)
 
-        # Initialize FAQ service for integrations (deferred initialization pattern)
-        if repositories.faq:
-            integrations.initialize_faq_service(repositories.faq)
-
         context = Context(
             repositories=repositories,
             integrations=integrations,

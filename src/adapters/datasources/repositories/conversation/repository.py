@@ -17,6 +17,8 @@ from .find_user_id import (
 )
 from .update_profile_by_user_id import update_profile_by_user_id
 from .update_messages_by_id import update_messages_by_id
+from .update_summary import update_conversation_summary
+from .find_unextracted import find_unextracted_conversations
 from .delete_by_id import delete_conversation_by_id
 
 
@@ -46,3 +48,9 @@ class Repository(RepositoryInterface):
 
     def delete_by_id(self, id: str) -> None:
         delete_conversation_by_id(self.client, id)
+
+    def update_summary(self, conversation_id: str, summary: str, memory_extracted: bool = True) -> None:
+        update_conversation_summary(self.client, conversation_id, summary, memory_extracted)
+
+    def find_unextracted(self, user_id: str) -> List[Conversation]:
+        return find_unextracted_conversations(self.client, user_id)

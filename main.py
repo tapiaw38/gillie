@@ -1,12 +1,14 @@
+import os
+import logging
 from fastapi import FastAPI
 from fastapi.responses import RedirectResponse
 from fastapi.middleware.cors import CORSMiddleware
-from starlette.middleware.base import BaseHTTPMiddleware
 from src.routes.routes_manager import RoutesManager
 from src.adapters.web.integrations.integrations import create_integrations
 from src.core.platform.config.service import (
     init_config,
-    get_config_service
+    init_config_from_json,
+    get_config_service,
 )
 from src.core.platform.nosql.client import MongoDBClient
 from src.adapters.datasources.datasources import Datasources
@@ -17,7 +19,9 @@ from src.core.platform.objectstorange.s3_session import get_s3_session
 from src.adapters.storeservice.storeservice import StoreServiceImpl
 from src.core.platform.services.platform_services import PlatformServices
 from src.core.platform.errors.exception_handler import register_exception_handlers
+from src.adapters.web.middlewares.authorization import SingleUserMiddleware
 
+logger = logging.getLogger(__name__)
 
 app = FastAPI(
     title="Assistant IA API",
@@ -27,14 +31,10 @@ app = FastAPI(
 
 register_exception_handlers(app)
 
-origins = [
-    "*"
-]
-
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=origins,
-    allow_credentials=True,
+    allow_origins=["*"],
+    allow_credentials=False,
     allow_methods=["*"],
     allow_headers=["*"],
     expose_headers=["*"]
@@ -44,10 +44,27 @@ app.add_middleware(
 async def redirect_to_docs():
     return RedirectResponse(url="/docs")
 
-init_config()
+
+# ─── Configuration ────────────────────────────────────────────────────────────
+# Priority: CLI config.json > .env
+_cli_config = None
+
+try:
+    from cli.config.manager import config_exists, load_config
+    if config_exists():
+        _cli_config = load_config()
+        init_config_from_json(_cli_config)
+        logger.info(f"Loaded config from CLI config.json (user_id={_cli_config.user_id})")
+    else:
+        init_config()
+        logger.info("Loaded config from .env (no CLI config found)")
+except ImportError:
+    init_config()
+    logger.info("CLI module not available, loaded config from .env")
+
 config_service = get_config_service()
 
-
+# ─── Database ─────────────────────────────────────────────────────────────────
 migrations_client = MongoDBClient(
     config_service.nosql_config.migrations.database_uri,
     config_service.nosql_config.migrations.database,
@@ -69,30 +86,50 @@ faqs_client = MongoDBClient(
     config_service.nosql_config.faqs.collection,
 )
 
+# Calendar clients (optional — only when google_calendar_config is enabled)
+calendar_sessions_client = None
+calendar_events_client = None
+gc_cfg = config_service.google_calendar_config
+if gc_cfg and gc_cfg.enabled and config_service.nosql_config.calendar_sessions:
+    calendar_sessions_client = MongoDBClient(
+        config_service.nosql_config.calendar_sessions.database_uri,
+        config_service.nosql_config.calendar_sessions.database,
+        config_service.nosql_config.calendar_sessions.collection,
+    )
+    calendar_events_client = MongoDBClient(
+        config_service.nosql_config.calendar_events.database_uri,
+        config_service.nosql_config.calendar_events.database,
+        config_service.nosql_config.calendar_events.collection,
+    )
+
 profiles_client.run_migrations(migrations_client.get_collection(), execute_migrations())
 
+# ─── Storage ──────────────────────────────────────────────────────────────────
 s3_session = get_s3_session()
 store_service = StoreServiceImpl(
     session=s3_session,
     config=config_service
 )
 
+# ─── Repositories ─────────────────────────────────────────────────────────────
 datasources = Datasources.create_datasources(
     no_sql_conversations_client=conversations_client,
     no_sql_profiles_client=profiles_client,
     no_sql_faqs_client=faqs_client,
+    no_sql_calendar_sessions_client=calendar_sessions_client,
+    no_sql_calendar_events_client=calendar_events_client,
 )
 
 from src.adapters.datasources.repositories.repositories import Repositories
 repositories = Repositories.create_repositories(datasources)
 
-integrations = create_integrations(config_service)
+# ─── Integrations & Services ──────────────────────────────────────────────────
+integrations = create_integrations(config_service, calendar_repository=repositories.calendar)
 
 platform_services = PlatformServices.create_services(
     integrations=integrations,
     store_service=store_service,
     config_service=config_service,
-    faq_repository=repositories.faq
 )
 
 context_factory = new_factory(
@@ -104,5 +141,31 @@ context_factory = new_factory(
 )
 usecases = create_usecases(context_factory)
 
+# ─── Auto-create profile for single-user mode ────────────────────────────────
+if config_service.single_user_config:
+    user_id = config_service.single_user_config.user_id
+    try:
+        existing_profile = repositories.profile.find_by_user_id(user_id)
+        if not existing_profile and _cli_config:
+            from src.schemas import ProfileInput
+            profile_input = ProfileInput(
+                assistant_name=_cli_config.profile.assistant_name,
+                business_name=_cli_config.profile.business_name,
+                business_context=_cli_config.profile.business_context,
+                functions=_cli_config.profile.functions,
+                role=_cli_config.profile.role,
+            )
+            usecases.profile.create_usecase.execute(profile_input, user_id)
+            logger.info(f"Auto-created profile for user_id={user_id}")
+        elif existing_profile:
+            logger.info(f"Profile already exists for user_id={user_id}")
+    except Exception as e:
+        logger.warning(f"Could not auto-create profile: {e}")
+else:
+    user_id = "default-user"
+
+# ─── Routes & Middleware ──────────────────────────────────────────────────────
 routes_manager = RoutesManager(app, usecases, config_service)
 routes_manager.include_routes()
+
+app.add_middleware(SingleUserMiddleware, user_id=user_id)

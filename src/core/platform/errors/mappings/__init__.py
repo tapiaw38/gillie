@@ -7,7 +7,9 @@ Contains all error definitions organized by domain.
 from .common import *
 from .profile import *
 from .conversation import *
-from .faq import *
+from .memory import *
+from .calendar import *
+from .drive import *
 
 __all__ = [
     # Common errors
@@ -60,15 +62,36 @@ __all__ = [
     "ConversationMessageNotFoundError",
     "ConversationMessageValidationError",
 
-    # FAQ errors
-    "FAQCreateQueryError",
-    "FAQCreateValidationError",
-    "FAQCreateNotFoundAfterCreationError",
-    "FAQGetQueryError",
-    "FAQGetNotFoundError",
-    "FAQUpdateQueryError",
-    "FAQUpdateNotFoundError",
-    "FAQDeleteQueryError",
-    "FAQDeleteNotFoundError",
-    "FAQListQueryError",
+    # Memory errors
+    "MemoryFAQNotFoundError",
+    "MemoryFAQCreateError",
+    "MemoryFAQUpdateError",
+    "MemoryFAQDeleteError",
+    "MemorySkillNotFoundError",
+    "MemoryExtractionError",
+
+    # Calendar errors
+    "CalendarSessionNotFoundError",
+    "CalendarOAuthError",
+    "CalendarTokenRefreshError",
+    "CalendarEventTitleRequiredError",
+    "CalendarEventInvalidTimesError",
+    "CalendarEventNotFoundError",
+    "CalendarEventCreateError",
+    "CalendarEventUpdateError",
+    "CalendarEventDeleteError",
+    "CalendarEventQueryError",
+    "CalendarSyncError",
+
+    # Drive errors
+    "DriveSessionNotFoundError",
+    "DriveOAuthError",
+    "DriveTokenRefreshError",
+    "DriveListFilesError",
+    "DriveFileNotFoundError",
+    "DriveFileDownloadError",
+    "DriveIngestionError",
+    "DriveSearchError",
+    "DriveSyncError",
+    "DriveIndexNotFoundError",
 ]

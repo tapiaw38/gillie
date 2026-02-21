@@ -1,9 +1,8 @@
 from dataclasses import dataclass, field
 from typing import List, Dict, Any, Optional, Tuple
 from langchain_core.tools import BaseTool
-from langchain.agents import AgentExecutor, create_openai_functions_agent
-from langchain_community.chat_models import ChatOpenAI
-from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
+from langgraph.prebuilt import create_react_agent
+from langchain_openai import ChatOpenAI
 from langchain_core.messages import SystemMessage, HumanMessage
 from src.core.platform.config.service import ConfigurationService
 from src.core.domain import Profile
@@ -372,31 +371,21 @@ class GenericFunctionExecutor:
             model=config_service.openai_config.model,
             temperature=0.1,
         )
-        self.tools = []
+        self.tools: List[BaseTool] = []
         self.agent = None
-        self.executor = None
-        self._setup_prompt()
+        self._system_prompt = self._build_system_prompt()
 
-    def _setup_prompt(self):
-        system_message = """You are a helpful AI assistant that can execute various functions based on user requests.
-
-Your role is to:
-1. Understand what the user is asking for
-2. Determine if any available functions can help
-3. Extract the necessary parameters from the user's message
-4. Execute the appropriate function
-5. Provide a friendly, helpful response in Spanish
-
-Always be conversational and helpful. If you need more information, ask for it clearly.
-If a function fails, explain what went wrong and suggest alternatives."""
-
-        self.prompt = ChatPromptTemplate.from_messages(
-            [
-                ("system", system_message),
-                MessagesPlaceholder(variable_name="chat_history"),
-                ("human", "{input}"),
-                MessagesPlaceholder(variable_name="agent_scratchpad"),
-            ]
+    def _build_system_prompt(self) -> str:
+        return (
+            "You are a helpful AI assistant that can execute various functions based on user requests.\n\n"
+            "Your role is to:\n"
+            "1. Understand what the user is asking for\n"
+            "2. Determine if any available functions can help\n"
+            "3. Extract the necessary parameters from the user's message\n"
+            "4. Execute the appropriate function\n"
+            "5. Provide a friendly, helpful response that matches the language the user is using\n\n"
+            "Always be conversational and helpful. If you need more information, ask for it clearly.\n"
+            "If a function fails, explain what went wrong and suggest alternatives."
         )
 
     def _extract_params_from_url(self, url: str) -> List[str]:
@@ -726,52 +715,58 @@ If a function fails, explain what went wrong and suggest alternatives."""
         return descriptions
 
     def setup_for_profile(self, profile: Profile):
-        """Setup the executor for a specific profile"""
+        """Setup the LangGraph react agent for a specific profile."""
         self.tools = self._create_tools_from_profile(profile)
 
         if self.tools:
-            self.agent = create_openai_functions_agent(
-                llm=self.llm, tools=self.tools, prompt=self.prompt
-            )
-            self.executor = AgentExecutor(
-                agent=self.agent,
+            # create_react_agent returns a compiled StateGraph (CompiledGraph).
+            # The prompt parameter accepts a system message string that is
+            # prepended to every invocation automatically by LangGraph.
+            self.agent = create_react_agent(
+                model=self.llm,
                 tools=self.tools,
-                verbose=True,
-                handle_parsing_errors=True,
+                prompt=self._system_prompt,
             )
             logger.info(
                 f"Setup complete for profile {profile.user_id} with {len(self.tools)} tools"
             )
         else:
+            self.agent = None
             logger.info(f"No tools available for profile {profile.user_id}")
 
     async def execute_function(
         self, user_message: str, profile: Profile, chat_history: List[str] = None
     ) -> str:
-        """Execute function based on user message"""
+        """Execute a function based on the user message using the LangGraph react agent."""
         try:
-            if not self.tools or not self.executor:
+            if not self.tools or not self.agent:
                 self.setup_for_profile(profile)
 
-            if not self.tools:
+            if not self.tools or not self.agent:
                 return "No functions are currently available for your profile."
 
-            history_messages = []
+            # Build the message list. LangGraph's create_react_agent expects
+            # {"messages": [BaseMessage, ...]}.  We include recent history so the
+            # agent has conversational context, followed by the current user turn.
+            messages: List[HumanMessage] = []
             if chat_history:
                 for msg in chat_history[-5:]:
-                    history_messages.append(HumanMessage(content=msg))
+                    messages.append(HumanMessage(content=msg))
+            messages.append(HumanMessage(content=user_message))
 
-            result = await self.executor.ainvoke(
-                {"input": user_message, "chat_history": history_messages}
-            )
+            result = await self.agent.ainvoke({"messages": messages})
 
-            return result.get("output", "Function executed successfully")
+            # The compiled graph returns {"messages": [BaseMessage, ...]}.
+            # The last message is the final agent response.
+            response_messages = result.get("messages", [])
+            if response_messages:
+                return response_messages[-1].content
+
+            return "Function executed successfully"
 
         except Exception as e:
             logger.error(f"Error executing function: {e}")
-            return (
-                f"Sorry, I had a problem processing your request. Error: {str(e)}"
-            )
+            return f"Sorry, I had a problem processing your request. Error: {str(e)}"
 
     def get_available_functions(self) -> List[Dict[str, Any]]:
         """Get information about available functions"""

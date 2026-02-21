@@ -35,3 +35,11 @@ class RepositoryInterface(ABC):
     @abstractmethod
     def delete_by_id(self, id: str) -> None:
         pass
+
+    @abstractmethod
+    def update_summary(self, conversation_id: str, summary: str, memory_extracted: bool = True) -> None:
+        pass
+
+    @abstractmethod
+    def find_unextracted(self, user_id: str) -> List[Conversation]:
+        pass

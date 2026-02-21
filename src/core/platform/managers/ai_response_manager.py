@@ -15,7 +15,6 @@ Responsibilities:
 import logging
 from typing import Optional, List
 from src.core.platform.functions.smart_function_executor import SmartFunctionExecutor
-from src.core.platform.managers.faq_context_manager import FAQContextManager
 from src.core.platform.functions.global_workflows import get_available_workflows
 
 logger = logging.getLogger(__name__)
@@ -34,7 +33,6 @@ class AIResponseService:
         openai_integration,
         config_service,
         smart_function_executor: Optional[SmartFunctionExecutor] = None,
-        faq_context_manager: Optional[FAQContextManager] = None,
         mcp_client=None
     ):
         """
@@ -44,7 +42,6 @@ class AIResponseService:
             openai_integration: OpenAI integration instance
             config_service: Configuration service instance
             smart_function_executor: Optional smart function executor
-            faq_context_manager: Optional FAQ context manager
             mcp_client: Optional MCP client for datetime parsing
         """
         self.openai_integration = openai_integration
@@ -53,7 +50,6 @@ class AIResponseService:
         self.smart_function_executor = smart_function_executor or SmartFunctionExecutor(
             config_service, mcp_client=mcp_client
         )
-        self.faq_context_manager = faq_context_manager
 
     async def generate_response(
         self,

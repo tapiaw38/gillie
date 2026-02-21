@@ -1,0 +1,26 @@
+import logging
+
+from src.core.platform.appcontext.appcontext import Factory
+
+logger = logging.getLogger(__name__)
+
+INTEGRATION_NAME = "google_drive"
+
+
+class CheckSessionStatusUseCase:
+    def __init__(self, context_factory: Factory):
+        self.context_factory = context_factory()
+
+    def execute(self, user_id: str) -> bool:
+        try:
+            profile = self.context_factory.repositories.profile.find_by_user_id(user_id)
+            if not profile:
+                return False
+            drive_integration = next(
+                (i for i in (profile.integrations or []) if i.name == INTEGRATION_NAME),
+                None,
+            )
+            return drive_integration is not None and drive_integration.activated
+        except Exception as e:
+            logger.error(f"Error checking Drive session: {e}", exc_info=True)
+            return False

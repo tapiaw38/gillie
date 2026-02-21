@@ -42,7 +42,6 @@ class LangChainService:
         openai_integration,
         max_concurrent_requests: int = 3,
         enable_langsmith: bool = False,
-        faq_repository=None,
     ):
         """
         Initialize the LangChain service.
@@ -52,11 +51,9 @@ class LangChainService:
             openai_integration: OpenAI integration for tool execution
             max_concurrent_requests: Maximum concurrent LLM requests
             enable_langsmith: Enable LangSmith tracing
-            faq_repository: FAQ repository for FAQ search tool (optional)
         """
         self.config = config_service.openai_config
         self.openai_integration = openai_integration
-        self.faq_repository = faq_repository
 
         # Initialize LangChain ChatOpenAI
         self.llm = ChatOpenAI(
@@ -201,7 +198,6 @@ class LangChainService:
                     tools = create_langchain_tools(
                         self.openai_integration,
                         profile,
-                        faq_repository=self.faq_repository
                     )
                     llm_with_tools = self.llm.bind_tools(tools)
                     logger.debug(f"Bound {len(tools)} tools to LLM")

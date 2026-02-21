@@ -18,7 +18,6 @@ class Profile(BaseModel):
     updated_at: Optional[datetime] = Field(default=None)
     is_active: Optional[bool] = Field(default=True)
     api_keys: Optional[List[ApiKey]] = Field(default=None)
-    iteration_limit: Optional[int] = Field(default=None)
     files: Optional[List[File]] = Field(default=None)
     integrations: Optional[List[Integration]] = Field(default=None)
 
