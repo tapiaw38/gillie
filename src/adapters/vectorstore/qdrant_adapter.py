@@ -181,6 +181,7 @@ class QdrantVectorStoreAdapter:
     ) -> List[tuple]:
         """
         Search for similar documents using semantic search.
+        Uses native qdrant-client directly to avoid LangChain wrapper version issues.
 
         Args:
             collection_name: Name of the collection
@@ -193,33 +194,41 @@ class QdrantVectorStoreAdapter:
             List of (Document, score) tuples
         """
         try:
-            vectorstore = self.get_vectorstore(collection_name, create_if_missing=False)
-            if vectorstore is None:
+            if self.embeddings is None:
+                logger.error("No embeddings model provided for search")
                 return []
+
+            # Embed query directly
+            query_vector = self.embeddings.embed_query(query)
 
             qdrant_filter = None
             if filter_dict:
                 qdrant_filter = self._build_filter(filter_dict)
 
-            if score_threshold is not None:
-                results = vectorstore.similarity_search_with_score(
-                    query,
-                    k=k,
-                    filter=qdrant_filter
-                )
-                results = [(doc, score) for doc, score in results if score >= score_threshold]
-            else:
-                results = vectorstore.similarity_search_with_score(
-                    query,
-                    k=k,
-                    filter=qdrant_filter
-                )
+            # Use native client to avoid LangChain wrapper version incompatibilities
+            response = self.client.query_points(
+                collection_name=collection_name,
+                query=query_vector,
+                query_filter=qdrant_filter,
+                limit=k,
+                with_payload=True,
+            )
 
-            logger.debug(f"Found {len(results)} similar documents in '{collection_name}'")
+            results = []
+            for point in response.points:
+                if score_threshold is not None and point.score < score_threshold:
+                    continue
+                payload = point.payload or {}
+                page_content = payload.get("page_content", "")
+                metadata = payload.get("metadata", {})
+                doc = Document(page_content=page_content, metadata=metadata)
+                results.append((doc, point.score))
+
+            logger.info(f"Found {len(results)} similar documents in '{collection_name}'")
             return results
 
         except Exception as e:
-            logger.error(f"Error searching in '{collection_name}': {e}")
+            logger.error(f"Error searching in '{collection_name}': {e}", exc_info=True)
             return []
 
     def delete_collection(self, collection_name: str) -> bool:

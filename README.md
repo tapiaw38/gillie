@@ -100,7 +100,8 @@ Show current configuration summary, including both file paths.
 ```
 
 Example output:
-```
+
+```sh
 ✨🐟 Gillie — Sofia
 Soul:   /home/user/.gillie/soul.json
 Config: /home/user/.gillie/config.json
@@ -201,7 +202,7 @@ The memory system gives the assistant persistent knowledge. All files live in `~
 
 `memory.md` is the root of the knowledge tree. It is auto-created on first startup and references other skill files using the `ver X.skill.md` directive. At request time, the API resolves those references by inlining the content of each skill file before sending context to the LLM.
 
-```
+```sh
 ~/.gillie/memory/
 ├── memory.md            ← root (auto-created, always loaded)
 ├── faqs.skill.md        ← referenced from memory.md
@@ -274,10 +275,10 @@ FAQs are stored as structured blocks inside `faqs.skill.md` and referenced autom
 
 Configuration is split into two files under `~/.gillie/`, both created by `./gillie init`:
 
-| File | Contents |
-| ---- | -------- |
-| `~/.gillie/soul.json` | Assistant identity: `user_id` (UUID) and `profile` |
-| `~/.gillie/config.json` | Technical settings: server, services, logging |
+| File                    | Contents                                           |
+| ----------------------- | -------------------------------------------------- |
+| `~/.gillie/soul.json`   | Assistant identity: `user_id` (UUID) and `profile` |
+| `~/.gillie/config.json` | Technical settings: server, services, logging      |
 
 They can be edited manually or interactively via `./gillie soul edit`, `./gillie profile edit`, and `./gillie services edit`.
 
@@ -374,28 +375,28 @@ Key patterns:
 
 All endpoints are prefixed according to the domain. Authentication is handled automatically by the single-user middleware — no token required.
 
-| Domain        | Base path             |
-| ------------- | --------------------- |
-| Profile       | `/profile`            |
-| Conversations | `/conversation`       |
-| WhatsApp      | `/whatsapp`           |
-| Memory        | `/api/v1/memory`      |
+| Domain        | Base path        |
+| ------------- | ---------------- |
+| Profile       | `/profile`       |
+| Conversations | `/conversation`  |
+| WhatsApp      | `/whatsapp`      |
+| Memory        | `/api/v1/memory` |
 
-#### Memory endpoints
+### Memory endpoints
 
-| Method | Path                        | Description                                      |
-| ------ | --------------------------- | ------------------------------------------------ |
-| GET    | `/api/v1/memory`            | Return `memory.md` with all skill refs inlined   |
-| GET    | `/api/v1/memory/root`       | Return raw `memory.md`                           |
-| PUT    | `/api/v1/memory/root`       | Overwrite `memory.md` (`{"content": "..."}`)     |
-| GET    | `/api/v1/memory/general`    | Return raw `general.skill.md`                    |
-| GET    | `/api/v1/memory/faqs`       | List all FAQs                                    |
-| POST   | `/api/v1/memory/faqs`       | Add a FAQ                                        |
-| PUT    | `/api/v1/memory/faqs/{id}`  | Update a FAQ                                     |
-| DELETE | `/api/v1/memory/faqs/{id}`  | Delete a FAQ                                     |
-| GET    | `/api/v1/memory/skills`     | List all `.skill.md` files                       |
-| GET    | `/api/v1/memory/skills/{n}` | Return content of a specific skill               |
-| POST   | `/api/v1/memory/extract`    | Run memory extraction from conversations         |
+| Method | Path                        | Description                                    |
+| ------ | --------------------------- | ---------------------------------------------- |
+| GET    | `/api/v1/memory`            | Return `memory.md` with all skill refs inlined |
+| GET    | `/api/v1/memory/root`       | Return raw `memory.md`                         |
+| PUT    | `/api/v1/memory/root`       | Overwrite `memory.md` (`{"content": "..."}`)   |
+| GET    | `/api/v1/memory/general`    | Return raw `general.skill.md`                  |
+| GET    | `/api/v1/memory/faqs`       | List all FAQs                                  |
+| POST   | `/api/v1/memory/faqs`       | Add a FAQ                                      |
+| PUT    | `/api/v1/memory/faqs/{id}`  | Update a FAQ                                   |
+| DELETE | `/api/v1/memory/faqs/{id}`  | Delete a FAQ                                   |
+| GET    | `/api/v1/memory/skills`     | List all `.skill.md` files                     |
+| GET    | `/api/v1/memory/skills/{n}` | Return content of a specific skill             |
+| POST   | `/api/v1/memory/extract`    | Run memory extraction from conversations       |
 
 Full interactive documentation: `http://localhost:8000/docs`
 

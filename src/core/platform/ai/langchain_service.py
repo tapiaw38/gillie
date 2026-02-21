@@ -194,7 +194,7 @@ class LangChainService:
 
                 # Create LLM with tools if enabled
                 tools = None
-                if use_tools and profile.files:
+                if use_tools:
                     tools = create_langchain_tools(
                         self.openai_integration,
                         profile,

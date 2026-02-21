@@ -28,14 +28,14 @@ const closeBanner = () => {
         <div class="flex-1">
           <h3 class="m-0 mb-2 text-xl font-bold">Entorno de Pruebas Sandbox</h3>
           <p class="m-0 mb-2">
-            Estás en <strong>modo sandbox</strong>. Este es un entorno de pruebas seguro donde puedes
-            experimentar con tu asistente de IA sin consumir iteraciones de API ni afectar
+            Estás en <strong>modo sandbox</strong>. Este es un entorno de pruebas seguro donde
+            puedes experimentar con tu asistente de IA sin consumir iteraciones de API ni afectar
             los datos de producción.
           </p>
           <div class="flex flex-wrap gap-2 mt-2">
             <InlineMessage severity="success" class="p-1">
               <i class="pi pi-check-circle mr-1"></i>
-              Pruebas Gratuitas
+              Pruebas
             </InlineMessage>
             <InlineMessage severity="info" class="p-1">
               <i class="pi pi-shield mr-1"></i>
@@ -64,7 +64,11 @@ const closeBanner = () => {
 }
 
 :deep(.p-message-warn) {
-  background: linear-gradient(135deg, var(--vt-c-warning-light) 0%, var(--vt-c-warning-lighter) 100%);
+  background: linear-gradient(
+    135deg,
+    var(--vt-c-warning-light) 0%,
+    var(--vt-c-warning-lighter) 100%
+  );
   border: none;
   box-shadow: 0 2px 8px rgba(245, 158, 11, 0.15);
 }

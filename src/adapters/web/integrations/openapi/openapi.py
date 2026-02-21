@@ -98,7 +98,7 @@ class OpenAIIntegration:
                     previous_messages=messages_list,
                     profile=profile,
                     conversation_id=conversation_id or profile.user_id,
-                    use_tools=bool(profile.files),
+                    use_tools=True,
                 )
                 return response
             except Exception as e:

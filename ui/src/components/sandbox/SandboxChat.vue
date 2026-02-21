@@ -110,7 +110,7 @@ const getMessageTime = (dateString: string) => {
       <div class="conversation-info">
         <div class="info-item">
           <i class="pi pi-check-circle text-xs"></i>
-          <span class="text-xs">Pruebas Gratuitas</span>
+          <span class="text-xs">Pruebas</span>
         </div>
         <div class="info-item">
           <i class="pi pi-comments text-xs"></i>

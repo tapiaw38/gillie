@@ -135,53 +135,31 @@ def create_langchain_tools(openai_integration, profile) -> List[StructuredTool]:
         import logging
         logger = logging.getLogger(__name__)
 
-        logger.info(f"search_documents_tool called with query: {query}")
-        logger.info(f"Profile has {len(profile.files) if profile.files else 0} files")
+        logger.info(f"search_documents_tool called with query: {query}, profile: {profile.user_id}")
 
-        # Process and store documents if not already done
-        document_ids = []
-        for file in profile.files:
-            try:
-                file_type = (
-                    "pdf" if file.url.lower().endswith(".pdf")
-                    else "xlsx" if file.url.lower().endswith((".xlsx", ".xls"))
-                    else None
-                )
+        # Search directly in Qdrant by profile_id — no need to process files first
+        search_result = await openai_integration.rag_processor.search_relevant_content(
+            query=query,
+            document_ids=[],
+            max_results=max_results,
+            profile_id=profile.user_id
+        )
 
-                if file_type:
-                    logger.info(f"Processing {file_type} document: {file.url}")
-                    result = await openai_integration.rag_processor.process_and_store_document(
-                        file.url, file_type, profile_id=profile.user_id
-                    )
-                    logger.info(f"Process result: {result}")
-                    if "document_id" in result:
-                        document_ids.append(result["document_id"])
-                        logger.info(f"Added document_id: {result['document_id']}")
-            except Exception as e:
-                logger.error(f"Error processing file {file.url}: {e}", exc_info=True)
-                continue
+        results = search_result.get("results", [])
+        unified_context = search_result.get("unified_context", "")
 
-        logger.info(f"Total document_ids: {len(document_ids)}")
+        logger.info(f"search_documents_tool found {len(results)} results for query: {query}")
 
-        # Search for relevant content
-        if document_ids:
-            logger.info(f"Searching in documents: {document_ids}")
-            search_result = await openai_integration.rag_processor.search_relevant_content(
-                query=query,
-                document_ids=document_ids,
-                max_results=max_results,
-                profile_id=profile.user_id
-            )
-            logger.info(f"Search result: {search_result}")
+        if results:
             return {
                 "found": True,
-                "results": search_result.get("results", []),
-                "context": search_result.get("unified_context", ""),
-                "total_chunks": len(search_result.get("results", []))
+                "results": results,
+                "context": unified_context,
+                "total_chunks": len(results)
             }
 
-        logger.warning("No documents processed, returning empty result")
-        return {"found": False, "context": "No documents available", "results": []}
+        logger.warning(f"No results found in Qdrant for profile {profile.user_id}")
+        return {"found": False, "context": "No hay información disponible en el catálogo.", "results": []}
 
     tools = [
         StructuredTool(
@@ -241,9 +219,10 @@ def create_langchain_tools(openai_integration, profile) -> List[StructuredTool]:
             name="search_documents",
             description=(
                 "Search for specific information in the user's uploaded documents (PDFs and Excel files). "
-                "Use this tool ONLY if search_faqs didn't find the answer. "
-                "This searches through uploaded PDF catalogs, price lists, and Excel files. "
-                "Returns relevant text chunks with product details, prices, specifications, etc."
+                "Use this tool when the user asks about products, prices, availability, specifications, "
+                "or any information that may be in the uploaded files. "
+                "This performs semantic search across PDF catalogs, price lists, and Excel spreadsheets. "
+                "Returns relevant text chunks with product details, prices, and specifications."
             ),
             func=search_documents_tool,
             args_schema=SearchDocumentsArgs,
