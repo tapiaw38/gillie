@@ -730,9 +730,11 @@ CRITICAL OUTPUT RULES:
                     function_name, matched_function.type, result, all_params
                 )
             else:
+                self._clear_params(user_id, function_name)
                 return f"Error running '{function_name}': {result.get('error', 'Unknown error')}"
 
         except Exception as e:
+            self._clear_params(user_id, function_name)
             logger.error(f"Error processing ongoing function: {e}", exc_info=True)
             return f"Sorry, I had a problem continuing. Error: {str(e)}"
 
