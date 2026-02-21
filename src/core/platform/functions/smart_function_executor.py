@@ -560,6 +560,26 @@ CRITICAL OUTPUT RULES:
                 else f"✅ Workflow '{function_name}' completed successfully."
             )
 
+    async def _generate_friendly_error(self, function_name: str, error_detail: str) -> str:
+        """Ask the LLM to turn a raw error into a user-friendly apology message."""
+        try:
+            prompt = (
+                "You are an assistant that communicates technical errors in a friendly, "
+                "reassuring way. Match the language the user has been using.\n\n"
+                f"A background operation called '{function_name}' failed with this technical error:\n"
+                f"{error_detail}\n\n"
+                "Instructions:\n"
+                "1. Apologize briefly and let the user know the action could not be completed\n"
+                "2. Do NOT expose raw error messages, stack traces, or technical details\n"
+                "3. If the error suggests a fixable issue (e.g. missing data), hint at what the user could try\n"
+                "4. Be concise — 1 or 2 sentences max\n\n"
+                "Generate the response now:"
+            )
+            response = await self.llm.ainvoke([HumanMessage(content=prompt)])
+            return response.content.strip()
+        except Exception:
+            return "Sorry, something went wrong while completing your request. Please try again."
+
     # ------------------------------------------------------------------
     # Main entry point
     # ------------------------------------------------------------------
@@ -632,7 +652,7 @@ CRITICAL OUTPUT RULES:
                 return f"Unsupported function type: {matched_function.type}"
 
             if not result.get("success", False):
-                return f"Error running '{matched_name}': {result.get('error', 'Unknown error')}"
+                return await self._generate_friendly_error(matched_name, result.get("error", "Unknown error"))
 
             if matched_function.response_field:
                 extracted = self._extract_response_field(result, matched_function.type, matched_function.response_field)
@@ -645,7 +665,7 @@ CRITICAL OUTPUT RULES:
 
         except Exception as e:
             logger.error(f"Error in SmartFunctionExecutor: {e}", exc_info=True)
-            return f"Sorry, I had a problem processing your request. Error: {str(e)}"
+            return await self._generate_friendly_error("request", str(e))
 
     # ------------------------------------------------------------------
     # Multi-turn parameter collection
@@ -731,12 +751,12 @@ CRITICAL OUTPUT RULES:
                 )
             else:
                 self._clear_params(user_id, function_name)
-                return f"Error running '{function_name}': {result.get('error', 'Unknown error')}"
+                return await self._generate_friendly_error(function_name, result.get("error", "Unknown error"))
 
         except Exception as e:
             self._clear_params(user_id, function_name)
             logger.error(f"Error processing ongoing function: {e}", exc_info=True)
-            return f"Sorry, I had a problem continuing. Error: {str(e)}"
+            return await self._generate_friendly_error(function_name, str(e))
 
     # ------------------------------------------------------------------
     # Parameter storage (in-memory)
