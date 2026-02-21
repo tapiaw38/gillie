@@ -57,6 +57,13 @@ from .audio import (
 from .whatsapp import (
     ProcessExternalMessageRequest,
     ProcessExternalMessageResponse,
+    CreateDeviceRequest,
+    AuthenticateDeviceRequest,
+    SendMessageRequest,
+    DeviceResponse,
+    DeviceListResponse,
+    AuthenticateResponse,
+    SendMessageResponse,
 )
 
 __all__ = [
@@ -114,4 +121,12 @@ __all__ = [
     # WhatsApp schemas
     "ProcessExternalMessageRequest",
     "ProcessExternalMessageResponse",
+    # WhatsApp Device schemas
+    "CreateDeviceRequest",
+    "AuthenticateDeviceRequest",
+    "SendMessageRequest",
+    "DeviceResponse",
+    "DeviceListResponse",
+    "AuthenticateResponse",
+    "SendMessageResponse",
 ]

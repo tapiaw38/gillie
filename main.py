@@ -21,6 +21,7 @@ from src.core.platform.services.platform_services import PlatformServices
 from src.core.platform.managers.skill_manager import SkillManager
 from src.core.platform.errors.exception_handler import register_exception_handlers
 from src.adapters.web.middlewares.authorization import SingleUserMiddleware
+from src.adapters.web.integrations.neonize.neonize_integration import NeonizeIntegration
 
 logger = logging.getLogger(__name__)
 
@@ -86,6 +87,11 @@ faqs_client = MongoDBClient(
     config_service.nosql_config.faqs.database,
     config_service.nosql_config.faqs.collection,
 )
+whatsapp_devices_client = MongoDBClient(
+    config_service.nosql_config.whatsapp_devices.database_uri,
+    config_service.nosql_config.whatsapp_devices.database,
+    config_service.nosql_config.whatsapp_devices.collection,
+)
 
 # Calendar clients (optional — only when google_calendar_config is enabled)
 calendar_sessions_client = None
@@ -119,6 +125,7 @@ datasources = Datasources.create_datasources(
     no_sql_faqs_client=faqs_client,
     no_sql_calendar_sessions_client=calendar_sessions_client,
     no_sql_calendar_events_client=calendar_events_client,
+    no_sql_whatsapp_devices_client=whatsapp_devices_client,
 )
 
 from src.adapters.datasources.repositories.repositories import Repositories
@@ -166,8 +173,34 @@ if config_service.single_user_config:
 else:
     user_id = "default-user"
 
+# ─── Neonize (WhatsApp device integration) ────────────────────────────────────
+neonize_integration = NeonizeIntegration(sessions_dir="./data/whatsapp")
+
+
 # ─── Routes & Middleware ──────────────────────────────────────────────────────
-routes_manager = RoutesManager(app, usecases, config_service)
+routes_manager = RoutesManager(app, usecases, config_service, neonize_integration=neonize_integration)
 routes_manager.include_routes()
 
 app.add_middleware(SingleUserMiddleware, user_id=user_id)
+
+
+# ─── Startup: restore previously connected devices ────────────────────────────
+@app.on_event("startup")
+async def restore_neonize_sessions():
+    """On startup, reconnect all devices that were previously authenticated."""
+    from src.adapters.web.controllers.whatsapp.device_controllers import _handle_incoming_message
+
+    if repositories.whatsapp_device is None:
+        logger.info("WhatsApp device repository not available — skipping session restore")
+        return
+
+    try:
+        connected_devices = repositories.whatsapp_device.find_by_status("authenticated")
+        for device in connected_devices:
+            try:
+                await neonize_integration.connect(device.id, _handle_incoming_message)
+                logger.info(f"Restored neonize session for device {device.id} ({device.device_name})")
+            except Exception as e:
+                logger.warning(f"Failed to restore session for device {device.id}: {e}")
+    except Exception as e:
+        logger.warning(f"Could not restore neonize sessions: {e}")

@@ -9,6 +9,7 @@ import Column from 'primevue/column'
 import Button from 'primevue/button'
 import Dialog from 'primevue/dialog'
 import InputText from 'primevue/inputtext'
+import Dropdown from 'primevue/dropdown'
 import Card from 'primevue/card'
 import Tag from 'primevue/tag'
 import Toast from 'primevue/toast'
@@ -18,6 +19,32 @@ import Message from 'primevue/message'
 const whatsapp = useWhatsApp()
 const toast = useToast()
 
+// Country codes
+interface Country {
+  name: string
+  flag: string
+  dial: string
+}
+
+const countries: Country[] = [
+  { name: 'Argentina',       flag: '🇦🇷', dial: '+54'  },
+  { name: 'México',          flag: '🇲🇽', dial: '+52'  },
+  { name: 'Colombia',        flag: '🇨🇴', dial: '+57'  },
+  { name: 'Chile',           flag: '🇨🇱', dial: '+56'  },
+  { name: 'Perú',            flag: '🇵🇪', dial: '+51'  },
+  { name: 'Uruguay',         flag: '🇺🇾', dial: '+598' },
+  { name: 'Paraguay',        flag: '🇵🇾', dial: '+595' },
+  { name: 'Bolivia',         flag: '🇧🇴', dial: '+591' },
+  { name: 'Ecuador',         flag: '🇪🇨', dial: '+593' },
+  { name: 'Venezuela',       flag: '🇻🇪', dial: '+58'  },
+  { name: 'Brasil',          flag: '🇧🇷', dial: '+55'  },
+  { name: 'España',          flag: '🇪🇸', dial: '+34'  },
+  { name: 'Estados Unidos',  flag: '🇺🇸', dial: '+1'   },
+]
+
+const selectedCountry = ref<Country>(countries[0]) // Argentina por defecto
+const localPhone = ref('')
+
 // State
 const devices = ref<WhatsAppDevice[]>([])
 const loading = ref(false)
@@ -25,12 +52,15 @@ const showCreateDialog = ref(false)
 const showQRDialog = ref(false)
 const qrCode = ref<string>()
 const selectedDevice = ref<WhatsAppDevice>()
+const wsConnection = ref<WebSocket | null>(null)
+
+function getWsBaseUrl(): string {
+  const httpBase = import.meta.env.VITE_WHATSAPP_API_BASE_URL || 'http://localhost:8000/api/whatsapp'
+  return httpBase.replace(/^https?/, (p) => (p === 'https' ? 'wss' : 'ws'))
+}
 
 // Form data
-const newDevice = ref<CreateDeviceRequest>({
-  phone_number: '',
-  device_name: '',
-})
+const newDevice = ref({ device_name: '' })
 
 // Computed
 const hasDevices = computed(() => devices.value?.length > 0)
@@ -54,7 +84,7 @@ const loadDevices = async () => {
 }
 
 const createDevice = async () => {
-  if (!newDevice.value.phone_number || !newDevice.value.device_name) {
+  if (!localPhone.value || !newDevice.value.device_name) {
     toast.add({
       severity: 'warn',
       summary: 'Campos requeridos',
@@ -66,7 +96,8 @@ const createDevice = async () => {
 
   loading.value = true
   try {
-    const device = await whatsapp.createDevice(newDevice.value)
+    const phone_number = selectedCountry.value.dial + localPhone.value.replace(/^\+/, '')
+    const device = await whatsapp.createDevice({ ...newDevice.value, phone_number })
     toast.add({
       severity: 'success',
       summary: 'Dispositivo creado',
@@ -74,7 +105,9 @@ const createDevice = async () => {
       life: 3000,
     })
     showCreateDialog.value = false
-    newDevice.value = { phone_number: '', device_name: '' }
+    newDevice.value = { device_name: '' }
+    localPhone.value = ''
+    selectedCountry.value = countries[0]
     await loadDevices()
   } catch (error) {
     toast.add({
@@ -92,24 +125,71 @@ const createDevice = async () => {
 const connectDevice = async (device: WhatsAppDevice) => {
   loading.value = true
   try {
-    const authenticatedDevice = await whatsapp.authenticateDevice(device.id, {
-      auth_method: 'qr',
-    })
-    qrCode.value = authenticatedDevice.qr_code
+    // 1. Trigger neonize to start QR generation (async on the backend)
+    await whatsapp.authenticateDevice(device.id, { auth_method: 'qr' })
+
+    // 2. Show dialog immediately with loading spinner (QR not yet available)
     selectedDevice.value = device
+    qrCode.value = undefined
     showQRDialog.value = true
 
-    toast.add({
-      severity: 'info',
-      summary: 'Código QR generado',
-      detail: 'Escanea el código QR con WhatsApp',
-      life: 5000,
-    })
+    // 3. Open WebSocket — backend polls DB and pushes QR when ready
+    const ws = new WebSocket(`${getWsBaseUrl()}/device/${device.id}/qr-stream`)
+    wsConnection.value = ws
+
+    ws.onmessage = async (event) => {
+      const msg = JSON.parse(event.data)
+
+      if (msg.type === 'qr') {
+        // Backend sent the QR code as base64 PNG
+        qrCode.value = msg.data
+
+      } else if (msg.type === 'authenticated') {
+        ws.close()
+        wsConnection.value = null
+        showQRDialog.value = false
+        qrCode.value = undefined
+
+        // 4. Connect device so it starts listening for incoming messages
+        try {
+          await whatsapp.connectDevice(device.id, 'qr')
+        } catch (e) {
+          console.warn('Auto-connect after auth:', e)
+        }
+
+        toast.add({
+          severity: 'success',
+          summary: 'Dispositivo autenticado',
+          detail: `${device.device_name} vinculado exitosamente`,
+          life: 4000,
+        })
+        selectedDevice.value = undefined
+        await loadDevices()
+
+      } else if (msg.type === 'error') {
+        toast.add({
+          severity: 'error',
+          summary: 'Error de autenticación',
+          detail: msg.message || 'Error desconocido',
+          life: 4000,
+        })
+      }
+    }
+
+    ws.onerror = () => {
+      toast.add({
+        severity: 'error',
+        summary: 'Error de conexión',
+        detail: 'No se pudo conectar al stream QR',
+        life: 3000,
+      })
+    }
+
   } catch (error) {
     toast.add({
       severity: 'error',
       summary: 'Error',
-      detail: 'No se pudo generar el código QR',
+      detail: 'No se pudo iniciar la autenticación',
       life: 3000,
     })
     console.error('Error connecting device:', error)
@@ -191,38 +271,21 @@ const getStatusLabel = (status: string) => {
 }
 
 const openCreateDialog = () => {
-  newDevice.value = { phone_number: '', device_name: '' }
+  newDevice.value = { device_name: '' }
+  localPhone.value = ''
+  selectedCountry.value = countries[0]
   showCreateDialog.value = true
 }
 
 const closeQRDialog = async () => {
+  if (wsConnection.value) {
+    wsConnection.value.close()
+    wsConnection.value = null
+  }
   showQRDialog.value = false
   qrCode.value = undefined
-
-  if (selectedDevice.value) {
-    const deviceToConnect = selectedDevice.value
-    selectedDevice.value = undefined
-
-    setTimeout(async () => {
-      try {
-        loading.value = true
-        await whatsapp.connectDevice(deviceToConnect.id, 'qr')
-        toast.add({
-          severity: 'success',
-          summary: 'Dispositivo conectado',
-          detail: 'El dispositivo se conectó exitosamente',
-          life: 3000,
-        })
-      } catch (error) {
-        console.log('Auto-connect attempt:', error)
-      } finally {
-        loading.value = false
-        await loadDevices()
-      }
-    }, 2000)
-  } else {
-    await loadDevices()
-  }
+  selectedDevice.value = undefined
+  await loadDevices()
 }
 
 onMounted(() => {
@@ -349,14 +412,30 @@ onMounted(() => {
       <div class="form-container">
         <div class="field">
           <label for="phone">Número de Teléfono</label>
-          <InputText
-            id="phone"
-            v-model="newDevice.phone_number"
-            placeholder="+1234567890"
-            class="w-full"
-            :disabled="loading"
-          />
-          <small class="text-muted">Incluye el código de país (ej: +52, +1, +34)</small>
+          <div class="phone-input-group">
+            <Dropdown
+              v-model="selectedCountry"
+              :options="countries"
+              optionLabel="name"
+              :disabled="loading"
+              class="country-dropdown"
+            >
+              <template #value="{ value }">
+                <span>{{ value.flag }} {{ value.dial }}</span>
+              </template>
+              <template #option="{ option }">
+                <span>{{ option.flag }} {{ option.dial }} {{ option.name }}</span>
+              </template>
+            </Dropdown>
+            <InputText
+              id="phone"
+              v-model="localPhone"
+              placeholder="1112345678"
+              :disabled="loading"
+              class="phone-number-input"
+            />
+          </div>
+          <small class="text-muted">Ingresa el número sin el código de país</small>
         </div>
 
         <div class="field">
@@ -387,13 +466,14 @@ onMounted(() => {
     <!-- QR Code Dialog -->
     <Dialog
       v-model:visible="showQRDialog"
-      header="Escanear Código QR"
+      :header="qrCode ? 'Escanear Código QR' : 'Generando Código QR…'"
       :modal="true"
       :style="{ width: '500px' }"
+      :closable="true"
       @hide="closeQRDialog"
     >
       <div class="qr-container">
-        <Message severity="info" :closable="false" class="qr-instructions">
+        <Message v-if="qrCode" severity="info" :closable="false" class="qr-instructions">
           <ol>
             <li>Abre WhatsApp en tu teléfono</li>
             <li>Ve a Configuración > Dispositivos vinculados</li>
@@ -405,17 +485,18 @@ onMounted(() => {
         <div v-if="qrCode" class="qr-code-wrapper">
           <img :src="qrCode" alt="QR Code" class="qr-code" />
         </div>
-        <div v-else class="loading-container">
+        <div v-else class="loading-container qr-loading">
           <ProgressSpinner />
+          <p class="qr-loading-text">Conectando con WhatsApp…</p>
         </div>
 
-        <Message severity="warn" :closable="false" class="qr-warning">
+        <Message v-if="qrCode" severity="warn" :closable="false" class="qr-warning">
           Este código QR expira en 60 segundos. Si expira, cierra esta ventana y vuelve a conectar.
         </Message>
       </div>
 
       <template #footer>
-        <Button label="Cerrar" icon="pi pi-times" @click="closeQRDialog" />
+        <Button label="Cancelar" icon="pi pi-times" text @click="closeQRDialog" />
       </template>
     </Dialog>
   </div>
@@ -525,6 +606,29 @@ onMounted(() => {
   }
 }
 
+.phone-input-group {
+  display: flex;
+  gap: 0;
+
+  .country-dropdown {
+    flex-shrink: 0;
+    border-top-right-radius: 0;
+    border-bottom-right-radius: 0;
+
+    :deep(.p-dropdown) {
+      border-top-right-radius: 0;
+      border-bottom-right-radius: 0;
+    }
+  }
+
+  .phone-number-input {
+    flex: 1;
+    border-top-left-radius: 0;
+    border-bottom-left-radius: 0;
+    border-left: 0;
+  }
+}
+
 .qr-container {
   display: flex;
   flex-direction: column;
@@ -541,6 +645,17 @@ onMounted(() => {
       margin: 0.5rem 0;
     }
   }
+}
+
+.qr-loading {
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.qr-loading-text {
+  margin: 0;
+  color: var(--text-color-secondary);
+  font-size: 0.875rem;
 }
 
 .qr-code-wrapper {

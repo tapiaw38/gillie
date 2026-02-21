@@ -10,6 +10,7 @@ from .conversation import *
 from .memory import *
 from .calendar import *
 from .drive import *
+from .whatsapp_device import *
 
 __all__ = [
     # Common errors
@@ -94,4 +95,19 @@ __all__ = [
     "DriveSearchError",
     "DriveSyncError",
     "DriveIndexNotFoundError",
+
+    # WhatsApp Device errors
+    "WhatsAppDeviceCreateError",
+    "WhatsAppDeviceNameRequiredError",
+    "WhatsAppDeviceNotFoundError",
+    "WhatsAppDeviceGetQueryError",
+    "WhatsAppDeviceListQueryError",
+    "WhatsAppDeviceDeleteError",
+    "WhatsAppDeviceUpdateError",
+    "WhatsAppDeviceAuthError",
+    "WhatsAppDeviceConnectError",
+    "WhatsAppDeviceDisconnectError",
+    "WhatsAppDeviceSendError",
+    "WhatsAppDeviceNotConnectedError",
+    "WhatsAppDevicePhoneRequiredError",
 ]

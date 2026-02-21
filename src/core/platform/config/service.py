@@ -27,6 +27,7 @@ class NoSQLConfig:
     faqs: Optional[NoSQLCollectionConfig] = None
     calendar_sessions: Optional[NoSQLCollectionConfig] = None
     calendar_events: Optional[NoSQLCollectionConfig] = None
+    whatsapp_devices: Optional[NoSQLCollectionConfig] = None
 
 @dataclass
 class ServerConfig:
@@ -215,6 +216,11 @@ def read_config() -> ConfigurationService:
             database=get_env("DB_NAME", "gillie-db"),
             collection=get_env("DB_COLLECTION_CALENDAR_EVENTS", "calendar_events"),
         ),
+        whatsapp_devices=NoSQLCollectionConfig(
+            database_uri=database_uri,
+            database=get_env("DB_NAME", "gillie-db"),
+            collection=get_env("DB_COLLECTION_WHATSAPP_DEVICES", "whatsapp_devices"),
+        ),
     )
 
     openai_config = OpenAIConfig(
@@ -370,6 +376,11 @@ def init_config_from_json(config_data: "AssistantConfig") -> None:
             database_uri=db_uri,
             database=db_name,
             collection="calendar_events",
+        ),
+        whatsapp_devices=NoSQLCollectionConfig(
+            database_uri=db_uri,
+            database=db_name,
+            collection="whatsapp_devices",
         ),
     )
 

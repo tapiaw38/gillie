@@ -56,6 +56,16 @@ from src.core.use_cases.drive import (
     GetIndexStatusUseCase,
     RemoveFileIndexUseCase,
 )
+from src.core.use_cases.whatsapp_device import (
+    CreateDeviceUseCase as WhatsAppDeviceCreateUseCase,
+    ListDevicesUseCase as WhatsAppDeviceListUseCase,
+    GetDeviceUseCase as WhatsAppDeviceGetUseCase,
+    DeleteDeviceUseCase as WhatsAppDeviceDeleteUseCase,
+    AuthenticateDeviceUseCase as WhatsAppDeviceAuthenticateUseCase,
+    ConnectDeviceUseCase as WhatsAppDeviceConnectUseCase,
+    DisconnectDeviceUseCase as WhatsAppDeviceDisconnectUseCase,
+    SendMessageUseCase as WhatsAppDeviceSendMessageUseCase,
+)
 
 
 @dataclass
@@ -127,6 +137,18 @@ class Drive:
 
 
 @dataclass
+class WhatsAppDevice:
+    create_usecase: WhatsAppDeviceCreateUseCase
+    list_usecase: WhatsAppDeviceListUseCase
+    get_usecase: WhatsAppDeviceGetUseCase
+    delete_usecase: WhatsAppDeviceDeleteUseCase
+    authenticate_usecase: WhatsAppDeviceAuthenticateUseCase
+    connect_usecase: WhatsAppDeviceConnectUseCase
+    disconnect_usecase: WhatsAppDeviceDisconnectUseCase
+    send_message_usecase: WhatsAppDeviceSendMessageUseCase
+
+
+@dataclass
 class Usecases:
     profile: Profile
     conversation: Conversation
@@ -134,6 +156,7 @@ class Usecases:
     whatsapp: WhatsApp
     calendar: Calendar
     drive: Drive
+    whatsapp_device: WhatsAppDevice
 
 
 def create_usecases(context_factory: Factory) -> Usecases:
@@ -193,5 +216,15 @@ def create_usecases(context_factory: Factory) -> Usecases:
             search_drive_usecase=SearchDriveUseCase(context_factory),
             get_index_status_usecase=GetIndexStatusUseCase(context_factory),
             remove_file_index_usecase=RemoveFileIndexUseCase(context_factory),
+        ),
+        whatsapp_device=WhatsAppDevice(
+            create_usecase=WhatsAppDeviceCreateUseCase(context_factory),
+            list_usecase=WhatsAppDeviceListUseCase(context_factory),
+            get_usecase=WhatsAppDeviceGetUseCase(context_factory),
+            delete_usecase=WhatsAppDeviceDeleteUseCase(context_factory),
+            authenticate_usecase=WhatsAppDeviceAuthenticateUseCase(context_factory),
+            connect_usecase=WhatsAppDeviceConnectUseCase(context_factory),
+            disconnect_usecase=WhatsAppDeviceDisconnectUseCase(context_factory),
+            send_message_usecase=WhatsAppDeviceSendMessageUseCase(context_factory),
         ),
     )
