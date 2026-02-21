@@ -155,9 +155,9 @@ def status():
 
 @app.command("reset")
 def reset(
-    yes: bool = typer.Option(False, "--yes", "-y", help="Omitir confirmación"),
+    yes: bool = typer.Option(False, "--yes", "-y", help="Skip confirmation prompt"),
 ):
-    """Eliminar todos los datos de la base de datos MongoDB."""
+    """Drop all data from the MongoDB database."""
     db_name = "gillie-db"
     uri = "mongodb://localhost:27017"
     if config_exists():
@@ -166,10 +166,10 @@ def reset(
         uri = config.services.mongodb.uri
 
     if not yes:
-        console.print(f"[red]⚠[/red]  Esto eliminará [bold]todos los datos[/bold] de [bold]{db_name}[/bold].")
-        confirm = typer.confirm("¿Estás seguro?")
+        console.print(f"[red]⚠[/red]  This will delete [bold]all data[/bold] in [bold]{db_name}[/bold].")
+        confirm = typer.confirm("Are you sure?")
         if not confirm:
-            console.print("Cancelado.")
+            console.print("Aborted.")
             raise typer.Exit(0)
 
     try:
@@ -177,9 +177,9 @@ def reset(
         client = MongoClient(uri, serverSelectionTimeoutMS=5000)
         client.drop_database(db_name)
         client.close()
-        console.print(f"[green]✓[/green] Base de datos [bold]{db_name}[/bold] eliminada correctamente.")
+        console.print(f"[green]✓[/green] Database [bold]{db_name}[/bold] dropped successfully.")
     except Exception as e:
-        console.print(f"[red]✗[/red] Error al resetear la base de datos: {e}")
+        console.print(f"[red]✗[/red] Failed to reset database: {e}")
         raise typer.Exit(1)
 
 

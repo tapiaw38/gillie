@@ -168,9 +168,9 @@ def status():
 
 @app.command("reset")
 def reset(
-    yes: bool = typer.Option(False, "--yes", "-y", help="Omitir confirmación"),
+    yes: bool = typer.Option(False, "--yes", "-y", help="Skip confirmation prompt"),
 ):
-    """Eliminar todas las colecciones de Qdrant (borra todos los vectores)."""
+    """Delete all Qdrant collections (removes all vector data)."""
     host = "localhost"
     port = 6333
     if config_exists():
@@ -179,10 +179,10 @@ def reset(
         port = config.services.qdrant.port
 
     if not yes:
-        console.print(f"[red]⚠[/red]  Esto eliminará [bold]todas las colecciones[/bold] de Qdrant en [bold]{host}:{port}[/bold].")
-        confirm = typer.confirm("¿Estás seguro?")
+        console.print(f"[red]⚠[/red]  This will delete [bold]all collections[/bold] in Qdrant at [bold]{host}:{port}[/bold].")
+        confirm = typer.confirm("Are you sure?")
         if not confirm:
-            console.print("Cancelado.")
+            console.print("Aborted.")
             raise typer.Exit(0)
 
     try:
@@ -194,7 +194,7 @@ def reset(
         collections = r.json().get("result", {}).get("collections", [])
 
         if not collections:
-            console.print("[dim]No hay colecciones en Qdrant.[/dim]")
+            console.print("[dim]No collections found in Qdrant.[/dim]")
             raise typer.Exit(0)
 
         deleted = 0
@@ -202,14 +202,14 @@ def reset(
             name = col["name"]
             r = requests.delete(f"{base_url}/collections/{name}", timeout=10)
             if r.status_code == 200:
-                console.print(f"  [green]✓[/green] Colección [bold]{name}[/bold] eliminada.")
+                console.print(f"  [green]✓[/green] Deleted collection [bold]{name}[/bold].")
                 deleted += 1
             else:
-                console.print(f"  [red]✗[/red] Error al eliminar [bold]{name}[/bold]: {r.text}")
+                console.print(f"  [red]✗[/red] Failed to delete [bold]{name}[/bold]: {r.text}")
 
-        console.print(f"\n[green]✓[/green] Reset completo — {deleted} colección(es) eliminada(s).")
+        console.print(f"\n[green]✓[/green] Reset complete — {deleted} collection(s) deleted.")
     except Exception as e:
-        console.print(f"[red]✗[/red] Error al resetear Qdrant: {e}")
+        console.print(f"[red]✗[/red] Failed to reset Qdrant: {e}")
         raise typer.Exit(1)
 
 

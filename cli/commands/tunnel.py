@@ -110,22 +110,22 @@ def start(
     cmd.append(f"{t.user}@{t.host}")
 
     console.print()
-    console.print(f"✨🐟 Iniciando túnel SSH...")
+    console.print(f"✨🐟 Starting SSH tunnel...")
     console.print(f"  [cyan]local:[/cyan]  localhost:[bold]{t.local_port}[/bold]")
-    console.print(f"  [cyan]remoto:[/cyan] {t.user}@{t.host}:{t.api_port}  (SSH :{t.ssh_port})")
+    console.print(f"  [cyan]remote:[/cyan] {t.user}@{t.host}:{t.api_port}  (SSH :{t.ssh_port})")
     console.print()
-    console.print(f"  El frontend puede conectarse a [bold]http://localhost:{t.local_port}[/bold]")
+    console.print(f"  Frontend can connect to [bold]http://localhost:{t.local_port}[/bold]")
     console.print()
-    console.print("[dim]Presioná Ctrl+C para detener el túnel.[/dim]")
+    console.print("[dim]Press Ctrl+C to stop the tunnel.[/dim]")
     console.print()
 
     try:
         subprocess.run(cmd, check=True)
     except KeyboardInterrupt:
         console.print()
-        console.print("[green]✓[/green] Túnel cerrado.")
+        console.print("[green]✓[/green] Tunnel closed.")
     except subprocess.CalledProcessError as e:
-        console.print(f"[red]✗[/red] Error al establecer el túnel: {e}")
+        console.print(f"[red]✗[/red] Failed to establish tunnel: {e}")
         raise typer.Exit(1)
 
 
@@ -134,14 +134,14 @@ def _print_tunnel_info(t):
     table.add_column("Key", style="bold dim")
     table.add_column("Value")
 
-    table.add_row("Host", t.host or "[dim]no configurado[/dim]")
-    table.add_row("User", t.user or "[dim]no configurado[/dim]")
+    table.add_row("Host", t.host or "[dim]not set[/dim]")
+    table.add_row("User", t.user or "[dim]not set[/dim]")
     table.add_row("SSH port", str(t.ssh_port))
     table.add_row("API port (VPS)", str(t.api_port))
     table.add_row("Local port", str(t.local_port))
-    table.add_row("Comando", f"ssh -N -L {t.local_port}:localhost:{t.api_port} -p {t.ssh_port} {t.user}@{t.host}")
+    table.add_row("Command", f"ssh -N -L {t.local_port}:localhost:{t.api_port} -p {t.ssh_port} {t.user}@{t.host}")
 
     console.print(table)
     console.print()
-    console.print("  Iniciá el túnel con: [bold cyan]gillie tunnel start[/bold cyan]")
+    console.print("  Start the tunnel with: [bold cyan]gillie tunnel start[/bold cyan]")
     console.print()
