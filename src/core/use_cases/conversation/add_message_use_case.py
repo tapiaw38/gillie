@@ -314,12 +314,12 @@ class AddMessageUseCase:
             # Build chat history for function execution
             chat_history = self.context_factory.platform_managers.message_history.build_chat_history(
                 messages=conversation.messages,
-                max_messages=5
+                max_messages=40
             )
 
-            # Convert messages to string for conversation context
+            # Convert messages to string for conversation context (last 40 to avoid processing entire history)
             conversation_history = self.context_factory.platform_managers.message_history.convert_messages_to_string(
-                conversation.messages
+                conversation.messages[-40:]
             )
 
             # Generate response using AI response service
@@ -438,7 +438,7 @@ class AddMessageUseCase:
             logger.info("Image processing activated")
 
             conversation_history = self.context_factory.platform_managers.message_history.convert_messages_to_string(
-                conversation.messages
+                conversation.messages[-40:]
             )
 
             formatted_images = await self.context_factory.platform_managers.image_processing.search_and_format_images(
