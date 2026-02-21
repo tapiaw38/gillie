@@ -556,7 +556,7 @@ CRITICAL OUTPUT RULES:
         profile: Profile,
         chat_history: List[str] = None,
         auth_token: str = None,
-    ) -> str:
+    ) -> Optional[str]:
         """Analyze the user message, find a matching function, and execute it."""
         try:
             available_functions = self._get_all_available_functions(profile)
@@ -577,8 +577,7 @@ CRITICAL OUTPUT RULES:
             intent = await self._analyze_user_intent(user_message, available_functions, chat_history)
 
             if not isinstance(intent, dict) or not intent.get("match_found", False):
-                reasoning = intent.get("reasoning", "") if isinstance(intent, dict) else ""
-                return f"I couldn't find a function that matches your request. {reasoning}".strip()
+                return None  # No match → fallback to standard AI
 
             matched_name = intent.get("function_name")
             matched_function = next((f for f in available_functions if f.name == matched_name), None)

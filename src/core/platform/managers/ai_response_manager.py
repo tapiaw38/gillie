@@ -134,15 +134,13 @@ class AIResponseService:
                 auth_token=auth_token
             )
 
-            # Check if function was successfully executed
-            if function_response and not function_response.startswith(
-                "No encontré una función"
-            ):
+            # Check if function was successfully executed (None = no match found)
+            if function_response is not None:
                 logger.info("Function executed successfully")
                 return function_response
             else:
                 # No matching function found, fallback to standard AI
-                logger.info("No function found, using standard AI response")
+                logger.info("No function matched, using standard AI response")
                 return await self._generate_standard_response(
                     user_message=user_message,
                     profile=profile,
