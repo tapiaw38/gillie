@@ -89,8 +89,8 @@ const assistantName = computed(() => assistantProfile.value?.assistant_name || '
 }
 
 .brand-logo {
-  width: 4.5rem;
-  height: 4.5rem;
+  width: 5rem;
+  height: 5rem;
   object-fit: contain;
 }
 

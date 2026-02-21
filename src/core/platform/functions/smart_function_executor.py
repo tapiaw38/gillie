@@ -36,6 +36,7 @@ class FunctionConfig:
     description: str = ""
     body_mode: str = "template"  # "template" | "llm"
     body_prompt: Optional[str] = None
+    required_body_params: List[str] = field(default_factory=list)
 
 
 class SmartFunctionExecutor:
@@ -150,6 +151,7 @@ CRITICAL OUTPUT RULES:
                     description=func.get("description", ""),
                     body_mode=func.get("body_mode", "template"),
                     body_prompt=func.get("body_prompt"),
+                    required_body_params=func.get("required_body_params", []),
                 )
                 parsed.append(config)
 
@@ -358,6 +360,7 @@ CRITICAL OUTPUT RULES:
         function_config: "FunctionConfig",
         user_message: str,
         params: Dict[str, Any],
+        chat_history: Optional[List[str]] = None,
     ) -> Optional[Dict[str, Any]]:
         """
         Use the LLM to build a complex JSON body (e.g. a shopping cart) from
@@ -365,8 +368,14 @@ CRITICAL OUTPUT RULES:
         extracted params.  Returns a dict/list or None on failure.
         """
         try:
+            history_context = ""
+            if chat_history:
+                recent = chat_history[-6:]  # last 3 exchanges
+                history_context = "Recent conversation:\n" + "\n".join(recent) + "\n\n"
+
             prompt = (
                 f"{function_config.body_prompt}\n\n"
+                f"{history_context}"
                 f"User request: \"{user_message}\"\n"
                 f"Already extracted params: {json.dumps(params, ensure_ascii=False)}\n\n"
                 "Build the complete JSON body for the API call based on the user's request "
@@ -429,6 +438,9 @@ CRITICAL OUTPUT RULES:
             if body and function_config.method.upper() not in ("GET", "DELETE"):
                 kwargs["json"] = body
 
+            logger.info(f"[{function_config.name}] {function_config.method} {url}")
+            logger.info(f"[{function_config.name}] body: {json.dumps(body, ensure_ascii=False) if body else 'None'}")
+
             timeout = aiohttp.ClientTimeout(total=30)
             async with aiohttp.ClientSession() as session:
                 async with session.request(
@@ -438,8 +450,10 @@ CRITICAL OUTPUT RULES:
                     timeout=timeout,
                     **kwargs,
                 ) as response:
+                    response_text = await response.text()
+                    logger.info(f"[{function_config.name}] response {response.status}: {response_text[:300]}")
                     response.raise_for_status()
-                    result = await response.json()
+                    result = json.loads(response_text)
 
             return {"success": True, "result": result, "url_executed": url, "type": "simple_function"}
 
@@ -570,7 +584,7 @@ CRITICAL OUTPUT RULES:
             if ongoing_function:
                 return await self._process_ongoing_function(
                     user_id, ongoing_function, user_message, available_functions,
-                    profile=profile, auth_token=auth_token,
+                    profile=profile, auth_token=auth_token, chat_history=chat_history,
                 )
 
             # Analyze intent
@@ -589,9 +603,17 @@ CRITICAL OUTPUT RULES:
             stored_params = self._get_stored_params(user_id, matched_name)
             all_params = {**stored_params, **extracted_params}
 
+            # For body_mode="llm", also check required_body_params
+            if matched_function.body_mode == "llm" and matched_function.required_body_params:
+                missing_body = [p for p in matched_function.required_body_params if p not in all_params]
+                if missing_body:
+                    missing_params = list(set(missing_params + missing_body))
+
             if missing_params:
                 if extracted_params:
                     self._store_params(user_id, matched_name, extracted_params)
+                # Store trigger message and seed storage so _detect_ongoing_function picks it up
+                self._store_params(user_id, matched_name, {"__trigger_message__": user_message})
                 param_request = await self._request_missing_params(missing_params, matched_name)
                 return param_request["message"]
 
@@ -601,7 +623,7 @@ CRITICAL OUTPUT RULES:
                 prebuilt_body = None
                 if matched_function.body_mode == "llm" and matched_function.body_prompt:
                     prebuilt_body = await self._build_body_with_llm(
-                        matched_function, user_message, clean_params
+                        matched_function, user_message, clean_params, chat_history
                     )
                 result = await self._execute_simple_function(matched_function, clean_params, prebuilt_body)
             elif matched_function.type == "workflow":
@@ -645,6 +667,7 @@ CRITICAL OUTPUT RULES:
         available_functions: List[FunctionConfig],
         profile=None,
         auth_token: str = None,
+        chat_history: List[str] = None,
     ) -> str:
         """Continue collecting parameters for a function already in progress."""
         try:
@@ -655,8 +678,10 @@ CRITICAL OUTPUT RULES:
             stored_params = self._get_stored_params(user_id, function_name)
             new_params = self._extract_generic_params(user_message)
 
-            # Determine required params
-            if matched_function.type == "workflow" and function_name in self.workflow_executor.workflows:
+            # Determine required params: URL params OR required_body_params for body_mode="llm"
+            if matched_function.body_mode == "llm" and matched_function.required_body_params:
+                required_params = matched_function.required_body_params
+            elif matched_function.type == "workflow" and function_name in self.workflow_executor.workflows:
                 required_params = self.workflow_executor.workflows[function_name].get("input_params", [])
             else:
                 required_params = self._extract_url_params(matched_function.url)
@@ -680,12 +705,14 @@ CRITICAL OUTPUT RULES:
                 return param_request["message"]
 
             # All params collected — execute
+            # Use the original trigger message (the one with the product request) for body building
+            trigger_message = all_params.get("__trigger_message__", user_message)
             clean_params = self._strip_metadata(all_params)
             if matched_function.type == "simple":
                 prebuilt_body = None
                 if matched_function.body_mode == "llm" and matched_function.body_prompt:
                     prebuilt_body = await self._build_body_with_llm(
-                        matched_function, user_message, clean_params
+                        matched_function, trigger_message, clean_params, chat_history
                     )
                 result = await self._execute_simple_function(matched_function, clean_params, prebuilt_body)
             elif matched_function.type == "workflow":
