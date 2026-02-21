@@ -218,11 +218,11 @@ def create_langchain_tools(openai_integration, profile) -> List[StructuredTool]:
         StructuredTool(
             name="search_documents",
             description=(
-                "Search for specific information in the user's uploaded documents (PDFs and Excel files). "
-                "Use this tool when the user asks about products, prices, availability, specifications, "
-                "or any information that may be in the uploaded files. "
-                "This performs semantic search across PDF catalogs, price lists, and Excel spreadsheets. "
-                "Returns relevant text chunks with product details, prices, and specifications."
+                "OBLIGATORIO: Usa esta herramienta cuando el usuario pregunte sobre productos, precios, "
+                "disponibilidad, stock o cualquier información del catálogo. "
+                "Ejemplos de cuándo usarla: 'qué productos tienen', 'precio de leche', 'tienen aceite', "
+                "'cuánto cuesta', 'qué hay disponible'. "
+                "Retorna los productos y precios encontrados en el catálogo."
             ),
             func=search_documents_tool,
             args_schema=SearchDocumentsArgs,
