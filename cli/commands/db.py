@@ -153,6 +153,36 @@ def status():
     console.print()
 
 
+@app.command("reset")
+def reset(
+    yes: bool = typer.Option(False, "--yes", "-y", help="Omitir confirmación"),
+):
+    """Eliminar todos los datos de la base de datos MongoDB."""
+    db_name = "gillie-db"
+    uri = "mongodb://localhost:27017"
+    if config_exists():
+        config = load_config()
+        db_name = config.services.mongodb.database
+        uri = config.services.mongodb.uri
+
+    if not yes:
+        console.print(f"[red]⚠[/red]  Esto eliminará [bold]todos los datos[/bold] de [bold]{db_name}[/bold].")
+        confirm = typer.confirm("¿Estás seguro?")
+        if not confirm:
+            console.print("Cancelado.")
+            raise typer.Exit(0)
+
+    try:
+        from pymongo import MongoClient
+        client = MongoClient(uri, serverSelectionTimeoutMS=5000)
+        client.drop_database(db_name)
+        client.close()
+        console.print(f"[green]✓[/green] Base de datos [bold]{db_name}[/bold] eliminada correctamente.")
+    except Exception as e:
+        console.print(f"[red]✗[/red] Error al resetear la base de datos: {e}")
+        raise typer.Exit(1)
+
+
 @app.command("logs")
 def logs(
     follow: bool = typer.Option(False, "--follow", "-f", help="Follow log output"),

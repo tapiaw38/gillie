@@ -11,6 +11,7 @@ from cli.commands.qdrant import app as qdrant_app
 from cli.commands.service import app as service_app
 from cli.commands.memory import app as memory_app
 from cli.commands.ui import app as ui_app
+from cli.commands.tunnel import app as tunnel_app
 
 console = Console()
 
@@ -31,6 +32,7 @@ app.add_typer(qdrant_app, name="qdrant", help="Manage Qdrant vector store (Docke
 app.add_typer(service_app, name="service", help="Manage systemd service")
 app.add_typer(memory_app, name="memory", help="Manage assistant memory (skills + FAQs)")
 app.add_typer(ui_app, name="ui", help="Manage the Gillie UI (Vue dashboard)")
+app.add_typer(tunnel_app, name="tunnel", help="SSH tunnel to a remote VPS")
 
 
 @app.command("status")

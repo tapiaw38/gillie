@@ -166,6 +166,53 @@ def status():
     console.print()
 
 
+@app.command("reset")
+def reset(
+    yes: bool = typer.Option(False, "--yes", "-y", help="Omitir confirmación"),
+):
+    """Eliminar todas las colecciones de Qdrant (borra todos los vectores)."""
+    host = "localhost"
+    port = 6333
+    if config_exists():
+        config = load_config()
+        host = config.services.qdrant.host
+        port = config.services.qdrant.port
+
+    if not yes:
+        console.print(f"[red]⚠[/red]  Esto eliminará [bold]todas las colecciones[/bold] de Qdrant en [bold]{host}:{port}[/bold].")
+        confirm = typer.confirm("¿Estás seguro?")
+        if not confirm:
+            console.print("Cancelado.")
+            raise typer.Exit(0)
+
+    try:
+        import requests
+        base_url = f"http://{host}:{port}"
+
+        r = requests.get(f"{base_url}/collections", timeout=10)
+        r.raise_for_status()
+        collections = r.json().get("result", {}).get("collections", [])
+
+        if not collections:
+            console.print("[dim]No hay colecciones en Qdrant.[/dim]")
+            raise typer.Exit(0)
+
+        deleted = 0
+        for col in collections:
+            name = col["name"]
+            r = requests.delete(f"{base_url}/collections/{name}", timeout=10)
+            if r.status_code == 200:
+                console.print(f"  [green]✓[/green] Colección [bold]{name}[/bold] eliminada.")
+                deleted += 1
+            else:
+                console.print(f"  [red]✗[/red] Error al eliminar [bold]{name}[/bold]: {r.text}")
+
+        console.print(f"\n[green]✓[/green] Reset completo — {deleted} colección(es) eliminada(s).")
+    except Exception as e:
+        console.print(f"[red]✗[/red] Error al resetear Qdrant: {e}")
+        raise typer.Exit(1)
+
+
 @app.command("logs")
 def logs(
     follow: bool = typer.Option(False, "--follow", "-f", help="Follow log output"),

@@ -23,6 +23,7 @@ from cli.config.schema import (
     LangSmithServiceConfig,
     LLMExtendedServiceConfig,
     LoggingConfig,
+    TunnelConfig,
 )
 
 CONFIG_DIR = Path.home() / ".gillie"
@@ -123,6 +124,7 @@ def load_config() -> AssistantConfig:
         server=ServerConfig(**data.get("server", {})),
         services=_build_services(data.get("services", {})),
         logging=LoggingConfig(**data.get("logging", {})),
+        tunnel=TunnelConfig(**data.get("tunnel", {})),
     )
 
 
@@ -140,6 +142,7 @@ def save_config(config: AssistantConfig) -> None:
         "server": asdict(config.server),
         "services": asdict(config.services),
         "logging": asdict(config.logging),
+        "tunnel": asdict(config.tunnel),
     }
     with open(path, "w") as f:
         json.dump(technical, f, indent=2)

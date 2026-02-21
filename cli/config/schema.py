@@ -157,6 +157,15 @@ class ServicesConfig:
 
 
 @dataclass
+class TunnelConfig:
+    host: str = ""
+    user: str = ""
+    ssh_port: int = 22
+    api_port: int = 8000
+    local_port: int = 8000
+
+
+@dataclass
 class LoggingConfig:
     environment: str = "development"
     log_level: str = "INFO"
@@ -177,3 +186,4 @@ class AssistantConfig:
     server: ServerConfig = field(default_factory=ServerConfig)
     services: ServicesConfig = field(default_factory=ServicesConfig)
     logging: LoggingConfig = field(default_factory=LoggingConfig)
+    tunnel: TunnelConfig = field(default_factory=TunnelConfig)
