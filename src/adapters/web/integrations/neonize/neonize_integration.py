@@ -333,7 +333,6 @@ class NeonizeIntegration:
         tmp_wav = None
         tmp_ogg = None
         try:
-            # 1. Descargar el WAV desde S3
             async with aiohttp.ClientSession() as session:
                 async with session.get(audio_url) as resp:
                     resp.raise_for_status()
@@ -344,7 +343,6 @@ class NeonizeIntegration:
                 len(wav_bytes), audio_url[:60], device_id,
             )
 
-            # 2. Convertir WAV → OGG OPUS (WhatsApp PTT requiere OGG OPUS)
             with tempfile.NamedTemporaryFile(suffix=".wav", delete=False) as f:
                 f.write(wav_bytes)
                 tmp_wav = f.name
@@ -353,10 +351,12 @@ class NeonizeIntegration:
             ffmpeg_cmd = [
                 "ffmpeg", "-y",
                 "-i", tmp_wav,
+                "-vn",                    # descartar video si hubiera
                 "-c:a", "libopus",
-                "-b:a", "64k",
+                "-b:a", "32k",            # 32k
                 "-ar", "48000",
-                "-ac", "1",
+                "-ac", "1",               # mono
+                "-application", "voip",
                 tmp_ogg,
             ]
             result = subprocess.run(ffmpeg_cmd, capture_output=True, timeout=30)
@@ -373,7 +373,6 @@ class NeonizeIntegration:
                     "[neonize] Converted to OGG OPUS: %d bytes", len(audio_bytes)
                 )
 
-            # 3. Enviar como nota de voz PTT
             client = await self.get_client(device_id)
             result = await client.send_audio(jid_proto, audio_bytes, ptt=True)
             msg_id = str(result.id) if hasattr(result, "id") else str(result)
@@ -394,8 +393,6 @@ class NeonizeIntegration:
                 if path and os.path.exists(path):
                     os.unlink(path)
 
-    # ─── Internal helpers ────────────────────────────────────────────────────
-
     def _is_running(self, device_id: str) -> bool:
         return device_id in self._clients
 
@@ -410,8 +407,6 @@ class NeonizeIntegration:
 
         try:
             client = await self.get_client(device_id)
-            # download_any expects the inner waE2E.Message (msg_event.Message),
-            # not the outer neonize MessageEv wrapper
             wa_msg = getattr(msg_event, "Message", None)
             if wa_msg is None:
                 return ""
@@ -420,7 +415,6 @@ class NeonizeIntegration:
                 logger.warning(f"[neonize] download_any returned empty for device {device_id}")
                 return ""
 
-            # Determine format from mimetype (WhatsApp typically sends audio/ogg; codecs=opus)
             mimetype = getattr(audio_msg, "mimetype", "audio/ogg")
             if "ogg" in mimetype:
                 audio_format = "ogg"
@@ -470,7 +464,6 @@ class NeonizeIntegration:
           msg_event.Message          → waE2E.Message (uses camelCase: conversation, extendedTextMessage)
         """
         try:
-            # Neonize protobuf field is "Info" (PascalCase), not "info"
             info = getattr(msg_event, "Info", None)
             if info is None:
                 logger.debug(f"[neonize] _dispatch_message: no Info field, skipping")
@@ -484,15 +477,12 @@ class NeonizeIntegration:
             if getattr(src, "IsFromMe", False):
                 return
 
-            # Use Jid2String to get "user@server" format (e.g. "5491112345678@s.whatsapp.net")
-            # str() returns a raw protobuf representation, not usable as a JID string
             from neonize.utils.jid import Jid2String
             sender_obj = getattr(src, "Sender", None)
             sender_jid = Jid2String(sender_obj) if sender_obj is not None else ""
             if not sender_jid:
                 return
 
-            # WA message content is in "Message" (PascalCase), inner fields are camelCase
             wa_msg = getattr(msg_event, "Message", None)
             text = ""
             if wa_msg is not None:

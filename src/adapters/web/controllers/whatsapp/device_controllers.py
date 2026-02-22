@@ -101,16 +101,15 @@ async def _handle_incoming_message(device_id: str, sender_jid: str, text: str):
                 audio_url = getattr(last, "audio_url", None)
 
         if assistant_response:
+            await neonize.send_text(device_id, sender_jid, assistant_response)
+            logger.info(f"[device:{device_id}] Replied to {sender_jid}")
+
             if audio_url:
                 sent = await neonize.send_audio(device_id, sender_jid, audio_url)
                 if sent:
                     logger.info(f"[device:{device_id}] Sent audio to {sender_jid}")
                 else:
-                    logger.warning(f"[device:{device_id}] Audio send failed, falling back to text")
-                    await neonize.send_text(device_id, sender_jid, assistant_response)
-            else:
-                await neonize.send_text(device_id, sender_jid, assistant_response)
-            logger.info(f"[device:{device_id}] Replied to {sender_jid}")
+                    logger.warning(f"[device:{device_id}] Audio send failed")
 
     except Exception as e:
         logger.error(
