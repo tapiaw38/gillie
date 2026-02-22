@@ -69,32 +69,8 @@ class TTSIntegration:
 
             processed_text = self._preprocess_text_for_natural_speech(text)
 
-            # Try regional variants first; fall back to plain "es"
-            # Use lang_check=False to avoid noisy rejections for regional codes
-            spanish_variants = [
-                "es-co",  # Colombia
-                "es-mx",  # Mexico
-                "es-ar",  # Argentina
-                "es",     # Spain (generic — always supported)
-            ]
-
-            tts_gtts = None
-            for lang_variant in spanish_variants:
-                try:
-                    tts_gtts = gTTS(
-                        text=processed_text,
-                        lang=lang_variant,
-                        slow=False,
-                        lang_check=False,   # skip remote check; avoids noisy failures
-                    )
-                    logger.info("TTS Strategy 1 (gTTS): using language variant '%s'", lang_variant)
-                    break
-                except Exception as variant_error:
-                    logger.debug("TTS Strategy 1 (gTTS): variant '%s' rejected: %s", lang_variant, variant_error)
-                    continue
-
-            if tts_gtts is None:
-                raise RuntimeError("No gTTS variant accepted")
+            tts_gtts = gTTS(text=processed_text, lang="es", slow=False)
+            logger.info("TTS Strategy 1 (gTTS): usando lang='es'")
 
             temp_mp3_path = output_path.replace(".wav", ".mp3")
             tts_gtts.save(temp_mp3_path)
