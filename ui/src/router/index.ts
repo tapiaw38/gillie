@@ -28,11 +28,6 @@ const router = createRouter({
           component: () => import('../views/ConversationView.vue'),
         },
         {
-          path: '/web-integration',
-          name: 'web-integration',
-          component: () => import('../views/WebIntegrationView.vue'),
-        },
-        {
           path: '/store-integration',
           name: 'store-integration',
           component: () => import('../views/StoreIntegrationView.vue'),
@@ -56,6 +51,11 @@ const router = createRouter({
           path: '/google-calendar-integration',
           name: 'google-calendar-integration',
           component: () => import('../views/GoogleCalendarIntegrationView.vue'),
+        },
+        {
+          path: '/google-drive-integration',
+          name: 'google-drive-integration',
+          component: () => import('../views/GoogleDriveIntegrationView.vue'),
         },
         {
           path: '/calendar/events',

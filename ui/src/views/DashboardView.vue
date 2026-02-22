@@ -158,14 +158,6 @@ const totalMessagesInConversation = computed(() => {
 
 const integrations = [
   {
-    name: 'Web',
-    description: 'Integración con sitios o aplicaciones web, mediante paquete NPM',
-    icon: 'pi pi-globe',
-    color: 'text-primary',
-    to: 'web-integration',
-    enabled: true,
-  },
-  {
     name: 'Storage',
     description: 'Integración con almacenamiento de archivos en la nube',
     icon: 'pi pi-file',
@@ -203,6 +195,14 @@ const integrations = [
     icon: 'pi pi-calendar',
     color: 'text-yellow-500',
     to: 'google-calendar-integration',
+    enabled: true,
+  },
+  {
+    name: 'Google Drive',
+    description: 'Integración Google Drive, accede a documentos y archivos desde el asistente',
+    icon: 'pi pi-folder-open',
+    color: 'text-blue-500',
+    to: 'google-drive-integration',
     enabled: true,
   },
   {

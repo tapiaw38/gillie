@@ -103,11 +103,20 @@ export interface GoogleCalendarIntegrationConfig {
   is_connected?: boolean
 }
 
+export interface GoogleDriveIntegrationConfig {
+  profile_id: string
+  is_connected?: boolean
+}
+
 export interface IntegrationParams {
   name: string
   type: string
   activated: boolean
-  config: MeliIntegrationConfig | WhatsappIntegrationConfig | GoogleCalendarIntegrationConfig
+  config:
+    | MeliIntegrationConfig
+    | WhatsappIntegrationConfig
+    | GoogleCalendarIntegrationConfig
+    | GoogleDriveIntegrationConfig
 }
 
 export interface IntegrationResponse {

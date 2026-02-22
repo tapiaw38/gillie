@@ -93,7 +93,6 @@ whatsapp_devices_client = MongoDBClient(
     config_service.nosql_config.whatsapp_devices.collection,
 )
 
-# Calendar clients (optional — only when google_calendar_config is enabled)
 calendar_sessions_client = None
 calendar_events_client = None
 gc_cfg = config_service.google_calendar_config

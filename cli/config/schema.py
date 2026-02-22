@@ -166,6 +166,14 @@ class TunnelConfig:
 
 
 @dataclass
+class ExposeConfig:
+    domain: str = ""
+    port: int = 8000
+    ssl: bool = False
+    email: str = ""  # used by certbot for Let's Encrypt
+
+
+@dataclass
 class LoggingConfig:
     environment: str = "development"
     log_level: str = "INFO"
@@ -187,3 +195,4 @@ class AssistantConfig:
     services: ServicesConfig = field(default_factory=ServicesConfig)
     logging: LoggingConfig = field(default_factory=LoggingConfig)
     tunnel: TunnelConfig = field(default_factory=TunnelConfig)
+    expose: ExposeConfig = field(default_factory=ExposeConfig)

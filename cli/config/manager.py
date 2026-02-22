@@ -24,6 +24,7 @@ from cli.config.schema import (
     LLMExtendedServiceConfig,
     LoggingConfig,
     TunnelConfig,
+    ExposeConfig,
 )
 
 CONFIG_DIR = Path.home() / ".gillie"
@@ -125,6 +126,7 @@ def load_config() -> AssistantConfig:
         services=_build_services(data.get("services", {})),
         logging=LoggingConfig(**data.get("logging", {})),
         tunnel=TunnelConfig(**data.get("tunnel", {})),
+        expose=ExposeConfig(**data.get("expose", {})),
     )
 
 
@@ -143,6 +145,7 @@ def save_config(config: AssistantConfig) -> None:
         "services": asdict(config.services),
         "logging": asdict(config.logging),
         "tunnel": asdict(config.tunnel),
+        "expose": asdict(config.expose),
     }
     with open(path, "w") as f:
         json.dump(technical, f, indent=2)
