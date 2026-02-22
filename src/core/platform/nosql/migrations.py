@@ -59,4 +59,11 @@ def execute_migrations() -> List[Migration]:
                 {"$set": {"profile_id": None}}
             )
         ),
+        Migration(
+            version=8,
+            up=lambda db: db["profiles"].update_many(
+                {"tts_enabled": {"$exists": False}},
+                {"$set": {"tts_enabled": False}}
+            )
+        ),
     ]

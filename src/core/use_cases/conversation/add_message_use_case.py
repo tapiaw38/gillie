@@ -473,7 +473,17 @@ class AddMessageUseCase:
         Returns:
             Audio URL or None
         """
-        if has_text_to_voice != "activate":
+        tts_active = has_text_to_voice == "activate"
+
+        if not tts_active:
+            try:
+                profile = self.context_factory.repositories.profile.find_by_user_id(user_id)
+                if profile and profile.tts_enabled:
+                    tts_active = True
+            except Exception:
+                pass
+
+        if not tts_active:
             return None
 
         if not self.context_factory.platform_managers:

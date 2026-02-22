@@ -30,6 +30,7 @@ class UpdateUseCase:
                 functions=profile.functions,
                 business_context=profile.business_context,
                 role=profile.role,
+                tts_enabled=profile.tts_enabled,
                 updated_at=datetime.now(timezone.utc),
             )
 

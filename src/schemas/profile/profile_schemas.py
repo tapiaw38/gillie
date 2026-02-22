@@ -13,6 +13,7 @@ class ProfileInput(BaseModel):
     functions: Optional[str] = None
     business_context: Optional[str] = None
     role: Optional[str] = None
+    tts_enabled: Optional[bool] = None
 
 
 class ProfileStatusInput(BaseModel):
@@ -28,6 +29,7 @@ class ProfileOutputData(BaseModel):
     business_context: str
     role: Optional[str]
     is_active: bool
+    tts_enabled: Optional[bool] = False
     created_at: Optional[datetime]
     updated_at: Optional[datetime]
     api_keys: Optional[List[ApiKeyOutputData]]
@@ -49,6 +51,7 @@ class ProfileOutput(BaseModel):
                 functions=profile.functions,
                 business_context=profile.business_context,
                 is_active=profile.is_active,
+                tts_enabled=profile.tts_enabled or False,
                 role=profile.role,
                 created_at=profile.created_at,
                 updated_at=profile.updated_at,

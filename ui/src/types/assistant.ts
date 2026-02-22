@@ -10,6 +10,7 @@ export interface AssistantProfileUpdateParams {
   business_name?: string
   functions?: string
   business_context?: string
+  tts_enabled?: boolean
 }
 
 export interface AssistantProfile {
@@ -22,6 +23,7 @@ export interface AssistantProfile {
   created_at: string
   updated_at: string
   is_active: boolean
+  tts_enabled: boolean
   iteration_limit: number
   api_keys: ApiKey[]
   files?: AssistantFile[]

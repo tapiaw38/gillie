@@ -9,6 +9,7 @@ import Button from 'primevue/button'
 import DefaultModal from '@/components/core/shared/DefaultModal/DefaultModal.vue'
 import InputText from 'primevue/inputtext'
 import Tag from 'primevue/tag'
+import InputSwitch from 'primevue/inputswitch'
 import { useToogle } from '@/composables/useToogle'
 import type { ApiKeyParams } from '@/types/assistant.ts'
 
@@ -18,10 +19,13 @@ const { toogleValue: isVisibleRemoveApiKey } = useToogle(false)
 const {
   assistantProfile,
   getAssistantProfile,
+  updateAssistantProfile,
   addApiKey,
   removeApiKey,
 
   isGetAssistantProfilePending,
+
+  isUpdateAssistantProfilePending,
 
   isAddApiKeyPending,
   isAddApiKeySuccess,
@@ -74,6 +78,34 @@ watch(isRemoveApiKeySuccess, (value) => {
     })
   }
 })
+
+const ttsEnabled = ref(false)
+
+watch(assistantProfile, (profile) => {
+  if (profile) {
+    ttsEnabled.value = profile.tts_enabled ?? false
+  }
+})
+
+const toggleTts = async (value: boolean) => {
+  try {
+    await updateAssistantProfile({ tts_enabled: value })
+    toast.add({
+      severity: 'success',
+      summary: 'Configuración guardada',
+      detail: value ? 'Respuestas en audio activadas' : 'Respuestas en audio desactivadas',
+      life: 3000,
+    })
+  } catch {
+    ttsEnabled.value = !value
+    toast.add({
+      severity: 'error',
+      summary: 'Error',
+      detail: 'No se pudo actualizar la configuración',
+      life: 3000,
+    })
+  }
+}
 
 const addApiKeyParams = reactive<ApiKeyParams>({
   description: '',
@@ -148,6 +180,28 @@ const removeApiKeyOpenModal = (apiKeyID: string) => {
     </div>
 
     <div v-else-if="assistantProfile" class="api-keys-section">
+      <!-- TTS Card -->
+      <Card class="tts-card">
+        <template #content>
+          <div class="tts-row">
+            <div class="tts-info">
+              <div class="tts-icon">
+                <i class="pi pi-volume-up"></i>
+              </div>
+              <div class="tts-details">
+                <h3>Respuestas en Audio</h3>
+                <p>El asistente responderá con un mensaje de voz además del texto</p>
+              </div>
+            </div>
+            <InputSwitch
+              v-model="ttsEnabled"
+              :disabled="isUpdateAssistantProfilePending"
+              @change="toggleTts(ttsEnabled)"
+            />
+          </div>
+        </template>
+      </Card>
+
       <Card class="api-keys-card">
         <template #header>
           <div class="api-header">
@@ -174,10 +228,7 @@ const removeApiKeyOpenModal = (apiKeyID: string) => {
         <template #content>
           <div class="api-keys-content">
             <!-- Keys List -->
-            <div
-              v-if="assistantProfile?.api_keys?.some((key) => key.is_active)"
-              class="keys-list"
-            >
+            <div v-if="assistantProfile?.api_keys?.some((key) => key.is_active)" class="keys-list">
               <div
                 v-for="apiKey in assistantProfile.api_keys"
                 :key="apiKey.id"
@@ -370,6 +421,56 @@ const removeApiKeyOpenModal = (apiKeyID: string) => {
 
 .loading-state p {
   margin: 0;
+  color: var(--do-text-muted);
+}
+
+/* TTS Card */
+.tts-card {
+  border-radius: 0.75rem;
+  overflow: hidden;
+  border: 1px solid var(--do-border-light);
+}
+
+:deep(.tts-card .p-card-content) {
+  padding: 1.25rem 1.5rem;
+}
+
+.tts-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+}
+
+.tts-info {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+}
+
+.tts-icon {
+  width: 2.75rem;
+  height: 2.75rem;
+  border-radius: 0.625rem;
+  background: var(--gradient-primary);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 1.125rem;
+  color: white;
+  flex-shrink: 0;
+}
+
+.tts-details h3 {
+  margin: 0 0 0.2rem 0;
+  font-size: 1.125rem;
+  font-weight: 700;
+  color: var(--do-text);
+}
+
+.tts-details p {
+  margin: 0;
+  font-size: 0.875rem;
   color: var(--do-text-muted);
 }
 

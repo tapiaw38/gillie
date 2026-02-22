@@ -17,6 +17,7 @@ class Profile(BaseModel):
     created_at: Optional[datetime] = Field(default=None)
     updated_at: Optional[datetime] = Field(default=None)
     is_active: Optional[bool] = Field(default=True)
+    tts_enabled: Optional[bool] = Field(default=False)
     api_keys: Optional[List[ApiKey]] = Field(default=None)
     files: Optional[List[File]] = Field(default=None)
     integrations: Optional[List[Integration]] = Field(default=None)
