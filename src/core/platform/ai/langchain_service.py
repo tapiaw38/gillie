@@ -42,6 +42,7 @@ class LangChainService:
         openai_integration,
         max_concurrent_requests: int = 3,
         enable_langsmith: bool = False,
+        skill_manager=None,
     ):
         """
         Initialize the LangChain service.
@@ -54,6 +55,7 @@ class LangChainService:
         """
         self.config = config_service.openai_config
         self.openai_integration = openai_integration
+        self.skill_manager = skill_manager
 
         # Initialize LangChain ChatOpenAI
         self.llm = ChatOpenAI(
@@ -198,6 +200,7 @@ class LangChainService:
                     tools = create_langchain_tools(
                         self.openai_integration,
                         profile,
+                        skill_manager=self.skill_manager,
                     )
                     llm_with_tools = self.llm.bind_tools(tools)
                     logger.debug(f"Bound {len(tools)} tools to LLM")

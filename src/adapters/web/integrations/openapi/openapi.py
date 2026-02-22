@@ -57,6 +57,7 @@ class OpenAIIntegration:
         self._max_failures = 3
         self._circuit_open_until = None
         self.langchain_service = None
+        self.skill_manager = None
 
         langchain_config = config_service.langchain_config
         if langchain_config.service_enabled:
@@ -75,6 +76,12 @@ class OpenAIIntegration:
                 self.langchain_service = None
 
         self.logger.info(f"OpenAI integration initialized with model: {self.model}")
+
+    def set_skill_manager(self, skill_manager) -> None:
+        """Inject SkillManager after construction (avoids circular init order)."""
+        self.skill_manager = skill_manager
+        if self.langchain_service is not None:
+            self.langchain_service.skill_manager = skill_manager
 
     @log_function_call
     async def ask(

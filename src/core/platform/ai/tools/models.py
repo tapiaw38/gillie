@@ -81,7 +81,22 @@ class SearchFAQsArgs(BaseModel):
     )
 
 
-def create_langchain_tools(openai_integration, profile) -> List[StructuredTool]:
+class SaveMemoryArgs(BaseModel):
+    """Arguments for saving a memory fact"""
+    content: str = Field(description="Hecho o información relevante a recordar")
+    category: str = Field(
+        default="General",
+        description="Categoría del hecho: Preferencias, Contacto, Historial, etc."
+    )
+
+
+class SearchMemoryArgs(BaseModel):
+    """Arguments for searching the assistant memory"""
+    query: str = Field(description="Término a buscar en la memoria del asistente")
+    max_results: int = Field(default=5, ge=1, le=10)
+
+
+def create_langchain_tools(openai_integration, profile, skill_manager=None) -> List[StructuredTool]:
     """
     Create LangChain StructuredTool instances with Pydantic validation.
 
@@ -229,5 +244,42 @@ def create_langchain_tools(openai_integration, profile) -> List[StructuredTool]:
             coroutine=search_documents_tool,
         ),
     ]
+
+    if skill_manager is not None:
+        async def save_memory_tool(content: str, category: str = "General") -> str:
+            fact_id = skill_manager.save_memory_fact(content, category)
+            return f"Hecho guardado con ID {fact_id}."
+
+        async def search_memory_tool(query: str, max_results: int = 5) -> str:
+            return skill_manager.search_memory(query, max_results)
+
+        tools.append(
+            StructuredTool(
+                name="save_memory",
+                description=(
+                    "Guarda un hecho o dato relevante de la conversación para recordarlo en el futuro. "
+                    "Úsala cuando el usuario comparta: nombre, ciudad, preferencias, productos de interés, "
+                    "datos de contacto, historial, problemas reportados. "
+                    "NO la uses para información genérica del negocio (eso ya está en el contexto del sistema)."
+                ),
+                func=save_memory_tool,
+                args_schema=SaveMemoryArgs,
+                coroutine=save_memory_tool,
+            )
+        )
+        tools.append(
+            StructuredTool(
+                name="search_memory",
+                description=(
+                    "Busca en la memoria del asistente (hechos guardados, FAQs, conocimiento general) "
+                    "información sobre el usuario o datos previos. "
+                    "Úsala cuando el usuario haga referencia a conversaciones anteriores, "
+                    "o cuando necesites recordar su nombre, preferencias o historial."
+                ),
+                func=search_memory_tool,
+                args_schema=SearchMemoryArgs,
+                coroutine=search_memory_tool,
+            )
+        )
 
     return tools

@@ -41,6 +41,10 @@ ver faqs.skill.md
 ## Conocimiento General
 
 ver general.skill.md
+
+## Hechos Recordados
+
+ver facts.skill.md
 """
 
 
@@ -146,6 +150,91 @@ class SkillManager:
 
     def update_general_memory(self, content: str) -> None:
         self.save_skill("general", content)
+
+    # ─── Facts memory (operates on facts.skill.md) ────────────────────────────
+
+    def save_memory_fact(self, content: str, category: str = "General") -> str:
+        """
+        Append a new fact block to facts.skill.md.
+        Returns the generated fact ID.
+        """
+        from datetime import date
+
+        fact_id = uuid.uuid4().hex[:8]
+        today = date.today().isoformat()
+
+        raw = self.load_skill("facts")
+        if not raw.strip():
+            raw = "# Hechos Recordados\n"
+
+        block = (
+            f"\n<!-- fact: {fact_id} -->\n"
+            f"## {category}\n"
+            f"**Hecho:** {content}\n"
+            f"**Fecha:** {today}\n\n"
+            "---"
+        )
+
+        raw = raw.rstrip() + "\n" + block + "\n"
+        self.save_skill("facts", raw)
+        logger.info("Saved memory fact %s: %s", fact_id, content[:80])
+        return fact_id
+
+    def search_memory(self, query: str, max_results: int = 5) -> str:
+        """
+        Text search across facts.skill.md, general.skill.md, and faqs.skill.md.
+        Returns matching sections with source labels; or a 'no results' message.
+        """
+        query_lower = query.lower()
+        window = 3  # lines of context around each match
+
+        sources = [
+            ("facts", "facts"),
+            ("general", "general"),
+            ("faqs", "faqs"),
+        ]
+
+        all_sections: list[str] = []
+
+        for skill_name, label in sources:
+            text = self.load_skill(skill_name)
+            if not text:
+                continue
+
+            lines = text.splitlines()
+            found_indices: list[int] = []
+            for idx, line in enumerate(lines):
+                if query_lower in line.lower():
+                    found_indices.append(idx)
+
+            if not found_indices:
+                continue
+
+            # Merge overlapping windows
+            merged_ranges: list[tuple[int, int]] = []
+            start = max(0, found_indices[0] - window)
+            end = min(len(lines) - 1, found_indices[0] + window)
+            for idx in found_indices[1:]:
+                new_start = max(0, idx - window)
+                new_end = min(len(lines) - 1, idx + window)
+                if new_start <= end + 1:
+                    end = max(end, new_end)
+                else:
+                    merged_ranges.append((start, end))
+                    start, end = new_start, new_end
+            merged_ranges.append((start, end))
+
+            snippets: list[str] = []
+            for rng_start, rng_end in merged_ranges[: max_results]:
+                snippets.append("\n".join(lines[rng_start : rng_end + 1]))
+
+            if snippets:
+                all_sections.append(f"[{label}]\n" + "\n...\n".join(snippets))
+
+        if not all_sections:
+            return "No se encontró información relevante en la memoria."
+
+        return "\n\n".join(all_sections)
 
     # ─── FAQs CRUD (operates on faqs.skill.md) ────────────────────────────────
 

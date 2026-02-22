@@ -16,11 +16,11 @@ class UpdateUseCase:
         self.context_factory = context_factory()
 
     def execute(self, user_id: str, profile: ProfileInput):
-        # Validation
-        if not profile.assistant_name or profile.assistant_name.strip() == "":
+        # Validate
+        if profile.assistant_name is not None and profile.assistant_name.strip() == "":
             raise NewApplicationError(ProfileUpdateValidationError)
 
-        if not profile.business_name or profile.business_name.strip() == "":
+        if profile.business_name is not None and profile.business_name.strip() == "":
             raise NewApplicationError(ProfileUpdateValidationError)
 
         try:

@@ -131,13 +131,17 @@ from src.adapters.datasources.repositories.repositories import Repositories
 repositories = Repositories.create_repositories(datasources)
 
 # ─── Integrations & Services ──────────────────────────────────────────────────
+skill_manager = SkillManager()
+
 integrations = create_integrations(config_service, calendar_repository=repositories.calendar)
+
+integrations.openai.set_skill_manager(skill_manager)
 
 platform_services = PlatformServices.create_services(
     integrations=integrations,
     store_service=store_service,
     config_service=config_service,
-    skill_manager=SkillManager(),
+    skill_manager=skill_manager,
 )
 
 context_factory = new_factory(
