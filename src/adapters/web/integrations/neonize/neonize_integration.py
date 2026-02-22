@@ -315,9 +315,12 @@ class NeonizeIntegration:
 
     async def send_audio(self, device_id: str, jid: str, audio_url: str) -> Optional[str]:
         """
-        Descarga el audio desde audio_url y lo envía como nota de voz (PTT) al JID.
+        Descarga el audio desde audio_url, lo convierte a OGG OPUS (formato
+        requerido por WhatsApp para notas de voz) y lo envía como PTT al JID.
         Retorna el message ID, o None si falla (para no cortar el flujo).
         """
+        import subprocess
+        import tempfile
         import aiohttp
         from neonize.utils.jid import build_jid
 
@@ -327,17 +330,50 @@ class NeonizeIntegration:
             user, server = jid, "s.whatsapp.net"
         jid_proto = build_jid(user, server)
 
+        tmp_wav = None
+        tmp_ogg = None
         try:
+            # 1. Descargar el WAV desde S3
             async with aiohttp.ClientSession() as session:
                 async with session.get(audio_url) as resp:
                     resp.raise_for_status()
-                    audio_bytes = await resp.read()
+                    wav_bytes = await resp.read()
 
             logger.info(
                 "[neonize] Downloaded audio %d bytes from %s for device %s",
-                len(audio_bytes), audio_url[:60], device_id,
+                len(wav_bytes), audio_url[:60], device_id,
             )
 
+            # 2. Convertir WAV → OGG OPUS (WhatsApp PTT requiere OGG OPUS)
+            with tempfile.NamedTemporaryFile(suffix=".wav", delete=False) as f:
+                f.write(wav_bytes)
+                tmp_wav = f.name
+
+            tmp_ogg = tmp_wav.replace(".wav", ".ogg")
+            ffmpeg_cmd = [
+                "ffmpeg", "-y",
+                "-i", tmp_wav,
+                "-c:a", "libopus",
+                "-b:a", "64k",
+                "-ar", "48000",
+                "-ac", "1",
+                tmp_ogg,
+            ]
+            result = subprocess.run(ffmpeg_cmd, capture_output=True, timeout=30)
+            if result.returncode != 0:
+                logger.warning(
+                    "[neonize] ffmpeg WAV→OGG failed: %s — sending WAV as fallback",
+                    result.stderr[-200:],
+                )
+                audio_bytes = wav_bytes
+            else:
+                with open(tmp_ogg, "rb") as f:
+                    audio_bytes = f.read()
+                logger.info(
+                    "[neonize] Converted to OGG OPUS: %d bytes", len(audio_bytes)
+                )
+
+            # 3. Enviar como nota de voz PTT
             client = await self.get_client(device_id)
             result = await client.send_audio(jid_proto, audio_bytes, ptt=True)
             msg_id = str(result.id) if hasattr(result, "id") else str(result)
@@ -353,6 +389,10 @@ class NeonizeIntegration:
                 exc_info=True,
             )
             return None
+        finally:
+            for path in (tmp_wav, tmp_ogg):
+                if path and os.path.exists(path):
+                    os.unlink(path)
 
     # ─── Internal helpers ────────────────────────────────────────────────────
 
