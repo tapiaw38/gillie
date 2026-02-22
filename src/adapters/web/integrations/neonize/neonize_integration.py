@@ -315,9 +315,12 @@ class NeonizeIntegration:
 
     async def send_audio(self, device_id: str, jid: str, audio_url: str) -> Optional[str]:
         """
-        Descarga el audio desde audio_url, lo convierte a OGG OPUS (formato
-        requerido por WhatsApp para notas de voz) y lo envía como PTT al JID.
-        Retorna el message ID, o None si falla (para no cortar el flujo).
+        Descarga el audio desde audio_url, lo convierte a MP3 y lo envía al JID.
+
+        Neonize detecta el mimetype con python-magic:
+        - OGG OPUS → "audio/ogg"  (WhatsApp necesita "audio/ogg; codecs=opus" → no reproduce)
+        - MP3      → "audio/mpeg" (universalmente soportado por WhatsApp)
+        Por eso convertimos a MP3.
         """
         import subprocess
         import tempfile
@@ -331,8 +334,9 @@ class NeonizeIntegration:
         jid_proto = build_jid(user, server)
 
         tmp_wav = None
-        tmp_ogg = None
+        tmp_mp3 = None
         try:
+            # 1. Descargar WAV desde S3
             async with aiohttp.ClientSession() as session:
                 async with session.get(audio_url) as resp:
                     resp.raise_for_status()
@@ -343,41 +347,43 @@ class NeonizeIntegration:
                 len(wav_bytes), audio_url[:60], device_id,
             )
 
+            # 2. Convertir WAV → MP3 (magic devuelve "audio/mpeg", soportado por WA)
             with tempfile.NamedTemporaryFile(suffix=".wav", delete=False) as f:
                 f.write(wav_bytes)
                 tmp_wav = f.name
 
-            tmp_ogg = tmp_wav.replace(".wav", ".ogg")
+            tmp_mp3 = tmp_wav.replace(".wav", ".mp3")
             ffmpeg_cmd = [
                 "ffmpeg", "-y",
                 "-i", tmp_wav,
-                "-vn",                    # descartar video si hubiera
-                "-c:a", "libopus",
-                "-b:a", "32k",            # 32k
-                "-ar", "48000",
-                "-ac", "1",               # mono
-                "-application", "voip",
-                tmp_ogg,
+                "-vn",
+                "-acodec", "libmp3lame",
+                "-b:a", "64k",
+                "-ar", "22050",
+                "-ac", "1",
+                tmp_mp3,
             ]
-            result = subprocess.run(ffmpeg_cmd, capture_output=True, timeout=30)
-            if result.returncode != 0:
+            conv = subprocess.run(ffmpeg_cmd, capture_output=True, timeout=30)
+            if conv.returncode != 0:
                 logger.warning(
-                    "[neonize] ffmpeg WAV→OGG failed: %s — sending WAV as fallback",
-                    result.stderr[-200:],
+                    "[neonize] ffmpeg WAV→MP3 failed: %s — enviando WAV",
+                    conv.stderr[-200:],
                 )
                 audio_bytes = wav_bytes
+                use_ptt = False
             else:
-                with open(tmp_ogg, "rb") as f:
+                with open(tmp_mp3, "rb") as f:
                     audio_bytes = f.read()
-                logger.info(
-                    "[neonize] Converted to OGG OPUS: %d bytes", len(audio_bytes)
-                )
+                logger.info("[neonize] Converted to MP3: %d bytes", len(audio_bytes))
+                use_ptt = True
 
+            # 3. Enviar — ptt=True marca el mensaje como nota de voz
             client = await self.get_client(device_id)
-            result = await client.send_audio(jid_proto, audio_bytes, ptt=True)
+            result = await client.send_audio(jid_proto, audio_bytes, ptt=use_ptt)
             msg_id = str(result.id) if hasattr(result, "id") else str(result)
             logger.info(
-                "[neonize] Sent audio to %s via device %s: id=%s", jid, device_id, msg_id
+                "[neonize] Sent audio to %s via device %s: id=%s (ptt=%s)",
+                jid, device_id, msg_id, use_ptt,
             )
             return msg_id
 
@@ -389,7 +395,7 @@ class NeonizeIntegration:
             )
             return None
         finally:
-            for path in (tmp_wav, tmp_ogg):
+            for path in (tmp_wav, tmp_mp3):
                 if path and os.path.exists(path):
                     os.unlink(path)
 
