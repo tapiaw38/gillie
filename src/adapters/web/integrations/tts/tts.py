@@ -55,22 +55,15 @@ class TTSIntegration:
     def _generate_speech_file(
         self, text: str, output_path: str, settings: Dict[str, Any]
     ) -> None:
-        """
-        Generate speech file trying strategies in order:
-          1. gTTS (Google Text-to-Speech) — primary, requires internet
-          2. espeak CLI — fallback, requires espeak binary
-          3. Dummy WAV — last resort
-        """
-
-        # ── Strategy 1: gTTS ────────────────────────────────────────────────────
-        logger.info("TTS Strategy 1 (gTTS): starting")
+        """Generate speech file using gTTS (Google Text-to-Speech)."""
+        logger.info("TTS (gTTS): starting")
         try:
             from gtts import gTTS
 
             processed_text = self._preprocess_text_for_natural_speech(text)
 
             tts_gtts = gTTS(text=processed_text, lang="es", slow=False)
-            logger.info("TTS Strategy 1 (gTTS): usando lang='es'")
+            logger.info("TTS (gTTS): usando lang='es'")
 
             temp_mp3_path = output_path.replace(".wav", ".mp3")
             tts_gtts.save(temp_mp3_path)
@@ -96,67 +89,21 @@ class TTSIntegration:
                     file_size = os.path.getsize(output_path)
                     if file_size > 1000:
                         logger.info(
-                            "TTS Strategy 1 (gTTS): SUCCESS — %d bytes at %s",
+                            "TTS (gTTS): SUCCESS — %d bytes at %s",
                             file_size, output_path,
                         )
                         return
                     else:
                         logger.warning(
-                            "TTS Strategy 1 (gTTS): output too small (%d bytes), falling through", file_size
+                            "TTS (gTTS): output too small (%d bytes)", file_size
                         )
                 else:
-                    logger.warning("TTS Strategy 1 (gTTS): ffmpeg failed: %s", result.stderr[:200])
+                    logger.warning("TTS (gTTS): ffmpeg failed: %s", result.stderr[:200])
 
         except ImportError:
-            logger.warning("TTS Strategy 1 (gTTS): not available (pip install gtts)")
-        except Exception as e1:
-            logger.warning("TTS Strategy 1 (gTTS): FAILED — %s", e1)
-
-        # ── Strategy 2: espeak CLI ───────────────────────────────────────────────
-        logger.info("TTS Strategy 2 (espeak): starting")
-        try:
-            import subprocess
-
-            subprocess.run(["espeak", "--version"], capture_output=True, check=True)
-
-            processed_text = self._preprocess_text_for_natural_speech(text)
-            espeak_cmd = [
-                "espeak",
-                "-w", output_path,
-                "-s", "140",
-                "-a", "85",
-                "-v", "es+f3",
-                processed_text,
-            ]
-            result = subprocess.run(
-                espeak_cmd, capture_output=True, text=True, timeout=30
-            )
-
-            if result.returncode == 0 and os.path.exists(output_path):
-                file_size = os.path.getsize(output_path)
-                if file_size > 1000:
-                    logger.info(
-                        "TTS Strategy 2 (espeak): SUCCESS — %d bytes at %s",
-                        file_size, output_path,
-                    )
-                    return
-                else:
-                    logger.warning(
-                        "TTS Strategy 2 (espeak): output too small (%d bytes)", file_size
-                    )
-            else:
-                logger.warning("TTS Strategy 2 (espeak): command failed: %s", result.stderr[:200])
-
-        except FileNotFoundError:
-            logger.warning("TTS Strategy 2 (espeak): binary not found (apt install espeak)")
-        except Exception as e2:
-            logger.warning("TTS Strategy 2 (espeak): FAILED — %s", e2)
-
-        # ── Strategy 3: dummy WAV ────────────────────────────────────────────────
-        logger.error(
-            "TTS: all real strategies failed — generating dummy audio for output_path=%s", output_path
-        )
-        self._create_enhanced_dummy_audio_file(output_path, text)
+            logger.error("TTS (gTTS): not available (pip install gtts)")
+        except Exception as e:
+            logger.error("TTS (gTTS): FAILED — %s", e)
 
     async def text_to_speech_stream(
         self, text: str, settings: Optional[Dict[str, Any]] = None
@@ -300,45 +247,6 @@ class TTSIntegration:
 
         except Exception:
             return text
-
-    def _create_enhanced_dummy_audio_file(self, output_path: str, text: str) -> None:
-        """
-        Last-resort: create a short WAV with beeps so the caller doesn't receive silence.
-        """
-        try:
-            import wave
-            import struct
-            import math
-
-            duration = min(len(text) * 0.05, 5.0)
-            sample_rate = 22050
-            num_samples = int(duration * sample_rate)
-
-            beep_pattern = [(0.0, 0.2), (0.3, 0.5), (0.6, 0.8)]
-
-            with wave.open(output_path, "w") as wav_file:
-                wav_file.setnchannels(1)
-                wav_file.setsampwidth(2)
-                wav_file.setframerate(sample_rate)
-
-                audio_data = []
-                for i in range(num_samples):
-                    t = i / sample_rate
-                    sample = 0
-                    for start, end in beep_pattern:
-                        if start <= t <= end:
-                            sample = int(0.4 * 32767 * math.sin(2 * math.pi * 800 * t))
-                            break
-                    audio_data.append(struct.pack("<h", sample))
-
-                wav_file.writeframes(b"".join(audio_data))
-
-            logger.info("TTS Strategy 3 (dummy): WAV generated at %s", output_path)
-
-        except Exception as e:
-            logger.error("TTS Strategy 3 (dummy): failed to create WAV: %s", e)
-            with open(output_path, "wb") as f:
-                f.write(b"")
 
     def __del__(self):
         if hasattr(self, "_executor"):
