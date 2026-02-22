@@ -370,20 +370,20 @@ class NeonizeIntegration:
                     conv.stderr[-200:],
                 )
                 audio_bytes = wav_bytes
-                use_ptt = False
             else:
                 with open(tmp_mp3, "rb") as f:
                     audio_bytes = f.read()
                 logger.info("[neonize] Converted to MP3: %d bytes", len(audio_bytes))
-                use_ptt = True
 
-            # 3. Enviar — ptt=True marca el mensaje como nota de voz
+            # ptt=False: WhatsApp PTT requiere OGG OPUS obligatoriamente.
+            # Con MP3 y ptt=True el cliente muestra "audio no disponible".
+            # ptt=False lo envía como adjunto de audio regular, reproducible.
             client = await self.get_client(device_id)
-            result = await client.send_audio(jid_proto, audio_bytes, ptt=use_ptt)
+            result = await client.send_audio(jid_proto, audio_bytes, ptt=False)
             msg_id = str(result.id) if hasattr(result, "id") else str(result)
             logger.info(
-                "[neonize] Sent audio to %s via device %s: id=%s (ptt=%s)",
-                jid, device_id, msg_id, use_ptt,
+                "[neonize] Sent audio to %s via device %s: id=%s",
+                jid, device_id, msg_id,
             )
             return msg_id
 
