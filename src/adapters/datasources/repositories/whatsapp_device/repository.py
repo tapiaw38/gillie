@@ -21,7 +21,6 @@ class Repository:
     def __init__(self, datasources: Datasources):
         self.client = datasources.no_sql_whatsapp_devices_client
         self.client.create_index("user_id")
-        self.client.create_index("id", unique=True)
 
     def create(self, device: WhatsAppDevice) -> str:
         try:
