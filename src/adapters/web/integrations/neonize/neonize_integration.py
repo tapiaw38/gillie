@@ -313,6 +313,47 @@ class NeonizeIntegration:
             )
             raise
 
+    async def send_audio(self, device_id: str, jid: str, audio_url: str) -> Optional[str]:
+        """
+        Descarga el audio desde audio_url y lo envía como nota de voz (PTT) al JID.
+        Retorna el message ID, o None si falla (para no cortar el flujo).
+        """
+        import aiohttp
+        from neonize.utils.jid import build_jid
+
+        if "@" in jid:
+            user, server = jid.rsplit("@", 1)
+        else:
+            user, server = jid, "s.whatsapp.net"
+        jid_proto = build_jid(user, server)
+
+        try:
+            async with aiohttp.ClientSession() as session:
+                async with session.get(audio_url) as resp:
+                    resp.raise_for_status()
+                    audio_bytes = await resp.read()
+
+            logger.info(
+                "[neonize] Downloaded audio %d bytes from %s for device %s",
+                len(audio_bytes), audio_url[:60], device_id,
+            )
+
+            client = await self.get_client(device_id)
+            result = await client.send_audio(jid_proto, audio_bytes, ptt=True)
+            msg_id = str(result.id) if hasattr(result, "id") else str(result)
+            logger.info(
+                "[neonize] Sent audio to %s via device %s: id=%s", jid, device_id, msg_id
+            )
+            return msg_id
+
+        except Exception as e:
+            logger.error(
+                "[neonize] Failed to send audio to %s via device %s: %s",
+                jid, device_id, e,
+                exc_info=True,
+            )
+            return None
+
     # ─── Internal helpers ────────────────────────────────────────────────────
 
     def _is_running(self, device_id: str) -> bool:
