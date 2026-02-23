@@ -4,31 +4,8 @@ import aiohttp
 import re
 from datetime import datetime
 from typing import Dict, Any, List, Optional
-from dataclasses import dataclass
 
 logger = logging.getLogger(__name__)
-
-
-@dataclass
-class WorkflowStep:
-    name: str
-    description: str
-    url: str
-    method: str
-    required_params: List[str]
-    condition: Optional[str] = None
-    body_template: Optional[str] = None
-    response_mapping: Dict[str, str] = None
-
-
-@dataclass
-class WorkflowDefinition:
-    name: str
-    description: str
-    input_params: List[str]
-    examples: List[str]
-    keywords: List[str]
-    steps: List[WorkflowStep]
 
 
 class WorkflowExecutor:
@@ -318,4 +295,3 @@ class WorkflowExecutor:
         }
 
 
-workflow_executor = WorkflowExecutor()

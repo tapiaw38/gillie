@@ -48,7 +48,7 @@ class AIResponseService:
         self.config_service = config_service
         self.mcp_client = mcp_client  # Store MCP client for datetime responses
         self.smart_function_executor = smart_function_executor or SmartFunctionExecutor(
-            config_service, mcp_client=mcp_client
+            config_service
         )
 
     async def generate_response(

@@ -9,7 +9,6 @@ from langchain_openai import ChatOpenAI
 from langchain_core.messages import HumanMessage
 
 from src.core.platform.functions.workflow_executor import WorkflowExecutor
-from src.core.platform.functions.function_executor import GenericHTTPTool, FunctionDefinition
 from src.core.platform.functions.global_workflows import get_available_workflows
 from src.core.services.configuration_service import ConfigurationService
 from src.core.domain import Profile
@@ -47,9 +46,8 @@ class SmartFunctionExecutor:
     Supports multi-turn parameter collection when parameters are missing.
     """
 
-    def __init__(self, config_service: ConfigurationService, mcp_client=None):
+    def __init__(self, config_service: ConfigurationService):
         self.config_service = config_service
-        self.mcp_client = mcp_client
         self.workflow_executor = WorkflowExecutor(config_service)
         self.llm = ChatOpenAI(
             api_key=config_service.openai_config.api_key,
