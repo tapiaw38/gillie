@@ -3,7 +3,7 @@ from .profile import Profile, ApiKey
 from .conversation import Conversation, Message
 from .file import File
 from .integration import Integration
-from .whatsapp_device import WhatsAppDevice
+from .whatsapp import WhatsAppDevice
 
 __all__ = [
     "SenderEnum",
