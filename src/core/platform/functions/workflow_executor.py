@@ -16,10 +16,6 @@ class WorkflowExecutor:
         self.execution_context: Dict[str, Any] = {}
         self.workflows: Dict[str, Any] = {}
 
-    # ------------------------------------------------------------------
-    # Registry
-    # ------------------------------------------------------------------
-
     def get_available_workflows(self) -> List[str]:
         return list(self.workflows.keys())
 
@@ -38,10 +34,6 @@ class WorkflowExecutor:
             "keywords": workflow["keywords"],
         }
 
-    # ------------------------------------------------------------------
-    # Execution
-    # ------------------------------------------------------------------
-
     async def execute_workflow(
         self,
         workflow_name: str,
@@ -57,7 +49,6 @@ class WorkflowExecutor:
         workflow = self.workflows[workflow_name]
         self.execution_context = input_params.copy()
 
-        # Auto-inject profile identifiers
         if profile:
             if hasattr(profile, "user_id") and profile.user_id:
                 self.execution_context.setdefault("user_id", profile.user_id)
@@ -105,18 +96,15 @@ class WorkflowExecutor:
     async def _execute_step(self, step: Dict[str, Any]) -> Optional[Dict[str, Any]]:
         """Execute a single workflow step."""
         try:
-            # Build the URL from the template
             url = self._substitute(step["url"])
 
             if not url.startswith(("http://", "https://")):
                 url = f"http://{url}"
 
-            # Build the body (if any)
             body: Optional[Dict[str, Any]] = None
             if step.get("body_template"):
                 body = self._prepare_body(step["body_template"])
 
-            # Build headers (if any)
             headers: Dict[str, str] = {}
             for key, value in (step.get("headers") or {}).items():
                 headers[key] = self._substitute(value)
@@ -157,10 +145,6 @@ class WorkflowExecutor:
                 response.raise_for_status()
                 return await response.json()
 
-    # ------------------------------------------------------------------
-    # Context helpers
-    # ------------------------------------------------------------------
-
     def _substitute(self, template: str) -> str:
         """Replace {param} placeholders in a string using the execution context."""
         for param, value in self.execution_context.items():
@@ -198,10 +182,6 @@ class WorkflowExecutor:
                 raise KeyError(f"Path '{path}' not found in response")
         return current
 
-    # ------------------------------------------------------------------
-    # Condition evaluation
-    # ------------------------------------------------------------------
-
     def _evaluate_condition(self, condition: str, results: Dict[str, Any]) -> bool:
         """Evaluate a simple workflow condition against the current context."""
         try:
@@ -235,10 +215,6 @@ class WorkflowExecutor:
             logger.error(f"Error evaluating condition '{condition}': {e}")
             return True
 
-    # ------------------------------------------------------------------
-    # Date normalization
-    # ------------------------------------------------------------------
-
     @staticmethod
     def _normalize_date(value: str) -> str:
         """
@@ -271,10 +247,6 @@ class WorkflowExecutor:
                     continue
 
         return value
-
-    # ------------------------------------------------------------------
-    # Utility
-    # ------------------------------------------------------------------
 
     def convert_workflow_to_function(self, workflow_name: str) -> Dict[str, Any]:
         """Convert a registered workflow to a function-compatible descriptor."""

@@ -56,13 +56,7 @@ class SmartFunctionExecutor:
             temperature=0.1,
         )
         self._setup_prompt()
-        # In-memory parameter store for multi-turn conversations
-        # Structure: { user_id: { function_name: { param: value } } }
         self.function_params_storage: Dict[str, Dict[str, Dict[str, Any]]] = {}
-
-    # ------------------------------------------------------------------
-    # Prompt setup
-    # ------------------------------------------------------------------
 
     def _setup_prompt(self):
         """Build the intent-analysis prompt template."""
@@ -115,10 +109,6 @@ CRITICAL OUTPUT RULES:
         self.intent_prompt = ChatPromptTemplate.from_messages(
             [("system", system_message), ("human", "User message: {{user_question}}")]
         )
-
-    # ------------------------------------------------------------------
-    # Function loading
-    # ------------------------------------------------------------------
 
     def _parse_functions_config(self, functions_string) -> List[FunctionConfig]:
         """Parse function configurations from a JSON string or list."""
@@ -183,10 +173,6 @@ CRITICAL OUTPUT RULES:
 
         logger.info(f"Total available functions: {len(all_functions)}")
         return all_functions
-
-    # ------------------------------------------------------------------
-    # Intent analysis
-    # ------------------------------------------------------------------
 
     async def _analyze_user_intent(
         self,
@@ -280,10 +266,6 @@ CRITICAL OUTPUT RULES:
 
         return None
 
-    # ------------------------------------------------------------------
-    # Generic parameter extraction
-    # ------------------------------------------------------------------
-
     def _extract_url_params(self, url: str) -> List[str]:
         """Return all {param} placeholders found in a URL template."""
         return re.findall(r"\{(\w+)\}", url)
@@ -315,10 +297,6 @@ CRITICAL OUTPUT RULES:
 
         return extracted
 
-    # ------------------------------------------------------------------
-    # Missing-param collection
-    # ------------------------------------------------------------------
-
     async def _request_missing_params(
         self, missing_params: List[str], function_name: str
     ) -> Dict[str, Any]:
@@ -343,10 +321,6 @@ CRITICAL OUTPUT RULES:
                 "next_param": missing_params[0] if missing_params else None,
                 "remaining_params": missing_params[1:] if len(missing_params) > 1 else [],
             }
-
-    # ------------------------------------------------------------------
-    # Execution
-    # ------------------------------------------------------------------
 
     def _build_url(self, url_template: str, params: Dict[str, str]) -> str:
         for param, value in params.items():
@@ -383,12 +357,10 @@ CRITICAL OUTPUT RULES:
             response = await self.llm.ainvoke([HumanMessage(content=prompt)])
             content = response.content.strip()
 
-            # Strip optional markdown fences
             content = re.sub(r"^```(?:json)?\s*", "", content)
             content = re.sub(r"\s*```$", "", content)
             content = content.strip()
 
-            # Try object first, then array
             for start_char, end_char in [("{", "}"), ("[", "]")]:
                 start = content.find(start_char)
                 end = content.rfind(end_char) + 1
@@ -479,10 +451,6 @@ CRITICAL OUTPUT RULES:
             logger.error(f"Error executing workflow '{function_config.name}': {e}")
             return {"success": False, "error": str(e), "type": "workflow"}
 
-    # ------------------------------------------------------------------
-    # Friendly response generation
-    # ------------------------------------------------------------------
-
     def _extract_response_field(
         self, execution_result: Dict[str, Any], function_type: str, field_name: str
     ) -> Optional[str]:
@@ -490,7 +458,6 @@ CRITICAL OUTPUT RULES:
         result_data = execution_result.get("result", {})
 
         if function_type == "workflow":
-            # Try final_result first, then context
             final_result = result_data.get("final_result", {})
             if isinstance(final_result, dict) and field_name in final_result:
                 return str(final_result[field_name])
@@ -578,10 +545,6 @@ CRITICAL OUTPUT RULES:
         except Exception:
             return "Sorry, something went wrong while completing your request. Please try again."
 
-    # ------------------------------------------------------------------
-    # Main entry point
-    # ------------------------------------------------------------------
-
     async def execute_function(
         self,
         user_message: str,
@@ -597,7 +560,6 @@ CRITICAL OUTPUT RULES:
 
             user_id = profile.user_id or "default_user"
 
-            # Check if a multi-turn collection is already in progress
             ongoing_function = self._detect_ongoing_function(user_id)
             if ongoing_function:
                 return await self._process_ongoing_function(
@@ -605,11 +567,10 @@ CRITICAL OUTPUT RULES:
                     profile=profile, auth_token=auth_token, chat_history=chat_history,
                 )
 
-            # Analyze intent
             intent = await self._analyze_user_intent(user_message, available_functions, chat_history)
 
             if not isinstance(intent, dict) or not intent.get("match_found", False):
-                return None  # No match → fallback to standard AI
+                return None
 
             matched_name = intent.get("function_name")
             matched_function = next((f for f in available_functions if f.name == matched_name), None)
@@ -621,7 +582,6 @@ CRITICAL OUTPUT RULES:
             stored_params = self._get_stored_params(user_id, matched_name)
             all_params = {**stored_params, **extracted_params}
 
-            # For body_mode="llm", also check required_body_params
             if matched_function.body_mode == "llm" and matched_function.required_body_params:
                 missing_body = [p for p in matched_function.required_body_params if p not in all_params]
                 if missing_body:
@@ -630,7 +590,6 @@ CRITICAL OUTPUT RULES:
             if missing_params:
                 if extracted_params:
                     self._store_params(user_id, matched_name, extracted_params)
-                # Store trigger message and seed storage so _detect_ongoing_function picks it up
                 self._store_params(user_id, matched_name, {"__trigger_message__": user_message})
                 param_request = await self._request_missing_params(missing_params, matched_name)
                 return param_request["message"]
@@ -665,10 +624,6 @@ CRITICAL OUTPUT RULES:
             logger.error(f"Error in SmartFunctionExecutor: {e}", exc_info=True)
             return await self._generate_friendly_error("request", str(e))
 
-    # ------------------------------------------------------------------
-    # Multi-turn parameter collection
-    # ------------------------------------------------------------------
-
     def _detect_ongoing_function(self, user_id: str) -> Optional[str]:
         """Return the name of the function currently awaiting parameters, or None."""
         user_storage = self.function_params_storage.get(user_id, {})
@@ -696,7 +651,6 @@ CRITICAL OUTPUT RULES:
             stored_params = self._get_stored_params(user_id, function_name)
             new_params = self._extract_generic_params(user_message)
 
-            # Determine required params: URL params OR required_body_params for body_mode="llm"
             if matched_function.body_mode == "llm" and matched_function.required_body_params:
                 required_params = matched_function.required_body_params
             elif matched_function.type == "workflow" and function_name in self.workflow_executor.workflows:
@@ -706,8 +660,6 @@ CRITICAL OUTPUT RULES:
 
             all_params = {**stored_params, **new_params}
 
-            # If no structured params were extracted, assume the whole message is for
-            # the single remaining missing param
             missing = [p for p in required_params if p not in all_params]
             if missing and not new_params:
                 all_params[missing[0]] = user_message.strip()
@@ -722,8 +674,6 @@ CRITICAL OUTPUT RULES:
                 param_request = await self._request_missing_params(missing, function_name)
                 return param_request["message"]
 
-            # All params collected — execute
-            # Use the original trigger message (the one with the product request) for body building
             trigger_message = all_params.get("__trigger_message__", user_message)
             clean_params = self._strip_metadata(all_params)
             if matched_function.type == "simple":
@@ -756,10 +706,6 @@ CRITICAL OUTPUT RULES:
             logger.error(f"Error processing ongoing function: {e}", exc_info=True)
             return await self._generate_friendly_error(function_name, str(e))
 
-    # ------------------------------------------------------------------
-    # Parameter storage (in-memory)
-    # ------------------------------------------------------------------
-
     def _store_params(self, user_id: str, function_name: str, params: Dict[str, Any]):
         self.function_params_storage.setdefault(user_id, {}).setdefault(function_name, {}).update(params)
 
@@ -772,18 +718,10 @@ CRITICAL OUTPUT RULES:
         except KeyError:
             pass
 
-    # ------------------------------------------------------------------
-    # Metadata filtering
-    # ------------------------------------------------------------------
-
     @staticmethod
     def _strip_metadata(params: Dict[str, Any]) -> Dict[str, Any]:
         """Remove internal metadata keys (prefixed with '__') before sending to a function."""
         return {k: v for k, v in params.items() if not k.startswith("__")}
-
-    # ------------------------------------------------------------------
-    # Public info
-    # ------------------------------------------------------------------
 
     def get_available_functions(self, profile: Profile) -> List[Dict[str, Any]]:
         """Return a summary of all functions available for a given profile."""
