@@ -11,7 +11,6 @@ def find_all(client: Client) -> List[Profile]:
     Encuentra todos los perfiles
     """
     try:
-        # El cliente ya apunta a la colección "profiles", podemos usar find() directamente
         profiles_data = list(client.find({}))
 
         profiles = []

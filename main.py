@@ -26,8 +26,8 @@ from src.adapters.web.integrations.neonize.neonize_integration import NeonizeInt
 logger = logging.getLogger(__name__)
 
 app = FastAPI(
-    title="Assistant IA API",
-    description="API for the Assistant IA",
+    title="Gillie IA",
+    description="Service API for the Assistant",
     version="1.0.0"
 )
 

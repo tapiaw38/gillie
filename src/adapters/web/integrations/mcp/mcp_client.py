@@ -17,8 +17,6 @@ class MCPClient:
         self._tools = DatetimeTools()
         logger.info("MCPClient initialized (in-process DatetimeTools)")
 
-    # ── DateTime Tools ──────────────────────────────────────────────────────
-
     async def get_current_datetime(
         self, timezone: Optional[str] = None, format_type: str = "rfc3339"
     ) -> Dict[str, Any]:
@@ -63,8 +61,6 @@ class MCPClient:
             minutes=minutes,
             seconds=seconds,
         )
-
-    # ── Convenience helpers ────────────────────────────────────────────────
 
     async def parse_date_for_workflow(
         self, text: str, user_timezone: str

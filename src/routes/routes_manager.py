@@ -21,7 +21,6 @@ class RoutesManager:
         self.neonize_integration = neonize_integration
 
     def include_routes(self):
-        # Initialize usecases in controllers
         conversation.controllers.set_usecases(self.usecases)
         profile.controllers.set_usecases(self.usecases)
         whatsapp.controllers.set_usecases(self.usecases)
@@ -32,10 +31,8 @@ class RoutesManager:
         if self.neonize_integration is not None:
             set_whatsapp_device_neonize(self.neonize_integration)
 
-        # Override config service dependency
         self.app.dependency_overrides[ConfigurationService] = lambda: self.config_service
 
-        # Include routers
         self.app.include_router(nosql_router)
         self.app.include_router(profile.controllers.router)
         self.app.include_router(conversation.controllers.router)

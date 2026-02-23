@@ -2,13 +2,6 @@ from src.core.platform.config.service import ConfigurationService
 from openai import AsyncOpenAI
 from typing import Optional, List, Dict, Any, Tuple
 import os
-from src.adapters.web.integrations.openapi.context import (
-    CONTEXT_INFORMATION,
-    CONTEXT_ROLE_ASSISTANT,
-    CONTEXT_ROLE_SELLER,
-    CONTEXT_ROLE_TUTOR,
-    CONTEXT_RULES,
-)
 from src.core.domain import Profile
 from src.core.platform.fileprocessor.pdf_processor import FileImageProcessor
 from src.core.platform.fileprocessor.xlsx_processor import ExcelImageProcessor
@@ -17,15 +10,11 @@ from src.core.platform.fileprocessor.hybrid_processor import HybridDocumentProce
 from src.core.platform.fileprocessor.rag_processor import RAGDocumentProcessor
 from src.core.platform.logging import get_logger, log_function_call, log_execution_time
 import pandas as pd
-import requests
 import json
-from io import BytesIO
 from PyPDF2 import PdfReader
 import asyncio
 import aiohttp
-import aiofiles
 import tempfile
-from pathlib import Path
 
 
 class OpenAIIntegration:
@@ -94,103 +83,17 @@ class OpenAIIntegration:
     ) -> str:
         self.logger.info(f"Processing question for profile: {profile.user_id}")
 
-        if self.langchain_service is not None:
-            try:
-                self.logger.info("Using LangChain service for response generation")
-                messages_list = self._parse_previous_messages(previous_messages)
+        self.logger.info("Using LangChain service for response generation")
+        messages_list = self._parse_previous_messages(previous_messages)
 
-                response = await self.langchain_service.generate_response(
-                    question=question,
-                    context=context,
-                    previous_messages=messages_list,
-                    profile=profile,
-                    conversation_id=conversation_id or profile.user_id,
-                    use_tools=True,
-                )
-                return response
-            except Exception as e:
-                self.logger.error(f"LangChain service failed, falling back to OpenAI: {e}")
-
-        document_ids = []
-        if profile.files:
-            for file in profile.files:
-                try:
-                    file_type = (
-                        "pdf"
-                        if file.url.lower().endswith(".pdf")
-                        else (
-                            "xlsx"
-                            if file.url.lower().endswith((".xlsx", ".xls"))
-                            else "unknown"
-                        )
-                    )
-
-                    if file_type != "unknown":
-                        result = await self.rag_processor.process_and_store_document(
-                            file.url, file_type, profile_id=profile.user_id
-                        )
-                        if "document_id" in result:
-                            document_ids.append(result["document_id"])
-                            self.logger.info(
-                                f"Document processed for RAG: {file.url} -> {result['document_id']} (profile: {profile.user_id})"
-                            )
-                        else:
-                            self.logger.error(f"Failed to process document: {result}")
-                    else:
-                        self.logger.warning(f"Unsupported file format: {file.url}")
-                        continue
-                except Exception as e:
-                    self.logger.error(f"Error processing file {file.url}: {e}")
-                    continue
-
-        relevant_context = ""
-        if document_ids:
-            try:
-                search_result = await self.rag_processor.search_relevant_content(
-                    query=question, document_ids=document_ids, max_results=5, profile_id=profile.user_id
-                )
-                relevant_context = search_result.get("unified_context", "")
-                self.logger.info(
-                    f"Found {len(search_result.get('results', []))} relevant chunks for question (profile: {profile.user_id})"
-                )
-            except Exception as e:
-                self.logger.error(f"Error searching relevant content: {e}")
-                relevant_context = ""
-
-        full_context = f"{context or ''}\n{relevant_context.strip()}"
-        self.logger.debug(f"RAG context length: {len(full_context)} characters")
-
-        question_message = CONTEXT_INFORMATION.format(
-            assistant_name=profile.assistant_name,
-            business_name=profile.business_name,
-            business_context=profile.business_context,
-            functions=profile.functions,
-            product_context=full_context,
+        return await self.langchain_service.generate_response(
             question=question,
-            previous_messages=previous_messages,
+            context=context,
+            previous_messages=messages_list,
+            profile=profile,
+            conversation_id=conversation_id or profile.user_id,
+            use_tools=True,
         )
-
-        if profile.role == "seller":
-            question_message += CONTEXT_ROLE_SELLER
-        elif profile.role == "tutor":
-            question_message += CONTEXT_ROLE_TUTOR
-        elif profile.role == "assistant":
-            question_message += CONTEXT_ROLE_ASSISTANT
-
-        question_message += CONTEXT_RULES
-
-        try:
-            response = await self.client.chat.completions.create(
-                model=self.model,
-                messages=[
-                    {"role": self.role, "content": question_message},
-                ],
-            )
-            self.logger.info(f"OpenAI response received successfully")
-            return response.choices[0].message.content
-        except Exception as e:
-            self.logger.error(f"Error getting OpenAI response: {e}")
-            raise
 
     @log_function_call
     async def search_images_in_files(
@@ -962,7 +865,6 @@ RESPUESTA (solo JSON):
                     })
         except Exception as e:
             self.logger.warning(f"Error parsing previous messages: {e}")
-            # Return empty list to avoid breaking the flow
             return []
 
         return messages

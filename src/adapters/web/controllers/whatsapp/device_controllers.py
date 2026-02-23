@@ -48,9 +48,6 @@ def _get_user_id(request: Request) -> str:
     return request.state.user.get("user_id", "default-user")
 
 
-# ─── Incoming message handler ────────────────────────────────────────────────
-
-
 async def _handle_incoming_message(device_id: str, sender_jid: str, text: str):
     """
     Called by neonize when an incoming WhatsApp message is received.
@@ -118,9 +115,6 @@ async def _handle_incoming_message(device_id: str, sender_jid: str, text: str):
         )
 
 
-# ─── REST endpoints ─────────────────────────────────────────────────────────
-
-
 @router.post("/device/register", response_model=DeviceResponse, status_code=status.HTTP_201_CREATED)
 async def create_device(request: Request, body: CreateDeviceRequest):
     user_id = _get_user_id(request)
@@ -166,7 +160,6 @@ async def authenticate_device(device_id: str, body: AuthenticateDeviceRequest):
         phone_number=body.phone_number,
         message_handler=_handle_incoming_message,
     )
-    # Return the full updated device so the UI can read qr_code / pair_code
     device = usecases.whatsapp_device.get_usecase.execute(device_id)
     return DeviceResponse(**device.dict())
 
@@ -211,7 +204,6 @@ async def send_message_by_phone(body: SendMessageByPhoneRequest):
     usecases = get_usecases()
     neonize = get_neonize()
 
-    # Normalize phone number to JID: strip leading + and append @s.whatsapp.net
     phone = body.recipient_phone.lstrip("+")
     recipient_jid = f"{phone}@s.whatsapp.net"
 
@@ -222,9 +214,6 @@ async def send_message_by_phone(body: SendMessageByPhoneRequest):
         neonize_integration=neonize,
     )
     return SendMessageResponse(message_id=message_id)
-
-
-# ─── WebSocket: QR stream ────────────────────────────────────────────────────
 
 
 @router.websocket("/device/{device_id}/qr-stream")
@@ -239,7 +228,6 @@ async def qr_stream(websocket: WebSocket, device_id: str):
         usecases = get_usecases()
         interval = 2
 
-        # Phase 1: wait for QR to appear in DB (up to 120s)
         for i in range(60):
             device = usecases.whatsapp_device.get_usecase.execute(device_id)
             logger.info(f"[device:{device_id}] qr-stream poll {i+1}/60 — status={device.status} qr_code={'SET' if device.qr_code else 'NONE'}")
@@ -254,7 +242,6 @@ async def qr_stream(websocket: WebSocket, device_id: str):
 
             await asyncio.sleep(interval)
 
-        # Phase 2: wait for authentication (up to 120s)
         for i in range(60):
             device = usecases.whatsapp_device.get_usecase.execute(device_id)
             logger.info(f"[device:{device_id}] qr-stream auth-poll {i+1}/60 — status={device.status}")

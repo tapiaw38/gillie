@@ -7,7 +7,7 @@ from src.core.platform.errors.mappings.whatsapp_device import (
     WhatsAppDeviceGetQueryError,
     WhatsAppDeviceNotFoundError,
 )
-from src.core.domain.whatsapp_device import WhatsAppDevice
+from src.core.domain.whatsapp import WhatsAppDevice
 
 logger = logging.getLogger(__name__)
 

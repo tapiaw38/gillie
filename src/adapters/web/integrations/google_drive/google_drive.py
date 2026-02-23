@@ -22,8 +22,6 @@ class GoogleDriveIntegration:
         self.client = client
         self.ingestion = ingestion
 
-    # ── OAuth helpers (no state stored here) ──────────────────────────────────
-
     def get_authorization_url(self, user_id: str) -> str:
         """Return the Google OAuth2 authorization URL (Drive scope)."""
         return self.client.get_authorization_url(state=user_id)
@@ -65,7 +63,6 @@ class GoogleDriveIntegration:
         if expiry > now:
             return config  # still valid
 
-        # Need refresh
         refreshed = self.client.refresh_access_token(config["refresh_token"])
         updated = dict(config)
         updated["access_token"] = refreshed["access_token"]
@@ -89,8 +86,6 @@ class GoogleDriveIntegration:
             refresh_token=config["refresh_token"],
             expiry=expiry,
         )
-
-    # ── Files ─────────────────────────────────────────────────────────────────
 
     def list_files(
         self,
@@ -121,7 +116,6 @@ class GoogleDriveIntegration:
             return {"status": "skipped", "reason": f"unsupported mime type: {mime_type}",
                     "file_id": file_id, "file_name": file_name, "chunks": 0}
 
-        # Dedup via Qdrant: skip if md5 hasn't changed
         drive_md5 = meta.get("md5Checksum")
         existing_meta = self.ingestion.get_file_index_meta(user_id, file_id)
         if existing_meta and existing_meta.get("md5_checksum") == drive_md5 and drive_md5:
@@ -134,11 +128,9 @@ class GoogleDriveIntegration:
                 "chunks": existing_meta.get("chunks_count", 0),
             }
 
-        # Remove old vectors if re-indexing
         if existing_meta:
             self.ingestion.delete_file_vectors(file_id, user_id)
 
-        # Download / export
         file_bytes = self.client.download_or_export(service, file_id, mime_type)
         ext = GoogleDriveClient.get_file_extension(mime_type)
 

@@ -64,8 +64,6 @@ class NeonizeIntegration:
     def _session_path(self, device_id: str) -> str:
         return os.path.join(self.sessions_dir, f"{device_id}.db")
 
-    # ─── Client lifecycle ────────────────────────────────────────────────────
-
     async def create_client(self, device_id: str) -> object:
         """Create (or return existing) neonize client for device_id."""
         if device_id in self._clients:
@@ -88,8 +86,6 @@ class NeonizeIntegration:
         if device_id not in self._clients:
             raise ValueError(f"No client for device {device_id}. Call create_client first.")
         return self._clients[device_id]
-
-    # ─── Authentication ──────────────────────────────────────────────────────
 
     async def start_qr_auth(
         self,
@@ -136,7 +132,6 @@ class NeonizeIntegration:
 
         client.qr(_on_qr)
 
-        # PairStatusEv — fires when user scans QR and auth completes
         try:
             from neonize.aioze.events import PairStatusEv
 
@@ -153,7 +148,6 @@ class NeonizeIntegration:
         except (ImportError, AttributeError):
             logger.warning("[neonize] PairStatusEv not available — auth won't be auto-detected")
 
-        # MessageEv — register here so it's included in Go's dispatch list (d) from the start
         if message_handler is not None:
             try:
                 from neonize.aioze.events import MessageEv
@@ -172,7 +166,6 @@ class NeonizeIntegration:
             except (ImportError, AttributeError):
                 logger.warning("[neonize] MessageEv not available")
 
-        # Single connect() — run on event_global_loop's thread so create_task is thread-safe
         logger.info(
             f"[neonize] Connecting device {device_id} with event codes: "
             f"{list(client.event.list_func.keys())}"
@@ -204,8 +197,6 @@ class NeonizeIntegration:
             logger.error(f"[neonize] pair_phone failed for device {device_id}: {e}", exc_info=True)
             raise
 
-    # ─── Connect / Disconnect ────────────────────────────────────────────────
-
     async def connect(self, device_id: str, message_handler: Optional[Callable] = None) -> None:
         """
         Connect the client and optionally register a message handler.
@@ -216,8 +207,6 @@ class NeonizeIntegration:
         """
         _ensure_neonize_loop()
 
-        # If the client was already created and connected (e.g. via start_qr_auth),
-        # skip reconnect to avoid StreamReplaced races.
         if self._is_running(device_id):
             logger.info(
                 f"[neonize] Device {device_id} already connected — skipping reconnect"
@@ -285,8 +274,6 @@ class NeonizeIntegration:
             os.remove(session_path)
             logger.info(f"[neonize] Session file deleted: {session_path}")
 
-    # ─── Messaging ───────────────────────────────────────────────────────────
-
     async def send_text(self, device_id: str, jid: str, text: str) -> str:
         """Send a text message to the given JID. Returns the message ID.
 
@@ -336,7 +323,6 @@ class NeonizeIntegration:
         tmp_wav = None
         tmp_mp3 = None
         try:
-            # 1. Descargar WAV desde S3
             async with aiohttp.ClientSession() as session:
                 async with session.get(audio_url) as resp:
                     resp.raise_for_status()
@@ -347,7 +333,6 @@ class NeonizeIntegration:
                 len(wav_bytes), audio_url[:60], device_id,
             )
 
-            # 2. Convertir WAV → MP3 (magic devuelve "audio/mpeg", soportado por WA)
             with tempfile.NamedTemporaryFile(suffix=".wav", delete=False) as f:
                 f.write(wav_bytes)
                 tmp_wav = f.name
@@ -375,9 +360,6 @@ class NeonizeIntegration:
                     audio_bytes = f.read()
                 logger.info("[neonize] Converted to MP3: %d bytes", len(audio_bytes))
 
-            # ptt=False: WhatsApp PTT requiere OGG OPUS obligatoriamente.
-            # Con MP3 y ptt=True el cliente muestra "audio no disponible".
-            # ptt=False lo envía como adjunto de audio regular, reproducible.
             client = await self.get_client(device_id)
             result = await client.send_audio(jid_proto, audio_bytes, ptt=False)
             msg_id = str(result.id) if hasattr(result, "id") else str(result)

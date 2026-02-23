@@ -24,7 +24,7 @@ class RepositoryInterface(ABC):
     @abstractmethod
     def find_all_user_ids(self) -> List[str]:
         pass
-        
+
     @abstractmethod
     def find_all(self) -> List[Profile]:
         pass

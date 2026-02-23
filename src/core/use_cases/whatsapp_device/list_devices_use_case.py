@@ -4,7 +4,7 @@ from typing import List
 from src.core.platform.appcontext.appcontext import Factory
 from src.core.platform.errors import NewApplicationError
 from src.core.platform.errors.mappings.whatsapp_device import WhatsAppDeviceListQueryError
-from src.core.domain.whatsapp_device import WhatsAppDevice
+from src.core.domain.whatsapp import WhatsAppDevice
 
 logger = logging.getLogger(__name__)
 

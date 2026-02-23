@@ -41,7 +41,7 @@ class Repository(RepositoryInterface):
 
     def find_all_user_ids(self) -> List[str]:
         return find_all_user_ids(self.client)
-        
+
     def find_all(self) -> List[Profile]:
         return find_all(self.client)
 

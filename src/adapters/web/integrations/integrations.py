@@ -26,7 +26,6 @@ class Integrations:
         self.stt = STTIntegration(config_service)
         self.mercadolibre = None  # initialized per-user with credentials
 
-        # Google Calendar — real in-process adapter
         self.google_calendar = None
         gc_cfg = config_service.google_calendar_config
         if gc_cfg and gc_cfg.enabled and gc_cfg.client_id and calendar_repository is not None:

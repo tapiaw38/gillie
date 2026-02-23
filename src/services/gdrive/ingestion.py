@@ -11,7 +11,6 @@ from src.adapters.vectorstore.qdrant_adapter import QdrantVectorStoreAdapter
 
 logger = logging.getLogger(__name__)
 
-# Maps processed MIME/ext to the correct LangChain loader
 _PDF_MIMES   = {"application/pdf", "application/vnd.google-apps.document",
                 "application/vnd.google-apps.presentation",
                 "application/vnd.openxmlformats-officedocument.presentationml.presentation"}
@@ -49,8 +48,6 @@ class DriveIngestionService:
     @staticmethod
     def collection_name(user_id: str) -> str:
         return f"{DriveIngestionService.COLLECTION_PREFIX}_{user_id}"
-
-    # ── Public API ─────────────────────────────────────────────────────────────
 
     def ingest(
         self,
@@ -204,8 +201,6 @@ class DriveIngestionService:
             for doc, score in results
         ]
 
-    # ── Document loaders ───────────────────────────────────────────────────────
-
     def _load_documents(self, file_path: str, original_mime: str) -> List[Document]:
         try:
             if original_mime in _PDF_MIMES or file_path.endswith(".pdf"):
@@ -216,7 +211,6 @@ class DriveIngestionService:
                 return self._load_unstructured(file_path)
             if original_mime in _TEXT_MIMES or file_path.endswith((".txt", ".csv")):
                 return self._load_text(file_path)
-            # Fallback: unstructured handles most formats
             return self._load_unstructured(file_path)
         except Exception as e:
             logger.error(f"Error loading document {file_path}: {e}", exc_info=True)
@@ -235,7 +229,6 @@ class DriveIngestionService:
             loader = UnstructuredExcelLoader(file_path, mode="elements")
             return loader.load()
         except Exception:
-            # Fallback: read with pandas, convert to text
             import pandas as pd
             docs = []
             xl = pd.ExcelFile(file_path)

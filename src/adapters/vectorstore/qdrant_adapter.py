@@ -198,14 +198,12 @@ class QdrantVectorStoreAdapter:
                 logger.error("No embeddings model provided for search")
                 return []
 
-            # Embed query directly
             query_vector = self.embeddings.embed_query(query)
 
             qdrant_filter = None
             if filter_dict:
                 qdrant_filter = self._build_filter(filter_dict)
 
-            # Use native client to avoid LangChain wrapper version incompatibilities
             response = self.client.query_points(
                 collection_name=collection_name,
                 query=query_vector,

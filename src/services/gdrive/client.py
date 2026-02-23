@@ -4,7 +4,6 @@ from typing import Optional, Dict, Any, List
 
 logger = logging.getLogger(__name__)
 
-# Supported Drive MIME types and how to handle them
 DRIVE_MIME_TYPES = {
     "application/vnd.google-apps.document":       "gdoc",
     "application/vnd.google-apps.spreadsheet":    "gsheet",
@@ -18,14 +17,12 @@ DRIVE_MIME_TYPES = {
     "text/csv":                                    "csv",
 }
 
-# How to export Google Workspace files (→ binary format we can process)
 EXPORT_MIME_MAP = {
     "application/vnd.google-apps.document":     "application/pdf",
     "application/vnd.google-apps.spreadsheet":  "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
     "application/vnd.google-apps.presentation": "application/pdf",
 }
 
-# Extension to use when saving exported files to tempfile
 EXPORT_EXT_MAP = {
     "application/vnd.google-apps.document":     ".pdf",
     "application/vnd.google-apps.spreadsheet":  ".xlsx",
@@ -52,8 +49,6 @@ class GoogleDriveClient:
         self.client_id = client_id
         self.client_secret = client_secret
         self.redirect_uri = redirect_uri
-
-    # ── OAuth ────────────────────────────────────────────────────────────────
 
     def get_authorization_url(self, state: str) -> str:
         """Return the Google OAuth2 authorization URL (Drive scope only)."""
@@ -110,8 +105,6 @@ class GoogleDriveClient:
         )
         return build("drive", "v3", credentials=creds, cache_discovery=False)
 
-    # ── Files ─────────────────────────────────────────────────────────────────
-
     def list_files(
         self,
         service,
@@ -155,11 +148,9 @@ class GoogleDriveClient:
         export_mime = EXPORT_MIME_MAP.get(mime_type)
 
         if export_mime:
-            # Google Workspace file — export to binary format
             request = service.files().export_media(fileId=file_id, mimeType=export_mime)
             logger.info(f"Exporting Drive file {file_id} ({mime_type}) → {export_mime}")
         else:
-            # Binary file — direct download
             request = service.files().get_media(fileId=file_id)
             logger.info(f"Downloading Drive file {file_id} ({mime_type})")
 
@@ -179,8 +170,6 @@ class GoogleDriveClient:
     @staticmethod
     def is_supported(mime_type: str) -> bool:
         return mime_type in DRIVE_MIME_TYPES
-
-    # ── Internal ──────────────────────────────────────────────────────────────
 
     def _build_flow(self):
         from google_auth_oauthlib.flow import Flow

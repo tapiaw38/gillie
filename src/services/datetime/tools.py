@@ -12,8 +12,6 @@ class DatetimeTools:
     Replaces the HTTP calls to the MCP Context Server.
     """
 
-    # ── Current datetime ─────────────────────────────────────────────────────
-
     def get_current_datetime(self, tz: str = "UTC") -> Dict[str, Any]:
         """Return current datetime in multiple formats."""
         try:
@@ -34,8 +32,6 @@ class DatetimeTools:
         except Exception as e:
             logger.error(f"get_current_datetime error: {e}")
             return {"success": False, "error": str(e)}
-
-    # ── Natural language parsing ─────────────────────────────────────────────
 
     def parse_natural_date(
         self,
@@ -75,8 +71,6 @@ class DatetimeTools:
             logger.error(f"parse_natural_date error: {e}")
             return {"success": False, "error": str(e)}
 
-    # ── Timezone conversion ──────────────────────────────────────────────────
-
     def convert_timezone(self, datetime_str: str, from_tz: str, to_tz: str) -> Dict[str, Any]:
         """Convert a datetime string from one timezone to another."""
         try:
@@ -101,8 +95,6 @@ class DatetimeTools:
         except Exception as e:
             logger.error(f"convert_timezone error: {e}")
             return {"success": False, "error": str(e)}
-
-    # ── Time difference ──────────────────────────────────────────────────────
 
     def calculate_difference(self, start: str, end: str) -> Dict[str, Any]:
         """Calculate the difference between two ISO datetime strings."""
@@ -130,8 +122,6 @@ class DatetimeTools:
         except Exception as e:
             logger.error(f"calculate_difference error: {e}")
             return {"success": False, "error": str(e)}
-
-    # ── Add time ─────────────────────────────────────────────────────────────
 
     def add_time(
         self,

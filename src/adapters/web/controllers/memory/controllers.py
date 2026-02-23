@@ -35,8 +35,6 @@ def get_usecases() -> Usecases:
     return _usecases_instance
 
 
-# ─── FAQs ─────────────────────────────────────────────────────────────────────
-
 @router.get("/faqs", status_code=status.HTTP_200_OK)
 def list_faqs(request: Request):
     """List all FAQs from faqs.skill.md."""
@@ -69,8 +67,6 @@ def delete_faq(faq_id: str, request: Request):
     return result
 
 
-# ─── Memory root (memory.md) ──────────────────────────────────────────────────
-
 @router.get("", status_code=status.HTTP_200_OK)
 def get_resolved_memory(request: Request):
     """Return memory.md with all skill references inlined."""
@@ -98,8 +94,6 @@ def update_memory_root(body: MemoryRootInput, request: Request):
     return MemoryRootOutput(content=body.content)
 
 
-# ─── General memory ───────────────────────────────────────────────────────────
-
 @router.get("/general", status_code=status.HTTP_200_OK)
 def get_general_memory(request: Request):
     """Return content of general.skill.md."""
@@ -108,8 +102,6 @@ def get_general_memory(request: Request):
     content = skill_manager.get_general_memory()
     return GeneralMemoryOutput(content=content)
 
-
-# ─── Skills ───────────────────────────────────────────────────────────────────
 
 @router.get("/skills", status_code=status.HTTP_200_OK)
 def list_skills(request: Request):

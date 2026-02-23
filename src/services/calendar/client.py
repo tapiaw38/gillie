@@ -19,8 +19,6 @@ class GoogleCalendarClient:
         self.client_secret = client_secret
         self.redirect_uri = redirect_uri
 
-    # ── OAuth ────────────────────────────────────────────────────────────────
-
     def get_authorization_url(self, state: str) -> str:
         """Return the Google OAuth2 authorization URL."""
         from google_auth_oauthlib.flow import Flow
@@ -88,8 +86,6 @@ class GoogleCalendarClient:
         )
         return build("calendar", "v3", credentials=creds, cache_discovery=False)
 
-    # ── Events ───────────────────────────────────────────────────────────────
-
     def create_event(self, service, event_data: Dict[str, Any]) -> Dict[str, Any]:
         """Create an event in Google Calendar. Returns the created event."""
         event = service.events().insert(calendarId="primary", body=event_data).execute()
@@ -131,8 +127,6 @@ class GoogleCalendarClient:
             .execute()
         )
         return result.get("items", [])
-
-    # ── Helpers ──────────────────────────────────────────────────────────────
 
     def _build_flow(self):
         from google_auth_oauthlib.flow import Flow

@@ -19,8 +19,6 @@ class GoogleCalendarIntegration:
         self.client = client
         self.repository = repository
 
-    # ── OAuth ──────────────────────────────────────────────────────────────────
-
     def get_authorization_url(self, user_id: str) -> str:
         """Return the Google OAuth2 authorization URL."""
         return self.client.get_authorization_url(state=user_id)
@@ -54,8 +52,6 @@ class GoogleCalendarIntegration:
             expiry = expiry.replace(tzinfo=timezone.utc)
         return expiry > now
 
-    # ── Internal helpers ───────────────────────────────────────────────────────
-
     def _get_service(self, user_id: str):
         """
         Return an authenticated Google Calendar service, refreshing token if needed.
@@ -81,8 +77,6 @@ class GoogleCalendarIntegration:
             refresh_token=session.refresh_token,
             expiry=session.token_expiry,
         )
-
-    # ── Events ─────────────────────────────────────────────────────────────────
 
     def create_event(
         self,
@@ -256,8 +250,6 @@ class GoogleCalendarIntegration:
             synced += 1
 
         return {"synced": synced, "user_id": user_id}
-
-    # ── Serialization ──────────────────────────────────────────────────────────
 
     @staticmethod
     def _event_to_dict(event: CalendarEvent, override_id: Optional[str] = None) -> Dict[str, Any]:

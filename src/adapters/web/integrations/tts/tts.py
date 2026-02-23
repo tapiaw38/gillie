@@ -163,11 +163,9 @@ class TTSIntegration:
 
             processed_text = text
 
-            # 1. Add pauses after punctuation
             processed_text = re.sub(r"([.!?])\s+", r"\1... ", processed_text)
             processed_text = re.sub(r"([,;:])\s+", r"\1.. ", processed_text)
 
-            # 2. Expand common Spanish abbreviations
             abbreviations = {
                 "Dr.": "Doctor", "Dra.": "Doctora",
                 "Sr.": "Señor", "Sra.": "Señora", "Srta.": "Señorita",
@@ -184,7 +182,6 @@ class TTSIntegration:
             for abbrev, expansion in abbreviations.items():
                 processed_text = processed_text.replace(abbrev, expansion)
 
-            # 3. Convert standalone small numbers to words
             number_words = {
                 "0": "cero", "1": "uno", "2": "dos", "3": "tres",
                 "4": "cuatro", "5": "cinco", "6": "seis", "7": "siete",
@@ -196,15 +193,12 @@ class TTSIntegration:
             for num, word in number_words.items():
                 processed_text = re.sub(rf"\b{num}\b", word, processed_text)
 
-            # 4. Percentages
             processed_text = re.sub(r"(\d+)%", r"\1 por ciento", processed_text)
 
-            # 5. Markdown formatting → pauses
             processed_text = re.sub(r"\*\*(.*?)\*\*", r".. \1 ..", processed_text)
             processed_text = re.sub(r"\*(.*?)\*", r". \1 .", processed_text)
             processed_text = re.sub(r"_(.*?)_", r". \1 .", processed_text)
 
-            # 6. Emoji → pause
             processed_text = re.sub(
                 r"[😀😃😄😁😆😅😂🤣😊😇🙂🙃😉😌😍🥰😘😗😙😚😋😛😝😜"
                 r"🤪🤨🧐🤓😎🤩🥳😏😒😞😔😟😕🙁☹️😣😖😫😩🥺😢😭😤😠😡"
@@ -215,7 +209,6 @@ class TTSIntegration:
                 processed_text,
             )
 
-            # 7. Common symbols
             replacements = {
                 "&": "y", "@": "arroba", "#": "numeral", "$": "dólares",
                 "€": "euros", "£": "libras", "+": "más", "=": "igual",
@@ -228,18 +221,15 @@ class TTSIntegration:
             for char, replacement in replacements.items():
                 processed_text = processed_text.replace(char, replacement)
 
-            # 8. Emphasis patterns
             processed_text = re.sub(r"!{2,}", " ¡con énfasis! ", processed_text)
             processed_text = re.sub(r"\?{2,}", " ¿en serio? ", processed_text)
             processed_text = re.sub(r"\.{3,}", " ... ", processed_text)
 
-            # 9. Pauses before key words
             for word in ["importante", "atención", "nota", "cuidado", "recuerda", "observa"]:
                 processed_text = re.sub(
                     rf"\b({word})\b", r".. \1", processed_text, flags=re.IGNORECASE
                 )
 
-            # 10. Cleanup
             processed_text = re.sub(r"\.{4,}", "...", processed_text)
             processed_text = re.sub(r"\s+", " ", processed_text).strip()
 

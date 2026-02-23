@@ -44,11 +44,9 @@ class FileUploadMiddleware(BaseHTTPMiddleware):
         """
         Process request and handle file uploads with streaming
         """
-        # Only process multipart/form-data requests
         if not self._is_file_upload_request(request):
             return await call_next(request)
 
-        # Check content length
         content_length = request.headers.get("content-length")
         if content_length and int(content_length) > self.max_file_size:
             return JSONResponse(
@@ -60,9 +58,7 @@ class FileUploadMiddleware(BaseHTTPMiddleware):
                 },
             )
 
-        # Process file upload
         try:
-            # Add file processing metadata to request state
             request.state.file_processing = {
                 "streaming_enabled": True,
                 "chunk_size": self.chunk_size,
@@ -105,7 +101,6 @@ class FileUploadMiddleware(BaseHTTPMiddleware):
             return temp_file.name
 
         except Exception as e:
-            # Clean up on error
             if temp_file and os.path.exists(temp_file.name):
                 os.unlink(temp_file.name)
             raise e
@@ -117,7 +112,6 @@ class FileUploadMiddleware(BaseHTTPMiddleware):
         validation_result = {"valid": True, "errors": [], "file_info": {}}
 
         try:
-            # Check file extension
             file_extension = Path(filename).suffix.lower()
             if file_extension not in self.allowed_extensions:
                 validation_result["valid"] = False
@@ -126,23 +120,19 @@ class FileUploadMiddleware(BaseHTTPMiddleware):
                 )
                 return validation_result
 
-            # Read first chunk to validate file header
             first_chunk = await file_stream.read(1024)
             await file_stream.seek(0)  # Reset stream position
 
-            # Basic file header validation
             if file_extension in [".pdf"]:
                 if not first_chunk.startswith(b"%PDF"):
                     validation_result["valid"] = False
                     validation_result["errors"].append("Invalid PDF file header")
 
             elif file_extension in [".xlsx"]:
-                # Excel files are ZIP archives
                 if not first_chunk.startswith(b"PK"):
                     validation_result["valid"] = False
                     validation_result["errors"].append("Invalid Excel file header")
 
-            # Add file info
             validation_result["file_info"] = {
                 "filename": filename,
                 "extension": file_extension,
@@ -199,25 +189,20 @@ class StreamingFileHandler:
         Process file stream with a given processor function
         """
         try:
-            # Create temporary file for processing
             temp_file = tempfile.NamedTemporaryFile(delete=False)
 
-            # Stream file content to temporary file
             async for chunk in self._read_file_chunks(file_stream):
                 temp_file.write(chunk)
 
             temp_file.close()
 
-            # Process file
             result = await processor_func(temp_file.name, *args, **kwargs)
 
-            # Clean up
             os.unlink(temp_file.name)
 
             return result
 
         except Exception as e:
-            # Clean up on error
             if temp_file and os.path.exists(temp_file.name):
                 os.unlink(temp_file.name)
             raise e
@@ -238,24 +223,19 @@ class StreamingFileHandler:
         """
         from io import BytesIO
 
-        # Create BytesIO stream
         file_stream = BytesIO(file_data)
 
-        # Process with the given processor
         processor = processor_class(*args, **kwargs)
 
-        # Call processor methods that accept BytesIO
         if hasattr(processor, "process_stream"):
             return await processor.process_stream(file_stream)
         else:
-            # Fallback to traditional processing
             return await processor.process_file(file_stream)
 
     def estimate_processing_time(self, file_size: int, file_type: str) -> float:
         """
         Estimate processing time based on file size and type
         """
-        # Base processing times per MB
         base_times = {
             ".pdf": 2.0,  # seconds per MB
             ".xlsx": 1.5,  # seconds per MB
@@ -266,7 +246,6 @@ class StreamingFileHandler:
         file_size_mb = file_size / (1024 * 1024)
         base_time = base_times.get(file_type, 2.0)
 
-        # Add overhead for very large files
         if file_size_mb > 50:
             base_time *= 1.5
 

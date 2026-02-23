@@ -55,7 +55,7 @@ async def transcribe_audio(
     """
     audio_content = await audio.read()
 
-    audio_format = "ogg"  # WhatsApp default
+    audio_format = "ogg"
     if audio.filename and "." in audio.filename:
         audio_format = audio.filename.split(".")[-1].lower()
 
@@ -225,10 +225,8 @@ async def process_external_message(
             conversation_id = new_conversation.data.id
             logger.info(f"Created new conversation: {conversation_id}")
 
-        # Add user message to conversation
         logger.info(f"Adding user message to conversation {conversation_id}")
 
-        # Extract auth token from request headers
         auth_token = None
         auth_header = req.headers.get("Authorization", "")
         if auth_header.startswith("Bearer "):
