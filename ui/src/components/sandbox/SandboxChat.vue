@@ -32,7 +32,7 @@ const emit = defineEmits<Emits>()
 const { dateFormat } = useDateFormat()
 
 const messageInput = ref('')
-const messagesContainer = ref<HTMLElement | null>(null)
+const messagesContainer = ref<InstanceType<typeof ScrollPanel> | null>(null)
 
 const canSendMessage = computed(() => {
   return messageInput.value.trim().length > 0 && !props.isSending
@@ -57,9 +57,10 @@ const handleKeyPress = (event: KeyboardEvent) => {
 const scrollToBottom = async () => {
   await nextTick()
   if (messagesContainer.value) {
-    const scrollPanel = messagesContainer.value.querySelector('.p-scrollpanel-content')
-    if (scrollPanel) {
-      scrollPanel.scrollTop = scrollPanel.scrollHeight
+    const el = (messagesContainer.value as unknown as { $el: HTMLElement }).$el
+    const scrollContent = el?.querySelector('.p-scrollpanel-content')
+    if (scrollContent) {
+      scrollContent.scrollTop = scrollContent.scrollHeight
     }
   }
 }
