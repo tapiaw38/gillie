@@ -68,7 +68,7 @@ const assistantName = computed(() => assistantProfile.value?.assistant_name || '
   align-items: center;
   justify-content: space-between;
   padding: 0 1.5rem;
-  height: 3.5rem;
+  height: 3.25rem;
   background: var(--do-bg-white);
   border-bottom: 1px solid var(--do-border-light);
   position: fixed;
@@ -89,13 +89,13 @@ const assistantName = computed(() => assistantProfile.value?.assistant_name || '
 }
 
 .brand-logo {
-  width: 5rem;
-  height: 5rem;
+  width: 6rem;
+  height: 6rem;
   object-fit: contain;
 }
 
 .brand-name {
-  font-size: 1rem;
+  font-size: 0.9rem;
   font-weight: 700;
   color: var(--do-text);
   letter-spacing: -0.01em;
@@ -117,8 +117,8 @@ const assistantName = computed(() => assistantProfile.value?.assistant_name || '
   color: var(--do-text-secondary);
   text-decoration: none;
   font-weight: 500;
-  font-size: 0.875rem;
-  padding: 0.4rem 0.75rem;
+  font-size: 0.8125rem;
+  padding: 0.35rem 0.65rem;
   border-radius: 0.375rem;
   transition:
     background 0.15s ease,
@@ -149,7 +149,7 @@ const assistantName = computed(() => assistantProfile.value?.assistant_name || '
   display: flex;
   align-items: center;
   gap: 0.4rem;
-  padding: 0.3rem 0.7rem;
+  padding: 0.25rem 0.6rem;
   background: rgba(10, 207, 131, 0.08);
   border: 1px solid rgba(10, 207, 131, 0.2);
   border-radius: 1rem;

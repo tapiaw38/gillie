@@ -193,6 +193,10 @@
   --shadow-light: rgba(0, 0, 0, 0.1);
   --shadow-medium: rgba(0, 0, 0, 0.15);
   --shadow-heavy: rgba(0, 0, 0, 0.2);
+  --shadow-primary: 0 6px 18px var(--shadow-light);
+  --shadow-success: 0 6px 18px var(--shadow-light);
+  --shadow-warning: 0 6px 18px var(--shadow-light);
+  --shadow-info: 0 6px 18px var(--shadow-light);
 
   /* Spacing */
   --spacing-xs: 0.5rem;
@@ -215,7 +219,7 @@
   --transition-slow: 0.5s ease;
 
   /* Navbar height for view spacing */
-  --navbar-height: 60px;
+  --navbar-height: 52px;
 }
 
 /* Common utility classes */
@@ -514,6 +518,80 @@
   height: 3rem;
   border-radius: 0.75rem;
   display: flex;
+
+/* Global compact normalization across views/components */
+:is(
+  .integration-container,
+  .functions-container,
+  .conversation-container,
+  .account-container,
+  .about-container,
+  .sandbox-container,
+  .calendar-events-container,
+  .dashboard-container,
+  .reset-password-view-container
+) {
+  padding: 1rem !important;
+  padding-top: calc(var(--navbar-height) + 0.8rem) !important;
+}
+
+:is(.integration-header, .functions-header, .page-header, .dashboard-header, .account-header) {
+  padding: 0.85rem 1rem !important;
+  border-radius: 0.625rem !important;
+  margin-bottom: 0.9rem !important;
+}
+
+:is(.integration-title, .page-title, .dashboard-title, .view-title) {
+  font-size: 1.2rem !important;
+  line-height: 1.2 !important;
+}
+
+:is(.integration-subtitle, .page-subtitle, .dashboard-subtitle, .view-subtitle) {
+  font-size: 0.85rem !important;
+}
+
+:is(.icon-wrapper, .header-icon, .profile-icon, .stats-icon, .integration-icon) {
+  width: 2rem !important;
+  height: 2rem !important;
+  border-radius: 0.5rem !important;
+  font-size: 0.85rem !important;
+}
+
+:is(.content-grid, .profile-section, .stats-grid, .integrations-grid) {
+  gap: 0.8rem !important;
+}
+
+:is(.stat-value, .empty-state i, .loading-state i, .error-state i) {
+  font-size: 1.4rem !important;
+}
+
+:is(.p-card .p-card-content, .p-panel .p-panel-content, .p-dialog .p-dialog-content) {
+  padding: 0.9rem !important;
+}
+
+:is(.p-button, .view-conversations-button, .sandbox-button, .create-button, .save-button) {
+  min-height: 2rem !important;
+  padding: 0.45rem 0.75rem !important;
+  border-radius: 0.5rem !important;
+  font-size: 0.8rem !important;
+}
+
+@media (max-width: 768px) {
+  :is(
+    .integration-container,
+    .functions-container,
+    .conversation-container,
+    .account-container,
+    .about-container,
+    .sandbox-container,
+    .calendar-events-container,
+    .dashboard-container,
+    .reset-password-view-container
+  ) {
+    padding: 0.75rem !important;
+    padding-top: calc(var(--navbar-height) + 0.6rem) !important;
+  }
+}
   align-items: center;
   justify-content: center;
   font-size: 1.25rem;
@@ -1063,5 +1141,82 @@
   }
   50% {
     transform: scale(1.05);
+  }
+}
+
+/* Compact DigitalOcean-like density across views/components */
+:root {
+  --view-top-offset: 4.25rem;
+}
+
+.dashboard-container,
+.conversation-container,
+.functions-container,
+.integration-container,
+.account-container,
+.about-container,
+.reset-password-view-container {
+  padding: 1.25rem !important;
+  padding-top: var(--view-top-offset) !important;
+}
+
+.dashboard-header,
+.page-header,
+.integration-header,
+.account-header,
+.about-header {
+  padding: 1rem 1.25rem !important;
+  border-radius: 0.625rem !important;
+  border: 1px solid var(--do-border-light) !important;
+  box-shadow: 0 2px 10px rgba(16, 24, 40, 0.06) !important;
+}
+
+.dashboard-title,
+.page-title {
+  font-size: clamp(1.35rem, 2vw, 1.8rem) !important;
+  line-height: 1.2 !important;
+}
+
+.dashboard-subtitle,
+.page-subtitle {
+  font-size: 0.92rem !important;
+}
+
+.icon-wrapper {
+  width: 2.75rem !important;
+  height: 2.75rem !important;
+  border-radius: 0.625rem !important;
+  font-size: 1rem !important;
+}
+
+:is(.dashboard-container, .conversation-container, .functions-container, .integration-container, .account-container)
+  :is(.p-card, .p-panel, .p-datatable) {
+  border-radius: 0.625rem !important;
+  box-shadow: 0 1px 6px rgba(16, 24, 40, 0.06) !important;
+}
+
+:is(.dashboard-container, .conversation-container, .functions-container, .integration-container, .account-container)
+  :is(.p-card-content, .p-panel-content) {
+  padding: 1rem !important;
+}
+
+:is(.dashboard-container, .conversation-container, .functions-container, .integration-container, .account-container)
+  :is(.p-button, .sandbox-button, .view-conversations-button) {
+  min-height: 2rem !important;
+  padding: 0.45rem 0.85rem !important;
+  border-radius: 0.5rem !important;
+  font-size: 0.82rem !important;
+}
+
+@media (max-width: 768px) {
+  .dashboard-container,
+  .conversation-container,
+  .functions-container,
+  .integration-container,
+  .account-container,
+  .about-container,
+  .reset-password-view-container {
+    padding: 0.85rem !important;
+    padding-top: 3.9rem !important;
   }
 }

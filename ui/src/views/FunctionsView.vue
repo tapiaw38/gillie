@@ -511,7 +511,7 @@ const handleWorkflowChange = () => {
   margin: 0 auto;
   padding: 2rem;
   min-height: 100vh;
-  background: linear-gradient(135deg, #f8fafc 0%, #e2e8f0 100%);
+  background: linear-gradient(135deg, var(--vt-c-gray-50) 0%, var(--do-border-light) 100%);
 }
 
 /* Header Section */
@@ -526,8 +526,8 @@ const handleWorkflowChange = () => {
   background: white;
   padding: 2rem;
   border-radius: 1rem;
-  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.08);
-  border: 1px solid #e2e8f0;
+  box-shadow: 0 4px 20px var(--shadow-light);
+  border: 1px solid var(--do-border-light);
 }
 
 .header-content {
@@ -556,9 +556,9 @@ const handleWorkflowChange = () => {
 .page-title {
   font-size: 2.5rem;
   font-weight: 700;
-  color: #1e293b;
+  color: var(--do-text);
   margin: 0 0 0.5rem 0;
-  background: linear-gradient(135deg, #1e293b 0%, #475569 100%);
+  background: linear-gradient(135deg, var(--do-text) 0%, var(--do-text-secondary) 100%);
   -webkit-background-clip: text;
   -webkit-text-fill-color: transparent;
   background-clip: text;
@@ -566,7 +566,7 @@ const handleWorkflowChange = () => {
 
 .page-subtitle {
   font-size: 1.125rem;
-  color: #64748b;
+  color: var(--do-text-muted);
   margin: 0;
   font-weight: 400;
 }
@@ -588,7 +588,7 @@ const handleWorkflowChange = () => {
 
 :deep(.edit-button:hover) {
   transform: translateY(-2px);
-  box-shadow: 0 8px 30px rgba(16, 185, 129, 0.4);
+  box-shadow: 0 8px 30px var(--shadow-medium);
 }
 
 :deep(.cancel-button) {
@@ -610,22 +610,22 @@ const handleWorkflowChange = () => {
 
 :deep(.mode-toggle-button:hover) {
   transform: translateY(-2px);
-  box-shadow: 0 8px 30px rgba(37, 99, 235, 0.4);
+  box-shadow: 0 8px 30px var(--shadow-medium);
 }
 
 :deep(.view-toggle-button) {
-  background: linear-gradient(135deg, #64748b 0%, #475569 100%);
+  background: linear-gradient(135deg, var(--do-text-muted) 0%, var(--do-text-secondary) 100%);
   border: none;
   border-radius: 0.75rem;
   padding: 0.875rem 1.5rem;
   font-weight: 600;
   transition: all 0.3s ease;
-  box-shadow: 0 4px 20px rgba(100, 116, 139, 0.3);
+  box-shadow: 0 4px 20px var(--shadow-medium);
 }
 
 :deep(.view-toggle-button:hover) {
   transform: translateY(-2px);
-  box-shadow: 0 8px 30px rgba(100, 116, 139, 0.4);
+  box-shadow: 0 8px 30px var(--shadow-medium);
 }
 
 :deep(.guide-button) {
@@ -640,14 +640,14 @@ const handleWorkflowChange = () => {
 
 :deep(.guide-button:hover) {
   transform: translateY(-2px);
-  box-shadow: 0 8px 30px rgba(37, 99, 235, 0.4);
+  box-shadow: 0 8px 30px var(--shadow-medium);
 }
 
 /* Workflow Selector */
 :deep(.workflow-selector) {
   min-width: 250px;
   border-radius: 0.75rem;
-  border: 2px solid #e2e8f0;
+  border: 2px solid var(--do-border-light);
   background: white;
   transition: all 0.3s ease;
 }
@@ -660,7 +660,7 @@ const handleWorkflowChange = () => {
 :deep(.workflow-selector .p-dropdown-label) {
   padding: 0.75rem 1rem;
   font-weight: 600;
-  color: #374151;
+  color: var(--vt-c-gray-700);
 }
 
 :deep(.workflow-selector .p-dropdown-trigger) {
@@ -672,13 +672,13 @@ const handleWorkflowChange = () => {
   margin-bottom: 2rem;
   border-radius: 1rem;
   overflow: hidden;
-  box-shadow: 0 10px 40px rgba(0, 0, 0, 0.1);
-  border: 1px solid #e2e8f0;
+  box-shadow: 0 10px 40px var(--shadow-light);
+  border: 1px solid var(--do-border-light);
   transition: all 0.3s ease;
 }
 
 .editor-card:hover {
-  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.15);
+  box-shadow: 0 20px 60px var(--shadow-medium);
   transform: translateY(-2px);
 }
 
@@ -688,9 +688,9 @@ const handleWorkflowChange = () => {
 
 /* Editor Toolbar */
 .editor-toolbar {
-  background: linear-gradient(135deg, #f1f5f9 0%, #e2e8f0 100%);
+  background: linear-gradient(135deg, var(--vt-c-gray-100) 0%, var(--do-border-light) 100%);
   padding: 1.5rem 2rem;
-  border-bottom: 1px solid #e2e8f0;
+  border-bottom: 1px solid var(--do-border-light);
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -707,7 +707,7 @@ const handleWorkflowChange = () => {
   align-items: center;
   gap: 0.5rem;
   font-weight: 600;
-  color: #374151;
+  color: var(--vt-c-gray-700);
 }
 
 .toolbar-title i {
@@ -739,14 +739,14 @@ const handleWorkflowChange = () => {
 }
 
 :deep(.restore-button) {
-  background: linear-gradient(135deg, #6b7280 0%, #4b5563 100%);
+  background: linear-gradient(135deg, var(--do-text-muted) 0%, var(--vt-c-gray-700) 100%);
   border: none;
   color: white;
 }
 
 :deep(.toolbar-button:hover) {
   transform: translateY(-1px);
-  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.2);
+  box-shadow: 0 4px 20px var(--shadow-medium);
 }
 
 .editing-indicator {
@@ -791,7 +791,7 @@ const handleWorkflowChange = () => {
   gap: 0.5rem;
   font-size: 1.125rem;
   font-weight: 600;
-  color: #374151;
+  color: var(--vt-c-gray-700);
 }
 
 .editor-label i {
@@ -804,16 +804,16 @@ const handleWorkflowChange = () => {
   align-items: center;
   gap: 0.5rem;
   padding: 0.5rem 1rem;
-  background: #f1f5f9;
-  border: 1px solid #e2e8f0;
+  background: var(--vt-c-gray-100);
+  border: 1px solid var(--do-border-light);
   border-radius: 1rem;
-  color: #64748b;
+  color: var(--do-text-muted);
   font-size: 0.875rem;
   font-weight: 500;
 }
 
 .readonly-badge i {
-  color: #94a3b8;
+  color: var(--vt-c-gray-400);
 }
 
 /* Editor Wrapper */
@@ -824,14 +824,14 @@ const handleWorkflowChange = () => {
 
 :deep(.json-editor) {
   width: 100%;
-  border: 2px solid #e2e8f0;
+  border: 2px solid var(--do-border-light);
   border-radius: 0.75rem;
   padding: 1.5rem;
   font-family: 'SF Mono', 'Monaco', 'Consolas', monospace;
   font-size: 0.875rem;
   line-height: 1.6;
-  background: #1e293b;
-  color: #e2e8f0;
+  background: var(--do-text);
+  color: var(--do-border-light);
   transition: all 0.3s ease;
   resize: vertical;
   min-height: 600px;
@@ -839,27 +839,27 @@ const handleWorkflowChange = () => {
 
 :deep(.json-editor:focus) {
   border-color: var(--color-primary);
-  box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.1);
+  box-shadow: 0 0 0 3px var(--vt-c-gray-200);
   outline: none;
 }
 
 :deep(.json-editor.editor-readonly) {
-  background: #f8fafc;
-  color: #64748b;
+  background: var(--vt-c-gray-50);
+  color: var(--do-text-muted);
   cursor: not-allowed;
 }
 
 :deep(.json-editor.editor-error) {
   border-color: var(--color-danger);
-  box-shadow: 0 0 0 3px rgba(239, 68, 68, 0.1);
+  box-shadow: 0 0 0 3px var(--vt-c-danger-lighter);
 }
 
 /* Error Message */
 .error-message {
   margin-top: 1rem;
   padding: 1rem;
-  background: rgba(239, 68, 68, 0.1);
-  border: 1px solid rgba(239, 68, 68, 0.2);
+  background: var(--vt-c-danger-lighter);
+  border: 1px solid var(--vt-c-danger-light);
   border-radius: 0.75rem;
   color: var(--color-danger-dark);
   display: flex;
@@ -877,7 +877,7 @@ const handleWorkflowChange = () => {
   display: flex;
   justify-content: center;
   padding-top: 1rem;
-  border-top: 1px solid #e2e8f0;
+  border-top: 1px solid var(--do-border-light);
 }
 
 :deep(.save-button) {
@@ -893,11 +893,11 @@ const handleWorkflowChange = () => {
 
 :deep(.save-button:hover:not(:disabled)) {
   transform: translateY(-2px);
-  box-shadow: 0 8px 30px rgba(16, 185, 129, 0.4);
+  box-shadow: 0 8px 30px var(--shadow-medium);
 }
 
 :deep(.save-button:disabled) {
-  background: #94a3b8;
+  background: var(--vt-c-gray-400);
   box-shadow: none;
   cursor: not-allowed;
 }

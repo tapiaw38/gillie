@@ -268,7 +268,7 @@ const conversationSelectedHandler = computed(() => {
   margin: 0 auto;
   padding: 2rem;
   min-height: 100vh;
-  background: linear-gradient(135deg, #f8fafc 0%, #e2e8f0 100%);
+  background: linear-gradient(135deg, var(--vt-c-gray-50) 0%, var(--do-border-light) 100%);
 }
 
 /* Header Section */
@@ -283,8 +283,8 @@ const conversationSelectedHandler = computed(() => {
   background: white;
   padding: 2rem;
   border-radius: 1rem;
-  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.08);
-  border: 1px solid #e2e8f0;
+  box-shadow: 0 4px 20px var(--shadow-light);
+  border: 1px solid var(--do-border-light);
 }
 
 .header-content {
@@ -313,9 +313,9 @@ const conversationSelectedHandler = computed(() => {
 .page-title {
   font-size: 2.5rem;
   font-weight: 700;
-  color: #1e293b;
+  color: var(--do-text);
   margin: 0 0 0.5rem 0;
-  background: linear-gradient(135deg, #1e293b 0%, #475569 100%);
+  background: linear-gradient(135deg, var(--do-text) 0%, var(--do-text-secondary) 100%);
   -webkit-background-clip: text;
   -webkit-text-fill-color: transparent;
   background-clip: text;
@@ -323,7 +323,7 @@ const conversationSelectedHandler = computed(() => {
 
 .page-subtitle {
   font-size: 1.125rem;
-  color: #64748b;
+  color: var(--do-text-muted);
   margin: 0;
   font-weight: 400;
 }
@@ -351,7 +351,7 @@ const conversationSelectedHandler = computed(() => {
 
 .refresh-button:hover {
   transform: translateY(-2px);
-  box-shadow: 0 8px 30px rgba(16, 185, 129, 0.4);
+  box-shadow: 0 8px 30px var(--shadow-medium);
 }
 
 .spinner-effect {
@@ -376,23 +376,23 @@ const conversationSelectedHandler = computed(() => {
 .messages-card {
   border-radius: 1rem;
   overflow: hidden;
-  box-shadow: 0 10px 40px rgba(0, 0, 0, 0.1);
-  border: 1px solid #e2e8f0;
+  box-shadow: 0 10px 40px var(--shadow-light);
+  border: 1px solid var(--do-border-light);
   transition: all 0.3s ease;
   height: fit-content;
 }
 
 .conversations-card:hover,
 .messages-card:hover {
-  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.15);
+  box-shadow: 0 20px 60px var(--shadow-medium);
   transform: translateY(-2px);
 }
 
 :deep(.conversations-card .p-card-header),
 :deep(.messages-card .p-card-header) {
-  background: linear-gradient(135deg, #f8fafc 0%, #e2e8f0 100%);
+  background: linear-gradient(135deg, var(--vt-c-gray-50) 0%, var(--do-border-light) 100%);
   padding: 1.5rem 2rem;
-  border-bottom: 1px solid #e2e8f0;
+  border-bottom: 1px solid var(--do-border-light);
 }
 
 .card-header {
@@ -424,13 +424,13 @@ const conversationSelectedHandler = computed(() => {
   margin: 0 0 0.25rem 0;
   font-size: 1.25rem;
   font-weight: 600;
-  color: #374151;
+  color: var(--vt-c-gray-700);
 }
 
 .header-text p {
   margin: 0;
   font-size: 0.875rem;
-  color: #64748b;
+  color: var(--do-text-muted);
 }
 
 :deep(.conversations-card .p-card-content),
@@ -455,7 +455,7 @@ const conversationSelectedHandler = computed(() => {
 .error-state i,
 .empty-state i {
   font-size: 3rem;
-  color: #94a3b8;
+  color: var(--vt-c-gray-400);
 }
 
 .error-state i {
@@ -466,13 +466,13 @@ const conversationSelectedHandler = computed(() => {
 .error-state p,
 .empty-state p {
   margin: 0;
-  color: #64748b;
+  color: var(--do-text-muted);
   font-weight: 500;
 }
 
 .empty-state h4 {
   margin: 0;
-  color: #374151;
+  color: var(--vt-c-gray-700);
   font-weight: 600;
 }
 
@@ -489,20 +489,20 @@ const conversationSelectedHandler = computed(() => {
 :deep(.modern-table) {
   border-radius: 0.75rem;
   overflow: hidden;
-  border: 1px solid #e2e8f0;
+  border: 1px solid var(--do-border-light);
 }
 
 :deep(.modern-table .p-datatable-header) {
-  background: #f8fafc;
-  border-bottom: 1px solid #e2e8f0;
+  background: var(--vt-c-gray-50);
+  border-bottom: 1px solid var(--do-border-light);
 }
 
 :deep(.modern-table .p-datatable-thead > tr > th) {
-  background: #f1f5f9;
-  color: #374151;
+  background: var(--vt-c-gray-100);
+  color: var(--vt-c-gray-700);
   font-weight: 600;
   padding: 1rem;
-  border-bottom: 2px solid #e2e8f0;
+  border-bottom: 2px solid var(--do-border-light);
 }
 
 :deep(.modern-table .p-datatable-tbody > tr) {
@@ -510,12 +510,12 @@ const conversationSelectedHandler = computed(() => {
 }
 
 :deep(.modern-table .p-datatable-tbody > tr:hover) {
-  background: #f8fafc;
+  background: var(--vt-c-gray-50);
 }
 
 :deep(.modern-table .p-datatable-tbody > tr > td) {
   padding: 1rem;
-  border-bottom: 1px solid #f1f5f9;
+  border-bottom: 1px solid var(--vt-c-gray-100);
 }
 
 .conversation-title {
@@ -535,14 +535,14 @@ const conversationSelectedHandler = computed(() => {
 
 .date-text {
   font-size: 0.875rem;
-  color: #64748b;
+  color: var(--do-text-muted);
 }
 
 .message-count {
   display: flex;
   align-items: center;
   gap: 0.5rem;
-  color: #374151;
+  color: var(--vt-c-gray-700);
 }
 
 .message-count i {
@@ -580,14 +580,14 @@ const conversationSelectedHandler = computed(() => {
 }
 
 :deep(.messages-scroll .p-scrollpanel-bar-y) {
-  background: #e2e8f0;
+  background: var(--do-border-light);
   border-radius: 4px;
   width: 6px;
 }
 
 .messages-list {
   padding: 1rem;
-  background: linear-gradient(135deg, #f0f9ff 0%, #e0f2fe 100%);
+  background: linear-gradient(135deg, var(--vt-c-gray-50) 0%, var(--vt-c-gray-100) 100%);
   border-radius: 0.75rem;
   min-height: 100%;
 }
@@ -639,13 +639,13 @@ const conversationSelectedHandler = computed(() => {
   background: white;
   border-radius: 1rem;
   padding: 1rem;
-  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.08);
-  border: 1px solid #e2e8f0;
+  box-shadow: 0 4px 20px var(--shadow-light);
+  border: 1px solid var(--do-border-light);
   position: relative;
 }
 
 .user-message .message-bubble {
-  background: linear-gradient(135deg, #dbeafe 0%, #bfdbfe 100%);
+  background: linear-gradient(135deg, var(--vt-c-blue-lighter) 0%, var(--vt-c-blue-light) 100%);
   border-color: var(--color-info);
 }
 
@@ -656,7 +656,7 @@ const conversationSelectedHandler = computed(() => {
   right: -8px;
   width: 0;
   height: 0;
-  border-left: 8px solid #bfdbfe;
+  border-left: 8px solid var(--vt-c-blue-light);
   border-top: 8px solid transparent;
   border-bottom: 8px solid transparent;
 }
@@ -683,7 +683,7 @@ const conversationSelectedHandler = computed(() => {
 .sender-name {
   font-weight: 600;
   font-size: 0.875rem;
-  color: #374151;
+  color: var(--vt-c-gray-700);
 }
 
 .user-message .sender-name {
@@ -692,11 +692,11 @@ const conversationSelectedHandler = computed(() => {
 
 .message-time {
   font-size: 0.75rem;
-  color: #64748b;
+  color: var(--do-text-muted);
 }
 
 .message-content {
-  color: #374151;
+  color: var(--vt-c-gray-700);
   line-height: 1.6;
   word-break: break-word;
   white-space: pre-line;

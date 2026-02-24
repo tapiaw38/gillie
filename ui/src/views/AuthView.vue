@@ -11,11 +11,15 @@ import { useAuth } from '@/composables/useAuth'
 import LoadingSpinner from '@/components/core/LoadingSpinner/LoadingSpinner.vue'
 import GoogleButton from '@/components/core/GoogleButton/GoogleButton.vue'
 import Button from 'primevue/button'
+import gillieOcean from '@/assets/icons/gillie-ocean.png'
 
 const router = useRouter()
 const toast = useToast()
 
 const { isLoginPending, isLoginError, isLoginSuccess, loginUser, meUser, user } = useAuth()
+const authBackgroundStyle = {
+  backgroundImage: `linear-gradient(135deg, rgba(0, 49, 122, 0.78), rgba(0, 105, 255, 0.58)), url(${gillieOcean})`,
+}
 
 type ViewMode = 'login' | 'register' | 'forgot-password'
 const currentView = ref<ViewMode>('login')
@@ -61,7 +65,7 @@ watch(isLoginSuccess, (value) => {
 
 <template>
   <div class="auth-container">
-    <div class="auth-background">
+    <div class="auth-background" :style="authBackgroundStyle">
       <div class="auth-shapes">
         <div class="shape shape-2"></div>
         <div class="shape shape-3"></div>
@@ -194,6 +198,9 @@ watch(isLoginSuccess, (value) => {
   right: 0;
   bottom: 0;
   overflow: hidden;
+  background-size: cover;
+  background-position: center;
+  background-repeat: no-repeat;
 }
 
 .auth-shapes {
@@ -277,14 +284,14 @@ watch(isLoginSuccess, (value) => {
   position: relative;
   z-index: 10;
   width: 100%;
-  max-width: 450px;
-  padding: 2rem;
+  max-width: 400px;
+  padding: 1.25rem;
 }
 
 /* Header */
 .auth-header {
   text-align: center;
-  margin-bottom: 2rem;
+  margin-bottom: 1.25rem;
 }
 
 .logo-container {
@@ -296,8 +303,8 @@ watch(isLoginSuccess, (value) => {
 }
 
 .logo-icon {
-  width: 4rem;
-  height: 4rem;
+  width: 2.75rem;
+  height: 2.75rem;
   background: var(--gradient-primary);
   border-radius: 1rem;
   display: flex;
@@ -307,12 +314,12 @@ watch(isLoginSuccess, (value) => {
 }
 
 .logo-icon i {
-  font-size: 2rem;
+  font-size: 1.2rem;
   color: var(--vt-c-white);
 }
 
 .logo-text {
-  font-size: 2rem;
+  font-size: 1.55rem;
   font-weight: 700;
   color: var(--vt-c-white);
   margin: 0;
@@ -320,7 +327,7 @@ watch(isLoginSuccess, (value) => {
 }
 
 .auth-subtitle {
-  font-size: 1.125rem;
+  font-size: 0.92rem;
   color: rgba(255, 255, 255, 0.9);
   margin: 0;
   font-weight: 400;
@@ -333,18 +340,18 @@ watch(isLoginSuccess, (value) => {
 }
 
 .auth-form-container {
-  padding: 2.5rem;
+  padding: 1.35rem;
 }
 
 /* Form Header */
 .form-header {
   text-align: center;
-  margin-bottom: 2rem;
+  margin-bottom: 1.25rem;
 }
 
 .form-icon {
-  width: 3.5rem;
-  height: 3.5rem;
+  width: 2.6rem;
+  height: 2.6rem;
   background: var(--gradient-primary);
   border-radius: 1rem;
   margin: 0 auto 1rem auto;
@@ -355,12 +362,12 @@ watch(isLoginSuccess, (value) => {
 }
 
 .form-icon i {
-  font-size: 1.5rem;
+  font-size: 1rem;
   color: var(--vt-c-white);
 }
 
 .form-title {
-  font-size: 1.75rem;
+  font-size: 1.2rem;
   font-weight: 700;
   color: var(--vt-c-gray-800);
   margin: 0;
@@ -368,14 +375,14 @@ watch(isLoginSuccess, (value) => {
 
 /* Form Content */
 .form-content {
-  margin-bottom: 2rem;
+  margin-bottom: 1.1rem;
 }
 
 /* Divider */
 .divider {
   position: relative;
   text-align: center;
-  margin: 2rem 0;
+  margin: 1.1rem 0;
 }
 
 .divider::before {
@@ -400,7 +407,7 @@ watch(isLoginSuccess, (value) => {
 
 /* Social Login */
 .social-login {
-  margin-bottom: 2rem;
+  margin-bottom: 1.1rem;
 }
 
 /* Form Footer */

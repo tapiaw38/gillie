@@ -14,7 +14,7 @@ import NavbarApp from '@/components/core/shared/AppNavbar/NavbarApp.vue'
 .layout-main {
   width: 100%;
   min-height: 100vh;
-  padding-top: 3.5rem;
+  padding-top: 3.25rem;
   background-color: var(--do-bg);
   box-sizing: border-box;
 }
