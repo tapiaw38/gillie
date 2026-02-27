@@ -1,13 +1,16 @@
 """
 Memory CLI commands
 
+gillie memory show
+gillie memory edit
+gillie memory extract
 gillie memory faqs list
 gillie memory faqs add
 gillie memory faqs delete <id>
 gillie memory skills list
 gillie memory skills show <name>
-gillie memory extract
-gillie memory show
+gillie memory skills edit <name>
+gillie memory skills rename <old> <new>
 """
 
 import os
@@ -30,7 +33,7 @@ MEMORY_DIR = Path.home() / ".gillie" / "memory"
 
 app = typer.Typer(help="Manage assistant memory (skills + FAQs).")
 faqs_app = typer.Typer(help="Manage FAQs in faqs.skill.md.")
-skills_app = typer.Typer(help="Browse .skill.md files.")
+skills_app = typer.Typer(help="Manage .skill.md files (list, show, edit, rename).")
 
 app.add_typer(faqs_app, name="faqs")
 app.add_typer(skills_app, name="skills")
@@ -249,6 +252,40 @@ def skills_edit(name: str = typer.Argument(..., help="Skill name (without .skill
         console.print(
             f"[dim]Tip: add [bold]ver {name}.skill.md[/bold] in memory.md to include it in the AI context.[/dim]"
         )
+
+
+@skills_app.command("rename")
+def skills_rename(
+    old_name: str = typer.Argument(..., help="Current skill name (without .skill.md)"),
+    new_name: str = typer.Argument(..., help="New skill name (without .skill.md)"),
+):
+    """Rename a .skill.md file and update references in memory.md."""
+    _require_config()
+
+    old_path = MEMORY_DIR / f"{old_name}.skill.md"
+    new_path = MEMORY_DIR / f"{new_name}.skill.md"
+
+    if not old_path.exists():
+        console.print(f"[red]✗[/red] {old_name}.skill.md not found.")
+        raise typer.Exit(1)
+
+    if new_path.exists():
+        console.print(f"[red]✗[/red] {new_name}.skill.md already exists.")
+        raise typer.Exit(1)
+
+    old_path.rename(new_path)
+    console.print(f"[green]✓[/green] Renamed [bold]{old_name}.skill.md[/bold] → [bold]{new_name}.skill.md[/bold]")
+
+    # Update references in memory.md
+    memory_path = MEMORY_DIR / "memory.md"
+    if memory_path.exists():
+        content = memory_path.read_text(encoding="utf-8")
+        old_ref = f"ver {old_name}.skill.md"
+        new_ref = f"ver {new_name}.skill.md"
+        if old_ref in content:
+            content = content.replace(old_ref, new_ref)
+            memory_path.write_text(content, encoding="utf-8")
+            console.print(f"[green]✓[/green] Updated reference in memory.md")
 
 
 # ─── Extract command ──────────────────────────────────────────────────────────
