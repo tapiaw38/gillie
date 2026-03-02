@@ -308,15 +308,16 @@ CRITICAL OUTPUT RULES:
         return extracted
 
     async def _request_missing_params(
-        self, missing_params: List[str], function_name: str
+        self, missing_params: List[str], function_name: str, user_message: str = ""
     ) -> Dict[str, Any]:
         """Ask the LLM to generate a natural request for missing parameters."""
         try:
             prompt = (
-                f"The user wants to use the function '{function_name}' but the following "
-                f"parameters are still needed: {', '.join(missing_params)}.\n\n"
+                f"The user sent this message: \"{user_message}\"\n\n"
+                f"To complete the '{function_name}' action, the following parameters are still needed: "
+                f"{', '.join(missing_params)}.\n\n"
                 "Ask the user to provide all missing parameters in a single, natural, "
-                "conversational message. Match the language the user is using."
+                "conversational message. Respond in the SAME language the user used."
             )
             response = await self.llm.ainvoke([HumanMessage(content=prompt)])
             return {
@@ -327,7 +328,7 @@ CRITICAL OUTPUT RULES:
         except Exception as e:
             logger.error(f"Error requesting missing params: {e}")
             return {
-                "message": f"To run '{function_name}', I still need: {', '.join(missing_params)}. Please provide them.",
+                "message": f"Necesito los siguientes datos para continuar: {', '.join(missing_params)}.",
                 "next_param": missing_params[0] if missing_params else None,
                 "remaining_params": missing_params[1:] if len(missing_params) > 1 else [],
             }
@@ -486,13 +487,13 @@ CRITICAL OUTPUT RULES:
         function_type: str,
         execution_result: Dict[str, Any],
         params: Dict[str, str],
+        user_message: str = "",
     ) -> str:
         """Ask the LLM to turn a raw execution result into a user-friendly message."""
         try:
             result_data = execution_result.get("result", {})
 
             if function_type == "workflow":
-                context_data = result_data.get("context", {})
                 steps_executed = result_data.get("steps_executed", [])
                 final_result = result_data.get("final_result", {})
                 has_error = not steps_executed
@@ -515,7 +516,9 @@ CRITICAL OUTPUT RULES:
 
             prompt = (
                 f"You are an assistant generating natural, friendly responses based on the "
-                f"results of technical operations. Match the language the user has been using.\n\n"
+                f"results of technical operations.\n\n"
+                f"The user sent: \"{user_message}\"\n"
+                f"Respond in the SAME language the user used.\n\n"
                 f"Operation executed:\n{context_str}\n\n"
                 f"Instructions:\n"
                 f"1. If 'Error detected: YES' or no steps were executed, inform the user about the error clearly\n"
@@ -529,18 +532,18 @@ CRITICAL OUTPUT RULES:
 
         except Exception as e:
             logger.error(f"Error generating friendly response: {e}", exc_info=True)
-            return (
-                f"✅ '{function_name}' completed successfully."
-                if function_type != "workflow"
-                else f"✅ Workflow '{function_name}' completed successfully."
-            )
+            return f"✅ Listo."
 
-    async def _generate_friendly_error(self, function_name: str, error_detail: str) -> str:
+    async def _generate_friendly_error(
+        self, function_name: str, error_detail: str, user_message: str = ""
+    ) -> str:
         """Ask the LLM to turn a raw error into a user-friendly apology message."""
         try:
             prompt = (
                 "You are an assistant that communicates technical errors in a friendly, "
-                "reassuring way. Match the language the user has been using.\n\n"
+                "reassuring way.\n\n"
+                f"The user sent: \"{user_message}\"\n"
+                f"Respond in the SAME language the user used.\n\n"
                 f"A background operation called '{function_name}' failed with this technical error:\n"
                 f"{error_detail}\n\n"
                 "Instructions:\n"
@@ -553,7 +556,7 @@ CRITICAL OUTPUT RULES:
             response = await self.llm.ainvoke([HumanMessage(content=prompt)])
             return response.content.strip()
         except Exception:
-            return "Sorry, something went wrong while completing your request. Please try again."
+            return "Disculpá, no pude completar la acción. Por favor intentá de nuevo."
 
     async def execute_function(
         self,
@@ -601,7 +604,7 @@ CRITICAL OUTPUT RULES:
                 if extracted_params:
                     self._store_params(user_id, matched_name, extracted_params)
                 self._store_params(user_id, matched_name, {"__trigger_message__": user_message})
-                param_request = await self._request_missing_params(missing_params, matched_name)
+                param_request = await self._request_missing_params(missing_params, matched_name, user_message)
                 return FunctionResult(response=param_request["message"])
 
             clean_params = self._strip_metadata(all_params)
@@ -619,7 +622,7 @@ CRITICAL OUTPUT RULES:
                 return FunctionResult(response=f"Unsupported function type: {matched_function.type}")
 
             if not result.get("success", False):
-                error_response = await self._generate_friendly_error(matched_name, result.get("error", "Unknown error"))
+                error_response = await self._generate_friendly_error(matched_name, result.get("error", "Unknown error"), user_message)
                 return FunctionResult(response=error_response)
 
             if matched_function.response_field:
@@ -631,7 +634,7 @@ CRITICAL OUTPUT RULES:
                     )
 
             response_text = await self._generate_friendly_response(
-                matched_name, matched_function.type, result, all_params
+                matched_name, matched_function.type, result, all_params, user_message
             )
             return FunctionResult(
                 response=response_text,
@@ -640,7 +643,7 @@ CRITICAL OUTPUT RULES:
 
         except Exception as e:
             logger.error(f"Error in SmartFunctionExecutor: {e}", exc_info=True)
-            error_response = await self._generate_friendly_error("request", str(e))
+            error_response = await self._generate_friendly_error("request", str(e), user_message)
             return FunctionResult(response=error_response)
 
     def _detect_ongoing_function(self, user_id: str) -> Optional[str]:
@@ -690,7 +693,7 @@ CRITICAL OUTPUT RULES:
 
             missing = [p for p in required_params if p not in all_params]
             if missing:
-                param_request = await self._request_missing_params(missing, function_name)
+                param_request = await self._request_missing_params(missing, function_name, user_message)
                 return FunctionResult(response=param_request["message"])
 
             trigger_message = all_params.get("__trigger_message__", user_message)
@@ -717,7 +720,7 @@ CRITICAL OUTPUT RULES:
                             default_message=matched_function.response_default_message,
                         )
                 response_text = await self._generate_friendly_response(
-                    function_name, matched_function.type, result, all_params
+                    function_name, matched_function.type, result, all_params, trigger_message
                 )
                 return FunctionResult(
                     response=response_text,
@@ -725,13 +728,13 @@ CRITICAL OUTPUT RULES:
                 )
             else:
                 self._clear_params(user_id, function_name)
-                error_response = await self._generate_friendly_error(function_name, result.get("error", "Unknown error"))
+                error_response = await self._generate_friendly_error(function_name, result.get("error", "Unknown error"), user_message)
                 return FunctionResult(response=error_response)
 
         except Exception as e:
             self._clear_params(user_id, function_name)
             logger.error(f"Error processing ongoing function: {e}", exc_info=True)
-            error_response = await self._generate_friendly_error(function_name, str(e))
+            error_response = await self._generate_friendly_error(function_name, str(e), user_message)
             return FunctionResult(response=error_response)
 
     def _store_params(self, user_id: str, function_name: str, params: Dict[str, Any]):
