@@ -154,41 +154,51 @@ class ProcessWhatsAppMessageUseCase:
                     conversation_id
                 )
 
-                assistant_messages = [
-                    msg
-                    for msg in updated_conversation.messages
-                    if msg.sender == SenderEnum.assistant
-                ]
+                all_messages = updated_conversation.messages
 
-                if assistant_messages:
-                    last_assistant_message = assistant_messages[-1]
+                # Find the last user message and collect all assistant messages after it
+                last_user_idx = next(
+                    (i for i in range(len(all_messages) - 1, -1, -1)
+                     if all_messages[i].sender != SenderEnum.assistant),
+                    None
+                )
 
+                new_assistant_messages = []
+                if last_user_idx is not None:
+                    new_assistant_messages = [
+                        m for m in all_messages[last_user_idx + 1:]
+                        if m.sender == SenderEnum.assistant
+                    ]
+
+                if new_assistant_messages:
                     logger.info(
-                        f"Sending AI response to WhatsApp: phone={sender_phone}, message_id={message_id}"
+                        f"Sending {len(new_assistant_messages)} AI message(s) to WhatsApp: "
+                        f"phone={sender_phone}, message_id={message_id}"
                     )
 
-                    sent = wa_client.send_message(
-                        sender_phone, last_assistant_message.content
-                    )
+                    last_sent = False
+                    for assistant_msg in new_assistant_messages:
+                        last_sent = wa_client.send_message(sender_phone, assistant_msg.content)
+                        if not last_sent:
+                            logger.warning(
+                                f"Failed to send message to WhatsApp: phone={sender_phone}"
+                            )
 
-                    if sent:
+                    if last_sent:
                         logger.info(
-                            f"Response successfully sent to WhatsApp: phone={sender_phone}"
-                        )
-                    else:
-                        logger.warning(
-                            f"Failed to send response to WhatsApp: phone={sender_phone}"
+                            f"All messages sent to WhatsApp: phone={sender_phone}"
                         )
 
+                    last_msg = new_assistant_messages[-1]
                     responses.append(
                         {
                             "phone": sender_phone,
                             "message_id": message_id,
-                            "response_sent": sent,
+                            "response_sent": last_sent,
                             "message": (
-                                last_assistant_message.content[:100] + "..."
-                                if len(last_assistant_message.content) > 100
-                                else last_assistant_message.content
+                                last_msg.content[:100] + "..."
+                                if len(last_msg.content) > 100
+                                else last_msg.content
                             ),
                         }
                     )
