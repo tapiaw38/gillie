@@ -88,19 +88,26 @@ async def _handle_incoming_message(device_id: str, sender_jid: str, text: str):
         )
 
         updated_conv = usecases.conversation.find_by_id_usecase.execute(conversation_id)
-        assistant_response = ""
-        audio_url = None
+        new_assistant_msgs = []
         if updated_conv and updated_conv.data.messages:
-            assistant_msgs = [m for m in updated_conv.data.messages if m.sender == SenderEnum.assistant]
-            if assistant_msgs:
-                last = assistant_msgs[-1]
-                assistant_response = last.content
-                audio_url = getattr(last, "audio_url", None)
+            all_msgs = updated_conv.data.messages
+            last_user_idx = next(
+                (i for i in range(len(all_msgs) - 1, -1, -1)
+                 if all_msgs[i].sender != SenderEnum.assistant),
+                None
+            )
+            if last_user_idx is not None:
+                new_assistant_msgs = [
+                    m for m in all_msgs[last_user_idx + 1:]
+                    if m.sender == SenderEnum.assistant
+                ]
 
-        if assistant_response:
-            await neonize.send_text(device_id, sender_jid, assistant_response)
+        for msg in new_assistant_msgs:
+            await neonize.send_text(device_id, sender_jid, msg.content)
             logger.info(f"[device:{device_id}] Replied to {sender_jid}")
 
+        if new_assistant_msgs:
+            audio_url = getattr(new_assistant_msgs[-1], "audio_url", None)
             if audio_url:
                 sent = await neonize.send_audio(device_id, sender_jid, audio_url)
                 if sent:
