@@ -36,6 +36,15 @@ class FunctionConfig:
     body_mode: str = "template"  # "template" | "llm"
     body_prompt: Optional[str] = None
     required_body_params: List[str] = field(default_factory=list)
+    response_default_message: Optional[str] = None
+
+
+@dataclass
+class FunctionResult:
+    """Result of a function execution carrying both the LLM response and an optional pre-message."""
+
+    response: str
+    default_message: Optional[str] = None
 
 
 class SmartFunctionExecutor:
@@ -140,6 +149,7 @@ CRITICAL OUTPUT RULES:
                     body_mode=func.get("body_mode", "template"),
                     body_prompt=func.get("body_prompt"),
                     required_body_params=func.get("required_body_params", []),
+                    response_default_message=func.get("response_default_message"),
                 )
                 parsed.append(config)
 
@@ -551,12 +561,12 @@ CRITICAL OUTPUT RULES:
         profile: Profile,
         chat_history: List[str] = None,
         auth_token: str = None,
-    ) -> Optional[str]:
+    ) -> Optional[FunctionResult]:
         """Analyze the user message, find a matching function, and execute it."""
         try:
             available_functions = self._get_all_available_functions(profile)
             if not available_functions:
-                return "No functions are configured for this profile."
+                return FunctionResult(response="No functions are configured for this profile.")
 
             user_id = profile.user_id or "default_user"
 
@@ -575,7 +585,7 @@ CRITICAL OUTPUT RULES:
             matched_name = intent.get("function_name")
             matched_function = next((f for f in available_functions if f.name == matched_name), None)
             if not matched_function:
-                return f"Error: function '{matched_name}' not found in configuration."
+                return FunctionResult(response=f"Error: function '{matched_name}' not found in configuration.")
 
             missing_params: List[str] = intent.get("missing_params", [])
             extracted_params: Dict[str, Any] = intent.get("extracted_params", {})
@@ -592,7 +602,7 @@ CRITICAL OUTPUT RULES:
                     self._store_params(user_id, matched_name, extracted_params)
                 self._store_params(user_id, matched_name, {"__trigger_message__": user_message})
                 param_request = await self._request_missing_params(missing_params, matched_name)
-                return param_request["message"]
+                return FunctionResult(response=param_request["message"])
 
             clean_params = self._strip_metadata(all_params)
 
@@ -606,23 +616,32 @@ CRITICAL OUTPUT RULES:
             elif matched_function.type == "workflow":
                 result = await self._execute_workflow(matched_function, clean_params, profile, auth_token)
             else:
-                return f"Unsupported function type: {matched_function.type}"
+                return FunctionResult(response=f"Unsupported function type: {matched_function.type}")
 
             if not result.get("success", False):
-                return await self._generate_friendly_error(matched_name, result.get("error", "Unknown error"))
+                error_response = await self._generate_friendly_error(matched_name, result.get("error", "Unknown error"))
+                return FunctionResult(response=error_response)
 
             if matched_function.response_field:
                 extracted = self._extract_response_field(result, matched_function.type, matched_function.response_field)
                 if extracted is not None:
-                    return extracted
+                    return FunctionResult(
+                        response=extracted,
+                        default_message=matched_function.response_default_message,
+                    )
 
-            return await self._generate_friendly_response(
+            response_text = await self._generate_friendly_response(
                 matched_name, matched_function.type, result, all_params
+            )
+            return FunctionResult(
+                response=response_text,
+                default_message=matched_function.response_default_message,
             )
 
         except Exception as e:
             logger.error(f"Error in SmartFunctionExecutor: {e}", exc_info=True)
-            return await self._generate_friendly_error("request", str(e))
+            error_response = await self._generate_friendly_error("request", str(e))
+            return FunctionResult(response=error_response)
 
     def _detect_ongoing_function(self, user_id: str) -> Optional[str]:
         """Return the name of the function currently awaiting parameters, or None."""
@@ -641,12 +660,12 @@ CRITICAL OUTPUT RULES:
         profile=None,
         auth_token: str = None,
         chat_history: List[str] = None,
-    ) -> str:
+    ) -> FunctionResult:
         """Continue collecting parameters for a function already in progress."""
         try:
             matched_function = next((f for f in available_functions if f.name == function_name), None)
             if not matched_function:
-                return f"Error: function '{function_name}' not found."
+                return FunctionResult(response=f"Error: function '{function_name}' not found.")
 
             stored_params = self._get_stored_params(user_id, function_name)
             new_params = self._extract_generic_params(user_message)
@@ -672,7 +691,7 @@ CRITICAL OUTPUT RULES:
             missing = [p for p in required_params if p not in all_params]
             if missing:
                 param_request = await self._request_missing_params(missing, function_name)
-                return param_request["message"]
+                return FunctionResult(response=param_request["message"])
 
             trigger_message = all_params.get("__trigger_message__", user_message)
             clean_params = self._strip_metadata(all_params)
@@ -686,25 +705,34 @@ CRITICAL OUTPUT RULES:
             elif matched_function.type == "workflow":
                 result = await self._execute_workflow(matched_function, clean_params, profile, auth_token)
             else:
-                return f"Unsupported function type: {matched_function.type}"
+                return FunctionResult(response=f"Unsupported function type: {matched_function.type}")
 
             if result.get("success", False):
                 self._clear_params(user_id, function_name)
                 if matched_function.response_field:
                     extracted = self._extract_response_field(result, matched_function.type, matched_function.response_field)
                     if extracted is not None:
-                        return extracted
-                return await self._generate_friendly_response(
+                        return FunctionResult(
+                            response=extracted,
+                            default_message=matched_function.response_default_message,
+                        )
+                response_text = await self._generate_friendly_response(
                     function_name, matched_function.type, result, all_params
+                )
+                return FunctionResult(
+                    response=response_text,
+                    default_message=matched_function.response_default_message,
                 )
             else:
                 self._clear_params(user_id, function_name)
-                return await self._generate_friendly_error(function_name, result.get("error", "Unknown error"))
+                error_response = await self._generate_friendly_error(function_name, result.get("error", "Unknown error"))
+                return FunctionResult(response=error_response)
 
         except Exception as e:
             self._clear_params(user_id, function_name)
             logger.error(f"Error processing ongoing function: {e}", exc_info=True)
-            return await self._generate_friendly_error(function_name, str(e))
+            error_response = await self._generate_friendly_error(function_name, str(e))
+            return FunctionResult(response=error_response)
 
     def _store_params(self, user_id: str, function_name: str, params: Dict[str, Any]):
         self.function_params_storage.setdefault(user_id, {}).setdefault(function_name, {}).update(params)

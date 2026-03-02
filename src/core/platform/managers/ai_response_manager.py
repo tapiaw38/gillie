@@ -13,8 +13,8 @@ Responsibilities:
 """
 
 import logging
-from typing import Optional, List
-from src.core.platform.functions.smart_function_executor import SmartFunctionExecutor
+from typing import Optional, List, Tuple
+from src.core.platform.functions.smart_function_executor import SmartFunctionExecutor, FunctionResult
 from src.core.platform.functions.global_workflows import get_available_workflows
 
 logger = logging.getLogger(__name__)
@@ -59,24 +59,14 @@ class AIResponseService:
         conversation_history: Optional[str] = None,
         chat_history: Optional[List[str]] = None,
         auth_token: Optional[str] = None
-    ) -> str:
+    ) -> Tuple[Optional[str], str]:
         """
         Generates an AI response with intelligent function execution.
 
-        This method implements a strategy pattern:
-        1. If functions are configured, try smart function execution
-        2. If function execution fails or returns no match, use standard AI
-        3. If all fails, return a friendly error message
-
-        Args:
-            user_message: The user's message content
-            profile: User profile with assistant configuration
-            message_context: Optional message context
-            conversation_history: Optional conversation history string
-            chat_history: Optional list of recent chat messages
-
         Returns:
-            Generated AI response string
+            Tuple of (default_message, response_text) where default_message is an optional
+            pre-message to send before the LLM response (set via response_default_message in
+            the function config), and response_text is the main AI response.
         """
         try:
             # Check if profile has functions configured
@@ -90,16 +80,17 @@ class AIResponseService:
                     auth_token=auth_token
                 )
             else:
-                return await self._generate_standard_response(
+                response = await self._generate_standard_response(
                     user_message=user_message,
                     profile=profile,
                     message_context=message_context,
                     conversation_history=conversation_history
                 )
+                return (None, response)
 
         except Exception as e:
             logger.error(f"Error generating AI response: {e}")
-            return self._get_fallback_error_message(profile)
+            return (None, self._get_fallback_error_message(profile))
 
     async def _generate_response_with_functions(
         self,
@@ -109,7 +100,7 @@ class AIResponseService:
         conversation_history: Optional[str],
         chat_history: Optional[List[str]],
         auth_token: Optional[str] = None
-    ) -> str:
+    ) -> Tuple[Optional[str], str]:
         """
         Generates response with smart function execution enabled.
 
@@ -121,13 +112,13 @@ class AIResponseService:
             chat_history: Chat history list
 
         Returns:
-            Generated response
+            Tuple of (default_message, response_text)
         """
         try:
             logger.info("Using smart function executor for response generation")
 
             # Execute smart function
-            function_response = await self.smart_function_executor.execute_function(
+            function_result = await self.smart_function_executor.execute_function(
                 user_message=user_message,
                 profile=profile,
                 chat_history=chat_history or [],
@@ -135,28 +126,30 @@ class AIResponseService:
             )
 
             # Check if function was successfully executed (None = no match found)
-            if function_response is not None:
+            if function_result is not None:
                 logger.info("Function executed successfully")
-                return function_response
+                return (function_result.default_message, function_result.response)
             else:
                 # No matching function found, fallback to standard AI
                 logger.info("No function matched, using standard AI response")
-                return await self._generate_standard_response(
+                response = await self._generate_standard_response(
                     user_message=user_message,
                     profile=profile,
                     message_context=message_context,
                     conversation_history=conversation_history
                 )
+                return (None, response)
 
         except Exception as function_error:
             logger.error(f"Error in smart function execution: {function_error}")
             # Fallback to standard AI response
-            return await self._generate_standard_response_with_fallback(
+            response = await self._generate_standard_response_with_fallback(
                 user_message=user_message,
                 profile=profile,
                 message_context=message_context,
                 conversation_history=conversation_history
             )
+            return (None, response)
 
     async def _generate_standard_response(
         self,

@@ -20,7 +20,7 @@ The heavy lifting is delegated to specialized services:
 
 import logging
 from datetime import datetime, timezone
-from typing import Optional
+from typing import Optional, Tuple
 
 from src.schemas import MessageInput, MessageListOutput
 from src.core.domain import Message, SenderEnum
@@ -104,12 +104,17 @@ class AddMessageUseCase:
         self._add_message_to_conversation(conversation, user_message)
 
         # Step 5: Generate AI response
-        ai_response_text = await self._generate_ai_response(
+        default_message, ai_response_text = await self._generate_ai_response(
             user_message=user_message,
             conversation=conversation,
             message_context=message.context,
             auth_token=auth_token
         )
+
+        # Step 5b: If a pre-configured default message exists, add it first
+        if default_message:
+            pre_message = self._create_assistant_message(content=default_message)
+            self._add_message_to_conversation(conversation, pre_message)
 
         # Step 6: Process images if enabled
         formatted_images = await self._process_images_if_enabled(
@@ -289,7 +294,7 @@ class AddMessageUseCase:
         conversation,
         message_context: Optional[str],
         auth_token: Optional[str] = None
-    ) -> str:
+    ) -> Tuple[Optional[str], str]:
         """
         Generates AI response using the AI response service.
 
@@ -299,13 +304,14 @@ class AddMessageUseCase:
             message_context: Optional message context
 
         Returns:
-            Generated AI response text
+            Tuple of (default_message, ai_response_text)
         """
         if not self.context_factory.platform_managers:
             logger.warning("Platform services not available, using fallback")
-            return await self._generate_ai_response_fallback(
+            response = await self._generate_ai_response_fallback(
                 user_message, conversation, message_context
             )
+            return (None, response)
 
         try:
             # Inject skill context BEFORE any AI processing (highest priority)
@@ -323,7 +329,7 @@ class AddMessageUseCase:
             )
 
             # Generate response using AI response service
-            response = await self.context_factory.platform_managers.ai_response.generate_response(
+            return await self.context_factory.platform_managers.ai_response.generate_response(
                 user_message=user_message.content,
                 profile=conversation.profile,
                 message_context=enhanced_context,
@@ -332,11 +338,9 @@ class AddMessageUseCase:
                 auth_token=auth_token
             )
 
-            return response
-
         except Exception as e:
             logger.error(f"Error generating AI response: {e}")
-            return self._get_fallback_error_message(conversation.profile)
+            return (None, self._get_fallback_error_message(conversation.profile))
 
     def _inject_skill_context(self, message_context: Optional[str]) -> str:
         """
