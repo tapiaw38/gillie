@@ -11,6 +11,7 @@ class Profile(BaseModel):
     assistant_name: Optional[str] = None
     business_name: Optional[str] = None
     functions: Optional[str] = None
+    tool_prompts: Optional[str] = None
     business_context: Optional[str] = None
     role: Optional[str] = None
     user_id: Optional[str] = None

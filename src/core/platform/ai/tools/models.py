@@ -5,9 +5,67 @@ This module defines Pydantic models for validating tool arguments.
 Each model corresponds to a tool that can be called by the AI assistant.
 """
 
+import json
+import logging
 from typing import Optional, List, Dict, Any
 from pydantic import BaseModel, Field
 from langchain_core.tools import StructuredTool
+
+logger = logging.getLogger(__name__)
+
+# Default descriptions used when the profile has no custom tool_prompts
+_DEFAULT_TOOL_PROMPTS: Dict[str, str] = {
+    "search_images": (
+        "Search for images in the user's uploaded files. "
+        "Use when the user asks to find or see images from their documents."
+    ),
+    "analyze_pdf": (
+        "Analyze the structure and content of a PDF file. "
+        "Use when the user asks about a specific PDF document."
+    ),
+    "extract_text_from_pdf": (
+        "Extract text and images from a PDF file. "
+        "Use when the user needs detailed content from a PDF."
+    ),
+    "analyze_excel": (
+        "Analyze data from an Excel file. "
+        "Use when the user asks about data in a spreadsheet."
+    ),
+    "describe_image": (
+        "Describe the content of an image. "
+        "Use when the user shares or asks about an image."
+    ),
+    "search_documents": (
+        "Search for information in the user's uploaded documents. "
+        "Use when the user asks a question that may be answered by their uploaded files."
+    ),
+    "query_database": (
+        "Query the database to retrieve information. "
+        "Use when the user asks for data that lives in the connected database."
+    ),
+    "save_memory": (
+        "Save a relevant fact from the conversation to remember it later. "
+        "Use when the user shares personal information, preferences, or important data."
+    ),
+    "search_memory": (
+        "Search previously saved facts about the user. "
+        "Use when the user refers to past conversations or when context about the user is needed."
+    ),
+}
+
+
+def _get_tool_prompts(profile) -> Dict[str, str]:
+    """Merge default prompts with any custom ones stored in profile.tool_prompts."""
+    prompts = dict(_DEFAULT_TOOL_PROMPTS)
+    if not profile or not getattr(profile, "tool_prompts", None):
+        return prompts
+    try:
+        custom = json.loads(profile.tool_prompts)
+        if isinstance(custom, dict):
+            prompts.update({k: v for k, v in custom.items() if v and isinstance(v, str)})
+    except Exception:
+        logger.warning("Could not parse profile.tool_prompts — using defaults")
+    return prompts
 
 
 class SearchImagesArgs(BaseModel):
@@ -96,6 +154,49 @@ class SearchMemoryArgs(BaseModel):
     max_results: int = Field(default=5, ge=1, le=10)
 
 
+class QueryDatabaseArgs(BaseModel):
+    """Arguments for querying the database"""
+    columns: List[str] = Field(
+        default=["*"],
+        description="Column names to retrieve. Use ['*'] for all columns."
+    )
+    filters: Optional[str] = Field(
+        default=None,
+        description=(
+            "Optional WHERE clause fragment. Examples: "
+            "\"nombre ILIKE '%leche%'\", "
+            "\"precio < 100\", "
+            "\"categoria = 'lacteos' AND stock > 0\""
+        )
+    )
+    limit: int = Field(
+        default=20,
+        description="Maximum number of rows to return",
+        ge=1,
+        le=50,
+    )
+
+
+def _get_sql_integration(profile):
+    """Return a SQLDatabaseIntegration if the profile has sqldatabase activated, else None."""
+    if not profile or not profile.integrations:
+        return None
+    for integration in profile.integrations:
+        if integration.name == "sqldatabase" and integration.activated:
+            config = integration.config or {}
+            connection_string = config.get("connection_string")
+            allowed_table = config.get("allowed_table")
+            if not connection_string or not allowed_table:
+                return None
+            from src.adapters.web.integrations.sqldatabase.sqldatabase import SQLDatabaseIntegration
+            return SQLDatabaseIntegration(
+                connection_string=connection_string,
+                allowed_table=allowed_table,
+                table_description=config.get("table_description", ""),
+            )
+    return None
+
+
 def create_langchain_tools(openai_integration, profile, skill_manager=None) -> List[StructuredTool]:
     """
     Create LangChain StructuredTool instances with Pydantic validation.
@@ -176,74 +277,88 @@ def create_langchain_tools(openai_integration, profile, skill_manager=None) -> L
         logger.warning(f"No results found in Qdrant for profile {profile.user_id}")
         return {"found": False, "context": "No hay información disponible en el catálogo.", "results": []}
 
+    prompts = _get_tool_prompts(profile)
+    sql_integration = _get_sql_integration(profile)
+
+    # When DB integration is active, override search_documents prompt to avoid conflict
+    if sql_integration is not None and "search_documents" not in (json.loads(profile.tool_prompts) if getattr(profile, "tool_prompts", None) else {}):
+        prompts["search_documents"] = (
+            "Search for information in the user's uploaded documents (PDFs, Excel). "
+            "Do NOT use for database queries — use query_database instead. "
+            "Use only when the user asks about uploaded files or documents."
+        )
+
     tools = [
         StructuredTool(
             name="search_images",
-            description=(
-                "Search for images in the user's uploaded files (PDFs and Excel). "
-                "Useful when the user asks to find images related to specific products, "
-                "features, or keywords. Returns image URLs with confidence scores."
-            ),
+            description=prompts["search_images"],
             func=search_images_tool,
             args_schema=SearchImagesArgs,
             coroutine=search_images_tool,
         ),
         StructuredTool(
             name="analyze_pdf",
-            description=(
-                "Analyze the structure and content of a PDF file. "
-                "Returns information about text extraction method, number of pages, "
-                "and whether the PDF contains text or images."
-            ),
+            description=prompts["analyze_pdf"],
             func=analyze_pdf_tool,
             args_schema=AnalyzePDFArgs,
             coroutine=analyze_pdf_tool,
         ),
         StructuredTool(
             name="extract_text_from_pdf",
-            description=(
-                "Extract text and related images from a PDF file. "
-                "Can optionally filter results by a search term. "
-                "Useful for getting detailed content from PDFs."
-            ),
+            description=prompts["extract_text_from_pdf"],
             func=extract_text_tool,
             args_schema=ExtractTextArgs,
             coroutine=extract_text_tool,
         ),
         StructuredTool(
             name="analyze_excel",
-            description=(
-                "Analyze data from an Excel file. "
-                "Returns structured data analysis including sheets, columns, and statistics."
-            ),
+            description=prompts["analyze_excel"],
             func=analyze_excel_tool,
             args_schema=AnalyzeExcelArgs,
             coroutine=analyze_excel_tool,
         ),
         StructuredTool(
             name="describe_image",
-            description=(
-                "Generate a detailed description of an image from base64 data. "
-                "Useful for understanding image content and context."
-            ),
+            description=prompts["describe_image"],
             func=describe_image_tool,
             args_schema=DescribeImageArgs,
             coroutine=describe_image_tool,
         ),
         StructuredTool(
             name="search_documents",
-            description=(
-                "OBLIGATORIO: Usa esta herramienta cuando el usuario pregunte sobre productos, precios, "
-                "disponibilidad, stock o cualquier información del catálogo. "
-                "Ejemplos de cuándo usarla: 'qué productos tienen', 'precio de leche', 'tienen aceite', "
-                "'cuánto cuesta', 'qué hay disponible'. "
-                "Retorna los productos y precios encontrados en el catálogo."
-            ),
+            description=prompts["search_documents"],
             func=search_documents_tool,
             args_schema=SearchDocumentsArgs,
             coroutine=search_documents_tool,
         ),
     ]
+
+    # SQL database tool — only added when the profile has sqldatabase integration active
+    if sql_integration is not None:
+        async def query_database_tool(
+            columns: List[str] = None,
+            filters: Optional[str] = None,
+            limit: int = 20,
+        ) -> Dict[str, Any]:
+            """Query the allowed database table and return matching rows."""
+            return await sql_integration.query(
+                columns=columns or ["*"],
+                filters=filters,
+                limit=limit,
+            )
+
+        db_description = prompts.get("query_database", _DEFAULT_TOOL_PROMPTS["query_database"])
+        db_description += f" Tabla: {sql_integration.allowed_table}. {sql_integration.table_description}"
+
+        tools.append(
+            StructuredTool(
+                name="query_database",
+                description=db_description,
+                func=query_database_tool,
+                args_schema=QueryDatabaseArgs,
+                coroutine=query_database_tool,
+            )
+        )
 
     if skill_manager is not None:
         async def save_memory_tool(content: str, category: str = "General") -> str:
@@ -256,12 +371,7 @@ def create_langchain_tools(openai_integration, profile, skill_manager=None) -> L
         tools.append(
             StructuredTool(
                 name="save_memory",
-                description=(
-                    "Guarda un hecho o dato relevante de la conversación para recordarlo en el futuro. "
-                    "Úsala cuando el usuario comparta: nombre, ciudad, preferencias, productos de interés, "
-                    "datos de contacto, historial, problemas reportados. "
-                    "NO la uses para información genérica del negocio (eso ya está en el contexto del sistema)."
-                ),
+                description=prompts["save_memory"],
                 func=save_memory_tool,
                 args_schema=SaveMemoryArgs,
                 coroutine=save_memory_tool,
@@ -270,12 +380,7 @@ def create_langchain_tools(openai_integration, profile, skill_manager=None) -> L
         tools.append(
             StructuredTool(
                 name="search_memory",
-                description=(
-                    "Busca en la memoria del asistente (hechos guardados, FAQs, conocimiento general) "
-                    "información sobre el usuario o datos previos. "
-                    "Úsala cuando el usuario haga referencia a conversaciones anteriores, "
-                    "o cuando necesites recordar su nombre, preferencias o historial."
-                ),
+                description=prompts["search_memory"],
                 func=search_memory_tool,
                 args_schema=SearchMemoryArgs,
                 coroutine=search_memory_tool,

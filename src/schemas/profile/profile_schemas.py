@@ -11,6 +11,7 @@ class ProfileInput(BaseModel):
     assistant_name: Optional[str] = None
     business_name: Optional[str] = None
     functions: Optional[str] = None
+    tool_prompts: Optional[str] = None
     business_context: Optional[str] = None
     role: Optional[str] = None
     tts_enabled: Optional[bool] = None
@@ -26,6 +27,7 @@ class ProfileOutputData(BaseModel):
     assistant_name: str
     business_name: str
     functions: str
+    tool_prompts: Optional[str] = None
     business_context: str
     role: Optional[str]
     is_active: bool
@@ -49,6 +51,7 @@ class ProfileOutput(BaseModel):
                 assistant_name=profile.assistant_name,
                 business_name=profile.business_name,
                 functions=profile.functions,
+                tool_prompts=profile.tool_prompts,
                 business_context=profile.business_context,
                 is_active=profile.is_active,
                 tts_enabled=profile.tts_enabled or False,

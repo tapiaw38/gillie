@@ -31,6 +31,7 @@ class UpdateUseCase:
                 business_context=profile.business_context,
                 role=profile.role,
                 tts_enabled=profile.tts_enabled,
+                tool_prompts=profile.tool_prompts,
                 updated_at=datetime.now(timezone.utc),
             )
 

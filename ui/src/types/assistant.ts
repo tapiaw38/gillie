@@ -11,6 +11,7 @@ export interface AssistantProfileUpdateParams {
   functions?: string
   business_context?: string
   tts_enabled?: boolean
+  tool_prompts?: string
 }
 
 export interface AssistantProfile {
@@ -28,6 +29,7 @@ export interface AssistantProfile {
   api_keys: ApiKey[]
   files?: AssistantFile[]
   integrations?: Integration[]
+  tool_prompts?: string
 }
 
 export interface AssistantProfileResponse {
@@ -110,6 +112,12 @@ export interface GoogleDriveIntegrationConfig {
   is_connected?: boolean
 }
 
+export interface SQLDatabaseIntegrationConfig {
+  connection_string: string
+  allowed_table: string
+  table_description: string
+}
+
 export interface IntegrationParams {
   name: string
   type: string
@@ -119,6 +127,19 @@ export interface IntegrationParams {
     | WhatsappIntegrationConfig
     | GoogleCalendarIntegrationConfig
     | GoogleDriveIntegrationConfig
+    | SQLDatabaseIntegrationConfig
+}
+
+export interface ToolPromptsConfig {
+  search_images?: string
+  analyze_pdf?: string
+  extract_text_from_pdf?: string
+  analyze_excel?: string
+  describe_image?: string
+  search_documents?: string
+  query_database?: string
+  save_memory?: string
+  search_memory?: string
 }
 
 export interface IntegrationResponse {

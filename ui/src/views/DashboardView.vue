@@ -206,6 +206,22 @@ const integrations = [
     enabled: true,
   },
   {
+    name: 'Base de Datos SQL',
+    description: 'Conecta el asistente a una tabla de PostgreSQL para consultar datos en tiempo real',
+    icon: 'pi pi-database',
+    tone: 'info',
+    to: 'sqldatabase-integration',
+    enabled: true,
+  },
+  {
+    name: 'Prompts de Tools',
+    description: 'Personaliza las instrucciones de cada tool del asistente (cuándo y cómo usarlas)',
+    icon: 'pi pi-sliders-h',
+    tone: 'primary',
+    to: 'tool-prompts',
+    enabled: true,
+  },
+  {
     name: 'Funciones',
     description: 'Editor de funciones personalizadas para el asistente',
     icon: 'pi pi-code',

@@ -58,6 +58,16 @@ const router = createRouter({
           component: () => import('../views/GoogleDriveIntegrationView.vue'),
         },
         {
+          path: '/sqldatabase-integration',
+          name: 'sqldatabase-integration',
+          component: () => import('../views/SQLDatabaseIntegrationView.vue'),
+        },
+        {
+          path: '/tool-prompts',
+          name: 'tool-prompts',
+          component: () => import('../views/ToolPromptsView.vue'),
+        },
+        {
           path: '/calendar/events',
           name: 'calendar-events',
           component: () => import('../views/CalendarEventsView.vue'),

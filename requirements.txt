@@ -35,6 +35,7 @@ pytesseract
 scikit-learn
 aiohttp
 aiofiles
+asyncpg
 SpeechRecognition
 pydub
 langchain>=0.3.0
