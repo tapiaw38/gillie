@@ -279,8 +279,13 @@ class NeonizeIntegration:
 
         jid must be a "user@server" string (e.g. "5491112345678@s.whatsapp.net").
         neonize's send_message requires a JID protobuf object, so we build it here.
+
+        Retries up to 3 times with exponential backoff on transient SendMessageError
+        (e.g. "failed to get device list: failed to send usync query").
         """
         from neonize.utils.jid import build_jid
+        from neonize.exc import SendMessageError
+
         if "@" in jid:
             user, server = jid.rsplit("@", 1)
         else:
@@ -288,17 +293,34 @@ class NeonizeIntegration:
         jid_proto = build_jid(user, server)
 
         client = await self.get_client(device_id)
-        try:
-            result = await client.send_message(jid_proto, text)
-            msg_id = str(result.id) if hasattr(result, "id") else str(result)
-            logger.info(f"[neonize] Sent message to {jid} via device {device_id}: id={msg_id}")
-            return msg_id
-        except Exception as e:
-            logger.error(
-                f"[neonize] Failed to send message to {jid} via device {device_id}: {e}",
-                exc_info=True,
-            )
-            raise
+        max_retries = 3
+        for attempt in range(max_retries):
+            try:
+                result = await client.send_message(jid_proto, text)
+                msg_id = str(result.id) if hasattr(result, "id") else str(result)
+                logger.info(f"[neonize] Sent message to {jid} via device {device_id}: id={msg_id}")
+                return msg_id
+            except SendMessageError as e:
+                if attempt < max_retries - 1:
+                    wait = 2 ** attempt  # 1s, 2s, ...
+                    logger.warning(
+                        f"[neonize] send_message attempt {attempt + 1}/{max_retries} failed for "
+                        f"{jid} via device {device_id}: {e} — retrying in {wait}s"
+                    )
+                    await asyncio.sleep(wait)
+                else:
+                    logger.error(
+                        f"[neonize] Failed to send message to {jid} via device {device_id} "
+                        f"after {max_retries} attempts: {e}",
+                        exc_info=True,
+                    )
+                    raise
+            except Exception as e:
+                logger.error(
+                    f"[neonize] Failed to send message to {jid} via device {device_id}: {e}",
+                    exc_info=True,
+                )
+                raise
 
     async def send_image(self, device_id: str, jid: str, image_url: str, caption: str = "") -> Optional[str]:
         """Download an image from image_url and send it to the given JID."""
