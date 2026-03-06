@@ -9,6 +9,7 @@ import Textarea from 'primevue/textarea'
 import Toast from 'primevue/toast'
 import Accordion from 'primevue/accordion'
 import AccordionTab from 'primevue/accordiontab'
+import InputSwitch from 'primevue/inputswitch'
 
 const { getAssistantProfile, updateAssistantProfile, assistantProfile } = useAssistant()
 const toast = useToast()
@@ -72,6 +73,11 @@ const TOOL_META: { key: keyof ToolPromptsConfig; label: string; icon: string; hi
 ]
 
 const prompts = ref<ToolPromptsConfig>({})
+// enabled[key] = true means the tool is active (not disabled)
+const enabled = ref<Record<string, boolean>>({})
+
+// Initialize all tools as enabled by default
+TOOL_META.forEach((t) => { enabled.value[t.key] = true })
 
 const resetToDefault = (key: keyof ToolPromptsConfig) => {
   prompts.value[key] = ''
@@ -80,13 +86,20 @@ const resetToDefault = (key: keyof ToolPromptsConfig) => {
 const save = async () => {
   isSaving.value = true
   try {
-    // Only save non-empty prompts
     const toSave: ToolPromptsConfig = {}
     for (const [k, v] of Object.entries(prompts.value)) {
       if (v && v.trim()) toSave[k as keyof ToolPromptsConfig] = v.trim()
     }
-    await updateAssistantProfile({ tool_prompts: JSON.stringify(toSave) })
-    toast.add({ severity: 'success', summary: 'Guardado', detail: 'Prompts actualizados', life: 3000 })
+
+    const disabledTools = TOOL_META
+      .filter((t) => !enabled.value[t.key])
+      .map((t) => t.key)
+
+    await updateAssistantProfile({
+      tool_prompts: JSON.stringify(toSave),
+      disabled_tools: disabledTools,
+    })
+    toast.add({ severity: 'success', summary: 'Guardado', detail: 'Configuración actualizada', life: 3000 })
   } catch {
     toast.add({ severity: 'error', summary: 'Error', detail: 'No se pudo guardar', life: 3000 })
   } finally {
@@ -104,6 +117,12 @@ onMounted(async () => {
       prompts.value = {}
     }
   }
+  if (assistantProfile.value?.disabled_tools) {
+    const disabled = assistantProfile.value.disabled_tools
+    TOOL_META.forEach((t) => {
+      enabled.value[t.key] = !disabled.includes(t.key)
+    })
+  }
 })
 </script>
 
@@ -114,8 +133,7 @@ onMounted(async () => {
       <div>
         <h1 class="page-title">Prompts de Tools</h1>
         <p class="page-subtitle">
-          Personalizá las instrucciones que le indican al LLM cuándo usar cada herramienta.
-          Dejá vacío para usar el valor por defecto.
+          Activá/desactivá herramientas y personalizá las instrucciones que le indican al LLM cuándo usar cada una.
         </p>
       </div>
     </div>
@@ -124,9 +142,15 @@ onMounted(async () => {
       <AccordionTab v-for="tool in TOOL_META" :key="tool.key">
         <template #header>
           <div class="tab-header">
-            <i :class="tool.icon" class="tab-icon"></i>
-            <span class="tab-label">{{ tool.label }}</span>
-            <span v-if="prompts[tool.key]" class="tab-badge">Personalizado</span>
+            <i :class="tool.icon" class="tab-icon" :style="{ opacity: enabled[tool.key] ? 1 : 0.4 }"></i>
+            <span class="tab-label" :style="{ opacity: enabled[tool.key] ? 1 : 0.5 }">{{ tool.label }}</span>
+            <span v-if="!enabled[tool.key]" class="tab-badge tab-badge--disabled">Desactivada</span>
+            <span v-else-if="prompts[tool.key]" class="tab-badge">Personalizado</span>
+            <InputSwitch
+              v-model="enabled[tool.key]"
+              class="tool-toggle"
+              @click.stop
+            />
           </div>
         </template>
 
@@ -135,6 +159,7 @@ onMounted(async () => {
           <Textarea
             v-model="prompts[tool.key]"
             :placeholder="`Dejar vacío para usar el prompt por defecto de '${tool.key}'`"
+            :disabled="!enabled[tool.key]"
             rows="4"
             class="w-full"
             auto-resize
@@ -146,6 +171,7 @@ onMounted(async () => {
               severity="secondary"
               size="small"
               text
+              :disabled="!enabled[tool.key]"
               @click="resetToDefault(tool.key)"
             />
           </div>
@@ -222,27 +248,39 @@ onMounted(async () => {
   display: flex;
   align-items: center;
   gap: 0.6rem;
+  width: 100%;
 }
 
 .tab-icon {
   color: var(--color-primary);
   font-size: 1rem;
+  transition: opacity 0.2s;
 }
 
 .tab-label {
   font-weight: 600;
   font-size: 0.95rem;
   color: #374151;
+  transition: opacity 0.2s;
 }
 
 .tab-badge {
-  margin-left: auto;
   font-size: 0.75rem;
   font-weight: 600;
   background: #dbeafe;
   color: #1d4ed8;
   padding: 0.15rem 0.5rem;
   border-radius: 999px;
+}
+
+.tab-badge--disabled {
+  background: #fee2e2;
+  color: #b91c1c;
+}
+
+.tool-toggle {
+  margin-left: auto;
+  flex-shrink: 0;
 }
 
 .tool-field {

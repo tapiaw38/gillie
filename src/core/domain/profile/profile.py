@@ -12,6 +12,7 @@ class Profile(BaseModel):
     business_name: Optional[str] = None
     functions: Optional[str] = None
     tool_prompts: Optional[str] = None
+    disabled_tools: Optional[List[str]] = None
     business_context: Optional[str] = None
     role: Optional[str] = None
     user_id: Optional[str] = None

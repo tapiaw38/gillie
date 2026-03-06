@@ -12,6 +12,7 @@ export interface AssistantProfileUpdateParams {
   business_context?: string
   tts_enabled?: boolean
   tool_prompts?: string
+  disabled_tools?: string[]
 }
 
 export interface AssistantProfile {
@@ -30,6 +31,7 @@ export interface AssistantProfile {
   files?: AssistantFile[]
   integrations?: Integration[]
   tool_prompts?: string
+  disabled_tools?: string[]
 }
 
 export interface AssistantProfileResponse {

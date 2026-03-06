@@ -288,53 +288,24 @@ def create_langchain_tools(openai_integration, profile, skill_manager=None) -> L
             "Use only when the user asks about uploaded files or documents."
         )
 
-    tools = [
-        StructuredTool(
-            name="search_images",
-            description=prompts["search_images"],
-            func=search_images_tool,
-            args_schema=SearchImagesArgs,
-            coroutine=search_images_tool,
-        ),
-        StructuredTool(
-            name="analyze_pdf",
-            description=prompts["analyze_pdf"],
-            func=analyze_pdf_tool,
-            args_schema=AnalyzePDFArgs,
-            coroutine=analyze_pdf_tool,
-        ),
-        StructuredTool(
-            name="extract_text_from_pdf",
-            description=prompts["extract_text_from_pdf"],
-            func=extract_text_tool,
-            args_schema=ExtractTextArgs,
-            coroutine=extract_text_tool,
-        ),
-        StructuredTool(
-            name="analyze_excel",
-            description=prompts["analyze_excel"],
-            func=analyze_excel_tool,
-            args_schema=AnalyzeExcelArgs,
-            coroutine=analyze_excel_tool,
-        ),
-        StructuredTool(
-            name="describe_image",
-            description=prompts["describe_image"],
-            func=describe_image_tool,
-            args_schema=DescribeImageArgs,
-            coroutine=describe_image_tool,
-        ),
-        StructuredTool(
-            name="search_documents",
-            description=prompts["search_documents"],
-            func=search_documents_tool,
-            args_schema=SearchDocumentsArgs,
-            coroutine=search_documents_tool,
-        ),
-    ]
+    disabled = set(getattr(profile, "disabled_tools", None) or [])
+
+    def _tool(name, description, func, schema):
+        if name in disabled:
+            return None
+        return StructuredTool(name=name, description=description, func=func, args_schema=schema, coroutine=func)
+
+    tools = list(filter(None, [
+        _tool("search_images",          prompts["search_images"],          search_images_tool,   SearchImagesArgs),
+        _tool("analyze_pdf",            prompts["analyze_pdf"],            analyze_pdf_tool,     AnalyzePDFArgs),
+        _tool("extract_text_from_pdf",  prompts["extract_text_from_pdf"],  extract_text_tool,    ExtractTextArgs),
+        _tool("analyze_excel",          prompts["analyze_excel"],          analyze_excel_tool,   AnalyzeExcelArgs),
+        _tool("describe_image",         prompts["describe_image"],         describe_image_tool,  DescribeImageArgs),
+        _tool("search_documents",       prompts["search_documents"],       search_documents_tool, SearchDocumentsArgs),
+    ]))
 
     # SQL database tool — only added when the profile has sqldatabase integration active
-    if sql_integration is not None:
+    if sql_integration is not None and "query_database" not in disabled:
         async def query_database_tool(
             columns: List[str] = None,
             filters: Optional[str] = None,
@@ -368,23 +339,21 @@ def create_langchain_tools(openai_integration, profile, skill_manager=None) -> L
         async def search_memory_tool(query: str, max_results: int = 5) -> str:
             return skill_manager.search_memory(query, max_results)
 
-        tools.append(
-            StructuredTool(
+        if "save_memory" not in disabled:
+            tools.append(StructuredTool(
                 name="save_memory",
                 description=prompts["save_memory"],
                 func=save_memory_tool,
                 args_schema=SaveMemoryArgs,
                 coroutine=save_memory_tool,
-            )
-        )
-        tools.append(
-            StructuredTool(
+            ))
+        if "search_memory" not in disabled:
+            tools.append(StructuredTool(
                 name="search_memory",
                 description=prompts["search_memory"],
                 func=search_memory_tool,
                 args_schema=SearchMemoryArgs,
                 coroutine=search_memory_tool,
-            )
-        )
+            ))
 
     return tools
