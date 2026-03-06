@@ -300,6 +300,36 @@ class NeonizeIntegration:
             )
             raise
 
+    async def send_image(self, device_id: str, jid: str, image_url: str, caption: str = "") -> Optional[str]:
+        """Download an image from image_url and send it to the given JID."""
+        import aiohttp
+        from neonize.utils.jid import build_jid
+
+        if "@" in jid:
+            user, server = jid.rsplit("@", 1)
+        else:
+            user, server = jid, "s.whatsapp.net"
+        jid_proto = build_jid(user, server)
+
+        try:
+            async with aiohttp.ClientSession() as session:
+                async with session.get(image_url) as resp:
+                    resp.raise_for_status()
+                    image_bytes = await resp.read()
+
+            client = await self.get_client(device_id)
+            result = await client.send_image(jid_proto, image_bytes, caption=caption)
+            msg_id = str(result.id) if hasattr(result, "id") else str(result)
+            logger.info(f"[neonize] Sent image to {jid} via device {device_id}: id={msg_id}")
+            return msg_id
+
+        except Exception as e:
+            logger.error(
+                f"[neonize] Failed to send image to {jid} via device {device_id}: {e}",
+                exc_info=True,
+            )
+            return None
+
     async def send_audio(self, device_id: str, jid: str, audio_url: str) -> Optional[str]:
         """
         Descarga el audio desde audio_url, lo convierte a MP3 y lo envía al JID.

@@ -52,6 +52,33 @@ class WhatsAppIntegration:
             )
             return False
 
+    def send_image(self, recipient: str, image_url: str, caption: str = "") -> bool:
+        import logging
+        logger = logging.getLogger(__name__)
+
+        recipient = "".join(filter(str.isdigit, recipient))
+        headers = {
+            "Authorization": f"Bearer {self.access_token}",
+            "Content-Type": "application/json",
+        }
+        data = {
+            "messaging_product": "whatsapp",
+            "to": recipient,
+            "type": "image",
+            "image": {"link": image_url, "caption": caption},
+        }
+        try:
+            response = requests.post(self.api_url, headers=headers, json=data)
+            if response.status_code == 200:
+                logger.info(f"Image sent successfully to {recipient}")
+                return True
+            else:
+                logger.error(f"Error sending image: status={response.status_code}, response={response.text}")
+                return False
+        except Exception as e:
+            logger.error(f"Exception while sending WhatsApp image: {str(e)}", exc_info=True)
+            return False
+
     def receive_message(self, payload):
         import logging
 

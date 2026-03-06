@@ -176,9 +176,15 @@ class ProcessWhatsAppMessageUseCase:
                         f"phone={sender_phone}, message_id={message_id}"
                     )
 
+                    from src.core.platform.utils.message_parser import parse_message_segments
+
                     last_sent = False
                     for assistant_msg in new_assistant_messages:
-                        last_sent = wa_client.send_message(sender_phone, assistant_msg.content)
+                        for segment in parse_message_segments(assistant_msg.content):
+                            if segment["type"] == "image":
+                                last_sent = wa_client.send_image(sender_phone, segment["content"])
+                            elif segment["content"]:
+                                last_sent = wa_client.send_message(sender_phone, segment["content"])
                         if not last_sent:
                             logger.warning(
                                 f"Failed to send message to WhatsApp: phone={sender_phone}"

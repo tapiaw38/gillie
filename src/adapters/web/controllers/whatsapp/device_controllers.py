@@ -102,8 +102,14 @@ async def _handle_incoming_message(device_id: str, sender_jid: str, text: str):
                     if m.sender == SenderEnum.assistant
                 ]
 
+        from src.core.platform.utils.message_parser import parse_message_segments
+
         for msg in new_assistant_msgs:
-            await neonize.send_text(device_id, sender_jid, msg.content)
+            for segment in parse_message_segments(msg.content):
+                if segment["type"] == "image":
+                    await neonize.send_image(device_id, sender_jid, segment["content"])
+                elif segment["content"]:
+                    await neonize.send_text(device_id, sender_jid, segment["content"])
             logger.info(f"[device:{device_id}] Replied to {sender_jid}")
 
         if new_assistant_msgs:
