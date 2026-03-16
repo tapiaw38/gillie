@@ -136,6 +136,7 @@ skill_manager = SkillManager()
 integrations = create_integrations(config_service, calendar_repository=repositories.calendar)
 
 integrations.openai.set_skill_manager(skill_manager)
+integrations.openai.set_store_service(store_service)
 
 platform_services = PlatformServices.create_services(
     integrations=integrations,

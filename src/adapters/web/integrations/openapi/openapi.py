@@ -41,6 +41,7 @@ class OpenAIIntegration:
 
         self.langchain_service = None
         self.skill_manager = None
+        self.store_service = None
 
         langchain_config = config_service.langchain_config
         if langchain_config.service_enabled:
@@ -65,6 +66,12 @@ class OpenAIIntegration:
         self.skill_manager = skill_manager
         if self.langchain_service is not None:
             self.langchain_service.skill_manager = skill_manager
+
+    def set_store_service(self, store_service) -> None:
+        """Inject StoreService after construction."""
+        self.store_service = store_service
+        if self.langchain_service is not None:
+            self.langchain_service.store_service = store_service
 
     @log_function_call
     async def ask(

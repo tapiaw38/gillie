@@ -56,6 +56,7 @@ class LangChainService:
         self.config = config_service.openai_config
         self.openai_integration = openai_integration
         self.skill_manager = skill_manager
+        self.store_service = None
 
         # Initialize LangChain ChatOpenAI
         self.llm = ChatOpenAI(
@@ -169,24 +170,20 @@ class LangChainService:
             Exception: If circuit breaker is open or generation fails
         """
 
-        # Check circuit breaker
         if self._is_circuit_open():
             logger.warning("Circuit breaker is OPEN - using fallback")
             raise Exception("AI service temporarily unavailable (circuit breaker)")
 
         async with self.semaphore:
             try:
-                # Build system prompt
                 system_prompt = self._build_system_prompt(profile, context)
 
-                # Convert messages to LangChain format
                 messages = self._convert_messages_to_langchain(
                     previous_messages=previous_messages,
                     system_prompt=system_prompt,
                     current_question=question
                 )
 
-                # Optimize message history
                 thread_id = self.memory_manager.create_thread_id(
                     conversation_id, profile.user_id
                 )
@@ -194,13 +191,13 @@ class LangChainService:
                     messages, system_prompt=None  # Already included
                 )
 
-                # Create LLM with tools if enabled
                 tools = None
                 if use_tools:
                     tools = create_langchain_tools(
                         self.openai_integration,
                         profile,
                         skill_manager=self.skill_manager,
+                        store_service=self.store_service,
                     )
                     llm_with_tools = self.llm.bind_tools(tools)
                     logger.debug(f"Bound {len(tools)} tools to LLM")
@@ -212,7 +209,6 @@ class LangChainService:
                 logger.info(f"Generating response for user {profile.user_id}")
                 response = await llm_with_tools.ainvoke(messages)
 
-                # Handle tool calls if present
                 if hasattr(response, 'tool_calls') and response.tool_calls:
                     response_text = await self._handle_tool_calls(
                         response=response,
@@ -223,7 +219,6 @@ class LangChainService:
                 else:
                     response_text = response.content
 
-                # Save checkpoint
                 self.memory_manager.save_checkpoint(
                     thread_id=thread_id,
                     messages=messages + [response],
@@ -260,10 +255,8 @@ class LangChainService:
         """
         logger.info(f"Handling {len(response.tool_calls)} tool calls")
 
-        # Add AI response to messages
         messages.append(response)
 
-        # Execute each tool call
         for tool_call in response.tool_calls:
             try:
                 tool_name = tool_call.get("name")
@@ -272,7 +265,6 @@ class LangChainService:
 
                 logger.info(f"Executing tool: {tool_name} with args: {tool_args}")
 
-                # Find and execute the tool
                 tool_result = None
                 tool_found = False
 
@@ -310,7 +302,6 @@ class LangChainService:
                     logger.warning(f"Tool {tool_name} not found in bound tools")
                     tool_result = f"Tool {tool_name} not found"
 
-                # Convert result to string if it's a dict
                 if isinstance(tool_result, dict):
                     import json
                     tool_result_str = json.dumps(tool_result, ensure_ascii=False)
@@ -333,7 +324,6 @@ class LangChainService:
                 )
                 messages.append(tool_message)
 
-        # Generate final response with tool results
         logger.info("Generating final response with tool results")
         final_response = await llm_with_tools.ainvoke(messages)
         return final_response.content
@@ -371,7 +361,6 @@ class LangChainService:
             previous_messages="",  # Handled by message history
         )
 
-        # Add role-specific context
         if profile.role == "seller":
             system_prompt += CONTEXT_ROLE_SELLER
         elif profile.role == "tutor":
@@ -381,7 +370,6 @@ class LangChainService:
 
         system_prompt += CONTEXT_RULES
 
-        # Add strong FAQ priority instructions if FAQs are in context
         if context and "PREGUNTAS FRECUENTES" in context:
             system_prompt += (
                 "\n\nINSTRUCCIÓN CRÍTICA - PRIORIDAD ABSOLUTA:\n"
@@ -415,16 +403,13 @@ class LangChainService:
         """
         messages = []
 
-        # Add system prompt
         messages.append(SystemMessage(content=system_prompt))
 
-        # Add conversation history
         langchain_history = self.memory_manager.messages_to_langchain(
             previous_messages
         )
         messages.extend(langchain_history)
 
-        # Add current question
         messages.append(HumanMessage(content=current_question))
 
         return messages

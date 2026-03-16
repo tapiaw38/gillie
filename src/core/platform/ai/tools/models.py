@@ -13,27 +13,73 @@ from langchain_core.tools import StructuredTool
 
 logger = logging.getLogger(__name__)
 
+_clip_model = None
+
+
+def _get_clip_model():
+    global _clip_model
+    if _clip_model is None:
+        try:
+            from sentence_transformers import SentenceTransformer
+            _clip_model = SentenceTransformer("clip-ViT-B-32")
+            logger.info("[tools] CLIP model loaded: clip-ViT-B-32")
+        except Exception as e:
+            logger.warning(f"[tools] Could not load CLIP model: {e}")
+    return _clip_model
+
+
+def _clip_is_relevant(image_base64: str, search_term: str, threshold: float = 0.22) -> bool:
+    """Use CLIP to check if an image is semantically related to the search term.
+
+    Returns True if similarity >= threshold, or if CLIP is unavailable (fail-open).
+    """
+    try:
+        import base64 as _b64
+        import io as _io
+        from PIL import Image as _PilImage
+        from sentence_transformers import util as _st_util
+
+        clip = _get_clip_model()
+        if clip is None:
+            return True  # CLIP not available — keep image
+
+        img = _PilImage.open(_io.BytesIO(_b64.b64decode(image_base64))).convert("RGB")
+        img_emb = clip.encode(img, convert_to_tensor=True)
+        text_emb = clip.encode(search_term, convert_to_tensor=True)
+        score = _st_util.cos_sim(img_emb, text_emb).item()
+        logger.info(f"[tools] CLIP score for '{search_term}': {score:.3f} (threshold={threshold})")
+        return score >= threshold
+    except Exception as e:
+        logger.warning(f"[tools] CLIP check failed: {e}")
+        return True  # fail-open
+
+
 # Default descriptions used when the profile has no custom tool_prompts
 _DEFAULT_TOOL_PROMPTS: Dict[str, str] = {
     "search_images": (
-        "Search for images in the user's uploaded files. "
-        "Use when the user asks to find or see images from their documents."
+        "Search for images inside the user's uploaded documents (PDFs, Excel). "
+        "First finds the relevant documents via semantic search, then extracts images from those documents. "
+        "Use when the user asks to see images, photos or visual content related to a topic. "
+        "IMPORTANT: when images are found, include each image_url literally and completely in your response text so it can be sent to the user."
     ),
     "analyze_pdf": (
-        "Analyze the structure and content of a PDF file. "
-        "Use when the user asks about a specific PDF document."
+        "Analyze the structure of a PDF file uploaded by the user. "
+        "Use when the user asks about a specific PDF by name (e.g. 'manual.pdf'). "
+        "Provide the file name, not a URL."
     ),
     "extract_text_from_pdf": (
-        "Extract text and images from a PDF file. "
-        "Use when the user needs detailed content from a PDF."
+        "Extract detailed text and images from a specific PDF uploaded by the user. "
+        "Use when the user needs the full content of a named PDF. "
+        "Provide the file name, not a URL."
     ),
     "analyze_excel": (
-        "Analyze data from an Excel file. "
-        "Use when the user asks about data in a spreadsheet."
+        "Analyze data from a specific Excel file uploaded by the user. "
+        "Use when the user asks about data in a named spreadsheet. "
+        "Provide the file name, not a URL."
     ),
     "describe_image": (
-        "Describe the content of an image. "
-        "Use when the user shares or asks about an image."
+        "Describe the visual content of an image using its URL. "
+        "Use after search_images returns image URLs and the user wants to know what an image shows."
     ),
     "search_documents": (
         "Search for information in the user's uploaded documents. "
@@ -83,15 +129,15 @@ class SearchImagesArgs(BaseModel):
 
 class AnalyzePDFArgs(BaseModel):
     """Arguments for analyzing PDF content"""
-    pdf_url: str = Field(
-        description="URL of the PDF file to analyze"
+    file_name: str = Field(
+        description="Name (or partial name) of the PDF file uploaded by the user, e.g. 'manual.pdf'"
     )
 
 
 class ExtractTextArgs(BaseModel):
     """Arguments for extracting text and images from PDF"""
-    pdf_url: str = Field(
-        description="URL of the PDF file to process"
+    file_name: str = Field(
+        description="Name (or partial name) of the PDF file uploaded by the user, e.g. 'manual.pdf'"
     )
     search_term: Optional[str] = Field(
         default=None,
@@ -101,15 +147,15 @@ class ExtractTextArgs(BaseModel):
 
 class AnalyzeExcelArgs(BaseModel):
     """Arguments for analyzing Excel file"""
-    excel_url: str = Field(
-        description="URL of the Excel file to analyze"
+    file_name: str = Field(
+        description="Name (or partial name) of the Excel file uploaded by the user, e.g. 'datos.xlsx'"
     )
 
 
 class DescribeImageArgs(BaseModel):
     """Arguments for describing an image"""
-    image_base64: str = Field(
-        description="Base64 encoded image data"
+    image_url: str = Field(
+        description="URL of the image to describe (e.g. obtained from search_images results)"
     )
 
 
@@ -197,7 +243,21 @@ def _get_sql_integration(profile):
     return None
 
 
-def create_langchain_tools(openai_integration, profile, skill_manager=None) -> List[StructuredTool]:
+def _find_file_by_name(files, file_name: str):
+    """Find a file in profile.files by name (case-insensitive partial match)."""
+    if not files:
+        return None
+    name_lower = file_name.lower()
+    for f in files:
+        if f.name.lower() == name_lower:
+            return f
+    for f in files:
+        if name_lower in f.name.lower() or f.name.lower() in name_lower:
+            return f
+    return None
+
+
+def create_langchain_tools(openai_integration, profile, skill_manager=None, store_service=None) -> List[StructuredTool]:
     """
     Create LangChain StructuredTool instances with Pydantic validation.
 
@@ -210,41 +270,132 @@ def create_langchain_tools(openai_integration, profile, skill_manager=None) -> L
     """
 
     async def search_images_tool(search_term: str, max_results: int = 5) -> List[Dict[str, Any]]:
-        """Search for images in user's files"""
+        """Search for images inside documents relevant to the search term."""
+        if not profile.files:
+            return []
+
+        doc_search = await openai_integration.rag_processor.search_relevant_content(
+            query=search_term,
+            document_ids=[],
+            max_results=20,
+            profile_id=profile.user_id,
+        )
+
+        relevant_urls: set = set()
+        for result in doc_search.get("results", []):
+            url = (
+                result.get("metadata", {}).get("file_url")
+                or result.get("metadata", {}).get("source")
+            )
+            if url:
+                relevant_urls.add(url)
+
+        if relevant_urls:
+            filtered_files = [f for f in profile.files if f.url in relevant_urls]
+        else:
+            filtered_files = list(profile.files)
+
+        if not filtered_files:
+            return []
+
+        class _ProfileProxy:
+            def __init__(self, files):
+                self.files = files
+
         results = await openai_integration.search_images_with_text_analysis(
             search_term=search_term,
-            profile=profile,
-            max_results=max_results
+            profile=_ProfileProxy(filtered_files),
+            max_results=max_results,
         )
-        # Convert to serializable format
-        return [
-            {
-                "image_url": result.image_url,
-                "confidence": result.confidence,
-                "page_number": result.page_number,
-                "source_file": result.source_file,
-            }
-            for result in results
-        ]
 
-    async def analyze_pdf_tool(pdf_url: str) -> Dict[str, Any]:
+        if not results:
+            return {"found": False, "message": "No se encontraron imágenes relacionadas con ese término."}
+
+        MIN_CONFIDENCE = 0.2
+        candidates = [r for r in results if getattr(r, "confidence", 1.0) >= MIN_CONFIDENCE]
+        if not candidates:
+            candidates = results  # keep all if all are below threshold
+
+        images = []
+        for i, result in enumerate(candidates):
+            image_base64 = getattr(result, "image_base64", None)
+            if not image_base64:
+                continue
+
+            if not _clip_is_relevant(image_base64, search_term):
+                logger.info(f"[tools] Image {i} filtered by CLIP (not relevant to '{search_term}')")
+                continue
+
+            image_url = None
+            if store_service:
+                try:
+                    import base64 as _b64
+                    import io as _io
+                    from uuid import uuid4
+                    image_bytes = _b64.b64decode(image_base64)
+                    file_name = f"search_result_{uuid4().hex[:8]}.png"
+                    key = store_service.put_object(
+                        file=_io.BytesIO(image_bytes),
+                        user_file=profile.user_id,
+                        filename=file_name,
+                        size=len(image_bytes),
+                        object_id=f"img{i}",
+                    )
+                    image_url = store_service.generate_url(key)
+                except Exception as e:
+                    logger.warning(f"Could not upload image to storage: {e}")
+
+            if image_url:
+                images.append({
+                    "image_url": image_url,
+                    "page_number": getattr(result, "page_number", None),
+                })
+
+        if not images:
+            return {"found": False, "message": "No se encontraron imágenes relevantes para ese término."}
+
+        return {
+            "found": True,
+            "images": images,
+            "instruction": "Include each image_url literally in your response text.",
+        }
+
+    async def analyze_pdf_tool(file_name: str) -> Dict[str, Any]:
         """Analyze PDF content structure"""
-        return await openai_integration.analyze_pdf_content(pdf_url)
+        file = _find_file_by_name(profile.files, file_name)
+        if not file:
+            return {"error": f"No se encontró ningún archivo con el nombre '{file_name}' en los archivos del usuario."}
+        return await openai_integration.analyze_pdf_content(file.url)
 
-    async def extract_text_tool(pdf_url: str, search_term: Optional[str] = None) -> Dict[str, Any]:
+    async def extract_text_tool(file_name: str, search_term: Optional[str] = None) -> Dict[str, Any]:
         """Extract text and images from PDF"""
+        file = _find_file_by_name(profile.files, file_name)
+        if not file:
+            return {"error": f"No se encontró ningún archivo con el nombre '{file_name}' en los archivos del usuario."}
         return await openai_integration.extract_text_and_images_from_pdf(
-            pdf_url=pdf_url,
-            search_term=search_term
+            pdf_url=file.url,
+            search_term=search_term,
         )
 
-    async def analyze_excel_tool(excel_url: str) -> Dict[str, Any]:
+    async def analyze_excel_tool(file_name: str) -> Dict[str, Any]:
         """Analyze Excel file data"""
-        return await openai_integration.analyze_excel_file(excel_url)
+        file = _find_file_by_name(profile.files, file_name)
+        if not file:
+            return {"error": f"No se encontró ningún archivo con el nombre '{file_name}' en los archivos del usuario."}
+        return await openai_integration.analyze_excel_file(file.url)
 
-    async def describe_image_tool(image_base64: str) -> str:
-        """Describe an image from base64 data"""
-        return await openai_integration.describe_image_from_base64(image_base64)
+    async def describe_image_tool(image_url: str) -> str:
+        """Describe an image from its URL"""
+        import aiohttp, base64 as b64
+        try:
+            async with aiohttp.ClientSession() as session:
+                async with session.get(image_url) as resp:
+                    resp.raise_for_status()
+                    image_bytes = await resp.read()
+            image_base64 = b64.b64encode(image_bytes).decode()
+            return await openai_integration.describe_image_from_base64(image_base64)
+        except Exception as e:
+            return f"Error al obtener la imagen desde la URL: {e}"
 
     async def search_documents_tool(query: str, max_results: int = 5) -> Dict[str, Any]:
         """Search for relevant content in user's uploaded documents"""
@@ -253,7 +404,6 @@ def create_langchain_tools(openai_integration, profile, skill_manager=None) -> L
 
         logger.info(f"search_documents_tool called with query: {query}, profile: {profile.user_id}")
 
-        # Search directly in Qdrant by profile_id — no need to process files first
         search_result = await openai_integration.rag_processor.search_relevant_content(
             query=query,
             document_ids=[],
@@ -280,7 +430,6 @@ def create_langchain_tools(openai_integration, profile, skill_manager=None) -> L
     prompts = _get_tool_prompts(profile)
     sql_integration = _get_sql_integration(profile)
 
-    # When DB integration is active, override search_documents prompt to avoid conflict
     if sql_integration is not None and "search_documents" not in (json.loads(profile.tool_prompts) if getattr(profile, "tool_prompts", None) else {}):
         prompts["search_documents"] = (
             "Search for information in the user's uploaded documents (PDFs, Excel). "
@@ -304,7 +453,6 @@ def create_langchain_tools(openai_integration, profile, skill_manager=None) -> L
         _tool("search_documents",       prompts["search_documents"],       search_documents_tool, SearchDocumentsArgs),
     ]))
 
-    # SQL database tool — only added when the profile has sqldatabase integration active
     if sql_integration is not None and "query_database" not in disabled:
         async def query_database_tool(
             columns: List[str] = None,
