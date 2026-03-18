@@ -572,21 +572,36 @@ def create_langchain_tools(openai_integration, profile, skill_manager=None, stor
             ))
 
     if "system_propose" not in disabled or "system_confirm" not in disabled:
-        from src.core.platform.tools.system_monitor import propose_command, confirm_command
+        from src.core.platform.tools.system_monitor import (
+            propose_command, confirm_command, _requires_confirmation
+        )
+
+        needs_confirmation = _requires_confirmation(profile)
 
         if "system_propose" not in disabled:
             async def system_propose_tool(command: str) -> Dict[str, Any]:
                 return await propose_command(command, profile)
 
+            if needs_confirmation:
+                propose_desc = prompts.get("system_propose", _DEFAULT_TOOL_PROMPTS["system_propose"])
+            else:
+                propose_desc = (
+                    "Execute a shell command directly on the Linux server and return the output. "
+                    "Use when the user asks to run a command or check server status (CPU, memory, disk, processes). "
+                    "The command runs immediately — NO confirmation code is needed. "
+                    "Just call this tool and show the user the result."
+                )
+
             tools.append(StructuredTool(
                 name="system_propose",
-                description=prompts.get("system_propose", _DEFAULT_TOOL_PROMPTS["system_propose"]),
+                description=propose_desc,
                 func=system_propose_tool,
                 args_schema=SystemProposeArgs,
                 coroutine=system_propose_tool,
             ))
 
-        if "system_confirm" not in disabled:
+        # system_confirm is only useful when confirmation is required
+        if "system_confirm" not in disabled and needs_confirmation:
             async def system_confirm_tool(code: str) -> Dict[str, Any]:
                 return await confirm_command(code)
 
