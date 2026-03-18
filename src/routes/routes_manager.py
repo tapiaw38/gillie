@@ -1,4 +1,5 @@
 from fastapi import FastAPI
+from fastapi.staticfiles import StaticFiles
 from src.adapters.web.controllers import conversation, profile, whatsapp
 from src.adapters.web.controllers.nosql.controllers import router as nosql_router
 from src.adapters.web.controllers.calendar.calendar import router as calendar_router, set_usecases as set_calendar_usecases
@@ -51,6 +52,17 @@ class RoutesManager:
             set_job_scheduler(self.scheduler)
 
         self.app.dependency_overrides[ConfigurationService] = lambda: self.config_service
+
+        # Mount local storage as static files if configured
+        storage_cfg = getattr(self.config_service, "storage_config", None)
+        if storage_cfg and storage_cfg.backend == "local" and storage_cfg.local_path:
+            import os
+            os.makedirs(storage_cfg.local_path, exist_ok=True)
+            self.app.mount(
+                "/api/storage",
+                StaticFiles(directory=storage_cfg.local_path),
+                name="storage",
+            )
 
         self.app.include_router(nosql_router)
         self.app.include_router(profile.controllers.router)

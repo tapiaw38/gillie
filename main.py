@@ -17,6 +17,7 @@ from src.core.use_cases.use_cases import create_usecases
 from src.core.platform.nosql.migrations import execute_migrations
 from src.core.platform.objectstorange.s3_session import get_s3_session
 from src.adapters.storeservice.storeservice import StoreServiceImpl
+from src.adapters.storeservice.local_storeservice import LocalStoreServiceImpl
 from src.core.platform.services.platform_services import PlatformServices
 from src.core.platform.managers.skill_manager import SkillManager
 from src.core.platform.errors.exception_handler import register_exception_handlers
@@ -116,11 +117,17 @@ if gc_cfg and gc_cfg.enabled and config_service.nosql_config.calendar_sessions:
 profiles_client.run_migrations(migrations_client.get_collection(), execute_migrations())
 
 # ─── Storage ──────────────────────────────────────────────────────────────────
-s3_session = get_s3_session()
-store_service = StoreServiceImpl(
-    session=s3_session,
-    config=config_service
-)
+_storage_cfg = config_service.storage_config
+if _storage_cfg and _storage_cfg.backend == "local":
+    store_service = LocalStoreServiceImpl(
+        base_path=_storage_cfg.local_path,
+        base_url=_storage_cfg.local_base_url,
+    )
+    logger.info(f"Storage: local — {_storage_cfg.local_path}")
+else:
+    s3_session = get_s3_session()
+    store_service = StoreServiceImpl(session=s3_session, config=config_service)
+    logger.info("Storage: S3")
 
 # ─── Repositories ─────────────────────────────────────────────────────────────
 datasources = Datasources.create_datasources(

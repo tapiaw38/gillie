@@ -1,4 +1,5 @@
 import os
+from pathlib import Path
 from dotenv import load_dotenv
 from enum import Enum
 from dataclasses import dataclass
@@ -133,6 +134,13 @@ class GoogleCalendarConfig:
 
 
 @dataclass
+class StorageConfig:
+    backend: str = "local"  # "s3" | "local"
+    local_path: str = ""
+    local_base_url: str = "http://localhost:8000/api/storage"
+
+
+@dataclass
 class SingleUserConfig:
     """Configuration for single-user mode (set by CLI init)."""
     user_id: str
@@ -156,6 +164,7 @@ class ConfigurationService:
     logging_config: LoggingConfig
     single_user_config: Optional[SingleUserConfig] = None
     google_calendar_config: Optional[GoogleCalendarConfig] = None
+    storage_config: Optional[StorageConfig] = None
 
 
 _config_service: Optional[ConfigurationService] = None
@@ -306,6 +315,12 @@ def read_config() -> ConfigurationService:
         scope=get_env("SCOPE", ""),
     )
 
+    storage_config = StorageConfig(
+        backend=get_env("STORAGE_BACKEND", "local"),
+        local_path=get_env("STORAGE_LOCAL_PATH", str(Path.home() / ".local" / "share" / "gillie" / "storage")),
+        local_base_url=get_env("STORAGE_LOCAL_BASE_URL", "http://localhost:8000/api/storage"),
+    )
+
     # Single-user config from env (optional, set by CLI)
     single_user_id = get_env("SINGLE_USER_ID", "")
     single_user_config = None
@@ -338,6 +353,7 @@ def read_config() -> ConfigurationService:
         logging_config=logging_config,
         single_user_config=single_user_config,
         google_calendar_config=google_calendar_config,
+        storage_config=storage_config,
     )
 
 
@@ -483,6 +499,11 @@ def init_config_from_json(config_data: "AssistantConfig") -> None:
             client_id=s.google_calendar.client_id if hasattr(s, "google_calendar") else "",
             client_secret=s.google_calendar.client_secret if hasattr(s, "google_calendar") else "",
             redirect_uri=s.google_calendar.redirect_uri if hasattr(s, "google_calendar") else "http://localhost:8000/api/v1/calendar/oauth/callback",
+        ),
+        storage_config=StorageConfig(
+            backend=s.storage.backend if hasattr(s, "storage") else "local",
+            local_path=s.storage.local_path if hasattr(s, "storage") else str(Path.home() / ".local" / "share" / "gillie" / "storage"),
+            local_base_url=s.storage.local_base_url if hasattr(s, "storage") else "http://localhost:8000/api/storage",
         ),
     )
 

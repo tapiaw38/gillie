@@ -48,7 +48,7 @@ def _get(path: str) -> dict:
         resp.raise_for_status()
         return resp.json()
     except requests.exceptions.ConnectionError:
-        console.print("\n[red]✗[/red] No se puede conectar a la API. ¿Está corriendo [bold cyan]gillie start[/bold cyan]?")
+        console.print("\n[red]✗[/red] Cannot connect to API. Is [bold cyan]gillie start[/bold cyan] running?")
         raise typer.Exit(1)
     except requests.exceptions.HTTPError as e:
         console.print(f"\n[red]✗[/red] API error {e.response.status_code}: {e.response.text}")
@@ -121,7 +121,7 @@ def _send_message(conv_id: str, content: str) -> str:
     result = _post_form(f"/conversation/{conv_id}/message", content)
     messages = result.get("data", [])
     if not messages:
-        return "(sin respuesta)"
+        return "(no reply)"
     # Last message is the assistant's reply
     last = messages[-1]
     return last.get("content", "(sin respuesta)")
@@ -137,7 +137,7 @@ def _print_header(assistant_name: str, conv_id: str) -> None:
     console.print()
     console.print(Panel(
         f"✨🐟 [bold cyan]{assistant_name}[/bold cyan]\n"
-        f"[dim]Conversación: {conv_id}[/dim]\n"
+        f"[dim]Conversation: {conv_id}[/dim]\n"
         f"[dim]/new · /list · /clear · /id · /exit[/dim]",
         border_style="cyan",
         box=box.ROUNDED,
@@ -185,21 +185,21 @@ def _print_history(messages: list, assistant_name: str) -> None:
 
 @app.command("listen")
 def listen(
-    silence: float = typer.Option(2.5, "--silence", "-s", help="Segundos de silencio para detectar fin de frase"),
-    threshold: float = typer.Option(0.01, "--threshold", "-t", help="Umbral RMS de silencio (0.0–1.0)"),
-    new: bool = typer.Option(False, "--new", "-n", help="Forzar nueva conversación"),
-    conv_id: str = typer.Option(None, "--id", help="ID de conversación específica"),
+    silence: float = typer.Option(2.5, "--silence", "-s", help="Seconds of silence to detect end of phrase"),
+    threshold: float = typer.Option(0.01, "--threshold", "-t", help="RMS silence threshold (0.0–1.0)"),
+    new: bool = typer.Option(False, "--new", "-n", help="Force a new conversation"),
+    conv_id: str = typer.Option(None, "--id", help="Attach to a specific conversation ID"),
 ):
-    """Modo escucha: grabá tu voz, el asistente responde en texto."""
+    """Voice listen mode: record your voice, assistant replies in text."""
     if not config_exists():
-        console.print("[red]✗[/red] No hay configuración. Ejecutá [bold cyan]gillie init[/bold cyan] primero.")
+        console.print("[red]✗[/red] Not initialized. Run [bold cyan]gillie init[/bold cyan] first.")
         raise typer.Exit(1)
 
     try:
         import sounddevice as sd
         import numpy as np
     except ImportError:
-        console.print("[red]✗[/red] Falta sounddevice. Ejecutá: [bold cyan]gillie install[/bold cyan]")
+        console.print("[red]✗[/red] sounddevice not found. Run: [bold cyan]gillie install[/bold cyan]")
         raise typer.Exit(1)
 
     import wave
@@ -220,7 +220,7 @@ def listen(
 
     current_id = conversation.get("id") or conversation.get("_id")
     if not current_id:
-        console.print("[red]✗[/red] No se pudo obtener el ID de la conversación.")
+        console.print("[red]✗[/red] Could not retrieve conversation ID.")
         raise typer.Exit(1)
 
     SAMPLE_RATE = 16000
@@ -229,8 +229,8 @@ def listen(
 
     console.print()
     console.print(Panel(
-        f"✨🐟 [bold cyan]{assistant_name}[/bold cyan] — modo escucha\n"
-        f"[dim]Hablá cuando veas el micrófono. {silence}s de silencio para enviar. Ctrl+C para salir.[/dim]",
+        f"✨🐟 [bold cyan]{assistant_name}[/bold cyan] — listen mode\n"
+        f"[dim]Speak when you see the mic. {silence}s of silence to send. Ctrl+C to quit.[/dim]",
         border_style="cyan",
     ))
     console.print()
@@ -238,7 +238,7 @@ def listen(
     BAR_WIDTH = 20
 
     def _level_bar(rms: float, recording: bool) -> str:
-        """Dibuja una barra de nivel de audio."""
+        """Draw audio level bar."""
         filled = min(BAR_WIDTH, int(rms / 0.1 * BAR_WIDTH))
         bar = "█" * filled + "░" * (BAR_WIDTH - filled)
         if recording:
@@ -247,7 +247,7 @@ def listen(
             return f"[dim]🎙  [{bar}][/dim]"
 
     def _record_utterance() -> bytes | None:
-        """Graba hasta detectar N segundos de silencio. Devuelve bytes WAV."""
+        """Record until N seconds of silence detected. Returns WAV bytes."""
         audio_chunks = []
         silence_count = 0
         started = False
@@ -264,7 +264,7 @@ def listen(
                 elif started:
                     silence_count += 1
 
-                # Barra de nivel en tiempo real
+                # Real-time level bar
                 bar = _level_bar(rms, started)
                 print(f"\r{' ' * 50}\r", end="", flush=True)
                 console.print(bar + "  ", end="\r")
@@ -291,31 +291,31 @@ def listen(
         return buf.getvalue()
 
     def _send_voice(conv_id: str, wav_bytes: bytes) -> str:
-        """Envía el audio al endpoint de mensaje y devuelve la respuesta."""
+        """Send audio to the message endpoint and return the reply."""
         try:
             resp = requests.post(
                 _base_url() + f"/conversation/{conv_id}/message",
-                data={"content": " "},  # requerido por el form
+                data={"content": " "},  # required by multipart form
                 files={"voice_content": ("audio.wav", wav_bytes, "audio/wav")},
                 timeout=60,
             )
             resp.raise_for_status()
             messages = resp.json().get("data", [])
             if messages:
-                return messages[-1].get("content", "(sin respuesta)")
+                return messages[-1].get("content", "(no reply)")
         except requests.exceptions.ConnectionError:
-            console.print("\n[red]✗[/red] No se puede conectar a la API.")
+            console.print("\n[red]✗[/red] Cannot connect to the API.")
         except requests.exceptions.HTTPError as e:
             console.print(f"\n[red]✗[/red] API error {e.response.status_code}: {e.response.text}")
-        return "(sin respuesta)"
+        return "(no reply)"
 
     # ── loop principal ────────────────────────────────────────────────────────
     while True:
         try:
-            console.print("[dim]🎙  Listo — hablá cuando quieras...[/dim]")
+            console.print("[dim]🎙  Ready — speak whenever you want...[/dim]")
             wav_bytes = _record_utterance()
         except KeyboardInterrupt:
-            console.print("\n[dim]Hasta luego 👋[/dim]")
+            console.print("\n[dim]Goodbye 👋[/dim]")
             break
 
         if not wav_bytes:
@@ -323,16 +323,16 @@ def listen(
 
         console.print("[dim]⏳ Procesando...[/dim]     ", end="\r")
         reply = _send_voice(current_id, wav_bytes)
-        console.print(" " * 40, end="\r")  # limpiar línea
+        console.print(" " * 40, end="\r")  # clear line
         _print_assistant(assistant_name, reply)
         console.print(Rule(style="dim"))
 
 
 @app.command("list")
 def list_conversations():
-    """Listar todas las conversaciones con su ID y título."""
+    """List all conversations with their ID and title."""
     if not config_exists():
-        console.print("[red]✗[/red] No hay configuración. Ejecutá [bold cyan]gillie init[/bold cyan] primero.")
+        console.print("[red]✗[/red] Not initialized. Run [bold cyan]gillie init[/bold cyan] first.")
         raise typer.Exit(1)
 
     from rich.table import Table
@@ -342,18 +342,18 @@ def list_conversations():
     conversations = result.get("data", [])
 
     if not conversations:
-        console.print("[dim]No hay conversaciones. Iniciá una con [bold cyan]gillie agent[/bold cyan].[/dim]")
+        console.print("[dim]No conversations found. Start one with [bold cyan]gillie agent[/bold cyan].[/dim]")
         return
 
     table = Table(box=rbox.ROUNDED, border_style="cyan", show_lines=False)
     table.add_column("ID", style="dim", no_wrap=True)
-    table.add_column("Título", style="bold")
-    table.add_column("Mensajes", justify="right")
-    table.add_column("Última actividad", style="dim")
+    table.add_column("Title", style="bold")
+    table.add_column("Messages", justify="right")
+    table.add_column("Last activity", style="dim")
 
     for conv in conversations:
         cid = conv.get("id") or conv.get("_id", "")
-        title = conv.get("title") or "[dim]sin título[/dim]"
+        title = conv.get("title") or "[dim]no title[/dim]"
         msgs = len(conv.get("messages", []))
         updated = (conv.get("updated_at") or conv.get("created_at") or "")[:19].replace("T", " ")
         table.add_row(cid, title, str(msgs), updated)
@@ -361,22 +361,22 @@ def list_conversations():
     console.print()
     console.print(table)
     console.print()
-    console.print(f"[dim]Conectate a una conversación: [bold cyan]gillie agent --id <ID>[/bold cyan][/dim]")
+    console.print(f"[dim]Attach to a conversation: [bold cyan]gillie agent --id <ID>[/bold cyan][/dim]")
     console.print()
 
 
 @app.callback(invoke_without_command=True)
 def agent(
     ctx: typer.Context,
-    new: bool = typer.Option(False, "--new", "-n", help="Forzar nueva conversación"),
-    conv_id: str = typer.Option(None, "--id", help="ID de conversación específica"),
+    new: bool = typer.Option(False, "--new", "-n", help="Force a new conversation"),
+    conv_id: str = typer.Option(None, "--id", help="Attach to a specific conversation ID"),
 ):
-    """Chat interactivo con el asistente desde la terminal."""
+    """Interactive chat with the assistant from the terminal."""
     if ctx.invoked_subcommand is not None:
-        return  # dejar que el subcomando maneje la ejecución
+        return
 
     if not config_exists():
-        console.print("[red]✗[/red] No hay configuración. Ejecutá [bold cyan]gillie init[/bold cyan] primero.")
+        console.print("[red]✗[/red] Not initialized. Run [bold cyan]gillie init[/bold cyan] first.")
         raise typer.Exit(1)
 
     config = load_config()
@@ -388,16 +388,16 @@ def agent(
         conversation = result.get("data", result)
     elif new:
         conversation = _create_conversation()
-        console.print(f"[green]✓[/green] Nueva conversación creada.")
+        console.print(f"[green]✓[/green] New conversation created.")
     else:
         conversation = _find_cli_conversation()
         if conversation is None:
             conversation = _create_conversation()
-            console.print(f"[green]✓[/green] Nueva conversación CLI creada.")
+            console.print(f"[green]✓[/green] New CLI conversation created.")
 
     current_id = conversation.get("id") or conversation.get("_id")
     if not current_id:
-        console.print("[red]✗[/red] No se pudo obtener el ID de la conversación.")
+        console.print("[red]✗[/red] Could not retrieve conversation ID.")
         raise typer.Exit(1)
 
     _print_header(assistant_name, current_id)
@@ -408,14 +408,14 @@ def agent(
         _print_history(messages, assistant_name)
 
     # ── REPL ─────────────────────────────────────────────────────────────────
-    console.print(f"[dim]Escribí tu mensaje y presioná Enter. /exit para salir.[/dim]")
+    console.print(f"[dim]Type your message and press Enter. /exit to quit.[/dim]")
     console.print()
 
     while True:
         try:
-            user_input = console.input("[bold cyan]Vos ›[/bold cyan] ").strip()
+            user_input = console.input("[bold cyan]You ›[/bold cyan] ").strip()
         except (KeyboardInterrupt, EOFError):
-            console.print("\n[dim]Hasta luego 👋[/dim]")
+            console.print("\n[dim]Goodbye 👋[/dim]")
             break
 
         if not user_input:
@@ -427,7 +427,7 @@ def agent(
             break
 
         if user_input.lower() == "/id":
-            console.print(f"[dim]Conversación ID: [bold]{current_id}[/bold][/dim]\n")
+            console.print(f"[dim]Conversation ID: [bold]{current_id}[/bold][/dim]\n")
             continue
 
         if user_input.lower() == "/list":
@@ -437,12 +437,12 @@ def agent(
             convs = result.get("data", [])
             table = Table(box=rbox.SIMPLE, border_style="dim", show_lines=False)
             table.add_column("ID", style="dim", no_wrap=True)
-            table.add_column("Título", style="bold")
+            table.add_column("Title", style="bold")
             table.add_column("Msgs", justify="right")
             for c in convs:
                 cid = c.get("id") or c.get("_id", "")
-                marker = " [cyan]◀ actual[/cyan]" if cid == current_id else ""
-                table.add_row(cid, (c.get("title") or "sin título") + marker, str(len(c.get("messages", []))))
+                marker = " [cyan]◀ current[/cyan]" if cid == current_id else ""
+                table.add_row(cid, (c.get("title") or "no title") + marker, str(len(c.get("messages", []))))
             console.print()
             console.print(table)
             console.print()
@@ -451,18 +451,18 @@ def agent(
         if user_input.lower() == "/new":
             conversation = _create_conversation()
             current_id = conversation.get("id") or conversation.get("_id")
-            console.print(f"[green]✓[/green] Nueva conversación: [bold]{current_id}[/bold]\n")
+            console.print(f"[green]✓[/green] New conversation: [bold]{current_id}[/bold]\n")
             _print_header(assistant_name, current_id)
             continue
 
         if user_input.lower() == "/clear":
             _clear_messages(current_id)
-            console.print("[green]✓[/green] Mensajes borrados.\n")
+            console.print("[green]✓[/green] Messages cleared.\n")
             continue
 
         # ── send message ────────────────────────────────────────────────────
         _print_user(user_input)
-        with console.status("[dim]Pensando...[/dim]", spinner="dots"):
+        with console.status("[dim]Thinking...[/dim]", spinner="dots"):
             reply = _send_message(current_id, user_input)
 
         _print_assistant(assistant_name, reply)

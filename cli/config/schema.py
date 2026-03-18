@@ -83,6 +83,13 @@ class S3ServiceConfig:
 
 
 @dataclass
+class StorageServiceConfig:
+    backend: str = "local"  # "s3" | "local"
+    local_path: str = ""
+    local_base_url: str = "http://localhost:8000/api/storage"
+
+
+@dataclass
 class TTSServiceConfig:
     enabled: bool = False
 
@@ -145,6 +152,7 @@ class ServicesConfig:
     langchain: LangChainServiceConfig = field(default_factory=LangChainServiceConfig)
     qdrant: QdrantServiceConfig = field(default_factory=QdrantServiceConfig)
     embeddings: EmbeddingsServiceConfig = field(default_factory=EmbeddingsServiceConfig)
+    storage: StorageServiceConfig = field(default_factory=StorageServiceConfig)
     s3: S3ServiceConfig = field(default_factory=S3ServiceConfig)
     tts: TTSServiceConfig = field(default_factory=TTSServiceConfig)
     stt: STTServiceConfig = field(default_factory=STTServiceConfig)

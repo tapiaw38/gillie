@@ -1,5 +1,6 @@
 import uuid
 import typer
+from pathlib import Path
 from rich.console import Console
 from rich.panel import Panel
 from rich.table import Table
@@ -17,6 +18,7 @@ from cli.config.schema import (
     LangChainServiceConfig,
     QdrantServiceConfig,
     EmbeddingsServiceConfig,
+    StorageServiceConfig,
     S3ServiceConfig,
     TTSServiceConfig,
     STTServiceConfig,
@@ -162,10 +164,19 @@ def init(
             )
 
     console.print()
-    console.print("[bold]File Storage (S3)[/bold]")
-    enable_s3 = _prompt_confirm("Enable S3 file storage?", default=False)
+    console.print("[bold]File Storage[/bold]")
+    storage_backend = _prompt_select(
+        "Storage backend",
+        choices=["local (recommended)", "S3"],
+        default="local (recommended)",
+    )
+
+    default_local_path = str(Path.home() / ".local" / "share" / "gillie" / "storage")
+    storage_cfg = StorageServiceConfig(backend="local", local_path=default_local_path)
     s3_cfg = S3ServiceConfig(enabled=False)
-    if enable_s3:
+
+    if "S3" in storage_backend:
+        storage_cfg = StorageServiceConfig(backend="s3")
         s3_cfg = S3ServiceConfig(
             enabled=True,
             access_key_id=_prompt_text("AWS Access Key ID", required=True),
@@ -173,6 +184,8 @@ def init(
             region=_prompt_text("AWS Region", default="us-east-1"),
             bucket_name=_prompt_text("S3 Bucket Name", required=True),
         )
+    else:
+        console.print(f"  [dim]Files will be stored at [bold]{default_local_path}[/bold][/dim]")
 
     console.print()
     console.print("[bold]Audio[/bold]")
@@ -230,6 +243,7 @@ def init(
             langchain=langchain_cfg,
             qdrant=qdrant_cfg,
             embeddings=embeddings_cfg,
+            storage=storage_cfg,
             s3=s3_cfg,
             tts=TTSServiceConfig(enabled=enable_tts),
             stt=STTServiceConfig(enabled=enable_stt),
@@ -265,7 +279,11 @@ def _print_summary(config: AssistantConfig) -> None:
     table.add_row("AI model", f"{config.services.openai.model} ({config.services.openai.base_url})")
     table.add_row("LangChain", "✓ enabled" if config.services.langchain.enabled else "✗ disabled")
     table.add_row("Qdrant", "✓ enabled" if config.services.qdrant.enabled else "✗ disabled")
-    table.add_row("S3 storage", "✓ enabled" if config.services.s3.enabled else "✗ disabled")
+    _storage = config.services.storage if hasattr(config.services, "storage") else None
+    _storage_display = _storage.backend if _storage else "s3"
+    if _storage and _storage.backend == "local":
+        _storage_display += f" → {_storage.local_path}"
+    table.add_row("Storage", _storage_display)
     table.add_row("TTS", "✓ enabled" if config.services.tts.enabled else "✗ disabled")
     table.add_row("STT", "✓ enabled" if config.services.stt.enabled else "✗ disabled")
     table.add_row("WhatsApp", "✓ enabled" if config.services.whatsapp.enabled else "✗ disabled")
