@@ -97,6 +97,17 @@ _DEFAULT_TOOL_PROMPTS: Dict[str, str] = {
         "Search previously saved facts about the user. "
         "Use when the user refers to past conversations or when context about the user is needed."
     ),
+    "system_propose": (
+        "Propose a shell command to execute on the Linux server. "
+        "Use when the user asks to run a command, check server status (CPU, memory, disk, processes, network), "
+        "or make changes to the system. The command will require user confirmation before execution. "
+        "Read-only commands (ps, df, free, uptime, ls, cat, top -bn1) are recommended for monitoring. "
+        "ALWAYS explain what the command will do before proposing it."
+    ),
+    "system_confirm": (
+        "Execute a previously proposed command after the user provides the confirmation code. "
+        "Use ONLY when the user responds with a 6-character hex code (like 'A3F9C1') to confirm a command."
+    ),
 }
 
 
@@ -157,6 +168,21 @@ class DescribeImageArgs(BaseModel):
     image_url: str = Field(
         description="URL of the image to describe (e.g. obtained from search_images results)"
     )
+
+
+class SystemProposeArgs(BaseModel):
+    """Arguments for proposing a server command"""
+    command: str = Field(
+        description="The shell command to propose for execution on the Linux server."
+    )
+
+
+class SystemConfirmArgs(BaseModel):
+    """Arguments for confirming a pending command"""
+    code: str = Field(
+        description="The 6-character confirmation code returned by system_propose (e.g. 'A3F9C1')."
+    )
+
 
 
 class SearchDocumentsArgs(BaseModel):
@@ -502,6 +528,33 @@ def create_langchain_tools(openai_integration, profile, skill_manager=None, stor
                 func=search_memory_tool,
                 args_schema=SearchMemoryArgs,
                 coroutine=search_memory_tool,
+            ))
+
+    if "system_propose" not in disabled or "system_confirm" not in disabled:
+        from src.core.platform.tools.system_monitor import propose_command, confirm_command
+
+        if "system_propose" not in disabled:
+            async def system_propose_tool(command: str) -> Dict[str, Any]:
+                return await propose_command(command, profile)
+
+            tools.append(StructuredTool(
+                name="system_propose",
+                description=prompts.get("system_propose", _DEFAULT_TOOL_PROMPTS["system_propose"]),
+                func=system_propose_tool,
+                args_schema=SystemProposeArgs,
+                coroutine=system_propose_tool,
+            ))
+
+        if "system_confirm" not in disabled:
+            async def system_confirm_tool(code: str) -> Dict[str, Any]:
+                return await confirm_command(code)
+
+            tools.append(StructuredTool(
+                name="system_confirm",
+                description=prompts.get("system_confirm", _DEFAULT_TOOL_PROMPTS["system_confirm"]),
+                func=system_confirm_tool,
+                args_schema=SystemConfirmArgs,
+                coroutine=system_confirm_tool,
             ))
 
     return tools

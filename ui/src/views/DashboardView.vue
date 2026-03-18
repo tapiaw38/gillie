@@ -214,6 +214,14 @@ const integrations = [
     enabled: true,
   },
   {
+    name: 'Comandos del Sistema',
+    description: 'Permite al asistente ejecutar comandos en el servidor Linux con confirmación y lista negra',
+    icon: 'pi pi-server',
+    tone: 'danger',
+    to: 'system-commands',
+    enabled: true,
+  },
+  {
     name: 'Prompts de Tools',
     description: 'Personaliza las instrucciones de cada tool del asistente (cuándo y cómo usarlas)',
     icon: 'pi pi-sliders-h',

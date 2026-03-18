@@ -70,6 +70,18 @@ const TOOL_META: { key: keyof ToolPromptsConfig; label: string; icon: string; hi
     icon: 'pi pi-history',
     hint: 'Cuándo buscar datos previos guardados en memoria.',
   },
+  {
+    key: 'system_propose',
+    label: 'Proponer comando del servidor',
+    icon: 'pi pi-server',
+    hint: 'Cuándo proponer un comando de shell en el servidor Linux para que el usuario confirme.',
+  },
+  {
+    key: 'system_confirm',
+    label: 'Confirmar comando del servidor',
+    icon: 'pi pi-check-circle',
+    hint: 'Cuándo ejecutar un comando ya propuesto usando el código de confirmación del usuario.',
+  },
 ]
 
 const prompts = ref<ToolPromptsConfig>({})

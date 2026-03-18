@@ -130,6 +130,7 @@ export interface IntegrationParams {
     | GoogleCalendarIntegrationConfig
     | GoogleDriveIntegrationConfig
     | SQLDatabaseIntegrationConfig
+    | SystemCommandsIntegrationConfig
 }
 
 export interface ToolPromptsConfig {
@@ -142,6 +143,12 @@ export interface ToolPromptsConfig {
   query_database?: string
   save_memory?: string
   search_memory?: string
+  system_propose?: string
+  system_confirm?: string
+}
+
+export interface SystemCommandsIntegrationConfig {
+  blacklist: string[]
 }
 
 export interface IntegrationResponse {
