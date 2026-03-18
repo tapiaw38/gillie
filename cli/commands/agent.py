@@ -61,7 +61,7 @@ def _post_json(path: str, data: dict) -> dict:
         resp.raise_for_status()
         return resp.json()
     except requests.exceptions.ConnectionError:
-        console.print("\n[red]✗[/red] No se puede conectar a la API.")
+        console.print("\n[red]✗[/red] Cannot connect to API. Is [bold cyan]gillie start[/bold cyan] running?")
         raise typer.Exit(1)
     except requests.exceptions.HTTPError as e:
         console.print(f"\n[red]✗[/red] API error {e.response.status_code}: {e.response.text}")
@@ -78,7 +78,7 @@ def _post_form(path: str, content: str) -> dict:
         resp.raise_for_status()
         return resp.json()
     except requests.exceptions.ConnectionError:
-        console.print("\n[red]✗[/red] No se puede conectar a la API.")
+        console.print("\n[red]✗[/red] Cannot connect to API. Is [bold cyan]gillie start[/bold cyan] running?")
         raise typer.Exit(1)
     except requests.exceptions.HTTPError as e:
         console.print(f"\n[red]✗[/red] API error {e.response.status_code}: {e.response.text}")
@@ -91,7 +91,7 @@ def _delete(path: str) -> dict:
         resp.raise_for_status()
         return resp.json()
     except requests.exceptions.ConnectionError:
-        console.print("\n[red]✗[/red] No se puede conectar a la API.")
+        console.print("\n[red]✗[/red] Cannot connect to API. Is [bold cyan]gillie start[/bold cyan] running?")
         raise typer.Exit(1)
     except requests.exceptions.HTTPError as e:
         console.print(f"\n[red]✗[/red] API error {e.response.status_code}: {e.response.text}")
@@ -124,7 +124,7 @@ def _send_message(conv_id: str, content: str) -> str:
         return "(no reply)"
     # Last message is the assistant's reply
     last = messages[-1]
-    return last.get("content", "(sin respuesta)")
+    return last.get("content", "(no reply)")
 
 
 def _clear_messages(conv_id: str) -> None:
@@ -146,22 +146,92 @@ def _print_header(assistant_name: str, conv_id: str) -> None:
 
 
 def _print_user(text: str) -> None:
-    console.print(f"[bold white]Vos[/bold white]  [dim]{text}[/dim]")
+    console.print(f"[bold white]You[/bold white]  [dim]{text}[/dim]")
+
 
 
 def _print_assistant(name: str, text: str) -> None:
+    """Print assistant reply (plain, no typewriter — used for history)."""
     console.print()
+    console.print(f"[bold cyan]{name}[/bold cyan]")
+    console.print(text)
+    console.print(Rule(style="dim"))
+    console.print()
+
+
+def _stream_assistant(conv_id: str, name: str, content: str) -> str:
+    """Stream the assistant reply token by token from the SSE endpoint."""
+    import sys
+    import threading
+    import time
+
+    _FRAMES = ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"]
+    _first_token = threading.Event()
+    _stop_spinner = threading.Event()
+
+    def _spinner():
+        i = 0
+        while not _first_token.is_set() and not _stop_spinner.is_set():
+            sys.stdout.write(f"\r{_FRAMES[i % len(_FRAMES)]} Thinking...  ")
+            sys.stdout.flush()
+            time.sleep(0.08)
+            i += 1
+        sys.stdout.write(f"\r{' ' * 25}\r")
+        sys.stdout.flush()
+
+    spinner_thread = threading.Thread(target=_spinner, daemon=True)
+    spinner_thread.start()
+
+    console.print()
+    console.print(f"[bold cyan]{name}[/bold cyan]")
+
+    full_text = ""
     try:
-        console.print(Panel(
-            Markdown(text),
-            title=f"[bold cyan]{name}[/bold cyan]",
-            border_style="cyan",
-            box=box.ROUNDED,
-            padding=(0, 1),
-        ))
-    except Exception:
-        console.print(Panel(text, title=f"[bold cyan]{name}[/bold cyan]", border_style="cyan"))
+        resp = requests.post(
+            _base_url() + f"/conversation/{conv_id}/message/stream",
+            data={"content": content},
+            stream=True,
+            timeout=120,
+        )
+        resp.raise_for_status()
+        import json as _json
+        for raw_line in resp.iter_lines():
+            if not raw_line:
+                continue
+            line = raw_line.decode("utf-8") if isinstance(raw_line, bytes) else raw_line
+            if not line.startswith("data: "):
+                continue
+            payload = line[6:]
+            try:
+                token = _json.loads(payload)
+            except _json.JSONDecodeError:
+                token = payload  # fallback for non-JSON frames
+            if token == "[DONE]":
+                break
+            if isinstance(token, str) and token.startswith("[ERROR]"):
+                _first_token.set()
+                console.print(f"\n[red]✗[/red] {token[7:].strip()}")
+                break
+            if not _first_token.is_set():
+                _first_token.set()
+                spinner_thread.join()
+            sys.stdout.write(token)
+            sys.stdout.flush()
+            full_text += token
+    except requests.exceptions.ConnectionError:
+        _stop_spinner.set()
+        console.print("\n[red]✗[/red] Cannot connect to API.")
+    except requests.exceptions.HTTPError as e:
+        _stop_spinner.set()
+        console.print(f"\n[red]✗[/red] API error {e.response.status_code}")
+    finally:
+        _stop_spinner.set()
+
+    sys.stdout.write("\n")
+    sys.stdout.flush()
+    console.print(Rule(style="dim"))
     console.print()
+    return full_text
 
 
 def _print_history(messages: list, assistant_name: str) -> None:
@@ -169,7 +239,7 @@ def _print_history(messages: list, assistant_name: str) -> None:
     if not messages:
         return
     recent = messages[-6:]  # last 3 exchanges
-    console.print(Rule("[dim]historial reciente[/dim]", style="dim"))
+    console.print(Rule("[dim]recent history[/dim]", style="dim"))
     for msg in recent:
         sender = msg.get("sender", "")
         content = msg.get("content", "")
@@ -239,7 +309,7 @@ def listen(
 
     def _level_bar(rms: float, recording: bool) -> str:
         """Draw audio level bar."""
-        filled = min(BAR_WIDTH, int(rms / 0.1 * BAR_WIDTH))
+        filled = min(BAR_WIDTH, int(rms / (threshold * 5) * BAR_WIDTH))
         bar = "█" * filled + "░" * (BAR_WIDTH - filled)
         if recording:
             return f"[bold red]🔴 [{bar}][/bold red]"
@@ -321,7 +391,7 @@ def listen(
         if not wav_bytes:
             continue
 
-        console.print("[dim]⏳ Procesando...[/dim]     ", end="\r")
+        console.print("[dim]⏳ Processing...[/dim]     ", end="\r")
         reply = _send_voice(current_id, wav_bytes)
         console.print(" " * 40, end="\r")  # clear line
         _print_assistant(assistant_name, reply)
@@ -423,7 +493,7 @@ def agent(
 
         # ── in-chat commands ────────────────────────────────────────────────
         if user_input.lower() in ("/exit", "/quit", "/q"):
-            console.print("[dim]Hasta luego 👋[/dim]")
+            console.print("[dim]Goodbye 👋[/dim]")
             break
 
         if user_input.lower() == "/id":
@@ -460,9 +530,6 @@ def agent(
             console.print("[green]✓[/green] Messages cleared.\n")
             continue
 
-        # ── send message ────────────────────────────────────────────────────
+        # ── send message (streaming) ─────────────────────────────────────
         _print_user(user_input)
-        with console.status("[dim]Thinking...[/dim]", spinner="dots"):
-            reply = _send_message(current_id, user_input)
-
-        _print_assistant(assistant_name, reply)
+        _stream_assistant(current_id, assistant_name, user_input)

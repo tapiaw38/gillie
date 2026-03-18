@@ -342,6 +342,45 @@ class AddMessageUseCase:
             logger.error(f"Error generating AI response: {e}")
             return (None, self._get_fallback_error_message(conversation.profile))
 
+    async def execute_stream(
+        self,
+        conversation_id: str,
+        content: str,
+        user_id: str,
+    ):
+        """
+        Streaming variant for CLI use. Validates the conversation, saves the user
+        message, streams AI response tokens, then persists the assistant message.
+        Yields str tokens.
+        """
+        conversation = self._get_and_validate_conversation(conversation_id, user_id)
+
+        user_message = self._create_user_message(content, SenderEnum.user)
+        self._add_message_to_conversation(conversation, user_message)
+
+        enhanced_context = self._inject_skill_context(None)
+        conversation_history = (
+            self.context_factory.platform_managers.message_history
+            .convert_messages_to_string(conversation.messages[-40:])
+            if self.context_factory.platform_managers
+            else ""
+        )
+
+        full_text = ""
+        async for token in self.context_factory.integrations.openai.ask_stream(
+            question=content,
+            context=enhanced_context,
+            previous_messages=conversation_history,
+            profile=conversation.profile,
+            conversation_id=conversation_id,
+        ):
+            yield token
+            full_text += token
+
+        assistant_message = self._create_assistant_message(content=full_text)
+        self._add_message_to_conversation(conversation, assistant_message)
+        self._save_messages(conversation_id, conversation.messages)
+
     def _inject_skill_context(self, message_context: Optional[str]) -> str:
         """
         Inject skill context (general.skill.md + faqs.skill.md) into message context.

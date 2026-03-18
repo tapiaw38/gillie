@@ -103,6 +103,28 @@ class OpenAIIntegration:
             use_tools=True,
         )
 
+    async def ask_stream(
+        self,
+        question: str,
+        context: Optional[str],
+        previous_messages: str,
+        profile: Profile,
+        conversation_id: Optional[str] = None,
+    ):
+        """Stream AI response tokens via LangChain. Yields str tokens."""
+        if self.langchain_service is None:
+            raise Exception("LangChain service not available for streaming")
+        messages_list = self._parse_previous_messages(previous_messages)
+        async for token in self.langchain_service.generate_response_stream(
+            question=question,
+            context=context,
+            previous_messages=messages_list,
+            profile=profile,
+            conversation_id=conversation_id or profile.user_id,
+            use_tools=True,
+        ):
+            yield token
+
     @log_function_call
     async def search_images_in_files(
         self, search_term: str, profile: Profile, max_results: int = 5

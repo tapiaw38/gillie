@@ -236,99 +236,153 @@ class LangChainService:
                 logger.error(f"Error generating response: {e}")
                 raise
 
+    async def generate_response_stream(
+        self,
+        question: str,
+        context: Optional[str],
+        previous_messages: List[Dict[str, Any]],
+        profile: Profile,
+        conversation_id: str,
+        use_tools: bool = True,
+    ):
+        """
+        Stream AI response tokens. Uses astream() for direct responses and
+        falls back to ainvoke() + _handle_tool_calls() when tool calls are needed.
+        Yields str tokens.
+        """
+        if self._is_circuit_open():
+            raise Exception("AI service temporarily unavailable (circuit breaker)")
+
+        async with self.semaphore:
+            try:
+                system_prompt = self._build_system_prompt(profile, context)
+                messages = self._convert_messages_to_langchain(
+                    previous_messages=previous_messages,
+                    system_prompt=system_prompt,
+                    current_question=question,
+                )
+                thread_id = self.memory_manager.create_thread_id(conversation_id, profile.user_id)
+                messages = self.memory_manager.optimize_message_history(messages, system_prompt=None)
+
+                tools = None
+                llm_with_tools = self.llm
+                if use_tools:
+                    tools = create_langchain_tools(
+                        self.openai_integration,
+                        profile,
+                        skill_manager=self.skill_manager,
+                        store_service=self.store_service,
+                        job_usecases=self.job_usecases,
+                    )
+                    llm_with_tools = self.llm.bind_tools(tools)
+
+                # Stream response — detect tool calls mid-stream
+                accumulated_chunks = []
+                has_tool_calls = False
+                full_content = ""
+
+                async for chunk in llm_with_tools.astream(messages):
+                    accumulated_chunks.append(chunk)
+                    if hasattr(chunk, "tool_call_chunks") and chunk.tool_call_chunks:
+                        has_tool_calls = True
+                    if not has_tool_calls and chunk.content:
+                        yield chunk.content
+                        full_content += chunk.content
+
+                if has_tool_calls:
+                    # Reconstruct full AIMessage from chunks and handle tools
+                    combined = accumulated_chunks[0]
+                    for c in accumulated_chunks[1:]:
+                        try:
+                            combined = combined + c
+                        except Exception:
+                            pass
+                    response_text = await self._handle_tool_calls(combined, messages, llm_with_tools, tools)
+                    logger.info(f"Stream: yielding tool-call result, length={len(response_text or '')}")
+                    yield response_text
+                    full_content = response_text
+
+                # Save checkpoint
+                from langchain_core.messages import AIMessage as LCAIMessage
+                ai_msg = LCAIMessage(content=full_content)
+                self.memory_manager.save_checkpoint(
+                    thread_id=thread_id,
+                    messages=messages + [ai_msg],
+                    metadata={"profile_id": profile.user_id},
+                )
+                self._record_success()
+
+            except Exception as e:
+                self._record_failure()
+                logger.error(f"Error in generate_response_stream: {e}")
+                raise
+
     async def _handle_tool_calls(
         self,
         response: AIMessage,
         messages: List,
         llm_with_tools,
-        tools: List = None
+        tools: List = None,
+        max_rounds: int = 10,
     ) -> str:
         """
-        Handle tool calls from the AI response.
-
-        Args:
-            response: AI response with tool calls
-            messages: Current message history
-            llm_with_tools: LLM instance with tools
-            tools: List of available tools
-
-        Returns:
-            Final response text after tool execution
+        Handle tool calls from the AI response, looping until the model
+        returns text content (supports chained/multi-round tool calls).
         """
-        logger.info(f"Handling {len(response.tool_calls)} tool calls")
+        import json as _json
+        import inspect
 
-        messages.append(response)
+        for round_num in range(max_rounds):
+            tool_calls = getattr(response, "tool_calls", None)
+            if not tool_calls:
+                break
 
-        for tool_call in response.tool_calls:
-            try:
-                tool_name = tool_call.get("name")
+            logger.info(f"Tool-call round {round_num + 1}: handling {len(tool_calls)} call(s)")
+            messages.append(response)
+
+            for tool_call in tool_calls:
+                tool_name = tool_call.get("name", "unknown")
                 tool_args = tool_call.get("args", {})
                 tool_id = tool_call.get("id", "unknown")
-
                 logger.info(f"Executing tool: {tool_name} with args: {tool_args}")
 
-                tool_result = None
-                tool_found = False
-
+                tool_result = f"Tool {tool_name} not found"
                 for tool in tools or []:
                     if tool.name == tool_name:
-                        tool_found = True
                         try:
-                            # Try different execution methods
                             if hasattr(tool, 'coroutine') and tool.coroutine:
-                                # Prefer coroutine for async tools
-                                logger.debug(f"Executing tool via coroutine")
                                 tool_result = await tool.coroutine(**tool_args)
                             elif hasattr(tool, 'afunc') and tool.afunc:
-                                # Try afunc (async function)
-                                logger.debug(f"Executing tool via afunc")
                                 tool_result = await tool.afunc(**tool_args)
                             elif hasattr(tool, 'func') and tool.func:
-                                # Fallback to func (may be sync or async)
-                                logger.debug(f"Executing tool via func")
-                                import asyncio
-                                import inspect
                                 if inspect.iscoroutinefunction(tool.func):
                                     tool_result = await tool.func(**tool_args)
                                 else:
                                     tool_result = tool.func(**tool_args)
                             else:
-                                logger.error(f"Tool {tool_name} has no executable method")
                                 tool_result = f"Tool {tool_name} has no executable method"
                         except Exception as e:
-                            logger.error(f"Error executing tool function: {e}", exc_info=True)
+                            logger.error(f"Error executing tool {tool_name}: {e}", exc_info=True)
                             tool_result = f"Error executing tool: {str(e)}"
                         break
 
-                if not tool_found:
-                    logger.warning(f"Tool {tool_name} not found in bound tools")
-                    tool_result = f"Tool {tool_name} not found"
-
                 if isinstance(tool_result, dict):
-                    import json
-                    tool_result_str = json.dumps(tool_result, ensure_ascii=False)
+                    tool_result_str = _json.dumps(tool_result, ensure_ascii=False)
                 else:
                     tool_result_str = str(tool_result)
 
                 logger.info(f"Tool {tool_name} result: {tool_result_str[:200]}...")
+                messages.append(ToolMessage(content=tool_result_str, tool_call_id=tool_id))
 
-                tool_message = ToolMessage(
-                    content=tool_result_str,
-                    tool_call_id=tool_id,
-                )
-                messages.append(tool_message)
+            logger.info(f"Invoking LLM after round {round_num + 1}")
+            response = await llm_with_tools.ainvoke(messages)
+            content = response.content or ""
+            logger.info(f"Response after round {round_num + 1}: length={len(content)}, has_more_tool_calls={bool(getattr(response, 'tool_calls', None))}")
 
-            except Exception as e:
-                logger.error(f"Error executing tool {tool_name}: {e}", exc_info=True)
-                tool_message = ToolMessage(
-                    content=f"Error executing tool: {str(e)}",
-                    tool_call_id=tool_id,
-                )
-                messages.append(tool_message)
+            if content and not getattr(response, "tool_calls", None):
+                break
 
-        logger.info("Generating final response with tool results")
-        final_response = await llm_with_tools.ainvoke(messages)
-        return final_response.content
+        return response.content or ""
 
     def _build_system_prompt(
         self,

@@ -1,5 +1,6 @@
 
 from fastapi import APIRouter, status, Depends, Request, Query, HTTPException, Form, File, UploadFile
+from fastapi.responses import StreamingResponse
 from src.schemas import (
     ConversationInput,
     MessageInput,
@@ -97,6 +98,36 @@ async def add_message(
         auth_token
     )
     return messages
+
+@router.post("/{conversation_id}/message/stream")
+async def add_message_stream(
+    conversation_id: str,
+    request: Request,
+    content: str = Form(...),
+    usecases: Usecases = Depends(get_usecases),
+):
+    """Stream AI response tokens as Server-Sent Events (SSE).
+
+    Each event is JSON-encoded so newlines inside tokens are safely escaped.
+    Client must json.loads() each data payload.
+    """
+    import json
+    user_id = request.state.user.get("user_id")
+
+    async def event_generator():
+        try:
+            async for token in usecases.conversation.add_message_usecase.execute_stream(
+                conversation_id=conversation_id,
+                content=content,
+                user_id=user_id,
+            ):
+                yield f"data: {json.dumps(token)}\n\n"
+        except Exception as e:
+            yield f"data: {json.dumps('[ERROR] ' + str(e))}\n\n"
+        yield f"data: {json.dumps('[DONE]')}\n\n"
+
+    return StreamingResponse(event_generator(), media_type="text/event-stream")
+
 
 @router.delete("/{conversation_id}/message", status_code=status.HTTP_200_OK)
 async def delete_all_messages(
