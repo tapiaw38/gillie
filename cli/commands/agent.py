@@ -297,15 +297,44 @@ def listen(
     CHUNK = int(SAMPLE_RATE * 0.1)  # 100ms chunks
     silence_chunks_needed = int(silence / 0.1)
 
+    # WebRTC VAD for human voice detection (optional)
+    _vad = None
+    try:
+        import webrtcvad as _webrtcvad
+        _vad = _webrtcvad.Vad(2)  # aggressiveness 0-3 (2 = balanced; RMS pre-filters energy)
+        vad_status = "voice detection: on"
+    except ImportError:
+        vad_status = "voice detection: off (pip install webrtcvad)"
+
     console.print()
     console.print(Panel(
         f"✨🐟 [bold cyan]{assistant_name}[/bold cyan] — listen mode\n"
-        f"[dim]Speak when you see the mic. {silence}s of silence to send. Ctrl+C to quit.[/dim]",
+        f"[dim]Speak when you see the mic. {silence}s of silence to send. Ctrl+C to quit.[/dim]\n"
+        f"[dim]{vad_status}[/dim]",
         border_style="cyan",
     ))
     console.print()
 
     BAR_WIDTH = 20
+    _VAD_FRAME = int(SAMPLE_RATE * 0.03)  # 30ms frames required by webrtcvad
+
+    def _is_voice(chunk_float: "np.ndarray") -> bool:
+        """True if chunk contains human voice (falls back to RMS if VAD unavailable)."""
+        rms = float(np.sqrt(np.mean(chunk_float ** 2)))
+        # Pre-filter: must have minimum energy regardless of VAD
+        if rms <= threshold:
+            return False
+        if _vad is None:
+            return True
+        chunk_int16 = (np.clip(chunk_float.flatten(), -1.0, 1.0) * 32767).astype(np.int16)
+        n_frames = len(chunk_int16) // _VAD_FRAME
+        if n_frames == 0:
+            return True
+        voice_frames = sum(
+            1 for i in range(n_frames)
+            if _vad.is_speech(chunk_int16[i * _VAD_FRAME:(i + 1) * _VAD_FRAME].tobytes(), SAMPLE_RATE)
+        )
+        return voice_frames / n_frames >= 0.5
 
     def _level_bar(rms: float, recording: bool) -> str:
         """Draw audio level bar."""
@@ -316,37 +345,57 @@ def listen(
         else:
             return f"[dim]🎙  [{bar}][/dim]"
 
+    _VOICE_STREAK_NEEDED = 3  # 300ms of continuous voice required to start recording
+
     def _record_utterance() -> bytes | None:
         """Record until N seconds of silence detected. Returns WAV bytes."""
         audio_chunks = []
+        pre_buffer = []   # holds chunks before speech confirmed
         silence_count = 0
+        voice_streak = 0
         started = False
 
         with sd.InputStream(samplerate=SAMPLE_RATE, channels=1, dtype="float32") as stream:
             while True:
                 chunk, _ = stream.read(CHUNK)
                 rms = float(np.sqrt(np.mean(chunk ** 2)))
+                is_voice = _is_voice(chunk)
 
-                if rms > threshold:
-                    if not started:
-                        started = True
+                if is_voice:
+                    voice_streak += 1
                     silence_count = 0
-                elif started:
-                    silence_count += 1
+                    if not started:
+                        pre_buffer.append(chunk.copy())
+                        if voice_streak >= _VOICE_STREAK_NEEDED:
+                            # Confirmed speech: flush pre-buffer into recording
+                            started = True
+                            audio_chunks.extend(pre_buffer)
+                            pre_buffer.clear()
+                    else:
+                        audio_chunks.append(chunk.copy())
+                else:
+                    voice_streak = 0
+                    if not started:
+                        # Discard pre-buffer older than the streak window
+                        pre_buffer = pre_buffer[-(  _VOICE_STREAK_NEEDED - 1):]
+                    elif started:
+                        silence_count += 1
+                        audio_chunks.append(chunk.copy())
 
                 # Real-time level bar
                 bar = _level_bar(rms, started)
                 print(f"\r{' ' * 50}\r", end="", flush=True)
                 console.print(bar + "  ", end="\r")
 
-                if started:
-                    audio_chunks.append(chunk.copy())
-
                 if started and silence_count >= silence_chunks_needed:
                     print(f"\r{' ' * 50}\r", end="", flush=True)
                     break
 
         if not audio_chunks:
+            return None
+
+        _MIN_CHUNKS = int(1.0 / 0.1)  # 10 chunks × 100ms
+        if len(audio_chunks) < _MIN_CHUNKS:
             return None
 
         audio_np = np.concatenate(audio_chunks, axis=0)

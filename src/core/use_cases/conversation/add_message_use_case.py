@@ -89,21 +89,21 @@ class AddMessageUseCase:
         Raises:
             ApplicationError: If conversation not found, unauthorized, or validation error
         """
-        # Step 1: Process voice content if provided
         enhanced_content = await self._process_voice_content(message)
 
-        # Step 2: Create user message
+        if message.voice_content and not enhanced_content.strip():
+            logger.warning("Voice content provided but transcription returned no text — skipping")
+            conversation = self._get_and_validate_conversation(conversation_id, user_id)
+            return MessageListOutput.from_output(conversation.messages)
+
         user_message = self._create_user_message(enhanced_content, sender)
 
-        # Step 3: Retrieve and validate conversation
         conversation = self._get_and_validate_conversation(
             conversation_id, user_id
         )
 
-        # Step 4: Add user message to conversation
         self._add_message_to_conversation(conversation, user_message)
 
-        # Step 5: Generate AI response
         default_message, ai_response_text = await self._generate_ai_response(
             user_message=user_message,
             conversation=conversation,
@@ -111,12 +111,10 @@ class AddMessageUseCase:
             auth_token=auth_token
         )
 
-        # Step 5b: If a pre-configured default message exists, add it first
         if default_message:
             pre_message = self._create_assistant_message(content=default_message)
             self._add_message_to_conversation(conversation, pre_message)
 
-        # Step 6: Process images if enabled
         formatted_images = await self._process_images_if_enabled(
             has_image_processor=has_image_processor,
             user_message=user_message,
@@ -124,7 +122,6 @@ class AddMessageUseCase:
             message_context=message.context
         )
 
-        # Step 7: Generate audio if enabled
         audio_url = await self._generate_audio_if_enabled(
             has_text_to_voice=has_text_to_voice,
             text=ai_response_text,
@@ -132,23 +129,18 @@ class AddMessageUseCase:
             conversation_id=conversation_id
         )
 
-        # Step 8: Create assistant response message
         assistant_message = self._create_assistant_message(
             content=ai_response_text,
             audio_url=audio_url
         )
 
-        # Step 9: Append images to assistant message if available
         if formatted_images:
             assistant_message.content = f"{ai_response_text}\n\n{formatted_images}"
 
-        # Step 10: Add assistant message to conversation
         self._add_message_to_conversation(conversation, assistant_message)
 
-        # Step 11: Persist messages to database
         self._save_messages(conversation_id, conversation.messages)
 
-        # Step 12: Return messages
         return MessageListOutput.from_output(conversation.messages)
 
     async def _process_voice_content(self, message: MessageInput) -> str:
