@@ -183,6 +183,151 @@ def _print_history(messages: list, assistant_name: str) -> None:
 
 # ─── Main command ──────────────────────────────────────────────────────────────
 
+@app.command("listen")
+def listen(
+    silence: float = typer.Option(2.5, "--silence", "-s", help="Segundos de silencio para detectar fin de frase"),
+    threshold: float = typer.Option(0.01, "--threshold", "-t", help="Umbral RMS de silencio (0.0–1.0)"),
+    new: bool = typer.Option(False, "--new", "-n", help="Forzar nueva conversación"),
+    conv_id: str = typer.Option(None, "--id", help="ID de conversación específica"),
+):
+    """Modo escucha: grabá tu voz, el asistente responde en texto."""
+    if not config_exists():
+        console.print("[red]✗[/red] No hay configuración. Ejecutá [bold cyan]gillie init[/bold cyan] primero.")
+        raise typer.Exit(1)
+
+    try:
+        import sounddevice as sd
+        import numpy as np
+    except ImportError:
+        console.print("[red]✗[/red] Falta sounddevice. Ejecutá: [bold cyan]gillie install[/bold cyan]")
+        raise typer.Exit(1)
+
+    import wave
+    import io
+    import tempfile
+
+    config = load_config()
+    assistant_name = config.profile.assistant_name
+
+    # ── resolve conversation ──────────────────────────────────────────────────
+    if conv_id:
+        result = _get(f"/conversation/{conv_id}")
+        conversation = result.get("data", result)
+    elif new:
+        conversation = _create_conversation()
+    else:
+        conversation = _find_cli_conversation() or _create_conversation()
+
+    current_id = conversation.get("id") or conversation.get("_id")
+    if not current_id:
+        console.print("[red]✗[/red] No se pudo obtener el ID de la conversación.")
+        raise typer.Exit(1)
+
+    SAMPLE_RATE = 16000
+    CHUNK = int(SAMPLE_RATE * 0.1)  # 100ms chunks
+    silence_chunks_needed = int(silence / 0.1)
+
+    console.print()
+    console.print(Panel(
+        f"✨🐟 [bold cyan]{assistant_name}[/bold cyan] — modo escucha\n"
+        f"[dim]Hablá cuando veas el micrófono. {silence}s de silencio para enviar. Ctrl+C para salir.[/dim]",
+        border_style="cyan",
+    ))
+    console.print()
+
+    BAR_WIDTH = 20
+
+    def _level_bar(rms: float, recording: bool) -> str:
+        """Dibuja una barra de nivel de audio."""
+        filled = min(BAR_WIDTH, int(rms / 0.1 * BAR_WIDTH))
+        bar = "█" * filled + "░" * (BAR_WIDTH - filled)
+        if recording:
+            return f"[bold red]🔴 [{bar}][/bold red]"
+        else:
+            return f"[dim]🎙  [{bar}][/dim]"
+
+    def _record_utterance() -> bytes | None:
+        """Graba hasta detectar N segundos de silencio. Devuelve bytes WAV."""
+        audio_chunks = []
+        silence_count = 0
+        started = False
+
+        with sd.InputStream(samplerate=SAMPLE_RATE, channels=1, dtype="float32") as stream:
+            while True:
+                chunk, _ = stream.read(CHUNK)
+                rms = float(np.sqrt(np.mean(chunk ** 2)))
+
+                if rms > threshold:
+                    if not started:
+                        started = True
+                    silence_count = 0
+                elif started:
+                    silence_count += 1
+
+                # Barra de nivel en tiempo real
+                bar = _level_bar(rms, started)
+                print(f"\r{' ' * 50}\r", end="", flush=True)
+                console.print(bar + "  ", end="\r")
+
+                if started:
+                    audio_chunks.append(chunk.copy())
+
+                if started and silence_count >= silence_chunks_needed:
+                    print(f"\r{' ' * 50}\r", end="", flush=True)
+                    break
+
+        if not audio_chunks:
+            return None
+
+        audio_np = np.concatenate(audio_chunks, axis=0)
+        audio_int16 = (np.clip(audio_np, -1.0, 1.0) * 32767).astype(np.int16)
+
+        buf = io.BytesIO()
+        with wave.open(buf, "wb") as wf:
+            wf.setnchannels(1)
+            wf.setsampwidth(2)
+            wf.setframerate(SAMPLE_RATE)
+            wf.writeframes(audio_int16.tobytes())
+        return buf.getvalue()
+
+    def _send_voice(conv_id: str, wav_bytes: bytes) -> str:
+        """Envía el audio al endpoint de mensaje y devuelve la respuesta."""
+        try:
+            resp = requests.post(
+                _base_url() + f"/conversation/{conv_id}/message",
+                data={"content": " "},  # requerido por el form
+                files={"voice_content": ("audio.wav", wav_bytes, "audio/wav")},
+                timeout=60,
+            )
+            resp.raise_for_status()
+            messages = resp.json().get("data", [])
+            if messages:
+                return messages[-1].get("content", "(sin respuesta)")
+        except requests.exceptions.ConnectionError:
+            console.print("\n[red]✗[/red] No se puede conectar a la API.")
+        except requests.exceptions.HTTPError as e:
+            console.print(f"\n[red]✗[/red] API error {e.response.status_code}: {e.response.text}")
+        return "(sin respuesta)"
+
+    # ── loop principal ────────────────────────────────────────────────────────
+    while True:
+        try:
+            console.print("[dim]🎙  Listo — hablá cuando quieras...[/dim]")
+            wav_bytes = _record_utterance()
+        except KeyboardInterrupt:
+            console.print("\n[dim]Hasta luego 👋[/dim]")
+            break
+
+        if not wav_bytes:
+            continue
+
+        console.print("[dim]⏳ Procesando...[/dim]     ", end="\r")
+        reply = _send_voice(current_id, wav_bytes)
+        console.print(" " * 40, end="\r")  # limpiar línea
+        _print_assistant(assistant_name, reply)
+        console.print(Rule(style="dim"))
+
+
 @app.command("list")
 def list_conversations():
     """Listar todas las conversaciones con su ID y título."""
@@ -222,10 +367,14 @@ def list_conversations():
 
 @app.callback(invoke_without_command=True)
 def agent(
+    ctx: typer.Context,
     new: bool = typer.Option(False, "--new", "-n", help="Forzar nueva conversación"),
     conv_id: str = typer.Option(None, "--id", help="ID de conversación específica"),
 ):
     """Chat interactivo con el asistente desde la terminal."""
+    if ctx.invoked_subcommand is not None:
+        return  # dejar que el subcomando maneje la ejecución
+
     if not config_exists():
         console.print("[red]✗[/red] No hay configuración. Ejecutá [bold cyan]gillie init[/bold cyan] primero.")
         raise typer.Exit(1)
