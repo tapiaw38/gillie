@@ -63,6 +63,11 @@ const router = createRouter({
           component: () => import('../views/SQLDatabaseIntegrationView.vue'),
         },
         {
+          path: '/system-commands',
+          name: 'system-commands',
+          component: () => import('../views/SystemCommandsView.vue'),
+        },
+        {
           path: '/tool-prompts',
           name: 'tool-prompts',
           component: () => import('../views/ToolPromptsView.vue'),
