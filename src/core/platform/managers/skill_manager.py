@@ -151,6 +151,82 @@ class SkillManager:
     def update_general_memory(self, content: str) -> None:
         self.save_skill("general", content)
 
+    def append_general_knowledge(self, content: str, category: str = "General") -> str:
+        """
+        Append a note to general.skill.md, skipping if a similar note already exists.
+        Returns the note ID (existing if duplicate, new if added).
+        """
+        from datetime import date
+
+        raw = self.load_skill("general")
+        if not raw.strip():
+            raw = "# Conocimiento General\n"
+
+        # Check for a similar existing note before writing
+        existing_id = self._find_similar_note(content, raw)
+        if existing_id:
+            logger.info("Skipped duplicate note — similar note %s already exists", existing_id)
+            return existing_id
+
+        note_id = uuid.uuid4().hex[:8]
+        today = date.today().isoformat()
+        section_header = "## Notas Importantes"
+        note_block = (
+            f"\n<!-- note: {note_id} -->\n"
+            f"**[{category} — {today}]** {content}\n"
+        )
+
+        if section_header in raw:
+            raw = raw.rstrip() + "\n" + note_block
+        else:
+            raw = raw.rstrip() + f"\n\n{section_header}\n" + note_block
+
+        self.save_skill("general", raw)
+        logger.info("Appended general knowledge note %s: %s", note_id, content[:80])
+        return note_id
+
+    def _find_similar_note(self, content: str, existing_raw: str, threshold: float = 0.45) -> Optional[str]:
+        """
+        Return the ID of an existing note that is semantically similar to content,
+        based on keyword overlap. Returns None if no similar note is found.
+        """
+        _STOP = {
+            "el", "la", "los", "las", "de", "en", "y", "a", "que", "es", "un",
+            "una", "su", "se", "lo", "por", "con", "me", "mi", "te", "si",
+            "the", "a", "an", "is", "are", "was", "were", "be", "been",
+            "i", "my", "me", "you", "your", "he", "she", "it", "we", "they",
+        }
+
+        def _keywords(text: str):
+            words = re.findall(r"[a-záéíóúñüA-ZÁÉÍÓÚÑÜ]{3,}", text.lower())
+            return set(words) - _STOP
+
+        new_kw = _keywords(content)
+        if len(new_kw) < 3:
+            return None
+
+        pattern = re.compile(
+            r"<!--\s*note:\s*([a-f0-9]+)\s*-->\n\*\*\[.+?\]\*\*\s*(.+?)(?=\n<!--\s*note:|\Z)",
+            re.DOTALL,
+        )
+        for m in pattern.finditer(existing_raw):
+            note_id, note_text = m.group(1), m.group(2)
+            note_kw = _keywords(note_text)
+            if not note_kw:
+                continue
+            overlap = len(new_kw & note_kw) / min(len(new_kw), len(note_kw))
+            if overlap >= threshold:
+                logger.info(
+                    "Found similar note %s (overlap=%.2f): %s", note_id, overlap, note_text[:60]
+                )
+                return note_id
+        return None
+
+    def overwrite_general_memory(self, content: str) -> None:
+        """Replace the entire general.skill.md with the given content."""
+        self.save_skill("general", content.strip() + "\n")
+        logger.info("general.skill.md overwritten (%d chars)", len(content))
+
     # ─── Facts memory (operates on facts.skill.md) ────────────────────────────
 
     def save_memory_fact(self, content: str, category: str = "General") -> str:

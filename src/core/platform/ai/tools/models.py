@@ -89,9 +89,22 @@ _DEFAULT_TOOL_PROMPTS: Dict[str, str] = {
         "Query the database to retrieve information. "
         "Use when the user asks for data that lives in the connected database."
     ),
+    "organize_memory": (
+        "Reorganize and deduplicate general.skill.md. "
+        "Use when the user asks to organize, clean, or consolidate memory. "
+        "WORKFLOW: 1) Read the current general.skill.md content from context. "
+        "2) Merge duplicate or overlapping notes into single coherent entries. "
+        "3) Call this tool with the consolidated content as the new_content argument. "
+        "The file will be fully replaced with your organized version. "
+        "Preserve all unique information — only merge actual duplicates."
+    ),
     "save_memory": (
-        "Save a relevant fact from the conversation to remember it later. "
-        "Use when the user shares personal information, preferences, or important data."
+        "Save important information to long-term memory (general.skill.md). "
+        "ALWAYS use this tool when the user says phrases like: "
+        "'recuerda', 'recuerda esto', 'guarda esto', 'ten en cuenta', "
+        "'guarda en memoria', 'anota', 'no olvides', 'para el futuro', "
+        "'remember this', 'save this', 'keep in mind', 'note that'. "
+        "Save the exact information the user wants remembered, with its context."
     ),
     "search_memory": (
         "Search previously saved facts about the user. "
@@ -258,6 +271,13 @@ class SaveMemoryArgs(BaseModel):
     category: str = Field(
         default="General",
         description="Categoría del hecho: Preferencias, Contacto, Historial, etc."
+    )
+
+
+class OrganizeMemoryArgs(BaseModel):
+    """Arguments for reorganizing general.skill.md"""
+    new_content: str = Field(
+        description="The full consolidated content to replace general.skill.md with."
     )
 
 
@@ -548,11 +568,21 @@ def create_langchain_tools(openai_integration, profile, skill_manager=None, stor
 
     if skill_manager is not None:
         async def save_memory_tool(content: str, category: str = "General") -> str:
-            fact_id = skill_manager.save_memory_fact(content, category)
-            return f"Hecho guardado con ID {fact_id}."
+            existing_id = skill_manager._find_similar_note(content, skill_manager.load_skill("general"))
+            if existing_id:
+                return (
+                    f"Ya existe una nota similar en memoria (ID {existing_id}). "
+                    f"No se creó duplicado. Si quieres actualizar la información usa organize_memory."
+                )
+            note_id = skill_manager.append_general_knowledge(content, category)
+            return f"Guardado en memoria (general.skill.md) con ID {note_id}."
 
         async def search_memory_tool(query: str, max_results: int = 5) -> str:
             return skill_manager.search_memory(query, max_results)
+
+        async def organize_memory_tool(new_content: str) -> str:
+            skill_manager.overwrite_general_memory(new_content)
+            return "general.skill.md reorganizado y actualizado correctamente."
 
         if "save_memory" not in disabled:
             tools.append(StructuredTool(
@@ -569,6 +599,14 @@ def create_langchain_tools(openai_integration, profile, skill_manager=None, stor
                 func=search_memory_tool,
                 args_schema=SearchMemoryArgs,
                 coroutine=search_memory_tool,
+            ))
+        if "organize_memory" not in disabled:
+            tools.append(StructuredTool(
+                name="organize_memory",
+                description=prompts.get("organize_memory", _DEFAULT_TOOL_PROMPTS["organize_memory"]),
+                func=organize_memory_tool,
+                args_schema=OrganizeMemoryArgs,
+                coroutine=organize_memory_tool,
             ))
 
     if "system_propose" not in disabled or "system_confirm" not in disabled:
