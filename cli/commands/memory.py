@@ -254,6 +254,40 @@ def skills_edit(name: str = typer.Argument(..., help="Skill name (without .skill
         )
 
 
+@skills_app.command("delete")
+def skills_delete(
+    name: str = typer.Argument(..., help="Skill name (without .skill.md)"),
+    yes: bool = typer.Option(False, "--yes", "-y", help="Skip confirmation prompt"),
+):
+    """Delete a .skill.md file and remove its reference from memory.md."""
+    _require_config()
+
+    skill_path = MEMORY_DIR / f"{name}.skill.md"
+
+    if not skill_path.exists():
+        console.print(f"[red]✗[/red] {name}.skill.md not found.")
+        raise typer.Exit(1)
+
+    if not yes:
+        confirm = typer.confirm(f"Delete {name}.skill.md?")
+        if not confirm:
+            console.print("[dim]Cancelled.[/dim]")
+            raise typer.Exit(0)
+
+    skill_path.unlink()
+    console.print(f"[green]✓[/green] {name}.skill.md deleted.")
+
+    # Remove reference from memory.md if present
+    memory_path = MEMORY_DIR / "memory.md"
+    if memory_path.exists():
+        content = memory_path.read_text(encoding="utf-8")
+        ref = f"ver {name}.skill.md"
+        if ref in content:
+            lines = [l for l in content.splitlines() if l.strip() != ref]
+            memory_path.write_text("\n".join(lines) + "\n", encoding="utf-8")
+            console.print(f"[green]✓[/green] Reference removed from memory.md.")
+
+
 @skills_app.command("rename")
 def skills_rename(
     old_name: str = typer.Argument(..., help="Current skill name (without .skill.md)"),
@@ -328,11 +362,11 @@ def show():
     refs = re.findall(r"^ver\s+([\w\-]+)\.skill\.md\s*$", content, re.MULTILINE)
     if refs:
         console.print()
-        console.print("[bold]Skills referenciadas:[/bold]")
+        console.print("[bold]Referenced skills:[/bold]")
         for name in refs:
             skill_path = MEMORY_DIR / f"{name}.skill.md"
             exists = skill_path.exists()
-            size = f"{skill_path.stat().st_size} bytes" if exists else "[dim]no existe[/dim]"
+            size = f"{skill_path.stat().st_size} bytes" if exists else "[dim]not found[/dim]"
             icon = "[green]✓[/green]" if exists else "[yellow]?[/yellow]"
             console.print(f"  {icon} {name}.skill.md  [dim]{size}[/dim]")
 
