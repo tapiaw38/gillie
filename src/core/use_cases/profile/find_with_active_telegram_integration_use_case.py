@@ -1,0 +1,20 @@
+from typing import Optional
+from src.core.platform.appcontext.appcontext import Factory
+from src.core.domain import Profile
+
+
+class FindWithActiveTelegramIntegrationUseCase:
+    """Find the first profile with an active Telegram integration."""
+
+    def __init__(self, context_factory: Factory):
+        self.context_factory = context_factory()
+
+    def execute(self) -> Optional[Profile]:
+        context = self.context_factory
+        profiles = context.repositories.profile.find_all()
+        for profile in profiles:
+            if profile.integrations:
+                for integration in profile.integrations:
+                    if integration.name == "telegram" and integration.activated:
+                        return profile
+        return None

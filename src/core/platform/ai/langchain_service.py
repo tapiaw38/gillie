@@ -57,6 +57,7 @@ class LangChainService:
         self.openai_integration = openai_integration
         self.skill_manager = skill_manager
         self.store_service = None
+        self.job_usecases = None
 
         # Initialize LangChain ChatOpenAI
         self.llm = ChatOpenAI(
@@ -198,6 +199,7 @@ class LangChainService:
                         profile,
                         skill_manager=self.skill_manager,
                         store_service=self.store_service,
+                        job_usecases=self.job_usecases,
                     )
                     llm_with_tools = self.llm.bind_tools(tools)
                     logger.debug(f"Bound {len(tools)} tools to LLM")

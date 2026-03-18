@@ -92,6 +92,11 @@ whatsapp_devices_client = MongoDBClient(
     config_service.nosql_config.whatsapp_devices.database,
     config_service.nosql_config.whatsapp_devices.collection,
 )
+jobs_client = MongoDBClient(
+    config_service.nosql_config.jobs.database_uri,
+    config_service.nosql_config.jobs.database,
+    config_service.nosql_config.jobs.collection,
+)
 
 calendar_sessions_client = None
 calendar_events_client = None
@@ -125,6 +130,7 @@ datasources = Datasources.create_datasources(
     no_sql_calendar_sessions_client=calendar_sessions_client,
     no_sql_calendar_events_client=calendar_events_client,
     no_sql_whatsapp_devices_client=whatsapp_devices_client,
+    no_sql_jobs_client=jobs_client,
 )
 
 from src.adapters.datasources.repositories.repositories import Repositories
@@ -153,6 +159,16 @@ context_factory = new_factory(
     platform_services
 )
 usecases = create_usecases(context_factory)
+integrations.openai.set_job_usecases(usecases.jobs)
+
+# ─── Scheduler ───────────────────────────────────────────────────────────────
+scheduler = None
+if repositories.job is not None:
+    from src.core.platform.managers.scheduler_manager import SchedulerManager
+    scheduler = SchedulerManager(
+        job_repository=repositories.job,
+        context_factory=context_factory,
+    )
 
 # ─── Auto-create profile for single-user mode ────────────────────────────────
 if config_service.single_user_config:
@@ -182,10 +198,18 @@ neonize_integration = NeonizeIntegration(sessions_dir="./data/whatsapp", stt_int
 
 
 # ─── Routes & Middleware ──────────────────────────────────────────────────────
-routes_manager = RoutesManager(app, usecases, config_service, neonize_integration=neonize_integration)
+routes_manager = RoutesManager(app, usecases, config_service, neonize_integration=neonize_integration, scheduler=scheduler)
 routes_manager.include_routes()
 
 app.add_middleware(SingleUserMiddleware, user_id=user_id)
+
+
+# ─── Startup: start scheduler ─────────────────────────────────────────────────
+@app.on_event("startup")
+async def start_scheduler():
+    if scheduler is not None:
+        await scheduler.start()
+        logger.info("Scheduler started")
 
 
 # ─── Startup: restore previously connected devices ────────────────────────────

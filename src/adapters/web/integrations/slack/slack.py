@@ -1,0 +1,167 @@
+import hashlib
+import hmac
+import logging
+from typing import List, Dict, Any
+
+import requests
+
+
+class SlackIntegration:
+    """
+    Adapter for the Slack Web API and Events API.
+
+    Handles outbound message delivery and inbound event parsing.
+    Signature verification follows Slack's official HMAC-SHA256 scheme.
+    """
+
+    def __init__(self, bot_token: str, signing_secret: str = ""):
+        self.bot_token = bot_token
+        self.signing_secret = signing_secret
+        self.api_url = "https://slack.com/api"
+
+    def _build_headers(self) -> Dict[str, str]:
+        return {
+            "Authorization": f"Bearer {self.bot_token}",
+            "Content-Type": "application/json",
+        }
+
+    def send_message(self, channel: str, text: str) -> bool:
+        """
+        Post a plain-text message to a Slack channel.
+
+        Returns True when Slack acknowledges the delivery (ok=true).
+        """
+        logger = logging.getLogger(__name__)
+
+        url = f"{self.api_url}/chat.postMessage"
+        payload = {"channel": channel, "text": text}
+
+        try:
+            response = requests.post(url, headers=self._build_headers(), json=payload, timeout=10)
+            response_json = response.json() if response.content else {}
+
+            if response_json.get("ok"):
+                logger.info(f"Slack message sent successfully to channel={channel}")
+                return True
+
+            logger.error(
+                f"Slack send_message error: channel={channel}, "
+                f"error={response_json.get('error')}, response={response_json}"
+            )
+            return False
+
+        except Exception as e:
+            logger.error(f"Exception while sending Slack message: {str(e)}", exc_info=True)
+            return False
+
+    def send_image(self, channel: str, image_url: str, caption: str = "") -> bool:
+        """
+        Post an image block to a Slack channel.
+
+        Uses Slack's Block Kit image element so the image renders inline.
+        Returns True when Slack acknowledges the delivery (ok=true).
+        """
+        logger = logging.getLogger(__name__)
+
+        url = f"{self.api_url}/chat.postMessage"
+        payload = {
+            "channel": channel,
+            "text": caption,
+            "blocks": [
+                {
+                    "type": "image",
+                    "image_url": image_url,
+                    "alt_text": caption or "image",
+                }
+            ],
+        }
+
+        try:
+            response = requests.post(url, headers=self._build_headers(), json=payload, timeout=10)
+            response_json = response.json() if response.content else {}
+
+            if response_json.get("ok"):
+                logger.info(f"Slack image sent successfully to channel={channel}")
+                return True
+
+            logger.error(
+                f"Slack send_image error: channel={channel}, "
+                f"error={response_json.get('error')}, response={response_json}"
+            )
+            return False
+
+        except Exception as e:
+            logger.error(f"Exception while sending Slack image: {str(e)}", exc_info=True)
+            return False
+
+    def receive_message(self, payload: Dict[str, Any]) -> List[Dict[str, str]]:
+        """
+        Parse a Slack Events API payload and return a list of user messages.
+
+        Only processes event_callback payloads of type "message".
+        Bot messages (bot_id present) and message subtypes (edits, deletions)
+        are silently skipped to avoid echo loops and noise.
+
+        Returns a list of dicts with keys: user_id, channel, text, ts.
+        """
+        logger = logging.getLogger(__name__)
+        messages: List[Dict[str, str]] = []
+
+        try:
+            if payload.get("type") != "event_callback":
+                logger.debug(f"Skipping non-event_callback payload type: {payload.get('type')}")
+                return messages
+
+            event = payload.get("event", {})
+
+            if event.get("type") != "message":
+                logger.debug(f"Skipping non-message event type: {event.get('type')}")
+                return messages
+
+            # Skip bot messages to prevent echo loops
+            if "bot_id" in event:
+                logger.debug("Skipping bot message")
+                return messages
+
+            # Skip message subtypes such as message_changed or message_deleted
+            if event.get("subtype"):
+                logger.debug(f"Skipping message with subtype: {event.get('subtype')}")
+                return messages
+
+            user_id = event.get("user")
+            channel = event.get("channel")
+            text = event.get("text", "")
+            ts = event.get("ts", "")
+
+            if not user_id or not channel or not text:
+                logger.warning(
+                    f"Incomplete message event: user_id={user_id}, channel={channel}, text={text!r}"
+                )
+                return messages
+
+            messages.append({"user_id": user_id, "channel": channel, "text": text, "ts": ts})
+            logger.debug(f"Extracted Slack message: user_id={user_id}, channel={channel}")
+
+        except Exception as e:
+            logger.error(f"Error processing Slack payload: {str(e)}", exc_info=True)
+
+        return messages
+
+    def verify_signature(self, raw_body: bytes, timestamp: str, signature: str) -> bool:
+        """
+        Verify a Slack request signature using HMAC-SHA256.
+
+        When signing_secret is empty, verification is skipped and True is returned.
+        This is intentional for local development environments without a secret configured.
+        """
+        if not self.signing_secret:
+            return True
+
+        base = f"v0:{timestamp}:{raw_body.decode('utf-8')}"
+        computed = "v0=" + hmac.new(
+            self.signing_secret.encode("utf-8"),
+            base.encode("utf-8"),
+            hashlib.sha256,
+        ).hexdigest()
+
+        return hmac.compare_digest(computed, signature)

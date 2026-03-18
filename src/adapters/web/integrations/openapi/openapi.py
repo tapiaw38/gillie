@@ -42,6 +42,7 @@ class OpenAIIntegration:
         self.langchain_service = None
         self.skill_manager = None
         self.store_service = None
+        self.job_usecases = None
 
         langchain_config = config_service.langchain_config
         if langchain_config.service_enabled:
@@ -72,6 +73,12 @@ class OpenAIIntegration:
         self.store_service = store_service
         if self.langchain_service is not None:
             self.langchain_service.store_service = store_service
+
+    def set_job_usecases(self, job_usecases) -> None:
+        """Inject job usecases after construction."""
+        self.job_usecases = job_usecases
+        if self.langchain_service is not None:
+            self.langchain_service.job_usecases = job_usecases
 
     @log_function_call
     async def ask(

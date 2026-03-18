@@ -82,6 +82,30 @@ const TOOL_META: { key: keyof ToolPromptsConfig; label: string; icon: string; hi
     icon: 'pi pi-check-circle',
     hint: 'Cuándo ejecutar un comando ya propuesto usando el código de confirmación del usuario.',
   },
+  {
+    key: 'cron_create',
+    label: 'Crear cron job',
+    icon: 'pi pi-clock',
+    hint: 'Cuándo crear una tarea programada que combina una fuente (comando, HTTP, texto) con un destino (WhatsApp, Telegram, Slack).',
+  },
+  {
+    key: 'cron_list',
+    label: 'Listar cron jobs',
+    icon: 'pi pi-list',
+    hint: 'Cuándo mostrar las tareas programadas del usuario.',
+  },
+  {
+    key: 'cron_delete',
+    label: 'Eliminar cron job',
+    icon: 'pi pi-trash',
+    hint: 'Cuándo eliminar una tarea programada por su ID.',
+  },
+  {
+    key: 'cron_run',
+    label: 'Ejecutar cron job ahora',
+    icon: 'pi pi-play',
+    hint: 'Cuándo ejecutar una tarea programada de inmediato sin esperar el próximo horario.',
+  },
 ]
 
 const prompts = ref<ToolPromptsConfig>({})

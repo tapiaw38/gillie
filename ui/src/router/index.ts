@@ -68,6 +68,16 @@ const router = createRouter({
           component: () => import('../views/SystemCommandsView.vue'),
         },
         {
+          path: '/slack-integration',
+          name: 'slack-integration',
+          component: () => import('../views/SlackIntegrationView.vue'),
+        },
+        {
+          path: '/telegram-integration',
+          name: 'telegram-integration',
+          component: () => import('../views/TelegramIntegrationView.vue'),
+        },
+        {
           path: '/tool-prompts',
           name: 'tool-prompts',
           component: () => import('../views/ToolPromptsView.vue'),
@@ -86,6 +96,11 @@ const router = createRouter({
           path: '/sandbox',
           name: 'sandbox',
           component: () => import('../views/SandboxView.vue'),
+        },
+        {
+          path: '/cron-jobs',
+          name: 'cron-jobs',
+          component: () => import('../views/CronJobsView.vue'),
         },
       ],
     },

@@ -21,7 +21,9 @@ from src.core.use_cases.profile import (
     AddIntegrationUseCase as ProfileAddIntegrationUseCase,
     ListOptionsUseCase as ProfileListOptionsUseCase,
     FindByWhatsAppBusinessIdUseCase as ProfileFindByWhatsAppBusinessIdUseCase,
-    FindWithActiveWhatsAppIntegrationUseCase as ProfileFindWithActiveWhatsAppIntegrationUseCase
+    FindWithActiveWhatsAppIntegrationUseCase as ProfileFindWithActiveWhatsAppIntegrationUseCase,
+    FindWithActiveSlackIntegrationUseCase as ProfileFindWithActiveSlackIntegrationUseCase,
+    FindWithActiveTelegramIntegrationUseCase as ProfileFindWithActiveTelegramIntegrationUseCase,
 )
 from src.core.use_cases.memory import (
     GetFAQsUseCase,
@@ -56,6 +58,15 @@ from src.core.use_cases.drive import (
     GetIndexStatusUseCase,
     RemoveFileIndexUseCase,
 )
+from src.core.use_cases.slack import ProcessSlackMessageUseCase
+from src.core.use_cases.telegram import ProcessTelegramMessageUseCase
+from src.core.use_cases.job import (
+    CreateJobUseCase,
+    ListJobsUseCase,
+    GetJobUseCase,
+    DeleteJobUseCase,
+    RunJobUseCase,
+)
 from src.core.use_cases.whatsapp_device import (
     CreateDeviceUseCase as WhatsAppDeviceCreateUseCase,
     ListDevicesUseCase as WhatsAppDeviceListUseCase,
@@ -83,6 +94,8 @@ class Profile:
     list_options_usecase: ProfileListOptionsUseCase
     find_by_whatsapp_business_id_usecase: ProfileFindByWhatsAppBusinessIdUseCase
     find_with_active_whatsapp_integration_usecase: ProfileFindWithActiveWhatsAppIntegrationUseCase
+    find_with_active_slack_integration_usecase: ProfileFindWithActiveSlackIntegrationUseCase
+    find_with_active_telegram_integration_usecase: ProfileFindWithActiveTelegramIntegrationUseCase
 
 
 @dataclass
@@ -149,6 +162,25 @@ class WhatsAppDevice:
 
 
 @dataclass
+class Jobs:
+    create_usecase: CreateJobUseCase
+    list_usecase: ListJobsUseCase
+    get_usecase: GetJobUseCase
+    delete_usecase: DeleteJobUseCase
+    run_usecase: RunJobUseCase
+
+
+@dataclass
+class Slack:
+    process_message_usecase: ProcessSlackMessageUseCase
+
+
+@dataclass
+class Telegram:
+    process_message_usecase: ProcessTelegramMessageUseCase
+
+
+@dataclass
 class Usecases:
     profile: Profile
     conversation: Conversation
@@ -157,6 +189,9 @@ class Usecases:
     calendar: Calendar
     drive: Drive
     whatsapp_device: WhatsAppDevice
+    jobs: Jobs
+    slack: Slack
+    telegram: Telegram
 
 
 def create_usecases(context_factory: Factory) -> Usecases:
@@ -175,6 +210,8 @@ def create_usecases(context_factory: Factory) -> Usecases:
             list_options_usecase=ProfileListOptionsUseCase(context_factory),
             find_by_whatsapp_business_id_usecase=ProfileFindByWhatsAppBusinessIdUseCase(context_factory),
             find_with_active_whatsapp_integration_usecase=ProfileFindWithActiveWhatsAppIntegrationUseCase(context_factory),
+            find_with_active_slack_integration_usecase=ProfileFindWithActiveSlackIntegrationUseCase(context_factory),
+            find_with_active_telegram_integration_usecase=ProfileFindWithActiveTelegramIntegrationUseCase(context_factory),
         ),
         conversation=Conversation(
             create_usecase=ConversationCreateUseCase(context_factory),
@@ -226,5 +263,18 @@ def create_usecases(context_factory: Factory) -> Usecases:
             connect_usecase=WhatsAppDeviceConnectUseCase(context_factory),
             disconnect_usecase=WhatsAppDeviceDisconnectUseCase(context_factory),
             send_message_usecase=WhatsAppDeviceSendMessageUseCase(context_factory),
+        ),
+        jobs=Jobs(
+            create_usecase=CreateJobUseCase(context_factory),
+            list_usecase=ListJobsUseCase(context_factory),
+            get_usecase=GetJobUseCase(context_factory),
+            delete_usecase=DeleteJobUseCase(context_factory),
+            run_usecase=RunJobUseCase(context_factory),
+        ),
+        slack=Slack(
+            process_message_usecase=ProcessSlackMessageUseCase(context_factory),
+        ),
+        telegram=Telegram(
+            process_message_usecase=ProcessTelegramMessageUseCase(context_factory),
         ),
     )

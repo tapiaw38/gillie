@@ -108,6 +108,25 @@ _DEFAULT_TOOL_PROMPTS: Dict[str, str] = {
         "Execute a previously proposed command after the user provides the confirmation code. "
         "Use ONLY when the user responds with a 6-character hex code (like 'A3F9C1') to confirm a command."
     ),
+    "cron_create": (
+        "Create a cron job that combines a source (system command, HTTP request, or static text) "
+        "with a destination (WhatsApp, Telegram, Slack, or none). "
+        "Use when the user wants to schedule a recurring task, like 'send me RAM usage via WhatsApp every 5 minutes' "
+        "or 'notify me on Telegram daily with the server uptime'. "
+        "ALWAYS confirm the cron schedule and integration details with the user before creating."
+    ),
+    "cron_list": (
+        "List all cron jobs for the current user. "
+        "Use when the user asks to see their scheduled jobs or wants to know what jobs are configured."
+    ),
+    "cron_delete": (
+        "Delete a cron job by ID. "
+        "Use when the user wants to remove a scheduled job. Ask for confirmation before deleting."
+    ),
+    "cron_run": (
+        "Run a cron job immediately without waiting for the next scheduled time. "
+        "Use when the user wants to test a job or trigger it on demand."
+    ),
 }
 
 
@@ -183,6 +202,28 @@ class SystemConfirmArgs(BaseModel):
         description="The 6-character confirmation code returned by system_propose (e.g. 'A3F9C1')."
     )
 
+
+
+class CronCreateArgs(BaseModel):
+    """Arguments for creating a cron job"""
+    name: str = Field(description="Job name, short and descriptive")
+    cron_expr: str = Field(description="5-field cron expression, e.g. '*/5 * * * *' for every 5 minutes, '0 8 * * *' for daily at 8am")
+    source_type: str = Field(description="Source type: 'system_command' (run shell command), 'http_get' (HTTP GET request), 'static' (fixed text)")
+    source_params: Dict[str, Any] = Field(default_factory=dict, description="Source parameters. For system_command: {'command': 'free -m'}. For http_get: {'url': 'https://...'}. For static: {'text': 'Hello'}.")
+    destination_type: str = Field(description="Destination type: 'whatsapp', 'telegram', 'slack', 'none'")
+    destination_params: Dict[str, Any] = Field(default_factory=dict, description="Destination parameters. For whatsapp/telegram/slack: {'phone': '+5491...'} or {'chat_id': '...'} or {'channel': '#general'}.")
+    message_template: str = Field(default="{{output}}", description="Message template. Use {{output}} as placeholder for the source result.")
+    description: str = Field(default="", description="Optional job description")
+
+
+class CronDeleteArgs(BaseModel):
+    """Arguments for deleting a cron job"""
+    job_id: str = Field(description="The job ID to delete")
+
+
+class CronRunArgs(BaseModel):
+    """Arguments for running a cron job immediately"""
+    job_id: str = Field(description="The job ID to run now")
 
 
 class SearchDocumentsArgs(BaseModel):
@@ -283,7 +324,7 @@ def _find_file_by_name(files, file_name: str):
     return None
 
 
-def create_langchain_tools(openai_integration, profile, skill_manager=None, store_service=None) -> List[StructuredTool]:
+def create_langchain_tools(openai_integration, profile, skill_manager=None, store_service=None, job_usecases=None) -> List[StructuredTool]:
     """
     Create LangChain StructuredTool instances with Pydantic validation.
 
@@ -555,6 +596,76 @@ def create_langchain_tools(openai_integration, profile, skill_manager=None, stor
                 func=system_confirm_tool,
                 args_schema=SystemConfirmArgs,
                 coroutine=system_confirm_tool,
+            ))
+
+    if job_usecases is not None:
+        async def cron_create_tool(
+            name: str,
+            cron_expr: str,
+            source_type: str,
+            source_params: Dict[str, Any] = None,
+            destination_type: str = "none",
+            destination_params: Dict[str, Any] = None,
+            message_template: str = "{{output}}",
+            description: str = "",
+        ) -> Dict[str, Any]:
+            from src.schemas.job import JobInput
+            job_input = JobInput(
+                name=name,
+                cron_expr=cron_expr,
+                source_type=source_type,
+                source_params=source_params or {},
+                destination_type=destination_type,
+                destination_params=destination_params or {},
+                message_template=message_template,
+                description=description,
+            )
+            result = job_usecases.create_usecase.execute(job_input, profile.user_id)
+            return {"job_id": result.data.id, "name": result.data.name, "cron_expr": result.data.cron_expr, "status": "created"}
+
+        async def cron_list_tool() -> Dict[str, Any]:
+            result = job_usecases.list_usecase.execute(profile.user_id)
+            return {"jobs": [{"id": j.id, "name": j.name, "cron_expr": j.cron_expr, "source_type": j.source_type, "destination_type": j.destination_type, "enabled": j.enabled, "status": j.status, "last_run_at": j.last_run_at} for j in result.data]}
+
+        async def cron_delete_tool(job_id: str) -> Dict[str, Any]:
+            job_usecases.delete_usecase.execute(job_id)
+            return {"deleted": True, "job_id": job_id}
+
+        async def cron_run_tool(job_id: str) -> Dict[str, Any]:
+            result = await job_usecases.run_usecase.execute(job_id)
+            return {"status": result.status, "result": result.result}
+
+        if "cron_create" not in disabled:
+            tools.append(StructuredTool(
+                name="cron_create",
+                description=prompts.get("cron_create", _DEFAULT_TOOL_PROMPTS["cron_create"]),
+                func=cron_create_tool,
+                args_schema=CronCreateArgs,
+                coroutine=cron_create_tool,
+            ))
+        if "cron_list" not in disabled:
+            tools.append(StructuredTool(
+                name="cron_list",
+                description=prompts.get("cron_list", _DEFAULT_TOOL_PROMPTS["cron_list"]),
+                func=cron_list_tool,
+                args_schema=None,
+                coroutine=cron_list_tool,
+            ))
+        if "cron_delete" not in disabled:
+            tools.append(StructuredTool(
+                name="cron_delete",
+                description=prompts.get("cron_delete", _DEFAULT_TOOL_PROMPTS["cron_delete"]),
+                func=cron_delete_tool,
+                args_schema=CronDeleteArgs,
+                coroutine=cron_delete_tool,
+            ))
+        if "cron_run" not in disabled:
+            tools.append(StructuredTool(
+                name="cron_run",
+                description=prompts.get("cron_run", _DEFAULT_TOOL_PROMPTS["cron_run"]),
+                func=cron_run_tool,
+                args_schema=CronRunArgs,
+                coroutine=cron_run_tool,
             ))
 
     return tools

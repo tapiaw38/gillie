@@ -61,3 +61,4 @@ google-auth-httplib2>=0.1.0
 dateparser>=1.1.8
 neonize
 qrcode[pil]
+apscheduler>=3.10.0

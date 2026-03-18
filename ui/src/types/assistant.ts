@@ -131,6 +131,8 @@ export interface IntegrationParams {
     | GoogleDriveIntegrationConfig
     | SQLDatabaseIntegrationConfig
     | SystemCommandsIntegrationConfig
+    | SlackIntegrationConfig
+    | TelegramIntegrationConfig
 }
 
 export interface ToolPromptsConfig {
@@ -145,10 +147,24 @@ export interface ToolPromptsConfig {
   search_memory?: string
   system_propose?: string
   system_confirm?: string
+  cron_create?: string
+  cron_list?: string
+  cron_delete?: string
+  cron_run?: string
 }
 
 export interface SystemCommandsIntegrationConfig {
   blacklist: string[]
+}
+
+export interface SlackIntegrationConfig {
+  bot_token: string
+  signing_secret: string
+}
+
+export interface TelegramIntegrationConfig {
+  bot_token: string
+  secret_token: string
 }
 
 export interface IntegrationResponse {

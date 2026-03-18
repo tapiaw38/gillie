@@ -4,6 +4,7 @@ from src.adapters.datasources.repositories.conversation.repository import Reposi
 from src.adapters.datasources.repositories.profile.repository import Repository as ProfileRepository
 from src.adapters.datasources.repositories.calendar.repository import Repository as CalendarRepository
 from src.adapters.datasources.repositories.whatsapp_device.repository import Repository as WhatsAppDeviceRepository
+from src.adapters.datasources.repositories.job.repository import Repository as JobRepository
 from src.adapters.datasources.repositories.inmemory.role_repository import RoleRepository, role_repository
 
 
@@ -15,12 +16,14 @@ class Repositories:
             role: RoleRepository,
             calendar: Optional[CalendarRepository] = None,
             whatsapp_device: Optional[WhatsAppDeviceRepository] = None,
+            job: Optional[JobRepository] = None,
     ):
         self.conversation = conversation
         self.profile = profile
         self.role = role
         self.calendar = calendar
         self.whatsapp_device = whatsapp_device
+        self.job = job
 
     @staticmethod
     def create_repositories(datasources: Datasources):
@@ -35,10 +38,15 @@ class Repositories:
         if datasources.no_sql_whatsapp_devices_client is not None:
             whatsapp_device = WhatsAppDeviceRepository(datasources)
 
+        job = None
+        if datasources.no_sql_jobs_client is not None:
+            job = JobRepository(datasources)
+
         return Repositories(
             conversation=ConversationRepository(datasources),
             profile=ProfileRepository(datasources),
             role=role_repository,
             calendar=calendar,
             whatsapp_device=whatsapp_device,
+            job=job,
         )
