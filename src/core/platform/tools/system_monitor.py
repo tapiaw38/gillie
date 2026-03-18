@@ -65,6 +65,18 @@ def _get_blacklist(profile) -> List[str]:
     return combined
 
 
+def _requires_confirmation(profile) -> bool:
+    """Return True only if the integration is activated AND require_confirmation is enabled."""
+    if not profile or not profile.integrations:
+        return False
+    for integration in profile.integrations:
+        if integration.name == "system_commands":
+            if not integration.activated:
+                return False
+            return integration.config.get("require_confirmation", True) is not False
+    return False
+
+
 def _is_blacklisted(command: str, blacklist: List[str]) -> Optional[str]:
     """Return the matched blacklist entry if command is blocked, else None."""
     cmd_lower = command.lower().strip()
@@ -94,9 +106,10 @@ def _sanitize(output: str) -> str:
 
 async def propose_command(command: str, profile) -> Dict[str, Any]:
     """
-    Validate command against blacklist and store it pending confirmation.
+    Validate command against blacklist.
 
-    Returns a message asking the user to confirm with the generated code.
+    If require_confirmation is enabled: store pending and ask for code.
+    If disabled: execute directly and return the result.
     """
     blacklist = _get_blacklist(profile)
     blocked = _is_blacklisted(command, blacklist)
@@ -105,6 +118,31 @@ async def propose_command(command: str, profile) -> Dict[str, Any]:
             "allowed": False,
             "message": f"El comando fue bloqueado porque coincide con una entrada de la lista negra: `{blocked}`.",
         }
+
+    if not _requires_confirmation(profile):
+        logger.info(f"[system] Executing directly (no confirmation required): {command}")
+        try:
+            proc = await asyncio.create_subprocess_shell(
+                command,
+                stdout=asyncio.subprocess.PIPE,
+                stderr=asyncio.subprocess.STDOUT,
+            )
+            stdout, _ = await asyncio.wait_for(proc.communicate(), timeout=30)
+            raw = stdout.decode(errors="replace")
+            output = _sanitize(raw)
+            exit_code = proc.returncode
+            logger.info(f"[system] Command exit_code={exit_code}, output_len={len(output)}")
+            return {
+                "success": exit_code == 0,
+                "exit_code": exit_code,
+                "command": command,
+                "output": output or "(sin salida)",
+            }
+        except asyncio.TimeoutError:
+            return {"success": False, "error": "El comando superó el tiempo límite de 30 segundos."}
+        except Exception as e:
+            logger.error(f"[system] Execution error: {e}", exc_info=True)
+            return {"success": False, "error": str(e)}
 
     code = secrets.token_hex(3).upper()  # e.g. "A3F9C1"
     _pending[code] = command

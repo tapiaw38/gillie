@@ -33,6 +33,7 @@ const integration = reactive<IntegrationParams>({
   activated: false,
   config: {
     blacklist: [],
+    require_confirmation: true,
   } as unknown as SystemCommandsIntegrationConfig,
 })
 
@@ -89,6 +90,7 @@ onMounted(async () => {
       const cfg = integration.config as unknown as SystemCommandsIntegrationConfig
       const saved = i.config as unknown as SystemCommandsIntegrationConfig
       cfg.blacklist = Array.isArray(saved?.blacklist) ? [...saved.blacklist] : []
+      cfg.require_confirmation = saved?.require_confirmation !== false
     }
   })
 })
@@ -122,6 +124,37 @@ onMounted(async () => {
         </div>
       </div>
     </div>
+
+    <!-- Confirmation Toggle Card -->
+    <Card class="config-card" :class="{ 'card-disabled': !integration.activated }">
+      <template #header>
+        <div class="card-header">
+          <i class="pi pi-shield card-header-icon"></i>
+          <span>Verificación por código</span>
+        </div>
+      </template>
+      <template #content>
+        <div class="confirmation-toggle-row">
+          <div class="confirmation-info">
+            <span class="confirmation-label">Requerir confirmación antes de ejecutar</span>
+            <span class="confirmation-desc">
+              <template v-if="(integration.config as unknown as SystemCommandsIntegrationConfig).require_confirmation">
+                El asistente propone el comando y el usuario debe responder con un código de 6 caracteres para ejecutarlo.
+              </template>
+              <template v-else>
+                El asistente ejecuta los comandos directamente sin pedir confirmación.
+              </template>
+            </span>
+          </div>
+          <InputSwitch
+            v-model="(integration.config as unknown as SystemCommandsIntegrationConfig).require_confirmation"
+            :disabled="!integration.activated"
+            class="modern-switch"
+            @change="saveIntegration"
+          />
+        </div>
+      </template>
+    </Card>
 
     <!-- Dynamic Blacklist Card -->
     <Card class="config-card" :class="{ 'card-disabled': !integration.activated }">
@@ -319,6 +352,31 @@ onMounted(async () => {
   color: #64748b;
   font-style: italic;
   margin: 0 0 0.75rem;
+}
+
+.confirmation-toggle-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+}
+
+.confirmation-info {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+
+.confirmation-label {
+  font-size: 0.95rem;
+  font-weight: 600;
+  color: #374151;
+}
+
+.confirmation-desc {
+  font-size: 0.85rem;
+  color: #64748b;
+  font-style: italic;
 }
 
 .add-row {

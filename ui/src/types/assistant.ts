@@ -155,6 +155,7 @@ export interface ToolPromptsConfig {
 
 export interface SystemCommandsIntegrationConfig {
   blacklist: string[]
+  require_confirmation: boolean
 }
 
 export interface SlackIntegrationConfig {
