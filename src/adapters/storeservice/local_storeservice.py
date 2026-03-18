@@ -4,7 +4,7 @@ from pathlib import Path
 from typing import BinaryIO
 
 
-class LocalStoreServiceImpl:
+class LocalStoreService:
     """Stores files on the local filesystem and serves them via a static URL."""
 
     def __init__(self, base_path: str, base_url: str):
