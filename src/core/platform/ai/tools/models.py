@@ -123,6 +123,13 @@ _DEFAULT_TOOL_PROMPTS: Dict[str, str] = {
         "Search previously saved facts about the user. "
         "Use when the user refers to past conversations or when context about the user is needed."
     ),
+    "save_solution": (
+        "Save a problem-solution pair to long-term memory (solutions.skill.md). "
+        "Use when the user explicitly asks to save a solution, or after solving a recurring or "
+        "noteworthy problem: 'guarda esta solución', 'anota cómo lo resolví', 'save this fix', "
+        "'remember how we fixed this'. "
+        "Always capture the exact problem description, the solution steps, and whether it worked."
+    ),
     "system_propose": (
         "Propose a shell command to execute on the Linux server. "
         "Use when the user asks to run a command, check server status (CPU, memory, disk, processes, network), "
@@ -309,6 +316,20 @@ class SearchMemoryArgs(BaseModel):
     """Arguments for searching the assistant memory"""
     query: str = Field(description="Término a buscar en la memoria del asistente")
     max_results: int = Field(default=5, ge=1, le=10)
+
+
+class SaveSolutionArgs(BaseModel):
+    """Arguments for saving a problem-solution pair"""
+    problem: str = Field(description="Description of the problem that was solved")
+    solution: str = Field(description="The solution or steps taken to resolve the problem")
+    context: Optional[str] = Field(
+        default=None,
+        description="Optional additional context (environment, constraints, related tools, etc.)"
+    )
+    effective: bool = Field(
+        default=True,
+        description="Whether the solution was effective. True by default."
+    )
 
 
 class QueryDatabaseArgs(BaseModel):
@@ -683,6 +704,21 @@ def create_langchain_tools(openai_integration, profile, skill_manager=None, stor
             skill_manager.overwrite_general_memory(new_content)
             return "general.skill.md reorganizado y actualizado correctamente."
 
+        async def save_solution_tool(
+            problem: str,
+            solution: str,
+            context: Optional[str] = None,
+            effective: bool = True,
+        ) -> str:
+            existing_id = skill_manager._find_similar_note(problem, skill_manager.load_skill("solutions"))
+            if existing_id:
+                return (
+                    f"Ya existe una solución similar en memoria (ID {existing_id}). "
+                    f"No se creó duplicado."
+                )
+            solution_id = skill_manager.append_solution(problem, solution, context, effective)
+            return f"Solución guardada en memoria (solutions.skill.md) con ID {solution_id}."
+
         if "save_memory" not in disabled:
             tools.append(StructuredTool(
                 name="save_memory",
@@ -706,6 +742,14 @@ def create_langchain_tools(openai_integration, profile, skill_manager=None, stor
                 func=organize_memory_tool,
                 args_schema=OrganizeMemoryArgs,
                 coroutine=organize_memory_tool,
+            ))
+        if "save_solution" not in disabled:
+            tools.append(StructuredTool(
+                name="save_solution",
+                description=prompts.get("save_solution", _DEFAULT_TOOL_PROMPTS["save_solution"]),
+                func=save_solution_tool,
+                args_schema=SaveSolutionArgs,
+                coroutine=save_solution_tool,
             ))
 
     if "system_propose" not in disabled or "system_confirm" not in disabled:

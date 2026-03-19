@@ -45,6 +45,10 @@ ver general.skill.md
 ## Hechos Recordados
 
 ver facts.skill.md
+
+## Soluciones Registradas
+
+ver solutions.skill.md
 """
 
 
@@ -101,6 +105,14 @@ class SkillManager:
         if not path.exists():
             path.write_text(_MEMORY_ROOT_TEMPLATE, encoding="utf-8")
             logger.info("Created default memory.md at %s", path)
+        self._ensure_solutions_skill()
+
+    def _ensure_solutions_skill(self) -> None:
+        """Create solutions.skill.md with a default header if it does not exist yet."""
+        path = self._skill_path("solutions")
+        if not path.exists():
+            path.write_text("# Soluciones Registradas\n", encoding="utf-8")
+            logger.info("Created default solutions.skill.md at %s", path)
 
     def _resolve_references(self, content: str) -> str:
         """
@@ -227,6 +239,53 @@ class SkillManager:
         self.save_skill("general", content.strip() + "\n")
         logger.info("general.skill.md overwritten (%d chars)", len(content))
 
+    # ─── Solutions memory (operates on solutions.skill.md) ────────────────────
+
+    def append_solution(
+        self,
+        problem: str,
+        solution: str,
+        context: Optional[str] = None,
+        effective: bool = True,
+    ) -> str:
+        """
+        Append a solution block to solutions.skill.md.
+
+        Returns the generated solution ID, or the ID of an existing duplicate
+        if a similar problem description was already recorded.
+        """
+        from datetime import date
+
+        raw = self.load_skill("solutions")
+        if not raw.strip():
+            raw = "# Soluciones Registradas\n"
+
+        existing_id = self._find_similar_note(problem, raw)
+        if existing_id:
+            logger.info("Skipped duplicate solution — similar entry %s already exists", existing_id)
+            return existing_id
+
+        solution_id = uuid.uuid4().hex[:8]
+        today = date.today().isoformat()
+        effective_label = "Sí" if effective else "No"
+
+        lines = [
+            f"\n<!-- solution: {solution_id} -->",
+            f"## [{today}] Problema: {problem}",
+            f"**Problema:** {problem}",
+            f"**Solución:** {solution}",
+        ]
+        if context:
+            lines.append(f"**Contexto:** {context}")
+        lines.append(f"**Efectiva:** {effective_label}")
+        lines.append("---")
+
+        block = "\n".join(lines)
+        raw = raw.rstrip() + "\n" + block + "\n"
+        self.save_skill("solutions", raw)
+        logger.info("Saved solution %s: %s", solution_id, problem[:80])
+        return solution_id
+
     # ─── Facts memory (operates on facts.skill.md) ────────────────────────────
 
     def save_memory_fact(self, content: str, category: str = "General") -> str:
@@ -268,6 +327,7 @@ class SkillManager:
             ("facts", "facts"),
             ("general", "general"),
             ("faqs", "faqs"),
+            ("solutions", "solutions"),
         ]
 
         all_sections: list[str] = []
