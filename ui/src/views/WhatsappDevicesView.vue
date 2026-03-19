@@ -56,7 +56,7 @@ const wsConnection = ref<WebSocket | null>(null)
 
 function getWsBaseUrl(): string {
   const httpBase = import.meta.env.VITE_WHATSAPP_API_BASE_URL || 'http://localhost:8000/api/whatsapp'
-  return httpBase.replace(/^https?/, (p) => (p === 'https' ? 'wss' : 'ws'))
+  return httpBase.replace(/^https?/, (p: string) => (p === 'https' ? 'wss' : 'ws'))
 }
 
 // Form data
