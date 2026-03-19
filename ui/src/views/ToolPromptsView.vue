@@ -106,6 +106,72 @@ const TOOL_META: { key: keyof ToolPromptsConfig; label: string; icon: string; hi
     icon: 'pi pi-play',
     hint: 'Cuándo ejecutar una tarea programada de inmediato sin esperar el próximo horario.',
   },
+  {
+    key: 'read_file',
+    label: 'Leer archivo',
+    icon: 'pi pi-file',
+    hint: 'Lee el contenido de archivos de texto con soporte de rangos de líneas.',
+  },
+  {
+    key: 'write_file',
+    label: 'Escribir archivo',
+    icon: 'pi pi-file-edit',
+    hint: 'Crea o sobreescribe archivos. Crea directorios intermedios automáticamente.',
+  },
+  {
+    key: 'edit_file',
+    label: 'Editar archivo',
+    icon: 'pi pi-pencil',
+    hint: 'Reemplaza fragmentos exactos de código en archivos. Usa matching inteligente (exact → normalizado → fuzzy).',
+  },
+  {
+    key: 'list_directory',
+    label: 'Listar directorio',
+    icon: 'pi pi-folder-open',
+    hint: 'Lista archivos y directorios con tamaños. Ideal para explorar la estructura del proyecto.',
+  },
+  {
+    key: 'find_files',
+    label: 'Buscar archivos',
+    icon: 'pi pi-search',
+    hint: 'Busca archivos por patrón glob (ej: **/*.py, src/**/*.ts) de forma recursiva.',
+  },
+  {
+    key: 'run_shell',
+    label: 'Ejecutar comandos',
+    icon: 'pi pi-terminal',
+    hint: 'Ejecuta comandos shell: correr tests, instalar paquetes, ver logs. Incluye protección contra comandos destructivos.',
+  },
+  {
+    key: 'grep_files',
+    label: 'Buscar en archivos',
+    icon: 'pi pi-filter',
+    hint: 'Busca texto o regex dentro del contenido de archivos. Soporta filtros por extensión y búsqueda case-insensitive.',
+  },
+  {
+    key: 'git_status',
+    label: 'Git: Estado',
+    icon: 'pi pi-code',
+    hint: 'Muestra el estado actual del repositorio git y las estadísticas de cambios pendientes.',
+  },
+  {
+    key: 'git_diff',
+    label: 'Git: Diferencias',
+    icon: 'pi pi-code',
+    hint: 'Muestra el diff de un archivo específico o de todo el repositorio. Soporta cambios staged y unstaged.',
+  },
+  {
+    key: 'git_log',
+    label: 'Git: Historial',
+    icon: 'pi pi-history',
+    hint: 'Muestra el historial de commits recientes, opcionalmente filtrado por archivo.',
+  },
+  {
+    key: 'git_commit',
+    label: 'Git: Commit',
+    icon: 'pi pi-check-circle',
+    hint: 'Hace commit de cambios con un mensaje. Solo se usa cuando el usuario lo pide explícitamente.',
+  },
 ]
 
 const prompts = ref<ToolPromptsConfig>({})

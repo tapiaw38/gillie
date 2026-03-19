@@ -160,6 +160,57 @@ _DEFAULT_TOOL_PROMPTS: Dict[str, str] = {
         "Run a cron job immediately without waiting for the next scheduled time. "
         "Use when the user wants to test a job or trigger it on demand."
     ),
+    "read_file": (
+        "Read the contents of a file. Use when you need to inspect code, "
+        "config files, logs, or any text file before making changes. "
+        "Supports line ranges via offset and limit."
+    ),
+    "write_file": (
+        "Create a new file or completely overwrite an existing one. "
+        "Use for creating new files or when changes are extensive enough "
+        "to rewrite the whole file. For small changes prefer edit_file."
+    ),
+    "edit_file": (
+        "Make a surgical edit to a file by replacing an exact string with new content. "
+        "Use for targeted code changes: fixing bugs, updating functions, modifying config. "
+        "Always read_file first to get the exact current content before editing."
+    ),
+    "list_directory": (
+        "List files and directories at a given path. Use to explore the project structure, "
+        "find files, or understand the layout of a repository before editing."
+    ),
+    "find_files": (
+        "Search for files matching a glob pattern (e.g. '**/*.py', 'src/**/*.ts'). "
+        "Use when you need to find files by name or extension across a project."
+    ),
+    "run_shell": (
+        "Execute a shell command in the workspace. Use for running tests, installing "
+        "packages, checking service status, viewing logs, or any terminal operation. "
+        "Always prefer specific commands over broad destructive ones. "
+        "Use working_dir to set the execution context."
+    ),
+    "grep_files": (
+        "Search for text or regex patterns inside file contents across the workspace. "
+        "Use before editing to find all usages of a function, class, or variable. "
+        "Supports glob filtering (e.g. '*.py', '*.ts') and case-insensitive search."
+    ),
+    "git_status": (
+        "Show the current git status and diff statistics of the workspace. "
+        "Use before and after file edits to understand what changed."
+    ),
+    "git_diff": (
+        "Show git diff for a specific file or the entire workspace. "
+        "Use to review changes before committing or to understand recent edits."
+    ),
+    "git_log": (
+        "Show recent git commit history. Use to understand what changed recently "
+        "or to find the commit that introduced a specific change."
+    ),
+    "git_commit": (
+        "Stage and commit changes to git. Provide a clear commit message. "
+        "Specify files to stage specific changes, or leave empty to stage all changes. "
+        "Only use when the user explicitly asks to commit."
+    ),
 }
 
 
@@ -330,6 +381,79 @@ class SaveSolutionArgs(BaseModel):
         default=True,
         description="Whether the solution was effective. True by default."
     )
+
+
+class ReadFileArgs(BaseModel):
+    """Arguments for reading a file"""
+    path: str = Field(description="Path to the file to read (relative to workspace or absolute)")
+    offset: int = Field(default=1, ge=1, description="Line number to start reading from (1-based)")
+    limit: int = Field(default=200, ge=1, le=2000, description="Maximum number of lines to read")
+
+
+class WriteFileArgs(BaseModel):
+    """Arguments for writing a file"""
+    path: str = Field(description="Path to the file to create or overwrite (relative to workspace or absolute)")
+    content: str = Field(description="Full content to write to the file")
+    create_dirs: bool = Field(default=True, description="Create intermediate directories if they do not exist")
+
+
+class EditFileArgs(BaseModel):
+    """Arguments for making a surgical edit to a file"""
+    path: str = Field(description="Path to the file to edit (relative to workspace or absolute)")
+    old_string: str = Field(description="The exact string to find and replace in the file")
+    new_string: str = Field(description="The string to replace old_string with")
+
+
+class ListDirectoryArgs(BaseModel):
+    """Arguments for listing directory contents"""
+    path: str = Field(default=".", description="Directory path to list (relative to workspace or absolute)")
+    show_hidden: bool = Field(default=False, description="Whether to include hidden files and directories (starting with .)")
+
+
+class FindFilesArgs(BaseModel):
+    """Arguments for finding files by glob pattern"""
+    pattern: str = Field(description="Glob pattern to match files (e.g. '**/*.py', 'src/**/*.ts', '*.json')")
+    path: str = Field(default=".", description="Base directory to search in (relative to workspace or absolute)")
+    max_results: int = Field(default=50, ge=1, le=200, description="Maximum number of results to return")
+
+
+class RunShellArgs(BaseModel):
+    """Arguments for running a shell command"""
+    command: str = Field(description="Shell command to execute")
+    working_dir: str = Field(default=".", description="Working directory (relative to workspace)")
+    timeout: int = Field(default=30, ge=1, le=300, description="Timeout in seconds")
+
+
+class GrepFilesArgs(BaseModel):
+    """Arguments for searching file contents by pattern"""
+    pattern: str = Field(description="Text or regex pattern to search for")
+    path: str = Field(default=".", description="Directory to search in (relative to workspace or absolute)")
+    file_glob: str = Field(default="*", description="File pattern filter (e.g. '*.py', '*.ts')")
+    max_results: int = Field(default=50, ge=1, le=200, description="Maximum number of matches to return")
+    ignore_case: bool = Field(default=False, description="Case-insensitive search")
+
+
+class GitStatusArgs(BaseModel):
+    """Arguments for git status (no args needed)"""
+    pass
+
+
+class GitDiffArgs(BaseModel):
+    """Arguments for git diff"""
+    file_path: str = Field(default="", description="Specific file to diff, or empty for full diff")
+    staged: bool = Field(default=False, description="Show staged changes instead of unstaged")
+
+
+class GitLogArgs(BaseModel):
+    """Arguments for git log"""
+    max_entries: int = Field(default=10, ge=1, le=50, description="Maximum number of commits to show")
+    file_path: str = Field(default="", description="Filter log to a specific file")
+
+
+class GitCommitArgs(BaseModel):
+    """Arguments for git commit"""
+    message: str = Field(description="Commit message")
+    files: List[str] = Field(default=[], description="Specific files to stage, or empty to stage all changes")
 
 
 class QueryDatabaseArgs(BaseModel):
@@ -559,6 +683,433 @@ def create_langchain_tools(openai_integration, profile, skill_manager=None, stor
         logger.warning(f"No results found in Qdrant for profile {profile.user_id}")
         return {"found": False, "context": "No hay información disponible en el catálogo.", "results": []}
 
+    # ── File editing tools ────────────────────────────────────────────────────
+
+    import os as _os
+    from pathlib import Path as _Path
+
+    def _resolve_safe_path(path: str) -> tuple:
+        """
+        Resolve a path to an absolute path and verify it stays within the workspace.
+
+        Returns (resolved_path, None) if safe, (None, error_message) if not.
+        Prevents directory traversal attacks and symlink escaping.
+        """
+        workspace = _Path(_os.environ.get("GILLIE_WORKSPACE", _Path.home())).resolve()
+        candidate = _Path(path)
+        if candidate.is_absolute():
+            target = candidate.resolve()
+        else:
+            target = (workspace / path).resolve()
+        if not str(target).startswith(str(workspace)):
+            return None, f"Access denied: path '{path}' is outside workspace '{workspace}'"
+        return target, None
+
+    async def read_file_tool(path: str, offset: int = 1, limit: int = 200) -> str:
+        """Read a file and return its contents with line numbers."""
+        resolved, err = _resolve_safe_path(path)
+        if err:
+            return err
+        if not resolved.exists():
+            return f"Error: file not found: '{path}'"
+        if not resolved.is_file():
+            return f"Error: '{path}' is not a file"
+        try:
+            raw = resolved.read_bytes()
+            # Detect binary files by checking for null bytes in the first 8KB
+            if b"\x00" in raw[:8192]:
+                return f"Error: '{path}' appears to be a binary file and cannot be read as text"
+            text = raw.decode("utf-8", errors="replace")
+        except Exception as e:
+            return f"Error reading file: {e}"
+
+        lines = text.splitlines()
+        total_lines = len(lines)
+        start = max(0, offset - 1)
+        end = min(start + limit, total_lines)
+        selected = lines[start:end]
+
+        header = f"File: {path} (lines {start + 1}-{end} of {total_lines})\n"
+        numbered = "\n".join(f"{start + i + 1:>6}\t{line}" for i, line in enumerate(selected))
+        return header + numbered
+
+    async def write_file_tool(path: str, content: str, create_dirs: bool = True) -> str:
+        """Create or overwrite a file with the given content."""
+        resolved, err = _resolve_safe_path(path)
+        if err:
+            return err
+        try:
+            if create_dirs:
+                resolved.parent.mkdir(parents=True, exist_ok=True)
+            resolved.write_text(content, encoding="utf-8")
+            line_count = len(content.splitlines())
+            return f"Written {line_count} lines to '{path}'"
+        except Exception as e:
+            return f"Error writing file: {e}"
+
+    async def edit_file_tool(path: str, old_string: str, new_string: str) -> str:
+        """Replace old_string with new_string in a file using cascading match strategies."""
+        import difflib
+
+        resolved, err = _resolve_safe_path(path)
+        if err:
+            return err
+        if not resolved.exists():
+            return f"Error: file not found: '{path}'"
+        if not resolved.is_file():
+            return f"Error: '{path}' is not a file"
+
+        try:
+            original = resolved.read_text(encoding="utf-8")
+        except Exception as e:
+            return f"Error reading file: {e}"
+
+        # Strategy 1: Exact match
+        exact_count = original.count(old_string)
+        if exact_count > 1:
+            return (
+                f"Error: found {exact_count} occurrences of the search string. "
+                f"Provide more surrounding context to make the match unique."
+            )
+        if exact_count == 1:
+            updated = original.replace(old_string, new_string, 1)
+            resolved.write_text(updated, encoding="utf-8")
+            return f"Edited '{path}': replaced 1 occurrence (exact match)"
+
+        # Strategy 2: Normalized whitespace match
+        def _normalize(text: str) -> str:
+            return "\n".join(line.strip() for line in text.splitlines())
+
+        norm_original = _normalize(original)
+        norm_old = _normalize(old_string)
+        norm_count = norm_original.count(norm_old)
+        if norm_count == 1:
+            # Find the actual span in the original text using the normalized index
+            norm_idx = norm_original.index(norm_old)
+            # Reconstruct original-text slice by mapping normalized position back
+            # We do a line-by-line replacement instead
+            orig_lines = original.splitlines(keepends=True)
+            old_lines = old_string.splitlines()
+            new_lines = new_string.splitlines(keepends=True)
+            norm_old_lines = [l.strip() for l in old_lines]
+            for i in range(len(orig_lines) - len(old_lines) + 1):
+                window = [orig_lines[i + j].rstrip("\n").rstrip("\r").strip() for j in range(len(old_lines))]
+                if window == norm_old_lines:
+                    updated_lines = orig_lines[:i] + new_lines + orig_lines[i + len(old_lines):]
+                    resolved.write_text("".join(updated_lines), encoding="utf-8")
+                    return f"Edited '{path}': replaced 1 occurrence (normalized whitespace match)"
+            # Fallback: simple normalized replace on the normalized text is not safe to write back,
+            # so fall through to fuzzy
+        elif norm_count > 1:
+            return (
+                f"Error: found {norm_count} normalized occurrences of the search string. "
+                f"Provide more surrounding context to make the match unique."
+            )
+
+        # Strategy 3: Fuzzy match using difflib (threshold 0.8)
+        orig_lines = original.splitlines()
+        old_lines_stripped = old_string.splitlines()
+        window_size = len(old_lines_stripped)
+        if window_size == 0:
+            return "Error: old_string is empty"
+
+        best_ratio = 0.0
+        best_start = -1
+        for i in range(len(orig_lines) - window_size + 1):
+            window = orig_lines[i:i + window_size]
+            ratio = difflib.SequenceMatcher(None, "\n".join(window), old_string).ratio()
+            if ratio > best_ratio:
+                best_ratio = ratio
+                best_start = i
+
+        if best_ratio >= 0.8 and best_start >= 0:
+            window_lines = orig_lines[best_start:best_start + window_size]
+            updated_lines = (
+                orig_lines[:best_start]
+                + new_string.splitlines()
+                + orig_lines[best_start + window_size:]
+            )
+            resolved.write_text("\n".join(updated_lines) + "\n", encoding="utf-8")
+            return (
+                f"Edited '{path}': replaced 1 occurrence (fuzzy match, similarity={best_ratio:.2f}). "
+                f"Replaced lines {best_start + 1}-{best_start + window_size}."
+            )
+
+        # No match found — return nearby lines to help the caller correct their search string
+        nearby_lines = "\n".join(
+            f"{i + 1:>6}\t{line}"
+            for i, line in enumerate(orig_lines[:30])
+        )
+        return (
+            f"Error: could not find old_string in '{path}' using exact, normalized, or fuzzy matching. "
+            f"Use read_file to get the current content and retry with the exact text.\n"
+            f"First 30 lines of file:\n{nearby_lines}"
+        )
+
+    async def list_directory_tool(path: str = ".", show_hidden: bool = False) -> str:
+        """List the contents of a directory in a simple tree format."""
+        resolved, err = _resolve_safe_path(path)
+        if err:
+            return err
+        if not resolved.exists():
+            return f"Error: path not found: '{path}'"
+        if not resolved.is_dir():
+            return f"Error: '{path}' is not a directory"
+
+        try:
+            entries = sorted(resolved.iterdir(), key=lambda p: (not p.is_dir(), p.name.lower()))
+        except PermissionError:
+            return f"Error: permission denied reading directory '{path}'"
+
+        lines = [f"Directory: {path}"]
+        for entry in entries:
+            if not show_hidden and entry.name.startswith("."):
+                continue
+            if entry.is_dir():
+                lines.append(f"  [dir]  {entry.name}/")
+            elif entry.is_file():
+                try:
+                    size = entry.stat().st_size
+                    if size >= 1_048_576:
+                        size_str = f"{size / 1_048_576:.1f}MB"
+                    elif size >= 1024:
+                        size_str = f"{size / 1024:.1f}KB"
+                    else:
+                        size_str = f"{size}B"
+                except OSError:
+                    size_str = "?"
+                lines.append(f"  [file] {entry.name}  ({size_str})")
+            else:
+                lines.append(f"  [other] {entry.name}")
+
+        if len(lines) == 1:
+            lines.append("  (empty)")
+        return "\n".join(lines)
+
+    async def find_files_tool(pattern: str, path: str = ".", max_results: int = 50) -> str:
+        """Search for files matching a glob pattern."""
+        resolved, err = _resolve_safe_path(path)
+        if err:
+            return err
+        if not resolved.exists():
+            return f"Error: base path not found: '{path}'"
+        if not resolved.is_dir():
+            return f"Error: '{path}' is not a directory"
+
+        try:
+            matches = []
+            for match in resolved.glob(pattern):
+                rel = match.relative_to(resolved)
+                matches.append((str(rel), match.is_dir()))
+                if len(matches) >= max_results:
+                    break
+        except Exception as e:
+            return f"Error during glob search: {e}"
+
+        if not matches:
+            return f"No files found matching '{pattern}' in '{path}'"
+
+        lines = [f"Found {len(matches)} result(s) for '{pattern}' in '{path}':"]
+        for rel_path, is_dir in sorted(matches, key=lambda t: t[0]):
+            suffix = "/" if is_dir else ""
+            lines.append(f"  {rel_path}{suffix}")
+
+        if len(matches) == max_results:
+            lines.append(f"  (results capped at {max_results})")
+        return "\n".join(lines)
+
+    # ── Shell and git tools ───────────────────────────────────────────────────
+
+    import asyncio as _asyncio
+    import re as _re
+
+    _SHELL_BLACKLIST = [
+        "rm -rf /", "mkfs", "dd if=", "shutdown", "reboot",
+        ":(){ :|:& };:", "chmod -R 777 /", "chown -R",
+    ]
+
+    async def run_shell_tool(command: str, working_dir: str = ".", timeout: int = 30) -> Dict[str, Any]:
+        """Execute a shell command inside the workspace."""
+        for blocked in _SHELL_BLACKLIST:
+            if blocked in command:
+                return {
+                    "exit_code": -1,
+                    "stdout": "",
+                    "stderr": f"Command rejected: contains blocked pattern '{blocked}'",
+                    "truncated": False,
+                }
+
+        resolved_dir, err = _resolve_safe_path(working_dir)
+        if err:
+            return {"exit_code": -1, "stdout": "", "stderr": err, "truncated": False}
+
+        try:
+            proc = await _asyncio.create_subprocess_shell(
+                command,
+                stdout=_asyncio.subprocess.PIPE,
+                stderr=_asyncio.subprocess.PIPE,
+                cwd=str(resolved_dir),
+            )
+            try:
+                raw_stdout, raw_stderr = await _asyncio.wait_for(proc.communicate(), timeout=timeout)
+            except _asyncio.TimeoutError:
+                proc.kill()
+                await proc.communicate()
+                return {
+                    "exit_code": -1,
+                    "stdout": "",
+                    "stderr": f"Command timed out after {timeout}s: {command}",
+                    "truncated": False,
+                }
+
+            stdout = raw_stdout.decode("utf-8", errors="replace")
+            stderr = raw_stderr.decode("utf-8", errors="replace")
+            combined = stdout + stderr
+            truncated = len(combined) > 4000
+            if truncated:
+                stdout = stdout[:3500]
+                stderr = stderr[:500]
+
+            return {
+                "exit_code": proc.returncode,
+                "stdout": stdout,
+                "stderr": stderr,
+                "truncated": truncated,
+            }
+        except Exception as e:
+            return {"exit_code": -1, "stdout": "", "stderr": f"Error running command: {e}", "truncated": False}
+
+    async def grep_files_tool(
+        pattern: str,
+        path: str = ".",
+        file_glob: str = "*",
+        max_results: int = 50,
+        ignore_case: bool = False,
+    ) -> Dict[str, Any]:
+        """Search for a text/regex pattern inside files."""
+        resolved, err = _resolve_safe_path(path)
+        if err:
+            return {"found": 0, "results": [], "truncated": False, "error": err}
+        if not resolved.exists() or not resolved.is_dir():
+            return {"found": 0, "results": [], "truncated": False, "error": f"Path not found or not a directory: '{path}'"}
+
+        _SKIP_DIRS = {".git", "node_modules", "__pycache__", ".venv"}
+        flags = _re.IGNORECASE if ignore_case else 0
+        try:
+            compiled = _re.compile(pattern, flags)
+        except _re.error as e:
+            return {"found": 0, "results": [], "truncated": False, "error": f"Invalid regex pattern: {e}"}
+
+        results = []
+        truncated = False
+
+        for file_path in resolved.rglob(file_glob):
+            # Skip excluded directories
+            if any(part in _SKIP_DIRS for part in file_path.parts):
+                continue
+            if not file_path.is_file():
+                continue
+
+            try:
+                raw = file_path.read_bytes()
+                if b"\x00" in raw[:8192]:
+                    continue  # binary file
+                text = raw.decode("utf-8", errors="replace")
+            except Exception:
+                continue
+
+            for line_num, line in enumerate(text.splitlines(), start=1):
+                if compiled.search(line):
+                    results.append({
+                        "file": str(file_path.relative_to(resolved)),
+                        "line": line_num,
+                        "content": line.strip(),
+                    })
+                    if len(results) >= max_results:
+                        truncated = True
+                        break
+            if truncated:
+                break
+
+        return {"found": len(results), "results": results, "truncated": truncated}
+
+    _git_workspace = _Path(_os.environ.get("GILLIE_WORKSPACE", _Path.home())).resolve()
+
+    async def _run_git(*args) -> tuple:
+        """Run a git command in the workspace and return (stdout, stderr, returncode)."""
+        proc = await _asyncio.create_subprocess_exec(
+            "git", *args,
+            stdout=_asyncio.subprocess.PIPE,
+            stderr=_asyncio.subprocess.PIPE,
+            cwd=str(_git_workspace),
+        )
+        raw_out, raw_err = await proc.communicate()
+        return (
+            raw_out.decode("utf-8", errors="replace"),
+            raw_err.decode("utf-8", errors="replace"),
+            proc.returncode,
+        )
+
+    async def git_status_tool() -> Dict[str, Any]:
+        """Return git status --short and git diff --stat."""
+        status_out, status_err, status_rc = await _run_git("status", "--short")
+        if status_rc != 0:
+            return {"error": status_err.strip() or "Not a git repository"}
+        diff_out, _, _ = await _run_git("diff", "--stat")
+        return {"status": status_out.strip(), "diff_stat": diff_out.strip()}
+
+    async def git_diff_tool(file_path: str = "", staged: bool = False) -> Dict[str, Any]:
+        """Return git diff output for a file or the whole repo."""
+        args = ["diff"]
+        if staged:
+            args.append("--staged")
+        if file_path:
+            args += ["--", file_path]
+        out, err, rc = await _run_git(*args)
+        if rc != 0:
+            return {"diff": "", "truncated": False, "error": err.strip()}
+        truncated = len(out) > 6000
+        return {"diff": out[:6000], "truncated": truncated}
+
+    async def git_log_tool(max_entries: int = 10, file_path: str = "") -> Dict[str, Any]:
+        """Return the last N commits from git log --oneline."""
+        args = ["log", "--oneline", f"-{max_entries}"]
+        if file_path:
+            args += ["--", file_path]
+        out, err, rc = await _run_git(*args)
+        if rc != 0:
+            return {"log": "", "error": err.strip()}
+        return {"log": out.strip()}
+
+    async def git_commit_tool(message: str, files: List[str] = None) -> Dict[str, Any]:
+        """Stage and commit changes."""
+        if not message or not message.strip():
+            return {"success": False, "output": "Commit message cannot be empty"}
+
+        files = files or []
+
+        if files:
+            # Validate each path stays within workspace
+            for f in files:
+                _, err = _resolve_safe_path(f)
+                if err:
+                    return {"success": False, "output": err}
+            add_args = ["add"] + files
+        else:
+            add_args = ["add", "-A"]
+
+        add_out, add_err, add_rc = await _run_git(*add_args)
+        if add_rc != 0:
+            return {"success": False, "output": f"git add failed: {add_err.strip()}"}
+
+        commit_out, commit_err, commit_rc = await _run_git("commit", "-m", message)
+        if commit_rc != 0:
+            return {"success": False, "output": f"git commit failed: {commit_err.strip()}"}
+
+        return {"success": True, "output": commit_out.strip()}
+
+    # ── End of file editing tools ─────────────────────────────────────────────
+
     prompts = _get_tool_prompts(profile)
     sql_integration = _get_sql_integration(profile)
 
@@ -652,6 +1203,17 @@ def create_langchain_tools(openai_integration, profile, skill_manager=None, stor
     tools = list(filter(None, [
         _tool("fetch_url",              prompts.get("fetch_url",  _DEFAULT_TOOL_PROMPTS["fetch_url"]),  fetch_url_tool,  FetchUrlArgs),
         _tool("web_search",             prompts.get("web_search", _DEFAULT_TOOL_PROMPTS["web_search"]), web_search_tool, WebSearchArgs),
+        _tool("read_file",              prompts.get("read_file",  _DEFAULT_TOOL_PROMPTS["read_file"]),  read_file_tool,  ReadFileArgs),
+        _tool("write_file",             prompts.get("write_file", _DEFAULT_TOOL_PROMPTS["write_file"]), write_file_tool, WriteFileArgs),
+        _tool("edit_file",              prompts.get("edit_file",  _DEFAULT_TOOL_PROMPTS["edit_file"]),  edit_file_tool,  EditFileArgs),
+        _tool("list_directory",         prompts.get("list_directory", _DEFAULT_TOOL_PROMPTS["list_directory"]), list_directory_tool, ListDirectoryArgs),
+        _tool("find_files",             prompts.get("find_files",  _DEFAULT_TOOL_PROMPTS["find_files"]), find_files_tool, FindFilesArgs),
+        _tool("run_shell",              prompts.get("run_shell",   _DEFAULT_TOOL_PROMPTS["run_shell"]),  run_shell_tool,  RunShellArgs),
+        _tool("grep_files",             prompts.get("grep_files",  _DEFAULT_TOOL_PROMPTS["grep_files"]), grep_files_tool, GrepFilesArgs),
+        _tool("git_status",             prompts.get("git_status",  _DEFAULT_TOOL_PROMPTS["git_status"]), git_status_tool, GitStatusArgs),
+        _tool("git_diff",               prompts.get("git_diff",    _DEFAULT_TOOL_PROMPTS["git_diff"]),   git_diff_tool,   GitDiffArgs),
+        _tool("git_log",                prompts.get("git_log",     _DEFAULT_TOOL_PROMPTS["git_log"]),    git_log_tool,    GitLogArgs),
+        _tool("git_commit",             prompts.get("git_commit",  _DEFAULT_TOOL_PROMPTS["git_commit"]), git_commit_tool, GitCommitArgs),
         _tool("search_images",          prompts["search_images"],          search_images_tool,   SearchImagesArgs),
         _tool("analyze_pdf",            prompts["analyze_pdf"],            analyze_pdf_tool,     AnalyzePDFArgs),
         _tool("extract_text_from_pdf",  prompts["extract_text_from_pdf"],  extract_text_tool,    ExtractTextArgs),

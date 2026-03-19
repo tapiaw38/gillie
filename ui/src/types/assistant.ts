@@ -151,6 +151,17 @@ export interface ToolPromptsConfig {
   cron_list?: string
   cron_delete?: string
   cron_run?: string
+  read_file?: string
+  write_file?: string
+  edit_file?: string
+  list_directory?: string
+  find_files?: string
+  run_shell?: string
+  grep_files?: string
+  git_status?: string
+  git_diff?: string
+  git_log?: string
+  git_commit?: string
 }
 
 export interface SystemCommandsIntegrationConfig {
