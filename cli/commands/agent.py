@@ -159,6 +159,27 @@ def _print_assistant(name: str, text: str) -> None:
     console.print()
 
 
+def _play_audio(url: str) -> None:
+    """Play an audio URL using the first available system player."""
+    import subprocess
+    if not url.startswith("http"):
+        return
+    players = [
+        ["mpv", "--no-video", "--really-quiet", "--speed=1.3", url],
+        ["ffplay", "-nodisp", "-autoexit", "-loglevel", "quiet", "-af", "atempo=1.3", url],
+        ["vlc", "--intf", "dummy", "--play-and-exit", "--quiet", "--rate=1.3", url],
+    ]
+    for cmd in players:
+        try:
+            subprocess.run(cmd, timeout=120, check=True)
+            return
+        except FileNotFoundError:
+            continue
+        except subprocess.CalledProcessError:
+            return
+    console.print("[yellow]⚠[/yellow] No audio player found. Install [bold]mpv[/bold] or [bold]ffplay[/bold].")
+
+
 def _stream_assistant(conv_id: str, name: str, content: str) -> str:
     """Stream the assistant reply token by token from the SSE endpoint."""
     import sys
@@ -195,6 +216,7 @@ def _stream_assistant(conv_id: str, name: str, content: str) -> str:
         )
         resp.raise_for_status()
         import json as _json
+        audio_url = None
         for raw_line in resp.iter_lines():
             if not raw_line:
                 continue
@@ -208,6 +230,10 @@ def _stream_assistant(conv_id: str, name: str, content: str) -> str:
                 token = payload  # fallback for non-JSON frames
             if token == "[DONE]":
                 break
+            if isinstance(token, dict):
+                if token.get("type") == "audio":
+                    audio_url = token.get("url")
+                continue
             if isinstance(token, str) and token.startswith("[ERROR]"):
                 _first_token.set()
                 console.print(f"\n[red]✗[/red] {token[7:].strip()}")
@@ -231,6 +257,11 @@ def _stream_assistant(conv_id: str, name: str, content: str) -> str:
     sys.stdout.flush()
     console.print(Rule(style="dim"))
     console.print()
+
+    if audio_url:
+        console.print(f"[dim]🔊 Playing audio...[/dim]")
+        _play_audio(audio_url)
+
     return full_text
 
 
@@ -409,8 +440,8 @@ def listen(
             wf.writeframes(audio_int16.tobytes())
         return buf.getvalue()
 
-    def _send_voice(conv_id: str, wav_bytes: bytes) -> str:
-        """Send audio to the message endpoint and return the reply."""
+    def _send_voice(conv_id: str, wav_bytes: bytes) -> tuple[str, str | None]:
+        """Send audio to the message endpoint and return (reply_text, audio_url)."""
         try:
             resp = requests.post(
                 _base_url() + f"/conversation/{conv_id}/message",
@@ -421,12 +452,13 @@ def listen(
             resp.raise_for_status()
             messages = resp.json().get("data", [])
             if messages:
-                return messages[-1].get("content", "(no reply)")
+                last = messages[-1]
+                return last.get("content", "(no reply)"), last.get("audio_url")
         except requests.exceptions.ConnectionError:
             console.print("\n[red]✗[/red] Cannot connect to the API.")
         except requests.exceptions.HTTPError as e:
             console.print(f"\n[red]✗[/red] API error {e.response.status_code}: {e.response.text}")
-        return "(no reply)"
+        return "(no reply)", None
 
     # ── loop principal ────────────────────────────────────────────────────────
     while True:
@@ -441,10 +473,13 @@ def listen(
             continue
 
         console.print("[dim]⏳ Processing...[/dim]     ", end="\r")
-        reply = _send_voice(current_id, wav_bytes)
+        reply, audio_url = _send_voice(current_id, wav_bytes)
         console.print(" " * 40, end="\r")  # clear line
         _print_assistant(assistant_name, reply)
         console.print(Rule(style="dim"))
+        if audio_url:
+            console.print("[dim]🔊 Playing audio...[/dim]")
+            _play_audio(audio_url)
 
 
 @app.command("list")

@@ -89,6 +89,19 @@ _DEFAULT_TOOL_PROMPTS: Dict[str, str] = {
         "Query the database to retrieve information. "
         "Use when the user asks for data that lives in the connected database."
     ),
+    "fetch_url": (
+        "Fetch and extract the text content of a specific web page URL. "
+        "Use when the user mentions a specific website by name or URL "
+        "(e.g. 'consulta en dolarhoy', 'abre infobae.com', 'revisa la página X'). "
+        "Prepend https:// if the user gives a domain without protocol."
+    ),
+    "web_search": (
+        "Search the internet for current, real-time information using DuckDuckGo. "
+        "Use when the user asks about recent news, current events, live data, prices, "
+        "or any information that may have changed after the model's training cutoff. "
+        "Also use when the user explicitly asks to 'search the web', 'look it up online', "
+        "'busca en internet', 'busca en google', or similar phrases."
+    ),
     "organize_memory": (
         "Reorganize and deduplicate general.skill.md. "
         "Use when the user asks to organize, clean, or consolidate memory. "
@@ -272,6 +285,17 @@ class SaveMemoryArgs(BaseModel):
         default="General",
         description="Categoría del hecho: Preferencias, Contacto, Historial, etc."
     )
+
+
+class FetchUrlArgs(BaseModel):
+    """Arguments for fetching a web page"""
+    url: str = Field(description="Full URL to fetch (e.g. https://dolarhoy.com)")
+
+
+class WebSearchArgs(BaseModel):
+    """Arguments for web search"""
+    query: str = Field(description="Search query to look up on the internet")
+    max_results: int = Field(default=5, ge=1, le=10, description="Number of results to return")
 
 
 class OrganizeMemoryArgs(BaseModel):
@@ -531,7 +555,82 @@ def create_langchain_tools(openai_integration, profile, skill_manager=None, stor
             return None
         return StructuredTool(name=name, description=description, func=func, args_schema=schema, coroutine=func)
 
+    async def fetch_url_tool(url: str) -> Dict[str, Any]:
+        """Fetch and extract text from a URL."""
+        import httpx
+        from html.parser import HTMLParser
+
+        class _TextExtractor(HTMLParser):
+            def __init__(self):
+                super().__init__()
+                self._text = []
+                self._skip = False
+            def handle_starttag(self, tag, attrs):
+                if tag in ("script", "style", "nav", "footer", "header"):
+                    self._skip = True
+            def handle_endtag(self, tag):
+                if tag in ("script", "style", "nav", "footer", "header"):
+                    self._skip = False
+            def handle_data(self, data):
+                if not self._skip:
+                    stripped = data.strip()
+                    if stripped:
+                        self._text.append(stripped)
+            def get_text(self):
+                return " ".join(self._text)
+
+        if not url.startswith("http"):
+            url = "https://" + url
+        try:
+            async with httpx.AsyncClient(follow_redirects=True, timeout=15) as client:
+                resp = await client.get(url, headers={"User-Agent": "Mozilla/5.0"})
+                resp.raise_for_status()
+                parser = _TextExtractor()
+                parser.feed(resp.text)
+                text = parser.get_text()[:4000]  # cap to avoid token overflow
+                return {"url": url, "content": text}
+        except Exception as e:
+            logger.error(f"fetch_url error for {url}: {e}")
+            return {"error": str(e), "url": url}
+
+    async def web_search_tool(query: str, max_results: int = 5) -> Dict[str, Any]:
+        """Search the internet using DuckDuckGo."""
+        import asyncio
+
+        try:
+            from duckduckgo_search import DDGS
+        except ImportError:
+            return {"error": "duckduckgo-search not installed. Run: pip install duckduckgo-search"}
+
+        # Try backends in order — "lite" is least rate-limited
+        backends = ["lite", "html", "api"]
+        last_error = None
+
+        for attempt, backend in enumerate(backends):
+            if attempt > 0:
+                await asyncio.sleep(1)
+            try:
+                results = []
+                with DDGS() as ddgs:
+                    for r in ddgs.text(query, max_results=max_results, backend=backend):
+                        results.append({
+                            "title": r.get("title", ""),
+                            "url": r.get("href", ""),
+                            "snippet": r.get("body", ""),
+                        })
+                if results:
+                    logger.info(f"web_search: {len(results)} results via backend='{backend}'")
+                    return {"found": True, "query": query, "results": results}
+                last_error = f"backend={backend} returned no results"
+            except Exception as e:
+                last_error = str(e)
+                logger.warning(f"web_search backend='{backend}' failed: {e}")
+
+        return {"found": False, "error": last_error, "message": f"All backends failed: {last_error}"}
+
     tools = list(filter(None, [
+        _tool("fetch_url",              prompts.get("fetch_url",  _DEFAULT_TOOL_PROMPTS["fetch_url"]),  fetch_url_tool,  FetchUrlArgs),
+        _tool("web_search",             prompts.get("web_search", _DEFAULT_TOOL_PROMPTS["web_search"]), web_search_tool, WebSearchArgs),
         _tool("search_images",          prompts["search_images"],          search_images_tool,   SearchImagesArgs),
         _tool("analyze_pdf",            prompts["analyze_pdf"],            analyze_pdf_tool,     AnalyzePDFArgs),
         _tool("extract_text_from_pdf",  prompts["extract_text_from_pdf"],  extract_text_tool,    ExtractTextArgs),

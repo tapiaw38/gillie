@@ -64,3 +64,4 @@ qrcode[pil]==8.2
 apscheduler==3.11.2
 sounddevice==0.5.1
 webrtcvad==2.0.10
+duckduckgo-search==6.3.7

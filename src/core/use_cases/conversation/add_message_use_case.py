@@ -369,7 +369,18 @@ class AddMessageUseCase:
             yield token
             full_text += token
 
-        assistant_message = self._create_assistant_message(content=full_text)
+        # Generate audio if TTS is enabled for this profile
+        audio_url = await self._generate_audio_if_enabled(
+            has_text_to_voice=None,
+            text=full_text,
+            user_id=user_id,
+            conversation_id=conversation_id,
+        )
+
+        if audio_url:
+            yield {"type": "audio", "url": audio_url}
+
+        assistant_message = self._create_assistant_message(content=full_text, audio_url=audio_url)
         self._add_message_to_conversation(conversation, assistant_message)
         self._save_messages(conversation_id, conversation.messages)
 
