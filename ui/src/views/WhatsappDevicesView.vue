@@ -2,7 +2,7 @@
 import { ref, onMounted, computed } from 'vue'
 import { useWhatsApp } from '@/composables/useWhatsApp'
 import { useToast } from 'primevue/usetoast'
-import type { WhatsAppDevice, CreateDeviceRequest } from '@/services/whatsapp'
+import type { WhatsAppDevice } from '@/services/whatsapp'
 
 import DataTable from 'primevue/datatable'
 import Column from 'primevue/column'
@@ -27,19 +27,19 @@ interface Country {
 }
 
 const countries: Country[] = [
-  { name: 'Argentina',       flag: '🇦🇷', dial: '+54'  },
-  { name: 'México',          flag: '🇲🇽', dial: '+52'  },
-  { name: 'Colombia',        flag: '🇨🇴', dial: '+57'  },
-  { name: 'Chile',           flag: '🇨🇱', dial: '+56'  },
-  { name: 'Perú',            flag: '🇵🇪', dial: '+51'  },
-  { name: 'Uruguay',         flag: '🇺🇾', dial: '+598' },
-  { name: 'Paraguay',        flag: '🇵🇾', dial: '+595' },
-  { name: 'Bolivia',         flag: '🇧🇴', dial: '+591' },
-  { name: 'Ecuador',         flag: '🇪🇨', dial: '+593' },
-  { name: 'Venezuela',       flag: '🇻🇪', dial: '+58'  },
-  { name: 'Brasil',          flag: '🇧🇷', dial: '+55'  },
-  { name: 'España',          flag: '🇪🇸', dial: '+34'  },
-  { name: 'Estados Unidos',  flag: '🇺🇸', dial: '+1'   },
+  { name: 'Argentina', flag: '🇦🇷', dial: '+54' },
+  { name: 'México', flag: '🇲🇽', dial: '+52' },
+  { name: 'Colombia', flag: '🇨🇴', dial: '+57' },
+  { name: 'Chile', flag: '🇨🇱', dial: '+56' },
+  { name: 'Perú', flag: '🇵🇪', dial: '+51' },
+  { name: 'Uruguay', flag: '🇺🇾', dial: '+598' },
+  { name: 'Paraguay', flag: '🇵🇾', dial: '+595' },
+  { name: 'Bolivia', flag: '🇧🇴', dial: '+591' },
+  { name: 'Ecuador', flag: '🇪🇨', dial: '+593' },
+  { name: 'Venezuela', flag: '🇻🇪', dial: '+58' },
+  { name: 'Brasil', flag: '🇧🇷', dial: '+55' },
+  { name: 'España', flag: '🇪🇸', dial: '+34' },
+  { name: 'Estados Unidos', flag: '🇺🇸', dial: '+1' },
 ]
 
 const selectedCountry = ref<Country>(countries[0]) // Argentina por defecto
@@ -55,7 +55,8 @@ const selectedDevice = ref<WhatsAppDevice>()
 const wsConnection = ref<WebSocket | null>(null)
 
 function getWsBaseUrl(): string {
-  const httpBase = import.meta.env.VITE_WHATSAPP_API_BASE_URL || 'http://localhost:8000/api/whatsapp'
+  const httpBase =
+    import.meta.env.VITE_WHATSAPP_API_BASE_URL || 'http://localhost:8000/api/whatsapp'
   return httpBase.replace(/^https?/, (p: string) => (p === 'https' ? 'wss' : 'ws'))
 }
 
@@ -143,7 +144,6 @@ const connectDevice = async (device: WhatsAppDevice) => {
       if (msg.type === 'qr') {
         // Backend sent the QR code as base64 PNG
         qrCode.value = msg.data
-
       } else if (msg.type === 'authenticated') {
         ws.close()
         wsConnection.value = null
@@ -165,7 +165,6 @@ const connectDevice = async (device: WhatsAppDevice) => {
         })
         selectedDevice.value = undefined
         await loadDevices()
-
       } else if (msg.type === 'error') {
         toast.add({
           severity: 'error',
@@ -184,7 +183,6 @@ const connectDevice = async (device: WhatsAppDevice) => {
         life: 3000,
       })
     }
-
   } catch (error) {
     toast.add({
       severity: 'error',
