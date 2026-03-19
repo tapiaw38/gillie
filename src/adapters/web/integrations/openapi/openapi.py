@@ -110,8 +110,15 @@ class OpenAIIntegration:
         previous_messages: str,
         profile: Profile,
         conversation_id: Optional[str] = None,
+        shell_output_queue=None,
     ):
-        """Stream AI response tokens via LangChain. Yields str tokens."""
+        """Stream AI response tokens via LangChain. Yields str tokens and shell_output dicts.
+
+        Args:
+            shell_output_queue: Optional asyncio.Queue. When provided, run_shell tool output
+                is emitted line-by-line as {"type": "shell_output", "line": "..."} dicts
+                in real time rather than buffering until the command finishes.
+        """
         if self.langchain_service is None:
             raise Exception("LangChain service not available for streaming")
         messages_list = self._parse_previous_messages(previous_messages)
@@ -122,6 +129,7 @@ class OpenAIIntegration:
             profile=profile,
             conversation_id=conversation_id or profile.user_id,
             use_tools=True,
+            shell_output_queue=shell_output_queue,
         ):
             yield token
 
@@ -526,6 +534,37 @@ class OpenAIIntegration:
         except Exception as e:
             self.logger.error(f"Error in hybrid text extraction: {e}")
             return f"Error extracting text: {str(e)}"
+
+    async def simple_completion(self, system: str, user: str) -> str:
+        """
+        Performs a minimal, tool-free chat completion.
+
+        This is intentionally kept separate from `ask` / `ask_stream` because
+        those methods route through LangChain with tools enabled, which is
+        inappropriate for internal housekeeping calls such as conversation
+        compaction summarisation.
+
+        Args:
+            system: The system prompt content.
+            user: The user prompt content.
+
+        Returns:
+            The assistant reply text, or an empty string on failure.
+        """
+        try:
+            response = await self.client.chat.completions.create(
+                model=self.model,
+                messages=[
+                    {"role": "system", "content": system},
+                    {"role": "user", "content": user},
+                ],
+                temperature=0.3,
+                max_tokens=1024,
+            )
+            return response.choices[0].message.content or ""
+        except Exception as e:
+            self.logger.error(f"simple_completion failed: {e}")
+            return ""
 
     def _parse_previous_messages(self, previous_messages: str) -> List[Dict[str, Any]]:
         """

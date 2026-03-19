@@ -138,7 +138,7 @@ def _print_header(assistant_name: str, conv_id: str) -> None:
     console.print(Panel(
         f"✨🐟 [bold cyan]{assistant_name}[/bold cyan]\n"
         f"[dim]Conversation: {conv_id}[/dim]\n"
-        f"[dim]/new · /list · /clear · /id · /exit[/dim]",
+        f"[dim]/new · /list · /clear · /id · /compactar · /exit[/dim]",
         border_style="cyan",
         box=box.ROUNDED,
     ))
@@ -233,6 +233,19 @@ def _stream_assistant(conv_id: str, name: str, content: str) -> str:
             if isinstance(token, dict):
                 if token.get("type") == "audio":
                     audio_url = token.get("url")
+                elif token.get("type") == "compaction":
+                    _stop_spinner.set()
+                    console.print(
+                        f"[dim]Conversation compacted to optimise context[/dim]"
+                    )
+                elif token.get("type") == "shell_output":
+                    line_text = token.get("line", "")
+                    if line_text:
+                        if not _first_token.is_set():
+                            _first_token.set()
+                            spinner_thread.join()
+                        sys.stdout.write(f"\r\033[2m{line_text}\033[0m\n")
+                        sys.stdout.flush()
                 continue
             if isinstance(token, str) and token.startswith("[ERROR]"):
                 _first_token.set()
@@ -612,6 +625,14 @@ def agent(
         if user_input.lower() == "/clear":
             _clear_messages(current_id)
             console.print("[green]✓[/green] Messages cleared.\n")
+            continue
+
+        if user_input.lower() == "/compactar":
+            console.print(
+                "[dim]Compaction is automatic: it triggers when the conversation "
+                "exceeds the configured threshold (default: 40 messages). "
+                "No manual action needed.[/dim]\n"
+            )
             continue
 
         # ── send message (streaming) ─────────────────────────────────────

@@ -244,11 +244,14 @@ class LangChainService:
         profile: Profile,
         conversation_id: str,
         use_tools: bool = True,
+        shell_output_queue: Optional[asyncio.Queue] = None,
     ):
         """
         Stream AI response tokens. Uses astream() for direct responses and
         falls back to ainvoke() + _handle_tool_calls() when tool calls are needed.
-        Yields str tokens.
+        Yields str tokens and, when a shell command is running with an active
+        shell_output_queue, also yields {"type": "shell_output", "line": "..."} dicts
+        in real time as process lines are emitted.
         """
         if self._is_circuit_open():
             raise Exception("AI service temporarily unavailable (circuit breaker)")
@@ -264,6 +267,15 @@ class LangChainService:
                 thread_id = self.memory_manager.create_thread_id(conversation_id, profile.user_id)
                 messages = self.memory_manager.optimize_message_history(messages, system_prompt=None)
 
+                # Build a shell_output_callback that writes to the queue when provided.
+                # The callback is async so it can be awaited inside run_shell_tool.
+                shell_output_callback = None
+                if shell_output_queue is not None:
+                    async def _shell_line_callback(line: str) -> None:
+                        await shell_output_queue.put(line)
+
+                    shell_output_callback = _shell_line_callback
+
                 tools = None
                 llm_with_tools = self.llm
                 if use_tools:
@@ -273,6 +285,7 @@ class LangChainService:
                         skill_manager=self.skill_manager,
                         store_service=self.store_service,
                         job_usecases=self.job_usecases,
+                        shell_output_callback=shell_output_callback,
                     )
                     llm_with_tools = self.llm.bind_tools(tools)
 
@@ -290,14 +303,41 @@ class LangChainService:
                         full_content += chunk.content
 
                 if has_tool_calls:
-                    # Reconstruct full AIMessage from chunks and handle tools
+                    # Reconstruct full AIMessage from chunks and handle tools.
+                    # When shell_output_queue is provided, run _handle_tool_calls as
+                    # a background task and concurrently drain shell output lines from
+                    # the queue so the caller receives them in real time.
                     combined = accumulated_chunks[0]
                     for c in accumulated_chunks[1:]:
                         try:
                             combined = combined + c
                         except Exception:
                             pass
-                    response_text = await self._handle_tool_calls(combined, messages, llm_with_tools, tools)
+
+                    if shell_output_queue is not None:
+                        # Sentinel value placed in the queue after the task completes
+                        # so the drain loop knows when to stop.
+                        _DONE_SENTINEL = object()
+
+                        async def _run_tool_calls_and_signal():
+                            try:
+                                return await self._handle_tool_calls(combined, messages, llm_with_tools, tools)
+                            finally:
+                                await shell_output_queue.put(_DONE_SENTINEL)
+
+                        tool_task = asyncio.create_task(_run_tool_calls_and_signal())
+
+                        # Drain queue until sentinel arrives, yielding SSE shell_output events.
+                        while True:
+                            item = await shell_output_queue.get()
+                            if item is _DONE_SENTINEL:
+                                break
+                            yield {"type": "shell_output", "line": item}
+
+                        response_text = await tool_task
+                    else:
+                        response_text = await self._handle_tool_calls(combined, messages, llm_with_tools, tools)
+
                     logger.info(f"Stream: yielding tool-call result, length={len(response_text or '')}")
                     yield response_text
                     full_content = response_text

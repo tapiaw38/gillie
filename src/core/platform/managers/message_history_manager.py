@@ -42,7 +42,9 @@ class MessageHistoryService:
             return ""
 
         message_objects = [
-            f"{message.sender}: {message.content}"
+            f"system: {message.content}"
+            if str(message.sender) == "summary"
+            else f"{message.sender}: {message.content}"
             for message in messages
         ]
         return " - ".join(message_objects)

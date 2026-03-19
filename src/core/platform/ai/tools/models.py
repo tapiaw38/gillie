@@ -5,6 +5,7 @@ This module defines Pydantic models for validating tool arguments.
 Each model corresponds to a tool that can be called by the AI assistant.
 """
 
+import fnmatch
 import json
 import logging
 from typing import Optional, List, Dict, Any
@@ -210,6 +211,12 @@ _DEFAULT_TOOL_PROMPTS: Dict[str, str] = {
         "Stage and commit changes to git. Provide a clear commit message. "
         "Specify files to stage specific changes, or leave empty to stage all changes. "
         "Only use when the user explicitly asks to commit."
+    ),
+    "repo_map": (
+        "Generate a compact map of the repository showing file tree and code signatures "
+        "(classes, functions, methods). Use at the start of a coding task to understand "
+        "the project structure before reading or editing files. Much more efficient than "
+        "multiple find_files + read_file calls for orientation."
     ),
 }
 
@@ -456,6 +463,14 @@ class GitCommitArgs(BaseModel):
     files: List[str] = Field(default=[], description="Specific files to stage, or empty to stage all changes")
 
 
+class RepoMapArgs(BaseModel):
+    """Arguments for generating a repository map"""
+    path: str = Field(default=".", description="Directory to map (relative to workspace)")
+    max_depth: int = Field(default=4, ge=1, le=8, description="Max directory depth")
+    include_signatures: bool = Field(default=True, description="Include class/function signatures")
+    file_glob: str = Field(default="*.py", description="File types to extract signatures from (e.g. '*.py', '*.ts')")
+
+
 class QueryDatabaseArgs(BaseModel):
     """Arguments for querying the database"""
     columns: List[str] = Field(
@@ -513,13 +528,19 @@ def _find_file_by_name(files, file_name: str):
     return None
 
 
-def create_langchain_tools(openai_integration, profile, skill_manager=None, store_service=None, job_usecases=None) -> List[StructuredTool]:
+def create_langchain_tools(openai_integration, profile, skill_manager=None, store_service=None, job_usecases=None, shell_output_callback=None) -> List[StructuredTool]:
     """
     Create LangChain StructuredTool instances with Pydantic validation.
 
     Args:
         openai_integration: OpenAI integration instance with tool methods
         profile: User profile for context
+        skill_manager: Optional skill manager for memory tools
+        store_service: Optional store service for image uploads
+        job_usecases: Optional job use cases for cron tools
+        shell_output_callback: Optional async callable(line: str) -> None.
+            When provided, run_shell streams stdout line by line through this
+            callback instead of buffering the full output before returning.
 
     Returns:
         List of LangChain StructuredTool instances
@@ -688,6 +709,8 @@ def create_langchain_tools(openai_integration, profile, skill_manager=None, stor
     import os as _os
     from pathlib import Path as _Path
 
+    workspace = _Path(_os.environ.get("GILLIE_WORKSPACE", _Path.home())).resolve()
+
     def _resolve_safe_path(path: str) -> tuple:
         """
         Resolve a path to an absolute path and verify it stays within the workspace.
@@ -695,7 +718,6 @@ def create_langchain_tools(openai_integration, profile, skill_manager=None, stor
         Returns (resolved_path, None) if safe, (None, error_message) if not.
         Prevents directory traversal attacks and symlink escaping.
         """
-        workspace = _Path(_os.environ.get("GILLIE_WORKSPACE", _Path.home())).resolve()
         candidate = _Path(path)
         if candidate.is_absolute():
             target = candidate.resolve()
@@ -705,11 +727,35 @@ def create_langchain_tools(openai_integration, profile, skill_manager=None, stor
             return None, f"Access denied: path '{path}' is outside workspace '{workspace}'"
         return target, None
 
+    def _is_ignored(path: _Path, ws: _Path) -> bool:
+        """Check if a path is excluded by .gillierignore in the workspace root."""
+        ignore_file = ws / ".gillierignore"
+        if not ignore_file.exists():
+            return False
+        try:
+            lines = ignore_file.read_text().splitlines()
+        except Exception:
+            return False
+        patterns = [l.strip() for l in lines if l.strip() and not l.strip().startswith("#")]
+        try:
+            rel = path.relative_to(ws)
+        except ValueError:
+            return False
+        rel_str = str(rel)
+        for pattern in patterns:
+            if fnmatch.fnmatch(rel_str, pattern) or fnmatch.fnmatch(path.name, pattern):
+                return True
+            if pattern.endswith("/") and rel_str.startswith(pattern[:-1]):
+                return True
+        return False
+
     async def read_file_tool(path: str, offset: int = 1, limit: int = 200) -> str:
         """Read a file and return its contents with line numbers."""
         resolved, err = _resolve_safe_path(path)
         if err:
             return err
+        if _is_ignored(resolved, workspace):
+            return {"error": f"Access denied: '{path}' is excluded by .gillierignore"}
         if not resolved.exists():
             return f"Error: file not found: '{path}'"
         if not resolved.is_file():
@@ -738,6 +784,8 @@ def create_langchain_tools(openai_integration, profile, skill_manager=None, stor
         resolved, err = _resolve_safe_path(path)
         if err:
             return err
+        if _is_ignored(resolved, workspace):
+            return {"error": f"Access denied: '{path}' is excluded by .gillierignore"}
         try:
             if create_dirs:
                 resolved.parent.mkdir(parents=True, exist_ok=True)
@@ -754,6 +802,8 @@ def create_langchain_tools(openai_integration, profile, skill_manager=None, stor
         resolved, err = _resolve_safe_path(path)
         if err:
             return err
+        if _is_ignored(resolved, workspace):
+            return {"error": f"Access denied: '{path}' is excluded by .gillierignore"}
         if not resolved.exists():
             return f"Error: file not found: '{path}'"
         if not resolved.is_file():
@@ -899,6 +949,8 @@ def create_langchain_tools(openai_integration, profile, skill_manager=None, stor
         try:
             matches = []
             for match in resolved.glob(pattern):
+                if _is_ignored(match, workspace):
+                    continue
                 rel = match.relative_to(resolved)
                 matches.append((str(rel), match.is_dir()))
                 if len(matches) >= max_results:
@@ -917,6 +969,91 @@ def create_langchain_tools(openai_integration, profile, skill_manager=None, stor
         if len(matches) == max_results:
             lines.append(f"  (results capped at {max_results})")
         return "\n".join(lines)
+
+    async def repo_map_tool(
+        path: str = ".",
+        max_depth: int = 4,
+        include_signatures: bool = True,
+        file_glob: str = "*.py",
+    ) -> Dict[str, Any]:
+        """Generate a compact repository map with file tree and code signatures."""
+        import ast as _ast
+
+        resolved, err = _resolve_safe_path(path)
+        if err:
+            return {"error": err}
+
+        lines: List[str] = []
+
+        def _tree(dir_path: _Path, prefix: str = "", depth: int = 0):
+            if depth > max_depth:
+                return
+            skip = {".git", "node_modules", "__pycache__", ".venv", "venv", ".mypy_cache", "dist", "build", ".next"}
+            try:
+                entries = sorted(dir_path.iterdir(), key=lambda e: (e.is_file(), e.name))
+            except PermissionError:
+                return
+            entries = [e for e in entries if e.name not in skip and not _is_ignored(e, workspace)]
+            for i, entry in enumerate(entries):
+                connector = "└── " if i == len(entries) - 1 else "├── "
+                lines.append(f"{prefix}{connector}{entry.name}")
+                if entry.is_dir():
+                    extension = "    " if i == len(entries) - 1 else "│   "
+                    _tree(entry, prefix + extension, depth + 1)
+                elif include_signatures and entry.is_file():
+                    _extract_signatures(entry, prefix + ("    " if i == len(entries) - 1 else "│   "))
+
+        def _extract_signatures(file_path: _Path, prefix: str):
+            """Extract class/function signatures from supported file types."""
+            if not fnmatch.fnmatch(file_path.name, file_glob):
+                return
+            try:
+                source = file_path.read_text(errors="replace")
+                if "\x00" in source:
+                    return
+            except Exception:
+                return
+
+            if file_path.suffix == ".py":
+                try:
+                    tree = _ast.parse(source)
+                    for node in _ast.walk(tree):
+                        if isinstance(node, _ast.ClassDef):
+                            lines.append(f"{prefix}    class {node.name}")
+                            for item in node.body:
+                                if isinstance(item, (_ast.FunctionDef, _ast.AsyncFunctionDef)):
+                                    args = [a.arg for a in item.args.args]
+                                    lines.append(f"{prefix}        def {item.name}({', '.join(args)})")
+                        elif isinstance(node, (_ast.FunctionDef, _ast.AsyncFunctionDef)):
+                            # Only top-level functions (not methods already handled above)
+                            pass
+                except SyntaxError:
+                    pass
+            else:
+                import re as _re_sig
+                patterns = [
+                    r"^(export\s+)?(async\s+)?function\s+(\w+)",
+                    r"^(export\s+)?(abstract\s+)?class\s+(\w+)",
+                    r"^def\s+(\w+)",
+                    r"^class\s+(\w+)",
+                ]
+                for line in source.splitlines()[:200]:
+                    stripped = line.strip()
+                    for pat in patterns:
+                        if _re_sig.match(pat, stripped):
+                            lines.append(f"{prefix}    {stripped[:80]}")
+                            break
+
+        lines.append(str(resolved))
+        _tree(resolved)
+
+        result = "\n".join(lines)
+        truncated = False
+        if len(result) > 8000:
+            result = result[:8000]
+            truncated = True
+
+        return {"map": result, "truncated": truncated}
 
     # ── Shell and git tools ───────────────────────────────────────────────────
 
@@ -942,6 +1079,8 @@ def create_langchain_tools(openai_integration, profile, skill_manager=None, stor
         resolved_dir, err = _resolve_safe_path(working_dir)
         if err:
             return {"exit_code": -1, "stdout": "", "stderr": err, "truncated": False}
+        if _is_ignored(resolved_dir, workspace):
+            return {"exit_code": -1, "stdout": "", "stderr": f"Access denied: '{working_dir}' is excluded by .gillierignore", "truncated": False}
 
         try:
             proc = await _asyncio.create_subprocess_shell(
@@ -950,32 +1089,81 @@ def create_langchain_tools(openai_integration, profile, skill_manager=None, stor
                 stderr=_asyncio.subprocess.PIPE,
                 cwd=str(resolved_dir),
             )
-            try:
-                raw_stdout, raw_stderr = await _asyncio.wait_for(proc.communicate(), timeout=timeout)
-            except _asyncio.TimeoutError:
-                proc.kill()
-                await proc.communicate()
+
+            if shell_output_callback is not None:
+                # Streaming mode: emit each stdout line via the callback as it arrives.
+                # stderr is collected silently to avoid interleaving with streamed output.
+                stdout_lines: list = []
+                truncated = False
+
+                async def _read_stdout_streaming():
+                    nonlocal truncated
+                    async for raw_line in proc.stdout:
+                        decoded = raw_line.decode("utf-8", errors="replace")
+                        stdout_lines.append(decoded)
+                        await shell_output_callback(decoded.rstrip("\n"))
+                        if sum(len(l) for l in stdout_lines) > 3500:
+                            truncated = True
+                            proc.kill()
+                            break
+
+                try:
+                    await _asyncio.wait_for(
+                        _asyncio.gather(_read_stdout_streaming(), proc.wait()),
+                        timeout=timeout,
+                    )
+                except _asyncio.TimeoutError:
+                    proc.kill()
+                    return {
+                        "exit_code": -1,
+                        "stdout": "".join(stdout_lines),
+                        "stderr": f"Command timed out after {timeout}s: {command}",
+                        "truncated": True,
+                        "streamed": True,
+                    }
+
+                raw_stderr = await proc.stderr.read()
+                stderr = raw_stderr.decode("utf-8", errors="replace")[:500]
+                stdout_full = "".join(stdout_lines)
+                if len(stdout_full) > 3500:
+                    stdout_full = stdout_full[:3500]
+                    truncated = True
+
                 return {
-                    "exit_code": -1,
-                    "stdout": "",
-                    "stderr": f"Command timed out after {timeout}s: {command}",
-                    "truncated": False,
+                    "exit_code": proc.returncode,
+                    "stdout": stdout_full,
+                    "stderr": stderr,
+                    "truncated": truncated,
+                    "streamed": True,
                 }
+            else:
+                # Non-streaming mode: buffer all output before returning (original behaviour).
+                try:
+                    raw_stdout, raw_stderr = await _asyncio.wait_for(proc.communicate(), timeout=timeout)
+                except _asyncio.TimeoutError:
+                    proc.kill()
+                    await proc.communicate()
+                    return {
+                        "exit_code": -1,
+                        "stdout": "",
+                        "stderr": f"Command timed out after {timeout}s: {command}",
+                        "truncated": False,
+                    }
 
-            stdout = raw_stdout.decode("utf-8", errors="replace")
-            stderr = raw_stderr.decode("utf-8", errors="replace")
-            combined = stdout + stderr
-            truncated = len(combined) > 4000
-            if truncated:
-                stdout = stdout[:3500]
-                stderr = stderr[:500]
+                stdout = raw_stdout.decode("utf-8", errors="replace")
+                stderr = raw_stderr.decode("utf-8", errors="replace")
+                combined = stdout + stderr
+                truncated = len(combined) > 4000
+                if truncated:
+                    stdout = stdout[:3500]
+                    stderr = stderr[:500]
 
-            return {
-                "exit_code": proc.returncode,
-                "stdout": stdout,
-                "stderr": stderr,
-                "truncated": truncated,
-            }
+                return {
+                    "exit_code": proc.returncode,
+                    "stdout": stdout,
+                    "stderr": stderr,
+                    "truncated": truncated,
+                }
         except Exception as e:
             return {"exit_code": -1, "stdout": "", "stderr": f"Error running command: {e}", "truncated": False}
 
@@ -1004,8 +1192,10 @@ def create_langchain_tools(openai_integration, profile, skill_manager=None, stor
         truncated = False
 
         for file_path in resolved.rglob(file_glob):
-            # Skip excluded directories
+            # Skip excluded directories and ignored paths
             if any(part in _SKIP_DIRS for part in file_path.parts):
+                continue
+            if _is_ignored(file_path, workspace):
                 continue
             if not file_path.is_file():
                 continue
@@ -1033,7 +1223,7 @@ def create_langchain_tools(openai_integration, profile, skill_manager=None, stor
 
         return {"found": len(results), "results": results, "truncated": truncated}
 
-    _git_workspace = _Path(_os.environ.get("GILLIE_WORKSPACE", _Path.home())).resolve()
+    _git_workspace = workspace
 
     async def _run_git(*args) -> tuple:
         """Run a git command in the workspace and return (stdout, stderr, returncode)."""
@@ -1210,6 +1400,7 @@ def create_langchain_tools(openai_integration, profile, skill_manager=None, stor
         _tool("find_files",             prompts.get("find_files",  _DEFAULT_TOOL_PROMPTS["find_files"]), find_files_tool, FindFilesArgs),
         _tool("run_shell",              prompts.get("run_shell",   _DEFAULT_TOOL_PROMPTS["run_shell"]),  run_shell_tool,  RunShellArgs),
         _tool("grep_files",             prompts.get("grep_files",  _DEFAULT_TOOL_PROMPTS["grep_files"]), grep_files_tool, GrepFilesArgs),
+        _tool("repo_map",               prompts.get("repo_map",    _DEFAULT_TOOL_PROMPTS["repo_map"]),   repo_map_tool,   RepoMapArgs),
         _tool("git_status",             prompts.get("git_status",  _DEFAULT_TOOL_PROMPTS["git_status"]), git_status_tool, GitStatusArgs),
         _tool("git_diff",               prompts.get("git_diff",    _DEFAULT_TOOL_PROMPTS["git_diff"]),   git_diff_tool,   GitDiffArgs),
         _tool("git_log",                prompts.get("git_log",     _DEFAULT_TOOL_PROMPTS["git_log"]),    git_log_tool,    GitLogArgs),

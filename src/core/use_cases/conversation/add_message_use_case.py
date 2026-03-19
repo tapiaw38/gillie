@@ -18,7 +18,9 @@ The heavy lifting is delegated to specialized services:
 - MessageHistoryService: Message history management
 """
 
+import asyncio
 import logging
+import os
 from datetime import datetime, timezone
 from typing import Optional, Tuple
 
@@ -101,6 +103,8 @@ class AddMessageUseCase:
         conversation = self._get_and_validate_conversation(
             conversation_id, user_id
         )
+
+        await self._compact_if_needed(conversation, conversation_id)
 
         self._add_message_to_conversation(conversation, user_message)
 
@@ -343,9 +347,18 @@ class AddMessageUseCase:
         """
         Streaming variant for CLI use. Validates the conversation, saves the user
         message, streams AI response tokens, then persists the assistant message.
-        Yields str tokens.
+
+        Yields:
+            str: AI response text tokens as they arrive.
+            dict {"type": "shell_output", "line": str}: real-time stdout lines from
+                run_shell tool invocations, emitted in real time as the process runs.
+            dict {"type": "audio", "url": str}: audio URL when TTS is enabled.
         """
         conversation = self._get_and_validate_conversation(conversation_id, user_id)
+
+        compaction_event = await self._compact_if_needed(conversation, conversation_id)
+        if compaction_event:
+            yield compaction_event
 
         user_message = self._create_user_message(content, SenderEnum.user)
         self._add_message_to_conversation(conversation, user_message)
@@ -358,6 +371,11 @@ class AddMessageUseCase:
             else ""
         )
 
+        # Queue for real-time shell stdout lines. LangChainService puts raw lines in,
+        # drains them while _handle_tool_calls runs, and yields shell_output dicts
+        # upstream — we simply forward whatever the generator yields here.
+        shell_output_queue: asyncio.Queue = asyncio.Queue()
+
         full_text = ""
         async for token in self.context_factory.integrations.openai.ask_stream(
             question=content,
@@ -365,9 +383,13 @@ class AddMessageUseCase:
             previous_messages=conversation_history,
             profile=conversation.profile,
             conversation_id=conversation_id,
+            shell_output_queue=shell_output_queue,
         ):
+            # dict tokens (shell_output, etc.) are forwarded as-is; only str
+            # tokens contribute to the persisted assistant message text.
             yield token
-            full_text += token
+            if isinstance(token, str):
+                full_text += token
 
         # Generate audio if TTS is enabled for this profile
         audio_url = await self._generate_audio_if_enabled(
@@ -550,6 +572,130 @@ class AddMessageUseCase:
         except Exception as e:
             logger.error(f"Error generating audio: {e}")
             return None
+
+    async def _compact_if_needed(
+        self,
+        conversation,
+        conversation_id: str,
+    ) -> Optional[dict]:
+        """
+        Compacts the conversation when it exceeds the configured threshold.
+
+        The method mutates ``conversation.messages`` in-place and persists the
+        updated list to the database.  It returns a compaction SSE event dict
+        when compaction was performed, or ``None`` when it was not needed.
+
+        The compaction algorithm:
+        1. Keep the most recent ``keep_recent`` messages untouched.
+        2. From the older messages, filter out any that are already summaries
+           (to avoid re-summarising summaries).
+        3. Call OpenAI for a concise summary of those older messages.
+        4. Replace the older messages with a single summary ``Message``.
+        5. Persist the compacted message list before returning.
+
+        Args:
+            conversation: The ``Conversation`` domain object (mutated in-place).
+            conversation_id: Identifier used for the database update.
+
+        Returns:
+            A compaction SSE event dict if compaction occurred, else ``None``.
+        """
+        threshold = int(os.environ.get("COMPACTION_THRESHOLD", "40"))
+        keep_recent = int(os.environ.get("COMPACTION_KEEP_RECENT", "20"))
+
+        if len(conversation.messages) <= threshold:
+            return None
+
+        messages_to_summarize = conversation.messages[:-keep_recent]
+        recent_messages = conversation.messages[-keep_recent:]
+
+        non_summary = [
+            m for m in messages_to_summarize
+            if m.sender != SenderEnum.summary
+        ]
+        if not non_summary:
+            # All older messages are already summaries — nothing to compact.
+            return None
+
+        summary_text = await self._generate_summary(messages_to_summarize)
+        if not summary_text:
+            # Summarisation failed; continue without compacting so the normal
+            # flow is never broken.
+            return None
+
+        summary_message = Message(
+            content=f"[RESUMEN DE CONVERSACIÓN ANTERIOR]\n{summary_text}",
+            sender=SenderEnum.summary,
+            created_at=datetime.now(timezone.utc),
+        )
+
+        conversation.messages = [summary_message] + recent_messages
+
+        self._save_messages(conversation_id, conversation.messages)
+
+        logger.info(
+            f"Conversation {conversation_id} compacted: "
+            f"{len(messages_to_summarize)} messages condensed into 1 summary"
+        )
+
+        return {
+            "type": "compaction",
+            "message": "Conversación compactada para optimizar el contexto",
+        }
+
+    async def _generate_summary(self, messages: list) -> str:
+        """
+        Generates a concise summary of ``messages`` using OpenAI.
+
+        Only ``user`` and ``assistant`` messages contribute to the summary
+        input; existing ``summary`` messages are presented as-is under their
+        own label so their context is preserved without duplication.
+
+        Args:
+            messages: The messages to summarise.
+
+        Returns:
+            The generated summary text, or an empty string on failure.
+        """
+        _SUMMARIZABLE = {SenderEnum.user, SenderEnum.assistant, SenderEnum.summary}
+
+        history_lines = []
+        for m in messages:
+            if m.sender not in _SUMMARIZABLE or not m.content:
+                continue
+            label = m.sender.value.upper()
+            snippet = m.content[:500]
+            history_lines.append(f"{label}: {snippet}")
+
+        if not history_lines:
+            return ""
+
+        history_text = "\n".join(history_lines)
+
+        system_prompt = (
+            "Eres un asistente que resume conversaciones. Resume la siguiente "
+            "conversación de forma concisa pero completa, preservando:\n"
+            "- Decisiones importantes tomadas\n"
+            "- Problemas resueltos y sus soluciones\n"
+            "- Contexto del proyecto o tarea en curso\n"
+            "- Preferencias o configuraciones mencionadas\n"
+            "- Archivos o código modificado\n\n"
+            "Responde SOLO con el resumen en bullets concisos. Sin introducción ni cierre."
+        )
+        user_prompt = (
+            "Resume esta conversación:\n\n"
+            f"{history_text}"
+        )
+
+        try:
+            summary = await self.context_factory.integrations.openai.simple_completion(
+                system=system_prompt,
+                user=user_prompt,
+            )
+            return summary
+        except Exception as e:
+            logger.error(f"Failed to generate conversation summary: {e}")
+            return ""
 
     def _save_messages(self, conversation_id: str, messages: list[Message]) -> None:
         """
