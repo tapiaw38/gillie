@@ -303,7 +303,7 @@ class LangChainService:
                         })
                         event = create_pending(request_id)
                         try:
-                            await asyncio.wait_for(event.wait(), timeout=120)
+                            await asyncio.wait_for(event.wait(), timeout=300)
                             return get_decision(request_id)
                         except asyncio.TimeoutError:
                             logger.warning(

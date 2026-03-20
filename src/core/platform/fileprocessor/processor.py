@@ -490,13 +490,13 @@ class BaseFileProcessor:
         except Exception as e:
             return f"Technically analyzed image. Possible relation to {search_term}."
 
-    async def describe_image(self, image_base64: str) -> str:
-        """Describe an image using technical analysis"""
+    async def describe_image(self, image_base64: str, prompt: str = None) -> str:
+        """Describe an image using technical analysis, optionally guided by a question."""
         try:
             python_analysis = self._analyze_image_with_python_tools(image_base64)
             description = self._create_detailed_description(python_analysis)
             enhanced_description = await self._enhance_description_with_ai(
-                description, python_analysis
+                description, python_analysis, user_prompt=prompt
             )
             return enhanced_description
         except Exception as e:
@@ -547,10 +547,11 @@ class BaseFileProcessor:
             return f"Technical image analysis available. Error in detailed description: {str(e)}"
 
     async def _enhance_description_with_ai(
-        self, technical_description: str, analysis: Dict[str, Any]
+        self, technical_description: str, analysis: Dict[str, Any], user_prompt: str = None
     ) -> str:
         """Enhance technical description using AI"""
         try:
+            focus = f"\n\nSPECIFIC QUESTION TO ANSWER: {user_prompt}" if user_prompt else ""
             prompt = f"""
             Based on this technical analysis of an image, create a more natural and understandable description:
 
@@ -562,13 +563,15 @@ class BaseFileProcessor:
             - Quality: {analysis.get('quality_score', 0):.2f}/1.0
             - Objects detected: {analysis.get('objects_detected', 0)}
             - Text detected: {'Yes' if analysis.get('text_detected', False) else 'No'}
+            {focus}
 
             Instructions:
             1. Rewrite the description in a more natural and fluid way
             2. Keep technical information but make it more understandable
             3. Suggest what type of content it could be based on characteristics
-            4. Respond in English
-            5. Maximum 200 words
+            4. If a specific question was provided, answer it directly first
+            5. Respond in English
+            6. Maximum 200 words
             """
 
             response = await self.client.chat.completions.create(

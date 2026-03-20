@@ -188,9 +188,9 @@ class OpenAIIntegration:
         return final_results
 
     @log_function_call
-    async def describe_image_from_base64(self, image_base64: str) -> str:
+    async def describe_image_from_base64(self, image_base64: str, prompt: str = None) -> str:
         self.logger.debug("Describing image from base64")
-        return await self.image_processor.describe_image(image_base64)
+        return await self.image_processor.describe_image(image_base64, prompt=prompt)
 
     @log_function_call
     async def analyze_excel_file(self, excel_url: str) -> dict:

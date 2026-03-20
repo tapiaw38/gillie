@@ -49,6 +49,34 @@ _SYSTEM_DEPS = [
         "brew": "tesseract",
         "check_bin": "tesseract",
     },
+    {
+        "package": "scrot",
+        "purpose": "Desktop screenshot capture — X11 (take_screenshot tool)",
+        "required": False,
+        "apt": "scrot",
+        "pacman": "scrot",
+        "brew": "scrot",
+        "check_bin": "scrot",
+    },
+    {
+        "package": "grim",
+        "purpose": "Desktop screenshot capture — Wayland (take_screenshot tool)",
+        "required": False,
+        "apt": "grim",
+        "pacman": "grim",
+        "brew": None,
+        "check_bin": "grim",
+    },
+    {
+        "package": "playwright-browsers",
+        "purpose": "Browser automation for DOM access, button clicks, page scraping (browser tool)",
+        "required": False,
+        "apt": None,   # installed via: playwright install chromium
+        "pacman": None,
+        "brew": None,
+        "check_bin": None,
+        "post_install": "python -m playwright install chromium",
+    },
 ]
 
 
@@ -60,8 +88,12 @@ def _detect_package_manager() -> str | None:
 
 
 def _check_installed(dep: dict) -> bool:
-    if dep["check_bin"]:
+    if dep.get("check_bin"):
         return shutil.which(dep["check_bin"]) is not None
+    if dep.get("post_install") and "playwright" in dep.get("post_install", ""):
+        # Check if playwright chromium cache exists
+        cache = Path.home() / ".cache" / "ms-playwright"
+        return any(cache.glob("chromium*")) if cache.exists() else False
     return True  # can't check, assume ok
 
 
@@ -117,13 +149,15 @@ def _install_system_deps():
     table.add_column("Package", style="bold")
     table.add_column("Purpose")
     table.add_column("Required")
+    table.add_column("Post-install", style="dim")
     table.add_column("Status")
 
     for dep in _SYSTEM_DEPS:
         installed = _check_installed(dep)
         status = "[green]✓ installed[/green]" if installed else "[yellow]✗ missing[/yellow]"
         req = "[red]required[/red]" if dep["required"] else "[dim]optional[/dim]"
-        table.add_row(dep["package"], dep["purpose"], req, status)
+        post = dep.get("post_install", "")
+        table.add_row(dep["package"], dep["purpose"], req, post, status)
 
     console.print()
     console.print(table)
@@ -137,7 +171,8 @@ def _install_system_deps():
     if not pm:
         console.print("[yellow]⚠[/yellow] Could not detect package manager. Install manually:")
         for dep in missing:
-            console.print(f"  [dim]•[/dim] [bold]{dep['package']}[/bold] — {dep['purpose']}")
+            post = f"  → [dim]{dep['post_install']}[/dim]" if dep.get("post_install") else ""
+            console.print(f"  [dim]•[/dim] [bold]{dep['package']}[/bold] — {dep['purpose']}{post}")
         return
 
     console.print(f"[dim]Detected package manager: [bold]{pm}[/bold][/dim]")
@@ -161,3 +196,10 @@ def _install_system_deps():
         console.print("[green]✓[/green] System dependencies installed.")
     else:
         console.print("[red]✗[/red] Some packages failed to install.")
+
+    # Run post-install commands (e.g. playwright install chromium)
+    for dep in missing:
+        post = dep.get("post_install")
+        if post:
+            console.print(f"[cyan]Post-install:[/cyan] {post}")
+            subprocess.run(post.split())

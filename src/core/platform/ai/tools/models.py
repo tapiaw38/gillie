@@ -212,6 +212,65 @@ _DEFAULT_TOOL_PROMPTS: Dict[str, str] = {
         "Specify files to stage specific changes, or leave empty to stage all changes. "
         "Only use when the user explicitly asks to commit."
     ),
+    "take_screenshot": (
+        "Take a screenshot of the current desktop screen and describe what is visible. "
+        "Use when the user asks what is on their screen, what windows are open, "
+        "what a specific application looks like, or anything about the visual state "
+        "of the desktop. Optionally focus on a specific region or window."
+    ),
+    "browser_navigate": (
+        "Open a URL in a headless browser and return the page title and visible text. "
+        "Use to visit websites, web apps, or local URLs. The browser session persists "
+        "across tool calls so you can navigate, interact, then read content."
+    ),
+    "browser_click": (
+        "Click an element in the current browser page by CSS selector or visible text. "
+        "Examples: 'button#submit', 'text=Login', '.nav-item:first-child'. "
+        "Use after browser_navigate to interact with the page."
+    ),
+    "browser_type": (
+        "Type text into an input field on the current browser page. "
+        "Use after browser_navigate to fill forms, search boxes, etc."
+    ),
+    "browser_get_content": (
+        "Extract text or HTML content from the current browser page or a specific element. "
+        "Use to read page content after navigating or after interactions. "
+        "Returns visible text by default, or raw HTML when as_html=True."
+    ),
+    "browser_screenshot": (
+        "Take a screenshot of the current browser page and describe its contents. "
+        "Use to visually verify the state of a web page after navigation or interaction."
+    ),
+    "browser_close": (
+        "Disconnect from the browser session. When connected to a real browser via "
+        "browser_connect, this only disconnects without closing the user's browser."
+    ),
+    "browser_connect": (
+        "Connect to an already-running Chrome, Chromium, or Firefox browser via CDP "
+        "(Chrome DevTools Protocol). Use this when the user wants the AI to control "
+        "their real browser with their existing session, cookies, and open tabs "
+        "(e.g. WhatsApp Web, Gmail, any logged-in site). "
+        "The user must start their browser with --remote-debugging-port=9222. "
+        "After connecting, all browser_* tools operate on the real browser. "
+        "Lists all open tabs so you can switch to the right one."
+    ),
+    "browser_switch_tab": (
+        "Switch the active browser tab to a specific index. "
+        "Use after browser_connect lists the open tabs to select the right one."
+    ),
+    "browser_enable_remote_debug": (
+        "Enable Chrome DevTools Protocol (CDP) remote debugging in Firefox permanently "
+        "by writing user.js to the Firefox profile. After running this tool, the user "
+        "only needs to restart Firefox once — Firefox will restore the session automatically. "
+        "Use this when the user wants the AI to control their existing Firefox browser "
+        "but it was not started with --remote-debugging-port."
+    ),
+    "browser_evaluate": (
+        "Execute JavaScript code in the current browser page and return the result. "
+        "Use to read DOM content, extract data, interact with page elements, or run any "
+        "JavaScript logic. Works only after browser_connect has been called. "
+        "Example: extract chat names from WhatsApp Web, get form values, check page state."
+    ),
     "repo_map": (
         "Generate a compact map of the repository showing file tree and code signatures "
         "(classes, functions, methods). Use at the start of a coding task to understand "
@@ -278,6 +337,62 @@ class DescribeImageArgs(BaseModel):
     image_url: str = Field(
         description="URL of the image to describe (e.g. obtained from search_images results)"
     )
+
+
+class TakeScreenshotArgs(BaseModel):
+    """Arguments for taking a screenshot"""
+    question: str = Field(
+        default="Describe what is visible on the screen.",
+        description="What to look for or describe in the screenshot (e.g. 'what tabs are open in Firefox?')"
+    )
+
+
+class BrowserNavigateArgs(BaseModel):
+    url: str = Field(description="URL to navigate to (include https://)")
+    wait_for: str = Field(default="load", description="Wait condition: 'load', 'domcontentloaded', or 'networkidle'")
+
+
+class BrowserClickArgs(BaseModel):
+    selector: str = Field(description="CSS selector or visible text to click (e.g. 'button#submit', 'text=Login')")
+
+
+class BrowserTypeArgs(BaseModel):
+    selector: str = Field(description="CSS selector of the input field (e.g. 'input[name=email]')")
+    text: str = Field(description="Text to type into the field")
+    clear_first: bool = Field(default=True, description="Clear the field before typing")
+
+
+class BrowserGetContentArgs(BaseModel):
+    selector: str = Field(default="", description="CSS selector to extract content from, or empty for full page text")
+    as_html: bool = Field(default=False, description="Return raw HTML instead of visible text")
+
+
+class BrowserScreenshotArgs(BaseModel):
+    selector: str = Field(default="", description="CSS selector to screenshot a specific element, or empty for full page")
+    question: str = Field(default="Describe what is visible on this page.", description="What to look for in the screenshot")
+
+
+class BrowserCloseArgs(BaseModel):
+    pass
+
+
+class BrowserConnectArgs(BaseModel):
+    cdp_url: str = Field(
+        default="http://localhost:9222",
+        description="CDP endpoint of the running browser (default: http://localhost:9222)"
+    )
+
+
+class BrowserSwitchTabArgs(BaseModel):
+    index: int = Field(description="Tab index to switch to (shown by browser_connect)")
+
+
+class BrowserEnableRemoteDebugArgs(BaseModel):
+    port: int = Field(default=9222, description="Port for CDP remote debugging (default: 9222)")
+
+
+class BrowserEvaluateArgs(BaseModel):
+    script: str = Field(description="JavaScript code to execute in the current page context. Return values are serialized to JSON.")
 
 
 class SystemProposeArgs(BaseModel):
@@ -678,7 +793,403 @@ def create_langchain_tools(openai_integration, profile, skill_manager=None, stor
             image_base64 = b64.b64encode(image_bytes).decode()
             return await openai_integration.describe_image_from_base64(image_base64)
         except Exception as e:
-            return f"Error al obtener la imagen desde la URL: {e}"
+            return f"Error fetching image from URL: {e}"
+
+    async def take_screenshot_tool(question: str = "Describe what is visible on the screen.") -> str:
+        """Capture the desktop screen and describe its contents using vision AI."""
+        import asyncio
+        import base64 as b64
+        import tempfile
+        import os
+
+        # Detect display server to pick the right tool
+        is_wayland = bool(os.environ.get("WAYLAND_DISPLAY"))
+
+        tmp = tempfile.NamedTemporaryFile(suffix=".png", delete=False)
+        tmp.close()
+        path = tmp.name
+
+        # Wayland-native tools first, then X11 fallbacks
+        if is_wayland:
+            _CAPTURE_CMDS = [
+                ["grim", path],                                    # Wayland (sway/wlroots)
+                ["gnome-screenshot", "-f", path],                  # GNOME on Wayland
+                ["spectacle", "-b", "-o", path],                   # KDE on Wayland
+                ["scrot", "-z", path],                             # X11 via XWayland
+                ["import", "-window", "root", path],               # ImageMagick via XWayland
+                ["maim", path],                                    # X11 via XWayland
+            ]
+        else:
+            _CAPTURE_CMDS = [
+                ["scrot", "-z", path],
+                ["maim", path],
+                ["import", "-window", "root", path],               # ImageMagick
+                ["gnome-screenshot", "-f", path],
+                ["spectacle", "-b", "-o", path],
+            ]
+
+        captured = False
+        for cmd in _CAPTURE_CMDS:
+            try:
+                proc = await asyncio.create_subprocess_exec(
+                    *cmd,
+                    stdout=asyncio.subprocess.DEVNULL,
+                    stderr=asyncio.subprocess.DEVNULL,
+                )
+                await asyncio.wait_for(proc.wait(), timeout=10)
+                if proc.returncode == 0 and os.path.getsize(path) > 0:
+                    captured = True
+                    break
+            except (FileNotFoundError, asyncio.TimeoutError):
+                continue
+
+        if not captured:
+            os.unlink(path)
+            install_hint = (
+                "grim (Wayland), gnome-screenshot, or spectacle"
+                if is_wayland else
+                "scrot, maim, imagemagick, gnome-screenshot, or spectacle"
+            )
+            return f"Could not take a screenshot. Running on {'Wayland' if is_wayland else 'X11'}. Install: {install_hint}"
+
+        try:
+            with open(path, "rb") as f:
+                image_base64 = b64.b64encode(f.read()).decode()
+        finally:
+            os.unlink(path)
+
+        prompt = f"Screenshot of the user's desktop. {question}"
+        try:
+            description = await openai_integration.describe_image_from_base64(
+                image_base64, prompt=prompt
+            )
+            return description
+        except Exception as e:
+            return f"Screenshot captured but vision analysis failed: {e}"
+
+    # ── Browser session (Playwright) ──────────────────────────────────────────
+    # _browser_state holds either:
+    #   - a headless Chromium launched by _get_page()
+    #   - a real user browser connected via CDP (browser_connect tool)
+    # The "connected" flag distinguishes the two so browser_close doesn't
+    # try to shut down the user's real browser.
+    _browser_state: Dict[str, Any] = {
+        "playwright": None,
+        "browser": None,
+        "page": None,
+        "connected": False,   # True when attached to a real browser via CDP
+    }
+
+    async def _get_page():
+        """Return (or lazily create) the shared Playwright page."""
+        try:
+            from playwright.async_api import async_playwright
+        except ImportError:
+            raise RuntimeError(
+                "playwright is not installed. Run: pip install playwright && playwright install chromium"
+            )
+        if _browser_state["page"] is None or _browser_state["page"].is_closed():
+            if _browser_state["playwright"] is None:
+                _browser_state["playwright"] = await async_playwright().start()
+            _browser_state["browser"] = await _browser_state["playwright"].chromium.launch(
+                headless=True,
+                args=["--no-sandbox", "--disable-dev-shm-usage"],
+            )
+            context = await _browser_state["browser"].new_context(
+                viewport={"width": 1280, "height": 800},
+                user_agent="Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 Chrome/120 Safari/537.36",
+            )
+            _browser_state["page"] = await context.new_page()
+        return _browser_state["page"]
+
+    async def _connect_cdp(cdp_url: str):
+        """Internal: attempt CDP connection and update _browser_state. Raises on failure."""
+        from playwright.async_api import async_playwright
+        if _browser_state["browser"] and not _browser_state["connected"]:
+            await _browser_state["browser"].close()
+        if _browser_state["playwright"] is None:
+            _browser_state["playwright"] = await async_playwright().start()
+        browser = await _browser_state["playwright"].chromium.connect_over_cdp(cdp_url)
+        _browser_state["browser"] = browser
+        _browser_state["connected"] = True
+        contexts = browser.contexts
+        if contexts and contexts[0].pages:
+            page = contexts[0].pages[0]
+        else:
+            page = await contexts[0].new_page() if contexts else await (await browser.new_context()).new_page()
+        _browser_state["page"] = page
+        return browser
+
+    async def browser_connect_tool(cdp_url: str = "http://localhost:9222") -> str:
+        """Connect to the user's real Chrome browser via CDP.
+
+        If Chrome is not already listening on the CDP port, automatically:
+        1. Kills any running Chrome instance
+        2. Relaunches Chrome with --remote-debugging-port using the real user profile
+           so all existing sessions (WhatsApp Web, Gmail, etc.) are preserved
+        3. Connects via CDP
+        """
+        try:
+            from playwright.async_api import async_playwright
+        except ImportError:
+            return "playwright not installed. Run: pip install playwright && playwright install chromium"
+
+        port = int(cdp_url.split(":")[-1]) if ":" in cdp_url else 9222
+
+        # First attempt — CDP might already be available (Chrome already running with --remote-debugging-port)
+        try:
+            await _connect_cdp(cdp_url)
+        except Exception:
+            # CDP not available — relaunch Chrome with real user profile + remote debugging
+            logger.info("browser_connect: CDP not available, relaunching Chrome with remote debugging...")
+
+            # Find Chrome binary
+            chrome_bins = ["google-chrome-stable", "google-chrome", "chromium", "chromium-browser"]
+            import shutil
+            chrome_bin = next((b for b in chrome_bins if shutil.which(b)), None)
+            if not chrome_bin:
+                return (
+                    "Chrome is not installed. Install google-chrome-stable and try again."
+                )
+
+            # Kill existing Chrome so it releases the profile lock
+            await asyncio.create_subprocess_exec(
+                "pkill", "-f", chrome_bin,
+                stdout=asyncio.subprocess.DEVNULL,
+                stderr=asyncio.subprocess.DEVNULL,
+            )
+            await asyncio.sleep(2)
+
+            # Relaunch Chrome with real user profile so sessions are preserved
+            real_profile = os.path.expanduser("~/.config/google-chrome")
+            await asyncio.create_subprocess_exec(
+                chrome_bin,
+                f"--remote-debugging-port={port}",
+                f"--user-data-dir={real_profile}",
+                "--no-first-run",
+                "--no-default-browser-check",
+                stdout=asyncio.subprocess.DEVNULL,
+                stderr=asyncio.subprocess.DEVNULL,
+            )
+
+            # Wait up to 30s for CDP to become available
+            connected = False
+            for _ in range(30):
+                await asyncio.sleep(1)
+                try:
+                    await _connect_cdp(cdp_url)
+                    connected = True
+                    break
+                except Exception:
+                    continue
+
+            if not connected:
+                return (
+                    f"Chrome was relaunched with remote debugging on port {port} but CDP "
+                    "is not yet available. Wait a few seconds and call browser_connect again."
+                )
+
+        # Build tab list
+        all_pages = [p for ctx in _browser_state["browser"].contexts for p in ctx.pages]
+        tab_list = "\n".join(f"  [{i}] {p.url[:80]}" for i, p in enumerate(all_pages))
+        return (
+            f"Connected to Chrome at {cdp_url}\n"
+            f"Open tabs ({len(all_pages)}):\n{tab_list}\n\n"
+            f"Active tab: {_browser_state['page'].url}"
+        )
+
+    async def browser_switch_tab_tool(index: int) -> str:
+        """Switch to a specific open tab by index (use browser_connect first to list tabs)."""
+        try:
+            browser = _browser_state["browser"]
+            if not browser:
+                return "No browser connected. Use browser_connect first."
+            all_pages = [p for ctx in browser.contexts for p in ctx.pages]
+            if index < 0 or index >= len(all_pages):
+                return f"Invalid tab index {index}. Available: 0–{len(all_pages)-1}"
+            _browser_state["page"] = all_pages[index]
+            await all_pages[index].bring_to_front()
+            return f"Switched to tab [{index}]: {all_pages[index].url}"
+        except Exception as e:
+            return f"Switch tab error: {e}"
+
+    async def browser_enable_remote_debug_tool(port: int = 9222) -> str:
+        """Write user.js to the Firefox profile to permanently enable CDP remote debugging.
+
+        Firefox restores its previous session on restart, so the user won't lose
+        open tabs or their WhatsApp Web session.
+        """
+        import glob as _glob
+
+        # Find Firefox profile directory (default-release or default)
+        home = os.path.expanduser("~")
+        patterns = [
+            f"{home}/.mozilla/firefox/*.default-release/",
+            f"{home}/.mozilla/firefox/*.default/",
+            f"{home}/.mozilla/firefox/*/",
+        ]
+        profile_dir = None
+        for pattern in patterns:
+            matches = _glob.glob(pattern)
+            if matches:
+                profile_dir = matches[0].rstrip("/")
+                break
+
+        if not profile_dir:
+            return (
+                "Could not find Firefox profile directory. "
+                "Start Firefox manually with:\n"
+                f"  firefox --remote-debugging-port={port} --no-remote\n"
+                "Or in a new instance:\n"
+                f"  firefox --remote-debugging-port={port} -P default-release"
+            )
+
+        user_js_path = os.path.join(profile_dir, "user.js")
+
+        prefs = f"""
+// Remote debugging — added by Gillie AI
+user_pref("devtools.debugger.remote-enabled", true);
+user_pref("devtools.debugger.remote-port", {port});
+user_pref("devtools.chrome.enabled", true);
+user_pref("devtools.debugger.prompt-connection", false);
+user_pref("devtools.debugger.remote-host", "127.0.0.1");
+user_pref("devtools.debugger.force-local", true);
+"""
+        # Append to existing user.js or create it
+        try:
+            existing = ""
+            if os.path.exists(user_js_path):
+                with open(user_js_path, "r") as f:
+                    existing = f.read()
+
+            if "devtools.debugger.remote-enabled" in existing:
+                return (
+                    f"Remote debugging is already configured in {user_js_path}.\n"
+                    f"Restart Firefox and then use browser_connect to attach."
+                )
+
+            with open(user_js_path, "a") as f:
+                f.write(prefs)
+
+            return (
+                f"✓ Remote debugging enabled in {user_js_path} on port {port}.\n\n"
+                f"Next steps:\n"
+                f"  1. Restart Firefox (it will restore your session automatically)\n"
+                f"  2. Tell me: 'connect to my browser' and I'll attach via CDP\n\n"
+                f"Firefox session restore is ON by default — WhatsApp Web and all "
+                f"other tabs will reopen automatically."
+            )
+        except Exception as e:
+            return f"Error writing {user_js_path}: {e}"
+
+    async def browser_navigate_tool(url: str, wait_for: str = "load") -> str:
+        """Navigate to a URL and return page title + visible text excerpt."""
+        try:
+            page = await _get_page()
+            wait_map = {"load": "load", "domcontentloaded": "domcontentloaded", "networkidle": "networkidle"}
+            await page.goto(url, wait_until=wait_map.get(wait_for, "load"), timeout=30000)
+            title = await page.title()
+            text = await page.inner_text("body")
+            text = text[:3000] + "..." if len(text) > 3000 else text
+            return f"Page: {title}\nURL: {page.url}\n\n{text}"
+        except Exception as e:
+            return f"Navigation error: {e}"
+
+    async def browser_click_tool(selector: str) -> str:
+        """Click an element by CSS selector or visible text."""
+        try:
+            page = await _get_page()
+            if selector.startswith("text="):
+                await page.get_by_text(selector[5:]).first.click(timeout=10000)
+            else:
+                await page.click(selector, timeout=10000)
+            await page.wait_for_load_state("domcontentloaded", timeout=10000)
+            return f"Clicked '{selector}'. Current page: {await page.title()} ({page.url})"
+        except Exception as e:
+            return f"Click error: {e}"
+
+    async def browser_type_tool(selector: str, text: str, clear_first: bool = True) -> str:
+        """Type text into an input field."""
+        try:
+            page = await _get_page()
+            if clear_first:
+                await page.fill(selector, "", timeout=10000)
+            await page.type(selector, text, delay=30)
+            return f"Typed into '{selector}' on {page.url}"
+        except Exception as e:
+            return f"Type error: {e}"
+
+    async def browser_get_content_tool(selector: str = "", as_html: bool = False) -> str:
+        """Extract text or HTML from the page or a specific element."""
+        try:
+            page = await _get_page()
+            target = selector or "body"
+            if as_html:
+                content = await page.inner_html(target)
+            else:
+                content = await page.inner_text(target)
+            content = content[:5000] + "..." if len(content) > 5000 else content
+            return f"Content from '{target}' on {page.url}:\n\n{content}"
+        except Exception as e:
+            return f"Get content error: {e}"
+
+    async def browser_screenshot_tool(selector: str = "", question: str = "Describe what is visible on this page.") -> str:
+        """Take a screenshot of the browser page and describe it."""
+        import base64 as b64
+        try:
+            page = await _get_page()
+            if selector:
+                element = await page.query_selector(selector)
+                if not element:
+                    return f"Element '{selector}' not found on page."
+                png = await element.screenshot()
+            else:
+                png = await page.screenshot(full_page=False)
+            image_base64 = b64.b64encode(png).decode()
+            prompt = f"Browser page: {await page.title()} ({page.url}). {question}"
+            description = await openai_integration.describe_image_from_base64(image_base64, prompt=prompt)
+            return description
+        except Exception as e:
+            return f"Browser screenshot error: {e}"
+
+    async def browser_evaluate_tool(script: str) -> str:
+        """Execute JavaScript in the current page and return the result."""
+        try:
+            page = _browser_state.get("page")
+            if not page or page.is_closed():
+                return "No browser page available. Use browser_connect first."
+            result = await page.evaluate(script)
+            if result is None:
+                return "(script executed, no return value)"
+            return json.dumps(result, ensure_ascii=False, indent=2) if isinstance(result, (dict, list)) else str(result)
+        except Exception as e:
+            return f"JavaScript error: {e}"
+
+    async def browser_close_tool() -> str:
+        """Disconnect from the browser session. When connected to a real browser via
+        browser_connect, this only disconnects — it does NOT close the user's browser."""
+        try:
+            if _browser_state["connected"]:
+                # Just disconnect — do not close the user's real browser
+                if _browser_state["browser"]:
+                    await _browser_state["browser"].close()
+                msg = "Disconnected from browser (your browser remains open)."
+            else:
+                if _browser_state["browser"]:
+                    await _browser_state["browser"].close()
+                msg = "Browser session closed."
+
+            _browser_state["browser"] = None
+            _browser_state["page"] = None
+            _browser_state["connected"] = False
+
+            if _browser_state["playwright"]:
+                await _browser_state["playwright"].stop()
+                _browser_state["playwright"] = None
+
+            return msg
+        except Exception as e:
+            return f"Error closing browser: {e}"
 
     async def search_documents_tool(query: str, max_results: int = 5) -> Dict[str, Any]:
         """Search for relevant content in user's uploaded documents"""
@@ -1521,6 +2032,17 @@ def create_langchain_tools(openai_integration, profile, skill_manager=None, stor
         _tool("extract_text_from_pdf",  prompts["extract_text_from_pdf"],  extract_text_tool,    ExtractTextArgs),
         _tool("analyze_excel",          prompts["analyze_excel"],          analyze_excel_tool,   AnalyzeExcelArgs),
         _tool("describe_image",         prompts["describe_image"],         describe_image_tool,  DescribeImageArgs),
+        _tool("take_screenshot",        prompts.get("take_screenshot",    _DEFAULT_TOOL_PROMPTS["take_screenshot"]),    take_screenshot_tool,    TakeScreenshotArgs),
+        _tool("browser_connect",              prompts.get("browser_connect",             _DEFAULT_TOOL_PROMPTS["browser_connect"]),             browser_connect_tool,             BrowserConnectArgs),
+        _tool("browser_switch_tab",           prompts.get("browser_switch_tab",          _DEFAULT_TOOL_PROMPTS["browser_switch_tab"]),          browser_switch_tab_tool,          BrowserSwitchTabArgs),
+        _tool("browser_enable_remote_debug",  prompts.get("browser_enable_remote_debug", _DEFAULT_TOOL_PROMPTS["browser_enable_remote_debug"]), browser_enable_remote_debug_tool, BrowserEnableRemoteDebugArgs),
+        _tool("browser_evaluate",             prompts.get("browser_evaluate",            _DEFAULT_TOOL_PROMPTS["browser_evaluate"]),            browser_evaluate_tool,            BrowserEvaluateArgs),
+        _tool("browser_navigate",       prompts.get("browser_navigate",   _DEFAULT_TOOL_PROMPTS["browser_navigate"]),   browser_navigate_tool,   BrowserNavigateArgs),
+        _tool("browser_click",          prompts.get("browser_click",      _DEFAULT_TOOL_PROMPTS["browser_click"]),      browser_click_tool,      BrowserClickArgs),
+        _tool("browser_type",           prompts.get("browser_type",       _DEFAULT_TOOL_PROMPTS["browser_type"]),       browser_type_tool,       BrowserTypeArgs),
+        _tool("browser_get_content",    prompts.get("browser_get_content",_DEFAULT_TOOL_PROMPTS["browser_get_content"]),browser_get_content_tool,BrowserGetContentArgs),
+        _tool("browser_screenshot",     prompts.get("browser_screenshot", _DEFAULT_TOOL_PROMPTS["browser_screenshot"]), browser_screenshot_tool, BrowserScreenshotArgs),
+        _tool("browser_close",          prompts.get("browser_close",      _DEFAULT_TOOL_PROMPTS["browser_close"]),      browser_close_tool,      BrowserCloseArgs),
         _tool("search_documents",       prompts["search_documents"],       search_documents_tool, SearchDocumentsArgs),
     ]))
 

@@ -68,7 +68,9 @@ _SAFE_TOOLS = {
     "git_status", "git_diff", "git_log",
     "web_search", "fetch_url", "search_images", "search_documents",
     "query_database", "save_memory", "search_memory", "organize_memory",
-    "save_solution", "cron_list", "describe_image",
+    "save_solution", "cron_list", "describe_image", "take_screenshot",
+    "browser_navigate", "browser_get_content", "browser_screenshot", "browser_close",
+    "browser_connect", "browser_switch_tab", "browser_enable_remote_debug", "browser_evaluate",
 }
 
 # High-risk: always ask, even in AUTO_EDIT.
@@ -78,6 +80,7 @@ _ALWAYS_ASK_TOOLS = {"run_shell", "git_commit"}
 _EDIT_TOOLS = {
     "edit_file", "write_file", "cron_create", "cron_delete", "cron_run",
     "system_propose", "system_confirm",
+    "browser_click", "browser_type",
 }
 
 
@@ -339,7 +342,7 @@ def _stream_assistant(
             data={"content": content},
             headers=_workspace_headers(effective_mode),
             stream=True,
-            timeout=120,
+            timeout=300,
         )
         resp.raise_for_status()
         import json as _json
