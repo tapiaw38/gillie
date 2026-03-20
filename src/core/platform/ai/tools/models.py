@@ -5,9 +5,11 @@ This module defines Pydantic models for validating tool arguments.
 Each model corresponds to a tool that can be called by the AI assistant.
 """
 
+import asyncio
 import fnmatch
 import json
 import logging
+import os
 from typing import Optional, List, Dict, Any
 from pydantic import BaseModel, Field
 from langchain_core.tools import StructuredTool
@@ -643,6 +645,15 @@ def _find_file_by_name(files, file_name: str):
     return None
 
 
+# ── Browser session state (module-level so it persists across requests) ──────
+_browser_state: Dict[str, Any] = {
+    "playwright": None,
+    "browser": None,
+    "page": None,
+    "connected": False,   # True when attached to a real browser via CDP
+}
+
+
 def create_langchain_tools(openai_integration, profile, skill_manager=None, store_service=None, job_usecases=None, shell_output_callback=None, client_workspace: str = "", approval_callback=None, plan_mode: bool = False) -> List[StructuredTool]:
     """
     Create LangChain StructuredTool instances with Pydantic validation.
@@ -868,39 +879,29 @@ def create_langchain_tools(openai_integration, profile, skill_manager=None, stor
             return f"Screenshot captured but vision analysis failed: {e}"
 
     # ── Browser session (Playwright) ──────────────────────────────────────────
-    # _browser_state holds either:
-    #   - a headless Chromium launched by _get_page()
-    #   - a real user browser connected via CDP (browser_connect tool)
-    # The "connected" flag distinguishes the two so browser_close doesn't
-    # try to shut down the user's real browser.
-    _browser_state: Dict[str, Any] = {
-        "playwright": None,
-        "browser": None,
-        "page": None,
-        "connected": False,   # True when attached to a real browser via CDP
-    }
+    # _browser_state is module-level (defined above create_langchain_tools) so
+    # it persists across requests within the same process.
 
     async def _get_page():
-        """Return (or lazily create) the shared Playwright page."""
+        """Return the active browser page. Auto-connects to the real Chrome via CDP if needed."""
+        page = _browser_state.get("page")
+        if page and not page.is_closed():
+            return page
+        # No active page — auto-connect to the real Chrome browser
+        result = await browser_connect_tool()
+        page = _browser_state.get("page")
+        if not page or page.is_closed():
+            raise RuntimeError(f"Could not connect to browser: {result}")
+        return page
+
+    async def _cdp_is_ready(host: str, port: int) -> bool:
+        """Check if CDP endpoint is responding via plain HTTP (avoids IPv6 issues)."""
+        import urllib.request
         try:
-            from playwright.async_api import async_playwright
-        except ImportError:
-            raise RuntimeError(
-                "playwright is not installed. Run: pip install playwright && playwright install chromium"
-            )
-        if _browser_state["page"] is None or _browser_state["page"].is_closed():
-            if _browser_state["playwright"] is None:
-                _browser_state["playwright"] = await async_playwright().start()
-            _browser_state["browser"] = await _browser_state["playwright"].chromium.launch(
-                headless=True,
-                args=["--no-sandbox", "--disable-dev-shm-usage"],
-            )
-            context = await _browser_state["browser"].new_context(
-                viewport={"width": 1280, "height": 800},
-                user_agent="Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 Chrome/120 Safari/537.36",
-            )
-            _browser_state["page"] = await context.new_page()
-        return _browser_state["page"]
+            with urllib.request.urlopen(f"http://{host}:{port}/json/version", timeout=2) as r:
+                return r.status == 200
+        except Exception:
+            return False
 
     async def _connect_cdp(cdp_url: str):
         """Internal: attempt CDP connection and update _browser_state. Raises on failure."""
@@ -909,7 +910,9 @@ def create_langchain_tools(openai_integration, profile, skill_manager=None, stor
             await _browser_state["browser"].close()
         if _browser_state["playwright"] is None:
             _browser_state["playwright"] = await async_playwright().start()
-        browser = await _browser_state["playwright"].chromium.connect_over_cdp(cdp_url)
+        # Always use 127.0.0.1 to avoid IPv6 resolution issues
+        normalized = cdp_url.replace("localhost", "127.0.0.1")
+        browser = await _browser_state["playwright"].chromium.connect_over_cdp(normalized)
         _browser_state["browser"] = browser
         _browser_state["connected"] = True
         contexts = browser.contexts
@@ -934,31 +937,45 @@ def create_langchain_tools(openai_integration, profile, skill_manager=None, stor
         except ImportError:
             return "playwright not installed. Run: pip install playwright && playwright install chromium"
 
+        import shutil
         port = int(cdp_url.split(":")[-1]) if ":" in cdp_url else 9222
 
-        # First attempt — CDP might already be available (Chrome already running with --remote-debugging-port)
-        try:
-            await _connect_cdp(cdp_url)
-        except Exception:
+        # Check if CDP is already available (Chrome running with --remote-debugging-port)
+        if await _cdp_is_ready("127.0.0.1", port):
+            try:
+                await _connect_cdp(cdp_url)
+            except Exception as e:
+                return f"CDP endpoint responded but Playwright connection failed: {e}"
+        else:
             # CDP not available — relaunch Chrome with real user profile + remote debugging
             logger.info("browser_connect: CDP not available, relaunching Chrome with remote debugging...")
 
             # Find Chrome binary
             chrome_bins = ["google-chrome-stable", "google-chrome", "chromium", "chromium-browser"]
-            import shutil
             chrome_bin = next((b for b in chrome_bins if shutil.which(b)), None)
             if not chrome_bin:
-                return (
-                    "Chrome is not installed. Install google-chrome-stable and try again."
-                )
+                return "Chrome is not installed. Install google-chrome-stable and try again."
 
-            # Kill existing Chrome so it releases the profile lock
-            await asyncio.create_subprocess_exec(
-                "pkill", "-f", chrome_bin,
-                stdout=asyncio.subprocess.DEVNULL,
-                stderr=asyncio.subprocess.DEVNULL,
-            )
-            await asyncio.sleep(2)
+            # Kill ALL chrome processes (main + renderers + helpers)
+            for sig in ("TERM", "KILL"):
+                await asyncio.create_subprocess_exec(
+                    "pkill", f"-{sig}", "-f", "chrome",
+                    stdout=asyncio.subprocess.DEVNULL,
+                    stderr=asyncio.subprocess.DEVNULL,
+                )
+                await asyncio.sleep(1)
+
+            # Wait until every chrome process is fully gone (profile lock released)
+            for _ in range(10):
+                chk = await asyncio.create_subprocess_exec(
+                    "pgrep", "-f", "chrome",
+                    stdout=asyncio.subprocess.DEVNULL,
+                    stderr=asyncio.subprocess.DEVNULL,
+                )
+                await chk.wait()
+                if chk.returncode != 0:
+                    break  # no chrome processes left
+                await asyncio.sleep(1)
 
             # Relaunch Chrome with real user profile so sessions are preserved
             real_profile = os.path.expanduser("~/.config/google-chrome")
@@ -968,26 +985,30 @@ def create_langchain_tools(openai_integration, profile, skill_manager=None, stor
                 f"--user-data-dir={real_profile}",
                 "--no-first-run",
                 "--no-default-browser-check",
+                "--disable-session-crashed-bubble",
                 stdout=asyncio.subprocess.DEVNULL,
                 stderr=asyncio.subprocess.DEVNULL,
             )
 
-            # Wait up to 30s for CDP to become available
-            connected = False
+            # Wait up to 30s for CDP HTTP endpoint to respond, then connect
+            ready = False
             for _ in range(30):
                 await asyncio.sleep(1)
-                try:
-                    await _connect_cdp(cdp_url)
-                    connected = True
+                if await _cdp_is_ready("127.0.0.1", port):
+                    ready = True
                     break
-                except Exception:
-                    continue
 
-            if not connected:
+            if not ready:
                 return (
-                    f"Chrome was relaunched with remote debugging on port {port} but CDP "
-                    "is not yet available. Wait a few seconds and call browser_connect again."
+                    f"Chrome was relaunched with --remote-debugging-port={port} but "
+                    "the CDP endpoint is not responding after 30s. "
+                    "Chrome may have failed to start. Check that google-chrome-stable is installed."
                 )
+
+            try:
+                await _connect_cdp(cdp_url)
+            except Exception as e:
+                return f"CDP endpoint is up but Playwright connection failed: {e}"
 
         # Build tab list
         all_pages = [p for ctx in _browser_state["browser"].contexts for p in ctx.pages]
@@ -1158,6 +1179,11 @@ user_pref("devtools.debugger.force-local", true);
             page = _browser_state.get("page")
             if not page or page.is_closed():
                 return "No browser page available. Use browser_connect first."
+            # Playwright's page.evaluate requires an expression or a function.
+            # Top-level `return` is a SyntaxError. Auto-wrap in IIFE when needed.
+            needs_wrap = "return " in script or script.strip().startswith("//")
+            if needs_wrap:
+                script = f"(function() {{\n{script}\n}})()"
             result = await page.evaluate(script)
             if result is None:
                 return "(script executed, no return value)"
