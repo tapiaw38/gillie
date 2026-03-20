@@ -39,12 +39,21 @@ class ServerConfig:
     jwt_secret: str
     encryption_algorithm: str
 
+_PROVIDER_PRESETS: dict = {
+    "deepseek":    {"base_url": "https://api.deepseek.com",          "model": "deepseek-chat",          "auth_type": "api_key"},
+    "openrouter":  {"base_url": "https://openrouter.ai/api/v1",      "model": "deepseek/deepseek-chat", "auth_type": "api_key"},
+    "anthropic":   {"base_url": "https://api.anthropic.com/v1",      "model": "claude-sonnet-4-6",      "auth_type": "api_key"},
+    "openai":      {"base_url": "https://api.openai.com/v1",         "model": "gpt-4o",                 "auth_type": "api_key"},
+}
+
+
 @dataclass
 class OpenAIConfig:
     api_key: str
     base_url: str
     model: str
     role: str
+    auth_type: str = "api_key"  # "api_key" | "bearer"
 
 
 @dataclass
@@ -238,11 +247,15 @@ def read_config() -> ConfigurationService:
         ),
     )
 
+    provider = get_env("AI_PROVIDER", "")
+    preset = _PROVIDER_PRESETS.get(provider, {})
+
     openai_config = OpenAIConfig(
-        api_key=get_env("OPENAI_API_KEY", ""),
-        base_url=get_env("OPENAI_BASE_URL", "https://api.deepseek.com"),
-        model=get_env("OPENAI_MODEL", "deepseek-chat"),
+        api_key=get_env("AI_AUTH_TOKEN", get_env("OPENAI_API_KEY", "")),
+        base_url=get_env("OPENAI_BASE_URL", preset.get("base_url", "https://api.deepseek.com")),
+        model=get_env("OPENAI_MODEL", preset.get("model", "deepseek-chat")),
         role=get_env("OPENAI_ROLE", "user"),
+        auth_type=get_env("AI_AUTH_TYPE", preset.get("auth_type", "api_key")),
     )
 
     aws_config = AWSConfig(
@@ -425,6 +438,7 @@ def init_config_from_json(config_data: "AssistantConfig") -> None:
             base_url=s.openai.base_url,
             model=s.openai.model,
             role=s.openai.role,
+            auth_type=s.openai.auth_type,
         ),
         aws_config=AWSConfig(
             access_key_id=s.s3.access_key_id if s.s3.enabled else "",

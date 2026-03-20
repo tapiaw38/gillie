@@ -815,29 +815,52 @@ def create_langchain_tools(openai_integration, profile, skill_manager=None, stor
 
         # Detect display server to pick the right tool
         is_wayland = bool(os.environ.get("WAYLAND_DISPLAY"))
+        desktop = os.environ.get("XDG_CURRENT_DESKTOP", "").lower()
 
         tmp = tempfile.NamedTemporaryFile(suffix=".png", delete=False)
         tmp.close()
         path = tmp.name
 
-        # Wayland-native tools first, then X11 fallbacks
-        if is_wayland:
+        # Some Wayland compositors (MangoWM, etc.) don't implement wlr-screencopy
+        # properly and grim produces a black image. For those, use X11/XWayland first.
+        _wlroots_compositors = {"sway", "wayfire", "river", "hyprland", "labwc"}
+        grim_likely_works = any(d in desktop for d in _wlroots_compositors)
+
+        if is_wayland and grim_likely_works:
             _CAPTURE_CMDS = [
-                ["grim", path],                                    # Wayland (sway/wlroots)
-                ["gnome-screenshot", "-f", path],                  # GNOME on Wayland
-                ["spectacle", "-b", "-o", path],                   # KDE on Wayland
-                ["scrot", "-z", path],                             # X11 via XWayland
-                ["import", "-window", "root", path],               # ImageMagick via XWayland
-                ["maim", path],                                    # X11 via XWayland
+                ["grim", path],
+                ["gnome-screenshot", "-f", path],
+                ["spectacle", "-b", "-o", path],
+                ["scrot", path],
+                ["import", "-window", "root", path],
+            ]
+        elif is_wayland:
+            # Wayland compositor without reliable wlr-screencopy — try X11 tools first
+            _CAPTURE_CMDS = [
+                ["scrot", path],
+                ["import", "-window", "root", path],
+                ["gnome-screenshot", "-f", path],
+                ["spectacle", "-b", "-o", path],
+                ["grim", path],
             ]
         else:
             _CAPTURE_CMDS = [
-                ["scrot", "-z", path],
+                ["scrot", path],
                 ["maim", path],
-                ["import", "-window", "root", path],               # ImageMagick
+                ["import", "-window", "root", path],
                 ["gnome-screenshot", "-f", path],
                 ["spectacle", "-b", "-o", path],
             ]
+
+        # Pass display env vars explicitly so subprocesses can reach the Wayland/X11 session
+        import pwd
+        uid = os.getuid()
+        capture_env = {
+            **os.environ,
+            "WAYLAND_DISPLAY": os.environ.get("WAYLAND_DISPLAY", "wayland-0"),
+            "DISPLAY": os.environ.get("DISPLAY", ":0"),
+            "XDG_RUNTIME_DIR": os.environ.get("XDG_RUNTIME_DIR", f"/run/user/{uid}"),
+        }
 
         captured = False
         for cmd in _CAPTURE_CMDS:
@@ -845,7 +868,8 @@ def create_langchain_tools(openai_integration, profile, skill_manager=None, stor
                 proc = await asyncio.create_subprocess_exec(
                     *cmd,
                     stdout=asyncio.subprocess.DEVNULL,
-                    stderr=asyncio.subprocess.DEVNULL,
+                    stderr=asyncio.subprocess.PIPE,
+                    env=capture_env,
                 )
                 await asyncio.wait_for(proc.wait(), timeout=10)
                 if proc.returncode == 0 and os.path.getsize(path) > 0:

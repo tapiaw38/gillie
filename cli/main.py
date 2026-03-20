@@ -16,6 +16,7 @@ from cli.commands.expose import app as expose_app
 from cli.commands.install import app as install_app
 from cli.commands.agent import app as agent_app
 from cli.commands.reset import app as reset_app
+from cli.commands.provider import app as provider_app
 
 console = Console()
 
@@ -41,6 +42,7 @@ app.add_typer(expose_app, name="expose", help="Expose API via nginx (HTTP/HTTPS)
 app.add_typer(install_app, name="install", help="Install Python dependencies")
 app.add_typer(agent_app, name="agent", help="Interactive chat with the assistant")
 app.add_typer(reset_app, name="reset", help="Reset Gillie to factory state")
+app.add_typer(provider_app, name="provider", help="Manage AI provider (DeepSeek, OpenRouter, Claude, etc.)")
 
 
 @app.command("status")

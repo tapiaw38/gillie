@@ -25,13 +25,10 @@ class OpenAIIntegration:
         self.base_url = config.base_url
         self.model = config.model
         self.role = config.role
+        self.auth_type = getattr(config, "auth_type", "api_key")
 
-        self.client = AsyncOpenAI(
-            api_key=self.api_key,
-            base_url=self.base_url,
-            timeout=45.0,
-            max_retries=3,
-        )
+        self.client = self._build_client()
+        self._extra_headers: Dict[str, str] = {}
 
         self.image_processor = FileImageProcessor(config_service)
         self.excel_processor = ExcelImageProcessor(config_service)
@@ -60,7 +57,20 @@ class OpenAIIntegration:
                 self.logger.error(f"Failed to initialize LangChain service: {e}")
                 self.langchain_service = None
 
-        self.logger.info(f"OpenAI integration initialized with model: {self.model}")
+        self.logger.info(f"OpenAI integration initialized with model: {self.model}, auth_type: {self.auth_type}")
+
+    # ------------------------------------------------------------------
+    # Client construction helpers
+    # ------------------------------------------------------------------
+
+    def _build_client(self) -> AsyncOpenAI:
+        """Construct an AsyncOpenAI client with the current credentials."""
+        return AsyncOpenAI(
+            api_key=self.api_key,
+            base_url=self.base_url,
+            timeout=45.0,
+            max_retries=3,
+        )
 
     def set_skill_manager(self, skill_manager) -> None:
         """Inject SkillManager after construction (avoids circular init order)."""
@@ -545,6 +555,27 @@ class OpenAIIntegration:
             self.logger.error(f"Error in hybrid text extraction: {e}")
             return f"Error extracting text: {str(e)}"
 
+    def _handle_bearer_401(self) -> bool:
+        """
+        Attempt to recover from a 401 by refreshing the Claude Code OAuth token.
+
+        Returns True if the token was refreshed successfully and the client was
+        rebuilt; False otherwise.  Only acts when auth_type == "bearer".
+        """
+        if self.auth_type != "bearer":
+            return False
+
+        self.logger.info("Received 401; attempting Claude Code token refresh")
+        new_token = self._refresh_claude_code_token()
+        if not new_token:
+            self.logger.warning("Token refresh returned empty; cannot retry")
+            return False
+
+        self.api_key = new_token
+        self.client = self._build_client(self._extra_headers)
+        self.logger.info("Token refreshed and client rebuilt successfully")
+        return True
+
     async def simple_completion(self, system: str, user: str) -> str:
         """
         Performs a minimal, tool-free chat completion.
@@ -554,6 +585,9 @@ class OpenAIIntegration:
         inappropriate for internal housekeeping calls such as conversation
         compaction summarisation.
 
+        When auth_type == "bearer" a single transparent retry is attempted on
+        401 errors by refreshing the Claude Code OAuth token.
+
         Args:
             system: The system prompt content.
             user: The user prompt content.
@@ -561,20 +595,26 @@ class OpenAIIntegration:
         Returns:
             The assistant reply text, or an empty string on failure.
         """
-        try:
-            response = await self.client.chat.completions.create(
-                model=self.model,
-                messages=[
-                    {"role": "system", "content": system},
-                    {"role": "user", "content": user},
-                ],
-                temperature=0.3,
-                max_tokens=1024,
-            )
-            return response.choices[0].message.content or ""
-        except Exception as e:
-            self.logger.error(f"simple_completion failed: {e}")
-            return ""
+        messages = [
+            {"role": "system", "content": system},
+            {"role": "user", "content": user},
+        ]
+        for attempt in range(2):
+            try:
+                response = await self.client.chat.completions.create(
+                    model=self.model,
+                    messages=messages,
+                    temperature=0.3,
+                    max_tokens=1024,
+                )
+                return response.choices[0].message.content or ""
+            except Exception as e:
+                is_auth_error = "401" in str(e) or "authentication" in str(e).lower()
+                if attempt == 0 and is_auth_error and self._handle_bearer_401():
+                    continue  # retry with refreshed token
+                self.logger.error(f"simple_completion failed: {e}")
+                return ""
+        return ""
 
     def _parse_previous_messages(self, previous_messages: str) -> List[Dict[str, Any]]:
         """

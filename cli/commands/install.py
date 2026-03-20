@@ -137,6 +137,10 @@ def install(
 
     if result.returncode == 0:
         console.print("[green]✓[/green] Done.")
+        if not package:
+            console.print(
+                "Run [bold cyan]gillie provider use[/bold cyan] to configure your AI provider."
+            )
     else:
         console.print("[red]✗[/red] Installation failed.")
         raise typer.Exit(result.returncode)
