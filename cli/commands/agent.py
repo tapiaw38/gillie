@@ -13,9 +13,13 @@ In-chat commands:
   /exit    — quit (also Ctrl+C or Ctrl+D)
 """
 
+import os
+import re
 import sys
+import glob as _glob
 import typer
 import requests
+from pathlib import Path
 from rich.console import Console
 from rich.panel import Panel
 from rich.markdown import Markdown
@@ -134,10 +138,12 @@ def _clear_messages(conv_id: str) -> None:
 # ─── Display helpers ───────────────────────────────────────────────────────────
 
 def _print_header(assistant_name: str, conv_id: str) -> None:
+    ws = _workspace()
     console.print()
     console.print(Panel(
         f"✨🐟 [bold cyan]{assistant_name}[/bold cyan]\n"
         f"[dim]Conversation: {conv_id}[/dim]\n"
+        f"[dim]Workspace:    {ws}[/dim]\n"
         f"[dim]/new · /list · /clear · /id · /compactar · /exit[/dim]",
         border_style="cyan",
         box=box.ROUNDED,
@@ -293,6 +299,200 @@ def _print_history(messages: list, assistant_name: str) -> None:
             _print_assistant(assistant_name, content)
     console.print(Rule(style="dim"))
     console.print()
+
+
+# ─── @ reference resolution ───────────────────────────────────────────────────
+
+_AT_URL_RE  = re.compile(r'@(https?://[^\s]+)')
+_AT_GLOB_RE = re.compile(r'@@([^\s]+)')
+_AT_DIR_RE  = re.compile(r'@([^\s@]+/)')
+_AT_FILE_RE = re.compile(r'@([^\s@]+\.[^\s@/]+)')
+
+_URL_CAP        = 3_000
+_FILE_CAP       = 4_000
+_DIR_FILE_CAP   = 500
+_DIR_TOTAL_CAP  = 5_000
+_WARN_TOTAL     = 8_000
+
+_SKIP_DIRS = {".git", "__pycache__", "node_modules", ".venv", "venv", ".mypy_cache", ".pytest_cache"}
+
+
+def _workspace() -> Path:
+    """Return the base directory for @ references and file tools.
+
+    Priority:
+    1. GILLIE_WORKSPACE env var  (set by --workspace flag or user env)
+    2. Current working directory (where the user ran gillie agent)
+    """
+    env = os.environ.get("GILLIE_WORKSPACE")
+    return Path(env).resolve() if env else Path.cwd().resolve()
+
+
+def _is_binary(path: Path) -> bool:
+    """Return True if the first 512 bytes contain a null byte (binary file)."""
+    try:
+        with open(path, "rb") as fh:
+            return b"\x00" in fh.read(512)
+    except OSError:
+        return True
+
+
+def _strip_html(html: str) -> str:
+    """Remove HTML tags and collapse whitespace for a plain-text approximation."""
+    text = re.sub(r"<[^>]+>", " ", html)
+    text = re.sub(r"[ \t]+", " ", text)
+    text = re.sub(r"\n{3,}", "\n\n", text)
+    return text.strip()
+
+
+def _expand_url(url: str) -> tuple[str, str | None]:
+    """Fetch a URL and return (plain_text_content, warning_or_None)."""
+    try:
+        resp = requests.get(url, timeout=15, headers={"User-Agent": "gillie-cli/1.0"})
+        resp.raise_for_status()
+        content_type = resp.headers.get("content-type", "")
+        raw = resp.text
+        if "html" in content_type:
+            raw = _strip_html(raw)
+        if len(raw) > _URL_CAP:
+            raw = raw[:_URL_CAP] + f"\n[... truncated at {_URL_CAP} chars]"
+        return raw, None
+    except requests.exceptions.RequestException as exc:
+        return "", f"Could not fetch URL {url}: {exc}"
+
+
+def _expand_glob(pattern: str) -> tuple[str, str | None]:
+    """Match a glob pattern relative to the workspace and return a file list."""
+    base = _workspace()
+    matched = sorted(_glob.glob(str(base / pattern), recursive=True))
+    if not matched:
+        return "", f"@@{pattern} matched no files"
+    # Make paths relative to the workspace for readability
+    rel_paths = []
+    for p in matched:
+        try:
+            rel_paths.append(str(Path(p).relative_to(base)))
+        except ValueError:
+            rel_paths.append(p)
+    listing = "\n".join(rel_paths)
+    block = f"--- @@{pattern} ({len(rel_paths)} files) ---\n{listing}\n--- end ---"
+    return block, None
+
+
+def _expand_dir(directory: str) -> tuple[str, str | None]:
+    """Read all text files in a directory recursively."""
+    base = _workspace()
+    dir_path = base / directory.rstrip("/")
+    if not dir_path.is_dir():
+        return "", f"Directory not found: {directory}"
+
+    collected: list[str] = []
+    total_chars = 0
+    file_count = 0
+
+    for root, dirs, files in os.walk(dir_path):
+        # Prune directories we should skip
+        dirs[:] = [d for d in dirs if d not in _SKIP_DIRS]
+        for fname in sorted(files):
+            fpath = Path(root) / fname
+            if _is_binary(fpath):
+                continue
+            try:
+                text = fpath.read_text(encoding="utf-8", errors="replace")
+            except OSError:
+                continue
+            if len(text) > _DIR_FILE_CAP:
+                text = text[:_DIR_FILE_CAP] + f"\n[... truncated at {_DIR_FILE_CAP} chars]"
+            try:
+                rel = str(fpath.relative_to(base))
+            except ValueError:
+                rel = str(fpath)
+            entry = f"=== {rel} ===\n{text}"
+            if total_chars + len(entry) > _DIR_TOTAL_CAP:
+                break
+            collected.append(entry)
+            total_chars += len(entry)
+            file_count += 1
+        else:
+            continue
+        break  # inner break propagates
+
+    if not collected:
+        return "", f"No readable text files found in {directory}"
+
+    body = "\n\n".join(collected)
+    block = f"--- @{directory} ({file_count} files) ---\n{body}\n--- end ---"
+    return block, None
+
+
+def _expand_file(filepath: str) -> tuple[str, str | None]:
+    """Read a single file relative to the workspace."""
+    base = _workspace()
+    fpath = base / filepath
+    if not fpath.exists():
+        return "", f"File not found: {filepath}"
+    if _is_binary(fpath):
+        return "", f"Skipped binary file: {filepath}"
+    try:
+        text = fpath.read_text(encoding="utf-8", errors="replace")
+    except OSError as exc:
+        return "", f"Could not read {filepath}: {exc}"
+    if len(text) > _FILE_CAP:
+        text = text[:_FILE_CAP] + f"\n[... truncated at {_FILE_CAP} chars]"
+    block = f"--- @{filepath} ---\n{text}\n--- end ---"
+    return block, None
+
+
+def _resolve_at_references(text: str) -> tuple[str, list[str]]:
+    """
+    Parse @ references in user input and replace them with their content.
+
+    Supported syntax:
+      @https://...          fetch URL content
+      @@pattern             glob file listing (names only)
+      @path/to/dir/         read all text files in directory
+      @path/to/file.ext     read a single file
+
+    Returns (expanded_text, warnings).
+    """
+    warnings: list[str] = []
+
+    def _replace(match_obj: re.Match, expander, raw_ref: str) -> str:
+        content, warn = expander(match_obj.group(1))
+        if warn:
+            warnings.append(warn)
+            return match_obj.group(0)  # leave original token unchanged
+        return content
+
+    # Process in specificity order: URL → glob (@@) → directory → file.
+    # Each pass operates on the already-substituted text so overlapping
+    # patterns don't re-process expanded blocks.
+
+    # 1. URLs — @http:// or @https://
+    text = _AT_URL_RE.sub(
+        lambda m: _replace(m, lambda u: _expand_url(u), m.group(0)),
+        text,
+    )
+
+    # 2. Glob — @@pattern (must run before single-@ patterns)
+    text = _AT_GLOB_RE.sub(
+        lambda m: _replace(m, lambda p: _expand_glob(p), m.group(0)),
+        text,
+    )
+
+    # 3. Directory — @path/ending/with/slash/
+    text = _AT_DIR_RE.sub(
+        lambda m: _replace(m, lambda d: _expand_dir(d), m.group(0)),
+        text,
+    )
+
+    # 4. File — @path/with/extension.ext
+    text = _AT_FILE_RE.sub(
+        lambda m: _replace(m, lambda f: _expand_file(f), m.group(0)),
+        text,
+    )
+
+    return text, warnings
 
 
 # ─── Main command ──────────────────────────────────────────────────────────────
@@ -532,19 +732,57 @@ def list_conversations():
     console.print()
 
 
+@app.command("workspace")
+def set_workspace(
+    path: str = typer.Argument(None, help="Directory to set as workspace. Omit to show current."),
+):
+    """Show or set the persistent workspace directory for file tools."""
+    from cli.config.manager import config_exists, load_config, save_config
+    if not config_exists():
+        console.print("[red]✗[/red] Not initialized. Run [bold cyan]gillie init[/bold cyan] first.")
+        raise typer.Exit(1)
+    if path is None:
+        ws = _workspace()
+        console.print(f"\n[bold]Workspace:[/bold] {ws}")
+        console.print(f"[dim]Override with: gillie agent workspace /your/path[/dim]\n")
+        return
+    ws_path = Path(path).resolve()
+    if not ws_path.is_dir():
+        console.print(f"[red]✗[/red] Directory not found: {ws_path}")
+        raise typer.Exit(1)
+    config = load_config()
+    config.workspace = str(ws_path)
+    save_config(config)
+    console.print(f"[green]✓[/green] Workspace set to: {ws_path}")
+
+
 @app.callback(invoke_without_command=True)
 def agent(
     ctx: typer.Context,
     new: bool = typer.Option(False, "--new", "-n", help="Force a new conversation"),
     conv_id: str = typer.Option(None, "--id", help="Attach to a specific conversation ID"),
+    workspace: str = typer.Option(None, "--workspace", "-w", help="Set workspace directory for this session"),
+    show_workspace: bool = typer.Option(False, "--show-workspace", help="Print current workspace and exit"),
 ):
     """Interactive chat with the assistant from the terminal."""
     if ctx.invoked_subcommand is not None:
         return
 
+    if show_workspace:
+        console.print(f"\n[bold]Workspace:[/bold] {_workspace()}\n")
+        raise typer.Exit(0)
+
     if not config_exists():
         console.print("[red]✗[/red] Not initialized. Run [bold cyan]gillie init[/bold cyan] first.")
         raise typer.Exit(1)
+
+    # Apply --workspace flag for this session
+    if workspace:
+        ws_path = Path(workspace).resolve()
+        if not ws_path.is_dir():
+            console.print(f"[red]✗[/red] Workspace directory not found: {ws_path}")
+            raise typer.Exit(1)
+        os.environ["GILLIE_WORKSPACE"] = str(ws_path)
 
     config = load_config()
     assistant_name = config.profile.assistant_name
@@ -634,6 +872,20 @@ def agent(
                 "No manual action needed.[/dim]\n"
             )
             continue
+
+        # ── expand @ references ──────────────────────────────────────────
+        expanded, ref_warnings = _resolve_at_references(user_input)
+        for w in ref_warnings:
+            console.print(f"[yellow]Warning:[/yellow] {w}")
+        if expanded != user_input:
+            ref_count = len(re.findall(r'(?<!\s)@', user_input))
+            console.print(f"[dim]{ref_count} reference(s) expanded[/dim]")
+            if len(expanded) > _WARN_TOTAL:
+                console.print(
+                    f"[yellow]Warning:[/yellow] Message expanded to {len(expanded)} chars"
+                    " — consider using more specific references"
+                )
+        user_input = expanded
 
         # ── send message (streaming) ─────────────────────────────────────
         _print_user(user_input)

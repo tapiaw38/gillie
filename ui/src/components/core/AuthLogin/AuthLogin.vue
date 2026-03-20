@@ -134,7 +134,7 @@ const showForgotPasswordForm = () => {
     </div>
   </form>
 
-  <p class="text-danger" v-if="isLoginError">Error: {{ loginError?.message }}</p>
+  <p class="text-danger" v-if="isLoginError">Error: {{ loginError instanceof Error ? loginError.message : loginError }}</p>
 
   <!-- Toast for Notifications -->
   <Toast position="top-right" />

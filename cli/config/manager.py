@@ -129,6 +129,7 @@ def load_config() -> AssistantConfig:
         logging=LoggingConfig(**data.get("logging", {})),
         tunnel=TunnelConfig(**data.get("tunnel", {})),
         expose=ExposeConfig(**data.get("expose", {})),
+        workspace=data.get("workspace", ""),
     )
 
 
@@ -148,6 +149,7 @@ def save_config(config: AssistantConfig) -> None:
         "logging": asdict(config.logging),
         "tunnel": asdict(config.tunnel),
         "expose": asdict(config.expose),
+        "workspace": config.workspace,
     }
     with open(path, "w") as f:
         json.dump(technical, f, indent=2)

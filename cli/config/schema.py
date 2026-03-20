@@ -204,3 +204,4 @@ class AssistantConfig:
     logging: LoggingConfig = field(default_factory=LoggingConfig)
     tunnel: TunnelConfig = field(default_factory=TunnelConfig)
     expose: ExposeConfig = field(default_factory=ExposeConfig)
+    workspace: str = ""  # Base directory for file tools. Empty = auto-detect from cwd.
