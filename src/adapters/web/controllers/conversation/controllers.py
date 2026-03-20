@@ -160,6 +160,18 @@ async def approve_tool(request: Request):
     return {"ok": found}
 
 
+@router.post("/{conversation_id}/compact", status_code=status.HTTP_200_OK)
+async def compact_conversation(
+    conversation_id: str,
+    request: Request,
+    usecases: Usecases = Depends(get_usecases),
+):
+    """Force-compact a conversation immediately, regardless of message count."""
+    user_id = request.state.user.get("user_id")
+    result = await usecases.conversation.add_message_usecase.compact_now(conversation_id, user_id)
+    return result
+
+
 @router.delete("/{conversation_id}/message", status_code=status.HTTP_200_OK)
 async def delete_all_messages(
     conversation_id: str,

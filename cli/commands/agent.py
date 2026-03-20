@@ -229,8 +229,8 @@ def _print_header(assistant_name: str, conv_id: str, mode: str = _Mode.CONFIRM_R
         f"✨🐟 [bold cyan]{assistant_name}[/bold cyan]\n"
         f"[dim]Conversation: {conv_id}[/dim]\n"
         f"[dim]Workspace:    {ws}[/dim]\n"
-        f"[dim]Mode: {mode} | /mode para cambiar[/dim]\n"
-        f"[dim]/new · /list · /clear · /id · /mode · /compactar · /exit[/dim]",
+        f"[dim]Mode: {mode} | /mode to change[/dim]\n"
+        f"[dim]/new · /list · /clear · /compact · /plan · /mode · /id · /exit[/dim]",
         border_style="cyan",
         box=box.ROUNDED,
     ))
@@ -894,10 +894,10 @@ def listen(
             console.print(f"\n[red]✗[/red] API error {e.response.status_code}: {e.response.text}")
         return "(no reply)", None
 
-    # ── loop principal ────────────────────────────────────────────────────────
+    # ── main loop ────────────────────────────────────────────────────────────
     while True:
         try:
-            console.print("[dim]🎙  Ready — speak whenever you want...[/dim]")
+            console.print("[dim]🎙  Ready — speak whenever you like...[/dim]")
             wav_bytes = _record_utterance()
         except KeyboardInterrupt:
             console.print("\n[dim]Goodbye 👋[/dim]")
@@ -1065,8 +1065,12 @@ def agent(
         class _AtCompleter(Completer):
             """Tab-complete @path references from the workspace."""
             _SLASH_CMDS = [
-                "/new", "/list", "/clear", "/id", "/mode",
-                "/compactar", "/exit",
+                "/new",
+                "/list", "/ls",
+                "/clear",
+                "/compact",
+                "/plan", "/mode",
+                "/id", "/exit",
             ]
 
             def get_completions(self, document, complete_event):
@@ -1134,15 +1138,17 @@ def agent(
             continue
 
         # ── in-chat commands ────────────────────────────────────────────────
-        if user_input.lower() in ("/exit", "/quit", "/q"):
+        cmd = user_input.lower()
+
+        if cmd in ("/exit", "/quit", "/q"):
             console.print("[dim]Goodbye 👋[/dim]")
             break
 
-        if user_input.lower() == "/id":
+        if cmd in ("/id",):
             console.print(f"[dim]Conversation ID: [bold]{current_id}[/bold][/dim]\n")
             continue
 
-        if user_input.lower() == "/list":
+        if cmd in ("/list", "/ls", "/conversations", "/convs"):
             from rich.table import Table
             from rich import box as rbox
             result = _get("/conversation/user")
@@ -1160,24 +1166,34 @@ def agent(
             console.print()
             continue
 
-        if user_input.lower() == "/new":
+        if cmd in ("/new",):
             conversation = _create_conversation()
             current_id = conversation.get("id") or conversation.get("_id")
             console.print(f"[green]✓[/green] New conversation: [bold]{current_id}[/bold]\n")
             _print_header(assistant_name, current_id, mode[0])
             continue
 
-        if user_input.lower() == "/clear":
+        if cmd in ("/clear",):
             _clear_messages(current_id)
             console.print("[green]✓[/green] Messages cleared.\n")
             continue
 
-        if user_input.lower() == "/compactar":
-            console.print(
-                "[dim]Compaction is automatic: it triggers when the conversation "
-                "exceeds the configured threshold (default: 40 messages). "
-                "No manual action needed.[/dim]\n"
-            )
+        if cmd in ("/compact",):
+            console.print("[dim]Compacting conversation...[/dim]")
+            try:
+                result = _post_json(f"/conversation/{current_id}/compact", {})
+                if result.get("compacted"):
+                    n = result.get("summarized", "?")
+                    console.print(f"[green]✓[/green] Conversation compacted: {n} messages → 1 summary\n")
+                else:
+                    console.print(f"[yellow]⚠[/yellow] {result.get('reason', 'Could not compact')}\n")
+            except Exception:
+                console.print("[red]✗[/red] Error compacting conversation\n")
+            continue
+
+        if cmd in ("/plan",):
+            mode[0] = _Mode.PLAN
+            console.print(f"[green]✓[/green] Mode: [bold]plan[/bold] (describe changes, never apply)\n")
             continue
 
         if user_input.lower().startswith("/mode"):

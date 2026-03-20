@@ -584,6 +584,33 @@ class AddMessageUseCase:
             logger.error(f"Error generating audio: {e}")
             return None
 
+    async def compact_now(self, conversation_id: str, user_id: str) -> dict:
+        """Force-compact the conversation immediately, regardless of message count."""
+        conversation = self._get_and_validate_conversation(conversation_id, user_id)
+
+        keep_recent = int(os.environ.get("COMPACTION_KEEP_RECENT", "20"))
+        messages_to_summarize = conversation.messages[:-keep_recent] if len(conversation.messages) > keep_recent else conversation.messages
+        non_summary = [m for m in messages_to_summarize if m.sender != SenderEnum.summary]
+
+        if not non_summary:
+            return {"compacted": False, "reason": "No hay mensajes para compactar"}
+
+        summary_text = await self._generate_summary(messages_to_summarize)
+        if not summary_text:
+            return {"compacted": False, "reason": "No se pudo generar el resumen"}
+
+        summary_message = Message(
+            content=f"[RESUMEN DE CONVERSACIÓN ANTERIOR]\n{summary_text}",
+            sender=SenderEnum.summary,
+            created_at=datetime.now(timezone.utc),
+        )
+        recent_messages = conversation.messages[-keep_recent:] if len(conversation.messages) > keep_recent else []
+        conversation.messages = [summary_message] + recent_messages
+        self._save_messages(conversation_id, conversation.messages)
+
+        logger.info(f"Manual compaction: {len(messages_to_summarize)} messages → 1 summary")
+        return {"compacted": True, "summarized": len(messages_to_summarize)}
+
     async def _compact_if_needed(
         self,
         conversation,
