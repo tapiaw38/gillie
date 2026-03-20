@@ -88,6 +88,7 @@ class OpenAIIntegration:
         previous_messages: str,
         profile: Profile,
         conversation_id: Optional[str] = None,
+        client_workspace: str = "",
     ) -> str:
         self.logger.info(f"Processing question for profile: {profile.user_id}")
 
@@ -101,6 +102,7 @@ class OpenAIIntegration:
             profile=profile,
             conversation_id=conversation_id or profile.user_id,
             use_tools=True,
+            client_workspace=client_workspace,
         )
 
     async def ask_stream(
@@ -111,6 +113,8 @@ class OpenAIIntegration:
         profile: Profile,
         conversation_id: Optional[str] = None,
         shell_output_queue=None,
+        client_workspace: str = "",
+        plan_mode: bool = False,
     ):
         """Stream AI response tokens via LangChain. Yields str tokens and shell_output dicts.
 
@@ -118,6 +122,10 @@ class OpenAIIntegration:
             shell_output_queue: Optional asyncio.Queue. When provided, run_shell tool output
                 is emitted line-by-line as {"type": "shell_output", "line": "..."} dicts
                 in real time rather than buffering until the command finishes.
+            client_workspace: Optional path sent by the CLI client via X-Gillie-Workspace.
+                When non-empty, overrides the GILLIE_WORKSPACE env var for all file tools.
+            plan_mode: When True, state-mutating tools return a description of the intended
+                change without applying it (sent via X-Gillie-Mode: plan header).
         """
         if self.langchain_service is None:
             raise Exception("LangChain service not available for streaming")
@@ -130,6 +138,8 @@ class OpenAIIntegration:
             conversation_id=conversation_id or profile.user_id,
             use_tools=True,
             shell_output_queue=shell_output_queue,
+            client_workspace=client_workspace,
+            plan_mode=plan_mode,
         ):
             yield token
 

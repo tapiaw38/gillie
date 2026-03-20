@@ -528,7 +528,7 @@ def _find_file_by_name(files, file_name: str):
     return None
 
 
-def create_langchain_tools(openai_integration, profile, skill_manager=None, store_service=None, job_usecases=None, shell_output_callback=None) -> List[StructuredTool]:
+def create_langchain_tools(openai_integration, profile, skill_manager=None, store_service=None, job_usecases=None, shell_output_callback=None, client_workspace: str = "", approval_callback=None, plan_mode: bool = False) -> List[StructuredTool]:
     """
     Create LangChain StructuredTool instances with Pydantic validation.
 
@@ -541,6 +541,12 @@ def create_langchain_tools(openai_integration, profile, skill_manager=None, stor
         shell_output_callback: Optional async callable(line: str) -> None.
             When provided, run_shell streams stdout line by line through this
             callback instead of buffering the full output before returning.
+        approval_callback: Optional async callable(request_id, tool_name, path, diff) -> bool.
+            When provided, edit_file and write_file pause and wait for explicit
+            user approval before applying any changes to disk.
+        plan_mode: When True, state-mutating tools (edit_file, write_file,
+            run_shell, git_commit) describe what they *would* do without
+            actually executing anything.
 
     Returns:
         List of LangChain StructuredTool instances
@@ -709,7 +715,10 @@ def create_langchain_tools(openai_integration, profile, skill_manager=None, stor
     import os as _os
     from pathlib import Path as _Path
 
-    workspace = _Path(_os.environ.get("GILLIE_WORKSPACE", _Path.home())).resolve()
+    if client_workspace:
+        workspace = _Path(client_workspace).resolve()
+    else:
+        workspace = _Path(_os.environ.get("GILLIE_WORKSPACE", _Path.home())).resolve()
 
     def _resolve_safe_path(path: str) -> tuple:
         """
@@ -781,11 +790,62 @@ def create_langchain_tools(openai_integration, profile, skill_manager=None, stor
 
     async def write_file_tool(path: str, content: str, create_dirs: bool = True) -> str:
         """Create or overwrite a file with the given content."""
+        import difflib as _difflib
+        import uuid as _uuid
+
         resolved, err = _resolve_safe_path(path)
         if err:
             return err
         if _is_ignored(resolved, workspace):
             return {"error": f"Access denied: '{path}' is excluded by .gillierignore"}
+
+        # Plan mode: describe the change without executing it.
+        if plan_mode:
+            if resolved.exists() and resolved.is_file():
+                try:
+                    current_lines = resolved.read_text(errors="replace").splitlines(keepends=True)
+                except Exception:
+                    current_lines = []
+            else:
+                current_lines = []
+            new_lines = content.splitlines(keepends=True)
+            diff = "".join(_difflib.unified_diff(
+                current_lines, new_lines,
+                fromfile=f"a/{path}", tofile=f"b/{path}", lineterm="",
+            ))
+            return {
+                "plan_only": True,
+                "would_do": f"Write '{path}' ({len(content.splitlines())} lines)",
+                "diff": diff[:500],
+            }
+
+        if approval_callback:
+            # Build a unified diff so the user can review what will change.
+            if resolved.exists() and resolved.is_file():
+                try:
+                    current_lines = resolved.read_text(errors="replace").splitlines(keepends=True)
+                except Exception:
+                    current_lines = []
+            else:
+                current_lines = []
+            new_lines = content.splitlines(keepends=True)
+            diff = "".join(_difflib.unified_diff(
+                current_lines, new_lines,
+                fromfile=f"a/{path}", tofile=f"b/{path}", lineterm="",
+            ))
+            request_id = str(_uuid.uuid4())
+            approved = await approval_callback(
+                request_id, "write_file", path,
+                diff or f"(new file) {path}",
+            )
+            if not approved:
+                from src.core.platform.ai.tools.approval_manager import get_feedback
+                feedback = get_feedback(request_id)
+                msg = f"Change to '{path}' was rejected by the user."
+                if feedback:
+                    msg += f" Reason: {feedback}. Please try a different approach."
+                return {"skipped": True, "message": msg}
+
         try:
             if create_dirs:
                 resolved.parent.mkdir(parents=True, exist_ok=True)
@@ -798,6 +858,7 @@ def create_langchain_tools(openai_integration, profile, skill_manager=None, stor
     async def edit_file_tool(path: str, old_string: str, new_string: str) -> str:
         """Replace old_string with new_string in a file using cascading match strategies."""
         import difflib
+        import uuid as _uuid
 
         resolved, err = _resolve_safe_path(path)
         if err:
@@ -813,6 +874,40 @@ def create_langchain_tools(openai_integration, profile, skill_manager=None, stor
             original = resolved.read_text(encoding="utf-8")
         except Exception as e:
             return f"Error reading file: {e}"
+
+        # Plan mode: describe the change without executing it.
+        if plan_mode:
+            old_lines = (old_string or "").splitlines(keepends=True)
+            new_lines_p = (new_string or "").splitlines(keepends=True)
+            diff_plan = "".join(difflib.unified_diff(
+                old_lines, new_lines_p,
+                fromfile=f"a/{path}", tofile=f"b/{path}", lineterm="",
+            ))
+            return {
+                "plan_only": True,
+                "would_do": f"Edit '{path}'",
+                "diff": diff_plan[:500],
+            }
+
+        if approval_callback:
+            old_lines = (old_string or "").splitlines(keepends=True)
+            new_lines = (new_string or "").splitlines(keepends=True)
+            diff = "".join(difflib.unified_diff(
+                old_lines, new_lines,
+                fromfile=f"a/{path}", tofile=f"b/{path}", lineterm="",
+            ))
+            request_id = str(_uuid.uuid4())
+            approved = await approval_callback(
+                request_id, "edit_file", path,
+                diff or f"Replace content in {path}",
+            )
+            if not approved:
+                from src.core.platform.ai.tools.approval_manager import get_feedback
+                feedback = get_feedback(request_id)
+                msg = f"Change to '{path}' was rejected by the user."
+                if feedback:
+                    msg += f" Reason: {feedback}. Please try a different approach."
+                return {"skipped": True, "message": msg}
 
         # Strategy 1: Exact match
         exact_count = original.count(old_string)
@@ -1076,6 +1171,14 @@ def create_langchain_tools(openai_integration, profile, skill_manager=None, stor
                     "truncated": False,
                 }
 
+        # Plan mode: describe the command without running it.
+        if plan_mode:
+            return {
+                "plan_only": True,
+                "would_do": f"Run: {command}",
+                "working_dir": working_dir,
+            }
+
         resolved_dir, err = _resolve_safe_path(working_dir)
         if err:
             return {"exit_code": -1, "stdout": "", "stderr": err, "truncated": False}
@@ -1275,6 +1378,14 @@ def create_langchain_tools(openai_integration, profile, skill_manager=None, stor
         """Stage and commit changes."""
         if not message or not message.strip():
             return {"success": False, "output": "Commit message cannot be empty"}
+
+        # Plan mode: describe what would be committed without doing it.
+        if plan_mode:
+            return {
+                "plan_only": True,
+                "would_do": f"Commit with message: '{message}'",
+                "files": files or [],
+            }
 
         files = files or []
 

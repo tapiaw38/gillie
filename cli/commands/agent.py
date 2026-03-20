@@ -27,12 +27,88 @@ from rich.rule import Rule
 from rich import box
 from rich.text import Text
 
+try:
+    from prompt_toolkit import PromptSession
+    from prompt_toolkit.completion import Completer, Completion
+    from prompt_toolkit.history import InMemoryHistory
+    from prompt_toolkit.styles import Style as PTStyle
+    _PT_AVAILABLE = True
+except ImportError:
+    _PT_AVAILABLE = False
+
 from cli.config.manager import config_exists, load_config
 
 console = Console()
 app = typer.Typer()
 
 _CLI_CONV_TITLE = "CLI Agent"
+
+
+# ─── Approval modes ────────────────────────────────────────────────────────────
+
+class _Mode:
+    PLAN          = "plan"       # read-only: describes changes but never applies them
+    DEFAULT       = "default"    # ask for every state-mutating tool
+    CONFIRM_RISKY = "risky"      # auto-accept reads/edits, ask only for shell/commit
+    AUTO_EDIT     = "auto-edit"  # auto-accept file edits, ask for shell/commit
+    YOLO          = "yolo"       # accept everything silently
+
+
+_MODES_CYCLE = [
+    _Mode.PLAN,
+    _Mode.DEFAULT,
+    _Mode.CONFIRM_RISKY,
+    _Mode.AUTO_EDIT,
+    _Mode.YOLO,
+]
+
+# Pure read tools — always auto-accept in every mode.
+_SAFE_TOOLS = {
+    "read_file", "list_directory", "find_files", "grep_files", "repo_map",
+    "git_status", "git_diff", "git_log",
+    "web_search", "fetch_url", "search_images", "search_documents",
+    "query_database", "save_memory", "search_memory", "organize_memory",
+    "save_solution", "cron_list", "describe_image",
+}
+
+# High-risk: always ask, even in AUTO_EDIT.
+_ALWAYS_ASK_TOOLS = {"run_shell", "git_commit"}
+
+# File / state mutations: ask in DEFAULT and CONFIRM_RISKY, auto-accept in AUTO_EDIT+YOLO.
+_EDIT_TOOLS = {
+    "edit_file", "write_file", "cron_create", "cron_delete", "cron_run",
+    "system_propose", "system_confirm",
+}
+
+
+def _should_ask(tool_name: str, mode: str, always_approved: set) -> bool:
+    """Return True when the user must be prompted before the tool runs."""
+    if tool_name in always_approved:
+        return False
+    if tool_name in _SAFE_TOOLS:
+        return False
+    if mode == _Mode.YOLO:
+        return False
+    if mode == _Mode.PLAN:
+        # Plan mode never executes — the tool itself returns a plan_only dict.
+        return False
+    if mode == _Mode.AUTO_EDIT and tool_name in _EDIT_TOOLS:
+        return False
+    # CONFIRM_RISKY: ask for _EDIT_TOOLS and _ALWAYS_ASK_TOOLS.
+    # DEFAULT: ask for everything that isn't in _SAFE_TOOLS.
+    return True
+
+
+def _build_prompt(mode: str) -> str:
+    """Return the prompt string for the REPL input line."""
+    indicators = {
+        _Mode.PLAN:          "[plan] You › ",
+        _Mode.CONFIRM_RISKY: "[risky] You › ",
+        _Mode.AUTO_EDIT:     "[auto] You › ",
+        _Mode.YOLO:          "[yolo] You › ",
+        _Mode.DEFAULT:       "You › ",
+    }
+    return indicators.get(mode, "You › ")
 
 
 # ─── HTTP helpers ─────────────────────────────────────────────────────────────
@@ -46,9 +122,17 @@ def _base_url() -> str:
     return f"http://{host}:{port}"
 
 
+def _workspace_headers(mode: str = "") -> dict:
+    """Return HTTP headers carrying the client workspace path and optional mode."""
+    headers = {"X-Gillie-Workspace": str(_workspace())}
+    if mode == _Mode.PLAN:
+        headers["X-Gillie-Mode"] = "plan"
+    return headers
+
+
 def _get(path: str) -> dict:
     try:
-        resp = requests.get(_base_url() + path, timeout=10)
+        resp = requests.get(_base_url() + path, headers=_workspace_headers(), timeout=10)
         resp.raise_for_status()
         return resp.json()
     except requests.exceptions.ConnectionError:
@@ -61,7 +145,7 @@ def _get(path: str) -> dict:
 
 def _post_json(path: str, data: dict) -> dict:
     try:
-        resp = requests.post(_base_url() + path, json=data, timeout=10)
+        resp = requests.post(_base_url() + path, json=data, headers=_workspace_headers(), timeout=10)
         resp.raise_for_status()
         return resp.json()
     except requests.exceptions.ConnectionError:
@@ -77,6 +161,7 @@ def _post_form(path: str, content: str) -> dict:
         resp = requests.post(
             _base_url() + path,
             data={"content": content},
+            headers=_workspace_headers(),
             timeout=120,
         )
         resp.raise_for_status()
@@ -91,7 +176,7 @@ def _post_form(path: str, content: str) -> dict:
 
 def _delete(path: str) -> dict:
     try:
-        resp = requests.delete(_base_url() + path, timeout=10)
+        resp = requests.delete(_base_url() + path, headers=_workspace_headers(), timeout=10)
         resp.raise_for_status()
         return resp.json()
     except requests.exceptions.ConnectionError:
@@ -137,14 +222,15 @@ def _clear_messages(conv_id: str) -> None:
 
 # ─── Display helpers ───────────────────────────────────────────────────────────
 
-def _print_header(assistant_name: str, conv_id: str) -> None:
+def _print_header(assistant_name: str, conv_id: str, mode: str = _Mode.CONFIRM_RISKY) -> None:
     ws = _workspace()
     console.print()
     console.print(Panel(
         f"✨🐟 [bold cyan]{assistant_name}[/bold cyan]\n"
         f"[dim]Conversation: {conv_id}[/dim]\n"
         f"[dim]Workspace:    {ws}[/dim]\n"
-        f"[dim]/new · /list · /clear · /id · /compactar · /exit[/dim]",
+        f"[dim]Mode: {mode} | /mode para cambiar[/dim]\n"
+        f"[dim]/new · /list · /clear · /id · /mode · /compactar · /exit[/dim]",
         border_style="cyan",
         box=box.ROUNDED,
     ))
@@ -186,11 +272,45 @@ def _play_audio(url: str) -> None:
     console.print("[yellow]⚠[/yellow] No audio player found. Install [bold]mpv[/bold] or [bold]ffplay[/bold].")
 
 
-def _stream_assistant(conv_id: str, name: str, content: str) -> str:
-    """Stream the assistant reply token by token from the SSE endpoint."""
+def _stream_assistant(
+    conv_id: str,
+    name: str,
+    content: str,
+    auto_approve: bool = False,
+    mode: str = _Mode.CONFIRM_RISKY,
+    always_approved: set = None,
+    always_rejected: set = None,
+) -> str:
+    """Stream the assistant reply token by token from the SSE endpoint.
+
+    When the backend emits an approval_request event the function pauses,
+    shows the diff with ANSI colours, and applies the approval decision
+    determined by the current mode and the per-session always_approved /
+    always_rejected sets.
+
+    Args:
+        conv_id: Conversation ID to stream from.
+        name: Assistant display name.
+        content: The user message to send.
+        auto_approve: Legacy flag — equivalent to mode=YOLO (kept for
+                      backward compatibility with ``--yolo``).
+        mode: Approval mode string (one of _Mode constants).
+        always_approved: Set of tool names that were approved with 'a'
+                         during this session; never prompted again.
+        always_rejected: Set of tool names rejected with 's' for the whole
+                         session; always auto-rejected without prompting.
+    """
     import sys
     import threading
     import time
+
+    if always_approved is None:
+        always_approved = set()
+    if always_rejected is None:
+        always_rejected = set()
+
+    # --yolo flag maps to YOLO mode for backward compatibility.
+    effective_mode = _Mode.YOLO if auto_approve else mode
 
     _FRAMES = ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"]
     _first_token = threading.Event()
@@ -217,6 +337,7 @@ def _stream_assistant(conv_id: str, name: str, content: str) -> str:
         resp = requests.post(
             _base_url() + f"/conversation/{conv_id}/message/stream",
             data={"content": content},
+            headers=_workspace_headers(effective_mode),
             stream=True,
             timeout=120,
         )
@@ -239,6 +360,10 @@ def _stream_assistant(conv_id: str, name: str, content: str) -> str:
             if isinstance(token, dict):
                 if token.get("type") == "audio":
                     audio_url = token.get("url")
+                elif token.get("type") == "tool_call":
+                    tool_name = token.get("name", "tool")
+                    sys.stdout.write(f"\r\033[2m🔧 {tool_name}...\033[0m      \n")
+                    sys.stdout.flush()
                 elif token.get("type") == "compaction":
                     _stop_spinner.set()
                     console.print(
@@ -252,6 +377,101 @@ def _stream_assistant(conv_id: str, name: str, content: str) -> str:
                             spinner_thread.join()
                         sys.stdout.write(f"\r\033[2m{line_text}\033[0m\n")
                         sys.stdout.flush()
+                elif token.get("type") == "approval_request":
+                    # Stop the spinner so we can display an interactive prompt.
+                    _stop_spinner.set()
+                    spinner_thread.join()
+
+                    request_id = token.get("request_id", "")
+                    tool_name  = token.get("tool", "tool")
+                    file_path  = token.get("file", "")
+                    diff       = token.get("diff", "")
+
+                    console.print(
+                        f"\n[bold]🔧 {tool_name}[/bold] → [cyan]{file_path}[/cyan]"
+                    )
+                    if diff:
+                        for diff_line in diff.splitlines():
+                            if diff_line.startswith("+") and not diff_line.startswith("+++"):
+                                console.print(f"[green]{diff_line}[/green]")
+                            elif diff_line.startswith("-") and not diff_line.startswith("---"):
+                                console.print(f"[red]{diff_line}[/red]")
+                            elif diff_line.startswith("@@"):
+                                console.print(f"[cyan]{diff_line}[/cyan]")
+                            else:
+                                console.print(f"[dim]{diff_line}[/dim]")
+
+                    # Determine whether to prompt or auto-decide.
+                    ask = _should_ask(tool_name, effective_mode, always_approved)
+
+                    if tool_name in always_rejected:
+                        approved = False
+                        feedback = ""
+                        console.print("[dim]  Auto-rejected (session skip)[/dim]")
+                    elif not ask:
+                        approved = True
+                        feedback = ""
+                        console.print("[dim]  Auto-accepted[/dim]")
+                    else:
+                        approved = False
+                        feedback = ""
+                        while True:
+                            try:
+                                choice = console.input(
+                                    "\nApply? "
+                                    "[[bold]y[/bold]]es / "
+                                    "[[bold]n[/bold]]o / "
+                                    "[[bold]a[/bold]]lways (this tool) / "
+                                    "[[bold]s[/bold]]kip session: "
+                                ).strip().lower()
+                            except (KeyboardInterrupt, EOFError):
+                                choice = "n"
+                            if choice in ("y", "yes", ""):
+                                approved = True
+                                break
+                            elif choice in ("n", "no"):
+                                approved = False
+                                try:
+                                    feedback = console.input(
+                                        "[dim]Reason (Enter to skip): [/dim]"
+                                    ).strip()
+                                except (KeyboardInterrupt, EOFError):
+                                    feedback = ""
+                                break
+                            elif choice in ("a", "always"):
+                                approved = True
+                                always_approved.add(tool_name)
+                                console.print(
+                                    f"[dim]'{tool_name}' auto-accepted for the rest of this session[/dim]"
+                                )
+                                break
+                            elif choice in ("s", "skip"):
+                                approved = False
+                                always_rejected.add(tool_name)
+                                console.print(
+                                    f"[dim]'{tool_name}' skipped for the rest of this session[/dim]"
+                                )
+                                break
+                            # Any other input: re-prompt
+
+                    try:
+                        requests.post(
+                            _base_url() + "/conversation/tool/approve",
+                            json={
+                                "request_id": request_id,
+                                "approved": approved,
+                                "feedback": feedback,
+                            },
+                            headers=_workspace_headers(),
+                            timeout=10,
+                        )
+                    except Exception:
+                        pass  # best-effort; the backend will timeout after 120s
+
+                    # Restart the spinner while the backend continues processing.
+                    _stop_spinner.clear()
+                    spinner_thread = threading.Thread(target=_spinner, daemon=True)
+                    spinner_thread.start()
                 continue
             if isinstance(token, str) and token.startswith("[ERROR]"):
                 _first_token.set()
@@ -306,7 +526,7 @@ def _print_history(messages: list, assistant_name: str) -> None:
 _AT_URL_RE  = re.compile(r'@(https?://[^\s]+)')
 _AT_GLOB_RE = re.compile(r'@@([^\s]+)')
 _AT_DIR_RE  = re.compile(r'@([^\s@]+/)')
-_AT_FILE_RE = re.compile(r'@([^\s@]+\.[^\s@/]+)')
+_AT_FILE_RE = re.compile(r'@([^\s@/]+(?:\.[^\s@/]*)?)')  # matches with or without extension
 
 _URL_CAP        = 3_000
 _FILE_CAP       = 4_000
@@ -660,6 +880,7 @@ def listen(
                 _base_url() + f"/conversation/{conv_id}/message",
                 data={"content": " "},  # required by multipart form
                 files={"voice_content": ("audio.wav", wav_bytes, "audio/wav")},
+                headers=_workspace_headers(),
                 timeout=60,
             )
             resp.raise_for_status()
@@ -763,6 +984,12 @@ def agent(
     conv_id: str = typer.Option(None, "--id", help="Attach to a specific conversation ID"),
     workspace: str = typer.Option(None, "--workspace", "-w", help="Set workspace directory for this session"),
     show_workspace: bool = typer.Option(False, "--show-workspace", help="Print current workspace and exit"),
+    yolo: bool = typer.Option(False, "--yolo", help="Auto-approve all tool calls (alias for --mode yolo)"),
+    mode_flag: str = typer.Option(
+        _Mode.CONFIRM_RISKY,
+        "--mode", "-m",
+        help="Approval mode: plan | default | risky | auto-edit | yolo",
+    ),
 ):
     """Interactive chat with the assistant from the terminal."""
     if ctx.invoked_subcommand is not None:
@@ -774,6 +1001,15 @@ def agent(
 
     if not config_exists():
         console.print("[red]✗[/red] Not initialized. Run [bold cyan]gillie init[/bold cyan] first.")
+        raise typer.Exit(1)
+
+    # --yolo is a backward-compatible alias for --mode yolo.
+    initial_mode = _Mode.YOLO if yolo else mode_flag
+    if initial_mode not in _MODES_CYCLE:
+        console.print(
+            f"[red]✗[/red] Unknown mode '{initial_mode}'. "
+            f"Valid modes: {' | '.join(_MODES_CYCLE)}"
+        )
         raise typer.Exit(1)
 
     # Apply --workspace flag for this session
@@ -805,7 +1041,14 @@ def agent(
         console.print("[red]✗[/red] Could not retrieve conversation ID.")
         raise typer.Exit(1)
 
-    _print_header(assistant_name, current_id)
+    # Mutable mode container — allows /mode command to update it in-place.
+    mode = [initial_mode]
+
+    # Per-session tool approval overrides.
+    always_approved: set = set()
+    always_rejected: set = set()
+
+    _print_header(assistant_name, current_id, mode[0])
 
     # Show recent history if resuming
     messages = conversation.get("messages", [])
@@ -816,9 +1059,73 @@ def agent(
     console.print(f"[dim]Type your message and press Enter. /exit to quit.[/dim]")
     console.print()
 
+    # Build prompt_toolkit session with @ file completer
+    _pt_session = None
+    if _PT_AVAILABLE:
+        class _AtCompleter(Completer):
+            """Tab-complete @path references from the workspace."""
+            _SLASH_CMDS = [
+                "/new", "/list", "/clear", "/id", "/mode",
+                "/compactar", "/exit",
+            ]
+
+            def get_completions(self, document, complete_event):
+                text = document.text_before_cursor
+                # Slash command completion
+                if text.startswith("/"):
+                    for cmd in self._SLASH_CMDS:
+                        if cmd.startswith(text):
+                            yield Completion(cmd[len(text):], display=cmd)
+                    return
+                # @ reference completion
+                at_match = re.search(r'@@?([^\s@]*)$', text)
+                if not at_match:
+                    return
+                prefix = at_match.group(0)   # e.g. "@src/co"
+                typed  = at_match.group(1)   # e.g. "src/co"
+                is_glob = prefix.startswith("@@")
+                base = _workspace()
+                search_path = base / typed
+                # If typed ends with partial filename, search in parent dir
+                if not search_path.is_dir():
+                    parent = search_path.parent
+                    stub   = search_path.name
+                else:
+                    parent = search_path
+                    stub   = ""
+                try:
+                    entries = sorted(parent.iterdir())
+                except (PermissionError, FileNotFoundError):
+                    return
+                for entry in entries:
+                    if stub and not entry.name.startswith(stub):
+                        continue
+                    rel = entry.relative_to(base)
+                    suffix = "/" if entry.is_dir() else ""
+                    display = f"{rel}{suffix}"
+                    completion_text = display[len(typed):]
+                    yield Completion(
+                        completion_text,
+                        display=display,
+                        display_meta="dir" if entry.is_dir() else entry.suffix,
+                    )
+
+        _pt_session = PromptSession(
+            history=InMemoryHistory(),
+            completer=_AtCompleter(),
+            complete_while_typing=False,   # only on Tab
+            style=PTStyle.from_dict({"prompt": "bold ansicyan"}),
+        )
+
+    def _read_input() -> str:
+        prompt_text = _build_prompt(mode[0])
+        if _pt_session:
+            return _pt_session.prompt(prompt_text).strip()
+        return console.input(f"[bold cyan]{prompt_text}[/bold cyan]").strip()
+
     while True:
         try:
-            user_input = console.input("[bold cyan]You ›[/bold cyan] ").strip()
+            user_input = _read_input()
         except (KeyboardInterrupt, EOFError):
             console.print("\n[dim]Goodbye 👋[/dim]")
             break
@@ -857,7 +1164,7 @@ def agent(
             conversation = _create_conversation()
             current_id = conversation.get("id") or conversation.get("_id")
             console.print(f"[green]✓[/green] New conversation: [bold]{current_id}[/bold]\n")
-            _print_header(assistant_name, current_id)
+            _print_header(assistant_name, current_id, mode[0])
             continue
 
         if user_input.lower() == "/clear":
@@ -871,6 +1178,26 @@ def agent(
                 "exceeds the configured threshold (default: 40 messages). "
                 "No manual action needed.[/dim]\n"
             )
+            continue
+
+        if user_input.lower().startswith("/mode"):
+            parts = user_input.split()
+            if len(parts) > 1:
+                new_mode = parts[1].lower()
+                if new_mode in _MODES_CYCLE:
+                    mode[0] = new_mode
+                    console.print(f"[green]✓[/green] Mode: [bold]{new_mode}[/bold]")
+                else:
+                    console.print(
+                        f"[dim]Unknown mode '{new_mode}'. "
+                        f"Modes: {' | '.join(_MODES_CYCLE)}[/dim]"
+                    )
+            else:
+                # Cycle to the next mode.
+                current_idx = _MODES_CYCLE.index(mode[0]) if mode[0] in _MODES_CYCLE else 1
+                mode[0] = _MODES_CYCLE[(current_idx + 1) % len(_MODES_CYCLE)]
+                console.print(f"[green]✓[/green] Mode: [bold]{mode[0]}[/bold]")
+            console.print()
             continue
 
         # ── expand @ references ──────────────────────────────────────────
@@ -889,4 +1216,12 @@ def agent(
 
         # ── send message (streaming) ─────────────────────────────────────
         _print_user(user_input)
-        _stream_assistant(current_id, assistant_name, user_input)
+        _stream_assistant(
+            current_id,
+            assistant_name,
+            user_input,
+            auto_approve=yolo,
+            mode=mode[0],
+            always_approved=always_approved,
+            always_rejected=always_rejected,
+        )

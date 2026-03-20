@@ -63,6 +63,7 @@ class AddMessageUseCase:
         has_image_processor: Optional[str] = None,
         has_text_to_voice: Optional[str] = None,
         auth_token: Optional[str] = None,
+        client_workspace: str = "",
     ) -> list[Message]:
         """
         Executes the add message workflow.
@@ -112,7 +113,8 @@ class AddMessageUseCase:
             user_message=user_message,
             conversation=conversation,
             message_context=message.context,
-            auth_token=auth_token
+            auth_token=auth_token,
+            client_workspace=client_workspace,
         )
 
         if default_message:
@@ -289,7 +291,8 @@ class AddMessageUseCase:
         user_message: Message,
         conversation,
         message_context: Optional[str],
-        auth_token: Optional[str] = None
+        auth_token: Optional[str] = None,
+        client_workspace: str = "",
     ) -> Tuple[Optional[str], str]:
         """
         Generates AI response using the AI response service.
@@ -305,7 +308,7 @@ class AddMessageUseCase:
         if not self.context_factory.platform_managers:
             logger.warning("Platform services not available, using fallback")
             response = await self._generate_ai_response_fallback(
-                user_message, conversation, message_context
+                user_message, conversation, message_context, client_workspace=client_workspace
             )
             return (None, response)
 
@@ -331,7 +334,8 @@ class AddMessageUseCase:
                 message_context=enhanced_context,
                 conversation_history=conversation_history,
                 chat_history=chat_history,
-                auth_token=auth_token
+                auth_token=auth_token,
+                client_workspace=client_workspace,
             )
 
         except Exception as e:
@@ -343,6 +347,8 @@ class AddMessageUseCase:
         conversation_id: str,
         content: str,
         user_id: str,
+        client_workspace: str = "",
+        plan_mode: bool = False,
     ):
         """
         Streaming variant for CLI use. Validates the conversation, saves the user
@@ -384,6 +390,8 @@ class AddMessageUseCase:
             profile=conversation.profile,
             conversation_id=conversation_id,
             shell_output_queue=shell_output_queue,
+            client_workspace=client_workspace,
+            plan_mode=plan_mode,
         ):
             # dict tokens (shell_output, etc.) are forwarded as-is; only str
             # tokens contribute to the persisted assistant message text.
@@ -440,7 +448,8 @@ class AddMessageUseCase:
         self,
         user_message: Message,
         conversation,
-        message_context: Optional[str]
+        message_context: Optional[str],
+        client_workspace: str = "",
     ) -> str:
         """
         Fallback method for generating AI response without platform services.
@@ -449,6 +458,7 @@ class AddMessageUseCase:
             user_message: User's message
             conversation: Conversation object
             message_context: Optional message context
+            client_workspace: Optional client workspace path
 
         Returns:
             Generated AI response text
@@ -467,7 +477,8 @@ class AddMessageUseCase:
                 user_message.content,
                 enhanced_context,
                 conversation_history,
-                conversation.profile
+                conversation.profile,
+                client_workspace=client_workspace,
             )
 
             return response

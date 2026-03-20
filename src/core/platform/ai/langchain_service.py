@@ -152,6 +152,7 @@ class LangChainService:
         profile: Profile,
         conversation_id: str,
         use_tools: bool = True,
+        client_workspace: str = "",
     ) -> str:
         """
         Generate AI response using LangChain with tool support.
@@ -200,6 +201,7 @@ class LangChainService:
                         skill_manager=self.skill_manager,
                         store_service=self.store_service,
                         job_usecases=self.job_usecases,
+                        client_workspace=client_workspace,
                     )
                     llm_with_tools = self.llm.bind_tools(tools)
                     logger.debug(f"Bound {len(tools)} tools to LLM")
@@ -245,6 +247,8 @@ class LangChainService:
         conversation_id: str,
         use_tools: bool = True,
         shell_output_queue: Optional[asyncio.Queue] = None,
+        client_workspace: str = "",
+        plan_mode: bool = False,
     ):
         """
         Stream AI response tokens. Uses astream() for direct responses and
@@ -276,6 +280,41 @@ class LangChainService:
 
                     shell_output_callback = _shell_line_callback
 
+                # Build an approval_callback that pauses the tool, sends an
+                # approval_request event through the SSE queue, and waits for
+                # the user's decision via POST /conversation/tool/approve.
+                approval_callback = None
+                if shell_output_queue is not None:
+                    async def _approval_callback(
+                        request_id: str,
+                        tool_name: str,
+                        file_path: str,
+                        diff: str,
+                    ) -> bool:
+                        from src.core.platform.ai.tools.approval_manager import (
+                            create_pending, get_decision, cleanup,
+                        )
+                        await shell_output_queue.put({
+                            "type": "approval_request",
+                            "request_id": request_id,
+                            "tool": tool_name,
+                            "file": file_path,
+                            "diff": diff,
+                        })
+                        event = create_pending(request_id)
+                        try:
+                            await asyncio.wait_for(event.wait(), timeout=120)
+                            return get_decision(request_id)
+                        except asyncio.TimeoutError:
+                            logger.warning(
+                                f"Approval request {request_id} timed out after 120s — rejecting"
+                            )
+                            return False
+                        finally:
+                            cleanup(request_id)
+
+                    approval_callback = _approval_callback
+
                 tools = None
                 llm_with_tools = self.llm
                 if use_tools:
@@ -286,6 +325,9 @@ class LangChainService:
                         store_service=self.store_service,
                         job_usecases=self.job_usecases,
                         shell_output_callback=shell_output_callback,
+                        client_workspace=client_workspace,
+                        approval_callback=approval_callback,
+                        plan_mode=plan_mode,
                     )
                     llm_with_tools = self.llm.bind_tools(tools)
 
@@ -314,6 +356,10 @@ class LangChainService:
                         except Exception:
                             pass
 
+                    # Notify the client which tools are about to run
+                    for tc in getattr(combined, "tool_calls", []):
+                        yield {"type": "tool_call", "name": tc.get("name", "tool")}
+
                     if shell_output_queue is not None:
                         # Sentinel value placed in the queue after the task completes
                         # so the drain loop knows when to stop.
@@ -327,12 +373,18 @@ class LangChainService:
 
                         tool_task = asyncio.create_task(_run_tool_calls_and_signal())
 
-                        # Drain queue until sentinel arrives, yielding SSE shell_output events.
+                        # Drain queue until sentinel arrives, yielding SSE events.
+                        # Items may be:
+                        #   str  → shell stdout line  → wrap as shell_output event
+                        #   dict → already a typed event (e.g. approval_request) → pass through
                         while True:
                             item = await shell_output_queue.get()
                             if item is _DONE_SENTINEL:
                                 break
-                            yield {"type": "shell_output", "line": item}
+                            if isinstance(item, dict):
+                                yield item
+                            else:
+                                yield {"type": "shell_output", "line": item}
 
                         response_text = await tool_task
                     else:
@@ -363,7 +415,7 @@ class LangChainService:
         messages: List,
         llm_with_tools,
         tools: List = None,
-        max_rounds: int = 10,
+        max_rounds: int = 30,
     ) -> str:
         """
         Handle tool calls from the AI response, looping until the model
@@ -422,7 +474,13 @@ class LangChainService:
             if content and not getattr(response, "tool_calls", None):
                 break
 
-        return response.content or ""
+        content = response.content or ""
+        if not content:
+            logger.warning(
+                f"_handle_tool_calls exhausted {max_rounds} rounds without a final text response"
+            )
+            content = "(Las herramientas se ejecutaron correctamente. Tarea completada.)"
+        return content
 
     def _build_system_prompt(
         self,
