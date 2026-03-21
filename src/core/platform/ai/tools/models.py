@@ -279,6 +279,12 @@ _DEFAULT_TOOL_PROMPTS: Dict[str, str] = {
         "the project structure before reading or editing files. Much more efficient than "
         "multiple find_files + read_file calls for orientation."
     ),
+    "check_code": (
+        "Run a static type checker or linter on a file or directory and return diagnostics. "
+        "Use after writing or editing code to catch type errors, undefined variables, and "
+        "other issues before running. Supports pyright, mypy (Python), tsc (TypeScript), eslint (JS/TS). "
+        "Use tool='auto' to auto-detect the right checker."
+    ),
 }
 
 
@@ -555,6 +561,7 @@ class GrepFilesArgs(BaseModel):
     file_glob: str = Field(default="*", description="File pattern filter (e.g. '*.py', '*.ts')")
     max_results: int = Field(default=50, ge=1, le=200, description="Maximum number of matches to return")
     ignore_case: bool = Field(default=False, description="Case-insensitive search")
+    context_lines: int = Field(default=0, ge=0, le=10, description="Number of context lines to show before and after each match")
 
 
 class GitStatusArgs(BaseModel):
@@ -586,6 +593,12 @@ class RepoMapArgs(BaseModel):
     max_depth: int = Field(default=4, ge=1, le=8, description="Max directory depth")
     include_signatures: bool = Field(default=True, description="Include class/function signatures")
     file_glob: str = Field(default="*.py", description="File types to extract signatures from (e.g. '*.py', '*.ts')")
+
+
+class CheckCodeArgs(BaseModel):
+    """Arguments for checking code for errors and warnings"""
+    path: str = Field(default=".", description="File or directory to check (relative to workspace)")
+    tool: str = Field(default="auto", description="Checker to use: 'auto', 'pyright', 'mypy', 'tsc', 'eslint'")
 
 
 class QueryDatabaseArgs(BaseModel):
@@ -1512,6 +1525,34 @@ user_pref("devtools.debugger.force-local", true);
                 f"Provide more surrounding context to make the match unique."
             )
 
+        # Strategy 2.5: Indentation-flexible match
+        # Strip common leading whitespace from old_string, then find windows with same stripped content
+        old_lines_raw = old_string.splitlines()
+        if old_lines_raw:
+            non_empty = [l for l in old_lines_raw if l.strip()]
+            if non_empty:
+                common_indent = min(len(l) - len(l.lstrip()) for l in non_empty)
+                dedented_old = [l[common_indent:] if len(l) >= common_indent else l.lstrip() for l in old_lines_raw]
+                orig_lines_full = original.splitlines(keepends=True)
+                for i in range(len(orig_lines_full) - len(old_lines_raw) + 1):
+                    window = orig_lines_full[i:i + len(old_lines_raw)]
+                    window_stripped = [l.rstrip("\n").rstrip("\r") for l in window]
+                    non_empty_w = [l for l in window_stripped if l.strip()]
+                    if not non_empty_w:
+                        continue
+                    win_indent = min(len(l) - len(l.lstrip()) for l in non_empty_w)
+                    dedented_win = [l[win_indent:] if len(l) >= win_indent else l.lstrip() for l in window_stripped]
+                    if dedented_win == dedented_old:
+                        # Re-indent new_string to match the window's base indentation
+                        indent_str = " " * win_indent
+                        new_reindented = "\n".join(
+                            indent_str + nl if nl.strip() else nl
+                            for nl in new_string.splitlines()
+                        )
+                        updated_lines = orig_lines_full[:i] + [new_reindented + "\n"] + orig_lines_full[i + len(old_lines_raw):]
+                        resolved.write_text("".join(updated_lines), encoding="utf-8")
+                        return f"Edited '{path}': replaced 1 occurrence (indentation-flexible match)"
+
         # Strategy 3: Fuzzy match using difflib (threshold 0.8)
         orig_lines = original.splitlines()
         old_lines_stripped = old_string.splitlines()
@@ -1681,8 +1722,8 @@ user_pref("devtools.debugger.force-local", true);
                                     args = [a.arg for a in item.args.args]
                                     lines.append(f"{prefix}        def {item.name}({', '.join(args)})")
                         elif isinstance(node, (_ast.FunctionDef, _ast.AsyncFunctionDef)):
-                            # Only top-level functions (not methods already handled above)
-                            pass
+                            args = [a.arg for a in node.args.args]
+                            lines.append(f"{prefix}    def {node.name}({', '.join(args)})")
                 except SyntaxError:
                     pass
             else:
@@ -1710,6 +1751,108 @@ user_pref("devtools.debugger.force-local", true);
             truncated = True
 
         return {"map": result, "truncated": truncated}
+
+    async def check_code_tool(path: str = ".", tool: str = "auto") -> Dict[str, Any]:
+        """Run a static analysis / type checker and return diagnostics."""
+        import shutil as _shutil
+
+        resolved, err = _resolve_safe_path(path)
+        if err:
+            return {"error": err}
+
+        # Auto-detect: pick checker based on file extension or available tool
+        def _pick_tool() -> str:
+            p = resolved
+            if p.is_file():
+                if p.suffix in (".ts", ".tsx"):
+                    return "tsc"
+                if p.suffix in (".js", ".jsx"):
+                    return "eslint"
+                if p.suffix == ".py":
+                    return "pyright" if _shutil.which("pyright") else "mypy"
+            # directory: prefer pyright > mypy if python files exist
+            if list(p.rglob("*.py")):
+                return "pyright" if _shutil.which("pyright") else "mypy"
+            if list(p.rglob("*.ts")) or list(p.rglob("*.tsx")):
+                return "tsc"
+            return "none"
+
+        chosen = tool if tool != "auto" else _pick_tool()
+
+        if chosen == "none":
+            return {"tool": "none", "diagnostics": [], "summary": "No supported checker found for this path."}
+
+        if not _shutil.which(chosen):
+            return {"tool": chosen, "error": f"'{chosen}' is not installed or not in PATH. Install it first."}
+
+        if chosen == "pyright":
+            cmd = ["pyright", "--outputjson", str(resolved)]
+        elif chosen == "mypy":
+            cmd = ["mypy", "--show-column-numbers", "--no-error-summary", str(resolved)]
+        elif chosen == "tsc":
+            cmd = ["tsc", "--noEmit", "--pretty", "false", str(resolved)]
+        elif chosen == "eslint":
+            cmd = ["eslint", "--format=json", str(resolved)]
+        else:
+            return {"tool": chosen, "error": f"Unknown checker: '{chosen}'"}
+
+        try:
+            proc = await _asyncio.create_subprocess_exec(
+                *cmd,
+                stdout=_asyncio.subprocess.PIPE,
+                stderr=_asyncio.subprocess.PIPE,
+                cwd=str(resolved if resolved.is_dir() else resolved.parent),
+            )
+            raw_out, raw_err = await proc.communicate()
+            stdout = raw_out.decode("utf-8", errors="replace")
+            stderr = raw_err.decode("utf-8", errors="replace")
+        except Exception as e:
+            return {"tool": chosen, "error": f"Failed to run {chosen}: {e}"}
+
+        diagnostics = []
+
+        if chosen == "pyright":
+            try:
+                import json as _json
+                data = _json.loads(stdout)
+                for diag in data.get("generalDiagnostics", []):
+                    diagnostics.append({
+                        "file": diag.get("file", ""),
+                        "line": diag.get("range", {}).get("start", {}).get("line", 0) + 1,
+                        "severity": diag.get("severity", "error"),
+                        "message": diag.get("message", ""),
+                        "rule": diag.get("rule", ""),
+                    })
+                summary = data.get("summary", {})
+            except Exception:
+                diagnostics = [{"raw": stdout[:2000]}]
+                summary = {}
+        elif chosen == "mypy":
+            import re as _re_diag
+            pat = _re_diag.compile(r"^(.+?):(\d+):(?:\d+:)?\s*(error|warning|note):\s*(.+)$")
+            for line in stdout.splitlines():
+                m = pat.match(line.strip())
+                if m:
+                    diagnostics.append({
+                        "file": m.group(1),
+                        "line": int(m.group(2)),
+                        "severity": m.group(3),
+                        "message": m.group(4),
+                    })
+            summary = {"errors": sum(1 for d in diagnostics if d.get("severity") == "error")}
+        else:
+            # tsc / eslint: return raw output
+            diagnostics = [{"raw": (stdout + stderr)[:3000]}]
+            summary = {}
+
+        error_count = sum(1 for d in diagnostics if d.get("severity") == "error")
+        return {
+            "tool": chosen,
+            "diagnostics": diagnostics[:50],
+            "truncated": len(diagnostics) > 50,
+            "error_count": error_count,
+            "summary": summary,
+        }
 
     # ── Shell and git tools ───────────────────────────────────────────────────
 
@@ -1837,14 +1980,63 @@ user_pref("devtools.debugger.force-local", true);
         file_glob: str = "*",
         max_results: int = 50,
         ignore_case: bool = False,
+        context_lines: int = 0,
     ) -> Dict[str, Any]:
-        """Search for a text/regex pattern inside files."""
+        """Search for a text/regex pattern inside files. Uses ripgrep when available."""
+        import shutil as _shutil
         resolved, err = _resolve_safe_path(path)
         if err:
             return {"found": 0, "results": [], "truncated": False, "error": err}
         if not resolved.exists() or not resolved.is_dir():
             return {"found": 0, "results": [], "truncated": False, "error": f"Path not found or not a directory: '{path}'"}
 
+        # Try ripgrep first (much faster for large repos)
+        if _shutil.which("rg"):
+            try:
+                rg_cmd = [
+                    "rg", "--json",
+                    f"--glob={file_glob}",
+                    f"--max-count={max_results}",
+                ]
+                if ignore_case:
+                    rg_cmd.append("-i")
+                if context_lines > 0:
+                    rg_cmd += [f"-C{context_lines}"]
+                rg_cmd += ["--", pattern, str(resolved)]
+
+                proc = await _asyncio.create_subprocess_exec(
+                    *rg_cmd,
+                    stdout=_asyncio.subprocess.PIPE,
+                    stderr=_asyncio.subprocess.PIPE,
+                )
+                raw_out, _ = await proc.communicate()
+                results = []
+                for line in raw_out.decode("utf-8", errors="replace").splitlines():
+                    line = line.strip()
+                    if not line:
+                        continue
+                    try:
+                        obj = __import__("json").loads(line)
+                    except Exception:
+                        continue
+                    if obj.get("type") == "match":
+                        data = obj["data"]
+                        file_rel = str(_Path(data["path"]["text"]).relative_to(resolved))
+                        line_num = data["line_number"]
+                        content = data["lines"]["text"].rstrip("\n")
+                        result_entry: Dict[str, Any] = {"file": file_rel, "line": line_num, "content": content}
+                        if context_lines > 0:
+                            # submatches context will be included naturally via -C in output
+                            pass
+                        results.append(result_entry)
+                        if len(results) >= max_results:
+                            break
+                truncated = len(results) >= max_results
+                return {"found": len(results), "results": results, "truncated": truncated}
+            except Exception:
+                pass  # fall through to Python implementation
+
+        # Python fallback
         _SKIP_DIRS = {".git", "node_modules", "__pycache__", ".venv"}
         flags = _re.IGNORECASE if ignore_case else 0
         try:
@@ -1856,7 +2048,6 @@ user_pref("devtools.debugger.force-local", true);
         truncated = False
 
         for file_path in resolved.rglob(file_glob):
-            # Skip excluded directories and ignored paths
             if any(part in _SKIP_DIRS for part in file_path.parts):
                 continue
             if _is_ignored(file_path, workspace):
@@ -1867,18 +2058,25 @@ user_pref("devtools.debugger.force-local", true);
             try:
                 raw = file_path.read_bytes()
                 if b"\x00" in raw[:8192]:
-                    continue  # binary file
+                    continue
                 text = raw.decode("utf-8", errors="replace")
             except Exception:
                 continue
 
-            for line_num, line in enumerate(text.splitlines(), start=1):
+            all_lines = text.splitlines()
+            for line_num, line in enumerate(all_lines, start=1):
                 if compiled.search(line):
-                    results.append({
+                    entry: Dict[str, Any] = {
                         "file": str(file_path.relative_to(resolved)),
                         "line": line_num,
                         "content": line.strip(),
-                    })
+                    }
+                    if context_lines > 0:
+                        before = all_lines[max(0, line_num - 1 - context_lines):line_num - 1]
+                        after = all_lines[line_num:min(len(all_lines), line_num + context_lines)]
+                        entry["before"] = before
+                        entry["after"] = after
+                    results.append(entry)
                     if len(results) >= max_results:
                         truncated = True
                         break
@@ -2073,6 +2271,7 @@ user_pref("devtools.debugger.force-local", true);
         _tool("run_shell",              prompts.get("run_shell",   _DEFAULT_TOOL_PROMPTS["run_shell"]),  run_shell_tool,  RunShellArgs),
         _tool("grep_files",             prompts.get("grep_files",  _DEFAULT_TOOL_PROMPTS["grep_files"]), grep_files_tool, GrepFilesArgs),
         _tool("repo_map",               prompts.get("repo_map",    _DEFAULT_TOOL_PROMPTS["repo_map"]),   repo_map_tool,   RepoMapArgs),
+        _tool("check_code",             prompts.get("check_code",  _DEFAULT_TOOL_PROMPTS["check_code"]), check_code_tool, CheckCodeArgs),
         _tool("git_status",             prompts.get("git_status",  _DEFAULT_TOOL_PROMPTS["git_status"]), git_status_tool, GitStatusArgs),
         _tool("git_diff",               prompts.get("git_diff",    _DEFAULT_TOOL_PROMPTS["git_diff"]),   git_diff_tool,   GitDiffArgs),
         _tool("git_log",                prompts.get("git_log",     _DEFAULT_TOOL_PROMPTS["git_log"]),    git_log_tool,    GitLogArgs),
