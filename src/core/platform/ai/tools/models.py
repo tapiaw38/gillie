@@ -807,13 +807,21 @@ def create_langchain_tools(openai_integration, profile, skill_manager=None, stor
         return await openai_integration.analyze_excel_file(file.url)
 
     async def describe_image_tool(image_url: str) -> str:
-        """Describe an image from its URL"""
-        import aiohttp, base64 as b64
+        """Describe an image from its URL or local file path"""
+        import aiohttp, base64 as b64, os
+        from urllib.parse import urlparse, unquote
         try:
-            async with aiohttp.ClientSession() as session:
-                async with session.get(image_url) as resp:
-                    resp.raise_for_status()
-                    image_bytes = await resp.read()
+            parsed = urlparse(image_url)
+            if parsed.scheme in ("", "file") or os.path.exists(image_url):
+                # Local file
+                file_path = unquote(parsed.path) if parsed.scheme == "file" else image_url
+                with open(file_path, "rb") as f:
+                    image_bytes = f.read()
+            else:
+                async with aiohttp.ClientSession() as session:
+                    async with session.get(image_url) as resp:
+                        resp.raise_for_status()
+                        image_bytes = await resp.read()
             image_base64 = b64.b64encode(image_bytes).decode()
             return await openai_integration.describe_image_from_base64(image_base64)
         except Exception as e:

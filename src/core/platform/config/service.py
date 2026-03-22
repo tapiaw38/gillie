@@ -150,6 +150,13 @@ class StorageConfig:
 
 
 @dataclass
+class VisionConfig:
+    api_key: str = ""
+    base_url: str = ""
+    model: str = ""
+
+
+@dataclass
 class SingleUserConfig:
     """Configuration for single-user mode (set by CLI init)."""
     user_id: str
@@ -174,6 +181,7 @@ class ConfigurationService:
     single_user_config: Optional[SingleUserConfig] = None
     google_calendar_config: Optional[GoogleCalendarConfig] = None
     storage_config: Optional[StorageConfig] = None
+    vision_config: Optional[VisionConfig] = None
 
 
 _config_service: Optional[ConfigurationService] = None
@@ -352,6 +360,12 @@ def read_config() -> ConfigurationService:
         redirect_uri=get_env("GOOGLE_CALENDAR_REDIRECT_URI", "http://localhost:8000/api/v1/calendar/oauth/callback"),
     )
 
+    vision_config = VisionConfig(
+        api_key=get_env("VISION_API_KEY", ""),
+        base_url=get_env("VISION_BASE_URL", ""),
+        model=get_env("VISION_MODEL", ""),
+    )
+
     return ConfigurationService(
         server_config=server_config,
         nosql_config=nosql_config,
@@ -367,6 +381,7 @@ def read_config() -> ConfigurationService:
         single_user_config=single_user_config,
         google_calendar_config=google_calendar_config,
         storage_config=storage_config,
+        vision_config=vision_config,
     )
 
 
@@ -518,6 +533,11 @@ def init_config_from_json(config_data: "AssistantConfig") -> None:
             backend=s.storage.backend if hasattr(s, "storage") else "local",
             local_path=s.storage.local_path if hasattr(s, "storage") else str(Path.home() / ".local" / "share" / "gillie" / "storage"),
             local_base_url=s.storage.local_base_url if hasattr(s, "storage") else "http://localhost:8000/api/storage",
+        ),
+        vision_config=VisionConfig(
+            api_key=s.vision.api_key if hasattr(s, "vision") else "",
+            base_url=s.vision.base_url if hasattr(s, "vision") else "",
+            model=s.vision.model if hasattr(s, "vision") else "",
         ),
     )
 

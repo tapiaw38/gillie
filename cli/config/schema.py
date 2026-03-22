@@ -91,6 +91,13 @@ class StorageServiceConfig:
 
 
 @dataclass
+class VisionServiceConfig:
+    api_key: str = ""
+    base_url: str = ""
+    model: str = ""
+
+
+@dataclass
 class TTSServiceConfig:
     enabled: bool = False
 
@@ -163,6 +170,7 @@ class ServicesConfig:
     google_drive: GoogleDriveServiceConfig = field(default_factory=GoogleDriveServiceConfig)
     langsmith: LangSmithServiceConfig = field(default_factory=LangSmithServiceConfig)
     llm: LLMExtendedServiceConfig = field(default_factory=LLMExtendedServiceConfig)
+    vision: VisionServiceConfig = field(default_factory=VisionServiceConfig)
 
 
 @dataclass

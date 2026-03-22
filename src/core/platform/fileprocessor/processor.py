@@ -43,8 +43,15 @@ class BaseFileProcessor:
         self.api_key = config.api_key
         self.base_url = config.base_url
         self.model = config.model
-
         self.client = AsyncOpenAI(api_key=self.api_key, base_url=self.base_url)
+
+        vision_cfg = getattr(config_service, "vision_config", None)
+        if vision_cfg and vision_cfg.api_key:
+            self._vision_client = AsyncOpenAI(api_key=vision_cfg.api_key, base_url=vision_cfg.base_url)
+            self._vision_model = vision_cfg.model
+        else:
+            self._vision_client = None
+            self._vision_model = None
 
     def _analyze_image_with_python_tools(self, image_base64: str) -> Dict[str, Any]:
         """Analyze image using Python tools (common for all processors)"""
@@ -60,10 +67,14 @@ class BaseFileProcessor:
                 "has_transparency": image.mode in ("RGBA", "LA")
                 or "transparency" in image.info,
                 "dominant_colors": self._get_dominant_colors(img_array),
+                "color_names": self._get_color_names(img_array),
                 "brightness": self._calculate_brightness(img_array),
                 "contrast": self._calculate_contrast(img_array),
                 "sharpness": self._calculate_sharpness(img_array),
                 "text_detected": self._detect_text_regions(img_array),
+                "ocr_text": self._extract_text_ocr(image),
+                "faces_detected": self._detect_faces(img_array),
+                "image_type": self._classify_image_type(img_array, image.size),
                 "objects_detected": self._detect_objects(img_array),
                 "quality_score": self._calculate_quality_score(img_array),
             }
@@ -72,6 +83,92 @@ class BaseFileProcessor:
 
         except Exception as e:
             return {"error": f"Error analyzing image: {str(e)}"}
+
+    def _extract_text_ocr(self, image: "Image.Image") -> str:
+        """Extract text from image using Tesseract OCR"""
+        try:
+            import pytesseract
+            text = pytesseract.image_to_string(image, config="--psm 3").strip()
+            # Clean up excessive whitespace
+            lines = [l.strip() for l in text.splitlines() if l.strip()]
+            return "\n".join(lines)
+        except Exception:
+            return ""
+
+    def _detect_faces(self, img_array: np.ndarray) -> int:
+        """Detect faces using OpenCV Haar cascades"""
+        try:
+            if cv2 is None:
+                return 0
+            gray = cv2.cvtColor(img_array, cv2.COLOR_RGB2GRAY) if len(img_array.shape) == 3 else img_array
+            cascade_path = cv2.data.haarcascades + "haarcascade_frontalface_default.xml"
+            face_cascade = cv2.CascadeClassifier(cascade_path)
+            faces = face_cascade.detectMultiScale(gray, scaleFactor=1.1, minNeighbors=5, minSize=(30, 30))
+            return len(faces) if len(faces) > 0 else 0
+        except Exception:
+            return 0
+
+    def _get_color_names(self, img_array: np.ndarray) -> List[str]:
+        """Convert dominant RGB colors to human-readable names"""
+        _COLOR_MAP = [
+            ((255, 0, 0), "red"), ((0, 255, 0), "green"), ((0, 0, 255), "blue"),
+            ((255, 255, 0), "yellow"), ((0, 255, 255), "cyan"), ((255, 0, 255), "magenta"),
+            ((255, 165, 0), "orange"), ((128, 0, 128), "purple"), ((255, 192, 203), "pink"),
+            ((165, 42, 42), "brown"), ((0, 0, 0), "black"), ((255, 255, 255), "white"),
+            ((128, 128, 128), "gray"), ((0, 128, 128), "teal"), ((0, 0, 128), "navy"),
+            ((255, 215, 0), "gold"), ((192, 192, 192), "silver"), ((245, 245, 220), "beige"),
+        ]
+        try:
+            colors = self._get_dominant_colors(img_array)
+            names = []
+            for rgb in colors[:3]:
+                if len(rgb) < 3:
+                    continue
+                best_name, best_dist = "unknown", float("inf")
+                for ref_rgb, name in _COLOR_MAP:
+                    dist = sum((a - b) ** 2 for a, b in zip(rgb[:3], ref_rgb)) ** 0.5
+                    if dist < best_dist:
+                        best_dist, best_name = dist, name
+                if best_name not in names:
+                    names.append(best_name)
+            return names
+        except Exception:
+            return []
+
+    def _classify_image_type(self, img_array: np.ndarray, size: tuple) -> str:
+        """Heuristically classify the type of image"""
+        try:
+            w, h = size
+            aspect = w / h if h > 0 else 1.0
+
+            # Edge density as proxy for screenshot vs photo
+            gray = cv2.cvtColor(img_array, cv2.COLOR_RGB2GRAY) if cv2 and len(img_array.shape) == 3 else None
+            edge_density = 0.0
+            if gray is not None and cv2:
+                edges = cv2.Canny(gray, 50, 150)
+                edge_density = np.sum(edges > 0) / edges.size
+
+            # Unique color count
+            if len(img_array.shape) == 3:
+                flat = img_array[:, :, :3].reshape(-1, 3)
+                sample = flat[::max(1, len(flat) // 5000)]
+                unique_colors = len(np.unique(sample, axis=0))
+            else:
+                unique_colors = len(np.unique(img_array))
+
+            if edge_density > 0.12 and unique_colors < 500:
+                return "diagram or chart"
+            if edge_density > 0.08 and aspect > 1.2:
+                return "screenshot or document"
+            if unique_colors > 5000 and edge_density < 0.08:
+                return "photograph"
+            if aspect < 0.6:
+                return "portrait photo"
+            if aspect > 2.0:
+                return "banner or panoramic image"
+            return "image"
+        except Exception:
+            return "image"
 
     def _get_dominant_colors(self, img_array: np.ndarray) -> List[List[int]]:
         """Get dominant colors from image"""
@@ -491,7 +588,30 @@ class BaseFileProcessor:
             return f"Technically analyzed image. Possible relation to {search_term}."
 
     async def describe_image(self, image_base64: str, prompt: str = None) -> str:
-        """Describe an image using technical analysis, optionally guided by a question."""
+        if self._vision_client:
+            try:
+                user_prompt = prompt or "Describe this image in detail. Be specific about what you see: objects, text, colors, context, and any relevant information."
+                response = await self._vision_client.chat.completions.create(
+                    model=self._vision_model,
+                    messages=[{
+                        "role": "user",
+                        "content": [
+                            {
+                                "type": "image_url",
+                                "image_url": {"url": f"data:image/png;base64,{image_base64}"}
+                            },
+                            {
+                                "type": "text",
+                                "text": user_prompt
+                            }
+                        ]
+                    }],
+                    max_tokens=500,
+                )
+                return response.choices[0].message.content.strip()
+            except Exception as e:
+                pass
+
         try:
             python_analysis = self._analyze_image_with_python_tools(image_base64)
             description = self._create_detailed_description(python_analysis)
@@ -551,47 +671,38 @@ class BaseFileProcessor:
     ) -> str:
         """Enhance technical description using AI"""
         try:
-            focus = f"\n\nSPECIFIC QUESTION TO ANSWER: {user_prompt}" if user_prompt else ""
-            prompt = f"""
-            Based on this technical analysis of an image, create a more natural and understandable description:
+            ocr_text = analysis.get("ocr_text", "")
+            faces = analysis.get("faces_detected", 0)
+            image_type = analysis.get("image_type", "image")
+            color_names = analysis.get("color_names", [])
 
-            TECHNICAL ANALYSIS:
-            {technical_description}
+            ocr_section = f"\n- Extracted text (OCR): \"{ocr_text}\"" if ocr_text else ""
+            faces_section = f"\n- Faces detected: {faces}" if faces > 0 else ""
+            colors_section = f"\n- Main colors: {', '.join(color_names)}" if color_names else ""
+            focus = f"\n\nQUESTION TO ANSWER: {user_prompt}" if user_prompt else ""
 
-            SPECIFIC DATA:
-            - Dimensions: {analysis.get('dimensions', 'N/A')}
-            - Quality: {analysis.get('quality_score', 0):.2f}/1.0
-            - Objects detected: {analysis.get('objects_detected', 0)}
-            - Text detected: {'Yes' if analysis.get('text_detected', False) else 'No'}
-            {focus}
+            prompt = f"""You are analyzing an image using technical data. Describe it as accurately as possible based on the information below.
 
-            Instructions:
-            1. Rewrite the description in a more natural and fluid way
-            2. Keep technical information but make it more understandable
-            3. Suggest what type of content it could be based on characteristics
-            4. If a specific question was provided, answer it directly first
-            5. Respond in English
-            6. Maximum 200 words
-            """
+IMAGE TYPE: {image_type}
+DIMENSIONS: {analysis.get('dimensions', 'N/A')}
+QUALITY: {analysis.get('quality_score', 0):.0%}{ocr_section}{faces_section}{colors_section}
+{focus}
+
+Rules:
+- If OCR text is present, it is the most important clue — use it to infer the image content
+- If faces are detected, mention people are present
+- Be direct and specific, not generic
+- Do NOT say "I cannot see the image" — work with the data provided
+- Max 150 words
+"""
 
             response = await self.client.chat.completions.create(
                 model=self.model,
                 messages=[{"role": "user", "content": prompt}],
-                max_tokens=250,
+                max_tokens=200,
             )
 
-            ai_description = response.choices[0].message.content.strip()
-
-            final_description = f"""{ai_description}
-
----
-TECHNICAL ANALYSIS:
-• Resolution: {analysis.get('dimensions', 'N/A')}
-• Quality: {analysis.get('quality_score', 0):.2f}/1.0
-• Objects detected: {analysis.get('objects_detected', 0)}
-• Contains text: {'Yes' if analysis.get('text_detected', False) else 'No'}"""
-
-            return final_description
+            return response.choices[0].message.content.strip()
         except Exception as e:
             return f"{technical_description}\n\n[Error enhancing description with AI: {str(e)}]"
 
