@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import type { IntegrationParams, TelegramIntegrationConfig } from '@/types/assistant'
-import { onMounted, reactive, computed, watch } from 'vue'
+import { onMounted, reactive, computed, watch, ref } from 'vue'
 import { useAssistant } from '@/composables/useAssistant'
 import { useErrorToast } from '@/composables/useErrorToast'
 import Toast from 'primevue/toast'
@@ -82,12 +82,19 @@ const currentIntegration = computed(() =>
   assistantProfile.value?.integrations?.find((i) => i.name === 'telegram'),
 )
 
-const webhookUrl = computed(() => {
-  const base = window.location.origin.includes('localhost')
+const publicUrl = ref('')
+const isRegisteringWebhook = ref(false)
+const webhookStatus = ref<'idle' | 'success' | 'error'>('idle')
+const webhookStatusMessage = ref('')
+
+const apiBase = computed(() => {
+  if (publicUrl.value.trim()) return publicUrl.value.trim().replace(/\/$/, '')
+  return window.location.origin.includes('localhost')
     ? 'http://localhost:8000'
     : window.location.origin
-  return `${base}/api/telegram/webhook`
 })
+
+const webhookUrl = computed(() => `${apiBase.value}/api/telegram/webhook`)
 
 const setWebhookUrl = computed(() => {
   const base = window.location.origin.includes('localhost')
@@ -95,6 +102,36 @@ const setWebhookUrl = computed(() => {
     : window.location.origin
   return `${base}/api/telegram/set-webhook`
 })
+
+const registerWebhook = async () => {
+  if (!publicUrl.value.trim()) {
+    webhookStatus.value = 'error'
+    webhookStatusMessage.value = 'Ingresá la URL pública (ngrok) primero.'
+    return
+  }
+  isRegisteringWebhook.value = true
+  webhookStatus.value = 'idle'
+  try {
+    const res = await fetch(setWebhookUrl.value, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ webhook_url: webhookUrl.value }),
+    })
+    if (res.ok) {
+      webhookStatus.value = 'success'
+      webhookStatusMessage.value = `Webhook registrado: ${webhookUrl.value}`
+    } else {
+      const err = await res.json().catch(() => ({}))
+      webhookStatus.value = 'error'
+      webhookStatusMessage.value = err.error || `Error ${res.status}`
+    }
+  } catch (e: any) {
+    webhookStatus.value = 'error'
+    webhookStatusMessage.value = e.message || 'Error de conexión'
+  } finally {
+    isRegisteringWebhook.value = false
+  }
+}
 
 onMounted(async () => {
   await getAssistantProfile()
@@ -216,8 +253,41 @@ onMounted(async () => {
         <div class="status-grid">
 
           <div class="status-item">
+            <div class="status-label"><i class="pi pi-globe"></i> URL Pública (ngrok)</div>
+            <div class="input-wrapper" style="margin-top: 0.25rem;">
+              <InputText
+                v-model="publicUrl"
+                placeholder="https://abc123.ngrok.io"
+                class="w-full"
+              />
+            </div>
+            <small class="field-help" style="margin-top: 0.25rem;">
+              URL pública de tu servidor (ngrok, cloudflare, etc.). Dejá vacío si ya tenés dominio propio.
+            </small>
+          </div>
+
+          <div class="status-item">
             <div class="status-label"><i class="pi pi-link"></i> Webhook URL</div>
             <div class="status-value webhook-url">{{ webhookUrl }}</div>
+          </div>
+
+          <div class="status-item">
+            <div class="status-label"><i class="pi pi-send"></i> Registrar Webhook</div>
+            <Button
+              label="Registrar en Telegram"
+              icon="pi pi-check"
+              severity="primary"
+              :loading="isRegisteringWebhook"
+              :disabled="!currentIntegration?.activated"
+              style="margin-top: 0.5rem; width: 100%;"
+              @click="registerWebhook"
+            />
+            <Message v-if="webhookStatus === 'success'" severity="success" style="margin-top: 0.5rem;">
+              {{ webhookStatusMessage }}
+            </Message>
+            <Message v-if="webhookStatus === 'error'" severity="error" style="margin-top: 0.5rem;">
+              {{ webhookStatusMessage }}
+            </Message>
           </div>
 
           <div class="status-item">
@@ -250,8 +320,9 @@ onMounted(async () => {
             <li>Abrí Telegram y hablá con <strong>@BotFather</strong></li>
             <li>Enviá <code>/newbot</code> y seguí las instrucciones</li>
             <li>Copiá el <strong>Bot Token</strong> que te da BotFather</li>
-            <li>Guardá la configuración acá arriba</li>
-            <li>Registrá el webhook enviando un POST a <code>{{ setWebhookUrl }}</code> con <code>{"webhook_url": "{{ webhookUrl }}"}</code></li>
+            <li>Activá la integración y guardá el token</li>
+            <li>Si estás en local, iniciá un túnel: <code>ngrok http 8000</code></li>
+            <li>Pegá la URL de ngrok en "URL Pública" y hacé clic en <strong>Registrar en Telegram</strong></li>
           </ol>
         </div>
       </template>

@@ -100,11 +100,13 @@ class ProcessTelegramMessageUseCase:
                         break
 
                 if not conversation_id:
-                    new_conv = context.repositories.conversation.create(
-                        ConversationInput(title=f"Telegram-{chat_id}").dict(),
+                    from src.core.use_cases.conversation import CreateUseCase
+                    create_usecase = CreateUseCase(self.context_factory)
+                    new_conv = create_usecase.execute(
+                        ConversationInput(title=f"Telegram-{chat_id}"),
                         profile.user_id,
                     )
-                    conversation_id = new_conv
+                    conversation_id = new_conv.data.id
 
                 from src.core.use_cases.conversation import AddMessageUseCase
 
