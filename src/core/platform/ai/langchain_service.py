@@ -24,6 +24,55 @@ from .memory.manager import ConversationMemoryManager
 logger = logging.getLogger(__name__)
 
 
+def _get_key_arg(tool_name: str, args: dict) -> str:
+    """Extract the most meaningful arg to display in the CLI tool progress line."""
+    for key in ("file_name", "path", "query", "url", "name", "command"):
+        val = args.get(key)
+        if val and isinstance(val, str):
+            # Show only the basename to keep the line short
+            import os as _os
+            return _os.path.basename(val.rstrip("/")) or val
+    # Fallback: first string arg value
+    for val in args.values():
+        if val and isinstance(val, str):
+            return val[:60]
+    return ""
+
+
+def _brief_result(tool_name: str, result_str: str) -> str:
+    """Return a one-line summary of a tool result for CLI display."""
+    import json as _json
+    try:
+        data = _json.loads(result_str)
+    except Exception:
+        data = None
+
+    if tool_name in ("read_docx",):
+        n = len(data.get("paragraphs", [])) if isinstance(data, dict) else 0
+        return f"{n} paragraphs read" if n else "read"
+    if tool_name in ("analyze_excel", "read_excel"):
+        n = len(data.get("sheets", [])) if isinstance(data, dict) else 0
+        return f"{n} sheet(s) analyzed" if n else "analyzed"
+    if tool_name in ("modify_docx", "modify_excel", "write_docx", "write_excel"):
+        saved = data.get("saved_to", "") if isinstance(data, dict) else ""
+        import os as _os
+        return f"saved → {_os.path.basename(saved)}" if saved else "saved"
+    if tool_name in ("list_directory",):
+        lines = result_str.count("\n")
+        return f"{lines} entries" if lines else "listed"
+    if tool_name in ("find_files",):
+        files = data.get("files", []) if isinstance(data, dict) else []
+        return f"{len(files)} file(s) found"
+    if tool_name in ("search_documents", "search_content"):
+        results = data.get("results", []) if isinstance(data, dict) else []
+        return f"{len(results)} result(s)"
+    if tool_name == "run_command":
+        return "command executed"
+    if "error" in result_str[:50].lower():
+        return "error"
+    return "ok"
+
+
 class LangChainService:
     """
     LangChain-based AI service with enhanced capabilities.
@@ -66,7 +115,7 @@ class LangChainService:
             base_url=self.config.base_url if hasattr(self.config, 'base_url') and self.config.base_url else None,
             temperature=0.7,
             max_tokens=2000,
-            timeout=45.0,
+            timeout=180.0,
             max_retries=3,
         )
 
@@ -358,7 +407,12 @@ class LangChainService:
 
                     # Notify the client which tools are about to run
                     for tc in getattr(combined, "tool_calls", []):
-                        yield {"type": "tool_call", "name": tc.get("name", "tool")}
+                        yield {
+                            "type": "tool_call",
+                            "name": tc.get("name", "tool"),
+                            "round": 1,
+                            "arg": _get_key_arg(tc.get("name", ""), tc.get("args", {})),
+                        }
 
                     if shell_output_queue is not None:
                         # Sentinel value placed in the queue after the task completes
@@ -367,7 +421,10 @@ class LangChainService:
 
                         async def _run_tool_calls_and_signal():
                             try:
-                                return await self._handle_tool_calls(combined, messages, llm_with_tools, tools)
+                                return await self._handle_tool_calls(
+                                    combined, messages, llm_with_tools, tools,
+                                    event_queue=shell_output_queue,
+                                )
                             finally:
                                 await shell_output_queue.put(_DONE_SENTINEL)
 
@@ -416,6 +473,7 @@ class LangChainService:
         llm_with_tools,
         tools: List = None,
         max_rounds: int = 30,
+        event_queue=None,
     ) -> str:
         """
         Handle tool calls from the AI response, looping until the model
@@ -464,8 +522,20 @@ class LangChainService:
                     tool_result_str = str(tool_result)
 
                 logger.info(f"Tool {tool_name} result: {tool_result_str[:200]}...")
+
+                # Emit tool_result event so the CLI can show brief feedback
+                if event_queue is not None:
+                    await event_queue.put({
+                        "type": "tool_result",
+                        "name": tool_name,
+                        "round": round_num + 1,
+                        "summary": _brief_result(tool_name, tool_result_str),
+                    })
+
                 messages.append(ToolMessage(content=tool_result_str, tool_call_id=tool_id))
 
+            # Emit tool_call events for the NEXT round before invoking LLM
+            # (round 0's tool_calls were already emitted before _handle_tool_calls)
             logger.info(f"Invoking LLM after round {round_num + 1}")
             response = await llm_with_tools.ainvoke(messages)
             content = response.content or ""
@@ -473,6 +543,16 @@ class LangChainService:
 
             if content and not getattr(response, "tool_calls", None):
                 break
+
+            # Emit tool_call events for the next round via the queue
+            if event_queue is not None:
+                for tc in getattr(response, "tool_calls", []):
+                    await event_queue.put({
+                        "type": "tool_call",
+                        "name": tc.get("name", "tool"),
+                        "round": round_num + 2,
+                        "arg": _get_key_arg(tc.get("name", ""), tc.get("args", {})),
+                    })
 
         content = response.content or ""
         if not content:

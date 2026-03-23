@@ -738,6 +738,59 @@ def _find_file_by_name(files, file_name: str):
     return None
 
 
+def _resolve_output_path(path: str, workspace: str) -> "Path":
+    """Resolve an output path against workspace, avoiding double-directory issues.
+
+    If the relative path starts with the workspace's own basename
+    (e.g. workspace='/home/user/Documentos', path='Documentos/IEST/f.docx')
+    the duplicate leading component is stripped before joining.
+    Absolute paths are returned as-is.
+    """
+    from pathlib import Path as _Path
+    p = _Path(path).expanduser()
+    if p.is_absolute():
+        return p
+    if workspace:
+        ws = _Path(workspace)
+        parts = p.parts
+        if parts and parts[0] == ws.name:
+            p = _Path(*parts[1:]) if len(parts) > 1 else _Path(".")
+        return ws / p
+    return p
+
+
+def _find_local_file(file_name: str, workspace: str) -> "Path | None":
+    """Resolve a file_name to an existing local Path.
+
+    Resolution order:
+    1. Absolute path (or ~/…) — used as-is.
+    2. workspace / file_name  — exact relative path from workspace root.
+    3. Recursive search inside workspace by filename (case-insensitive).
+       Returns the first match found via os.walk.
+    Returns None if nothing is found.
+    """
+    from pathlib import Path as _Path
+    import os as _os
+
+    candidate = _Path(file_name).expanduser()
+    if candidate.is_absolute():
+        return candidate if candidate.exists() else None
+
+    if workspace:
+        direct = _Path(workspace) / file_name
+        if direct.exists():
+            return direct
+
+        # Recursive search by filename (handles subdirectories like IEST/)
+        target_name = _Path(file_name).name.lower()
+        for root, _dirs, files in _os.walk(workspace):
+            for fname in files:
+                if fname.lower() == target_name:
+                    return _Path(root) / fname
+
+    return None
+
+
 # ── Browser session state (module-level so it persists across requests) ──────
 _browser_state: Dict[str, Any] = {
     "playwright": None,
@@ -881,9 +934,32 @@ def create_langchain_tools(openai_integration, profile, skill_manager=None, stor
 
     async def analyze_excel_tool(file_name: str) -> Dict[str, Any]:
         """Analyze Excel file data"""
+        import asyncio
+
+        local = _find_local_file(file_name, client_workspace)
+        if local:
+            def _read_local():
+                import openpyxl
+                wb = openpyxl.load_workbook(local, data_only=True)
+                result = {"sheets": [], "total_sheets": len(wb.sheetnames)}
+                for name in wb.sheetnames:
+                    ws = wb[name]
+                    rows = list(ws.iter_rows(values_only=True))
+                    result["sheets"].append({
+                        "name": name,
+                        "rows": len(rows),
+                        "columns": ws.max_column,
+                        "sample": [list(r) for r in rows[:5]],
+                    })
+                return result
+            try:
+                return await asyncio.get_event_loop().run_in_executor(None, _read_local)
+            except Exception as e:
+                return {"error": str(e)}
+
         file = _find_file_by_name(profile.files, file_name)
         if not file:
-            return {"error": f"No se encontró ningún archivo con el nombre '{file_name}' en los archivos del usuario."}
+            return {"error": f"File '{file_name}' not found on disk or in profile storage."}
         return await openai_integration.analyze_excel_file(file.url)
 
     async def write_excel_tool(path: str, sheets: dict, mode: str = "overwrite") -> Dict[str, Any]:
@@ -892,7 +968,7 @@ def create_langchain_tools(openai_integration, profile, skill_manager=None, stor
         from pathlib import Path as _Path
         import openpyxl
 
-        resolved = (_Path(client_workspace) / path) if client_workspace else _Path(path)
+        resolved = _resolve_output_path(path, client_workspace)
 
         def _write():
             if mode == "update" and resolved.exists():
@@ -922,11 +998,8 @@ def create_langchain_tools(openai_integration, profile, skill_manager=None, stor
 
     async def read_docx_tool(file_name: str) -> Dict[str, Any]:
         """Read the text content of a Word (.docx) document."""
-        import asyncio
-
-        file = _find_file_by_name(profile.files, file_name)
-        if not file:
-            return {"error": f"No se encontró ningún archivo con el nombre '{file_name}' en los archivos del usuario."}
+        import asyncio, io
+        from pathlib import Path as _Path
 
         def _read():
             try:
@@ -934,10 +1007,17 @@ def create_langchain_tools(openai_integration, profile, skill_manager=None, stor
             except ImportError:
                 return {"error": "python-docx not installed. Run: pip install python-docx"}
 
-            import io, requests as _requests
-            resp = _requests.get(file.url, timeout=30)
-            resp.raise_for_status()
-            doc = Document(io.BytesIO(resp.content))
+            local = _find_local_file(file_name, client_workspace)
+            if local:
+                doc = Document(str(local))
+            else:
+                profile_file = _find_file_by_name(profile.files, file_name)
+                if not profile_file:
+                    return {"error": f"File '{file_name}' not found on disk or in profile storage."}
+                import requests as _requests
+                resp = _requests.get(profile_file.url, timeout=30)
+                resp.raise_for_status()
+                doc = Document(io.BytesIO(resp.content))
 
             sections = []
             for para in doc.paragraphs:
@@ -961,7 +1041,7 @@ def create_langchain_tools(openai_integration, profile, skill_manager=None, stor
         import asyncio
         from pathlib import Path as _Path
 
-        resolved = (_Path(client_workspace) / path) if client_workspace else _Path(path)
+        resolved = _resolve_output_path(path, client_workspace)
 
         def _write():
             try:
@@ -1022,10 +1102,13 @@ def create_langchain_tools(openai_integration, profile, skill_manager=None, stor
 
         def _execute():
             output_name = save_as or file_name
-            ws_path = _Path(client_workspace) / output_name if client_workspace else _Path(output_name)
+            ws_path = _resolve_output_path(output_name, client_workspace)
 
-            local_input = _Path(client_workspace) / file_name if client_workspace else _Path(file_name)
-            if local_input.exists():
+            local_input = _find_local_file(file_name, client_workspace)
+            if local_input:
+                # Save output next to the source file by default
+                if not save_as and not _Path(output_name).is_absolute():
+                    ws_path = local_input.parent / _Path(output_name).name
                 wb = openpyxl.load_workbook(local_input)
             else:
                 profile_file = _find_file_by_name(profile.files, file_name)
@@ -1110,10 +1193,13 @@ def create_langchain_tools(openai_integration, profile, skill_manager=None, stor
                 return {"error": "python-docx not installed. Run: pip install python-docx"}
 
             output_name = save_as or file_name
-            ws_path = _Path(client_workspace) / output_name if client_workspace else _Path(output_name)
+            ws_path = _resolve_output_path(output_name, client_workspace)
 
-            local_input = _Path(client_workspace) / file_name if client_workspace else _Path(file_name)
-            if local_input.exists():
+            local_input = _find_local_file(file_name, client_workspace)
+            if local_input:
+                # Save output next to the source file by default
+                if not save_as and not _Path(output_name).is_absolute():
+                    ws_path = local_input.parent / _Path(output_name).name
                 doc = Document(str(local_input))
             else:
                 profile_file = _find_file_by_name(profile.files, file_name)

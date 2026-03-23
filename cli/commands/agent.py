@@ -373,21 +373,34 @@ def _stream_assistant(
     effective_mode = _Mode.YOLO if auto_approve else mode
 
     _FRAMES = ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"]
-    _first_token = threading.Event()
     _stop_spinner = threading.Event()
+    _spinner_label = ["Thinking..."]
 
     def _spinner():
         i = 0
-        while not _first_token.is_set() and not _stop_spinner.is_set():
-            sys.stdout.write(f"\r{_FRAMES[i % len(_FRAMES)]} Thinking...  ")
+        while not _stop_spinner.is_set():
+            sys.stdout.write(f"\r{_FRAMES[i % len(_FRAMES)]} {_spinner_label[0]}  ")
             sys.stdout.flush()
             time.sleep(0.08)
             i += 1
-        sys.stdout.write(f"\r{' ' * 25}\r")
+        sys.stdout.write(f"\r{' ' * 35}\r")
         sys.stdout.flush()
 
-    spinner_thread = threading.Thread(target=_spinner, daemon=True)
-    spinner_thread.start()
+    def _start_spinner(label="Thinking..."):
+        nonlocal spinner_thread
+        _spinner_label[0] = label
+        _stop_spinner.clear()
+        spinner_thread = threading.Thread(target=_spinner, daemon=True)
+        spinner_thread.start()
+
+    def _stop_spin():
+        nonlocal spinner_thread
+        _stop_spinner.set()
+        if spinner_thread and spinner_thread.is_alive():
+            spinner_thread.join()
+
+    spinner_thread = None
+    _start_spinner("Thinking...")
 
     console.print()
     console.print(f"[bold cyan]{name}[/bold cyan]")
@@ -399,7 +412,7 @@ def _stream_assistant(
             data={"content": content},
             headers=_workspace_headers(effective_mode),
             stream=True,
-            timeout=300,
+            timeout=900,
         )
         resp.raise_for_status()
         import json as _json
@@ -421,26 +434,35 @@ def _stream_assistant(
                 if token.get("type") == "audio":
                     audio_url = token.get("url")
                 elif token.get("type") == "tool_call":
+                    _stop_spin()
                     tool_name = token.get("name", "tool")
-                    sys.stdout.write(f"\r\033[2m🔧 {tool_name}...\033[0m      \n")
+                    round_n   = token.get("round", "")
+                    arg       = token.get("arg", "")
+                    prefix    = f"[{round_n}] " if round_n else ""
+                    suffix    = f" · \033[36m{arg}\033[0m" if arg else ""
+                    sys.stdout.write(f"\r\033[2m🔧 {prefix}{tool_name}{suffix}\033[0m\n")
                     sys.stdout.flush()
+                    _start_spinner("Running tool...")
+                elif token.get("type") == "tool_result":
+                    _stop_spin()
+                    summary = token.get("summary", "")
+                    if summary:
+                        sys.stdout.write(f"\r  \033[32m✓\033[0m \033[2m{summary}\033[0m\n")
+                        sys.stdout.flush()
+                    _start_spinner("Thinking...")
                 elif token.get("type") == "compaction":
-                    _stop_spinner.set()
+                    _stop_spin()
                     console.print(
                         f"[dim]Conversation compacted to optimise context[/dim]"
                     )
                 elif token.get("type") == "shell_output":
                     line_text = token.get("line", "")
                     if line_text:
-                        if not _first_token.is_set():
-                            _first_token.set()
-                            spinner_thread.join()
+                        _stop_spin()
                         sys.stdout.write(f"\r\033[2m{line_text}\033[0m\n")
                         sys.stdout.flush()
                 elif token.get("type") == "approval_request":
-                    # Stop the spinner so we can display an interactive prompt.
-                    _stop_spinner.set()
-                    spinner_thread.join()
+                    _stop_spin()
 
                     request_id = token.get("request_id", "")
                     tool_name  = token.get("tool", "tool")
@@ -529,28 +551,24 @@ def _stream_assistant(
                         pass  # best-effort; the backend will timeout after 120s
 
                     # Restart the spinner while the backend continues processing.
-                    _stop_spinner.clear()
-                    spinner_thread = threading.Thread(target=_spinner, daemon=True)
-                    spinner_thread.start()
+                    _start_spinner("Thinking...")
                 continue
             if isinstance(token, str) and token.startswith("[ERROR]"):
-                _first_token.set()
+                _stop_spin()
                 console.print(f"\n[red]✗[/red] {token[7:].strip()}")
                 break
-            if not _first_token.is_set():
-                _first_token.set()
-                spinner_thread.join()
+            _stop_spin()
             sys.stdout.write(token)
             sys.stdout.flush()
             full_text += token
     except requests.exceptions.ConnectionError:
-        _stop_spinner.set()
+        _stop_spin()
         console.print("\n[red]✗[/red] Cannot connect to API.")
     except requests.exceptions.HTTPError as e:
-        _stop_spinner.set()
+        _stop_spin()
         console.print(f"\n[red]✗[/red] API error {e.response.status_code}")
     finally:
-        _stop_spinner.set()
+        _stop_spin()
 
     sys.stdout.write("\n")
     sys.stdout.flush()
