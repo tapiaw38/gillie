@@ -951,6 +951,7 @@ def create_langchain_tools(openai_integration, profile, skill_manager=None, stor
                         "columns": ws.max_column,
                         "sample": [list(r) for r in rows[:5]],
                     })
+                result["note"] = "Use modify_excel to edit cells. Sample shows first 5 rows per sheet."
                 return result
             try:
                 return await asyncio.get_event_loop().run_in_executor(None, _read_local)
@@ -1029,7 +1030,11 @@ def create_langchain_tools(openai_integration, profile, skill_manager=None, stor
                 rows = [[cell.text for cell in row.cells] for row in table.rows]
                 tables.append(rows)
 
-            return {"paragraphs": sections, "tables": tables, "total_paragraphs": len(sections)}
+            total = len(sections)
+            if total > 80:
+                sections = sections[:80]
+                sections.append({"style": "Note", "text": f"[... {total - 80} more paragraphs truncated. Ask for a specific section if you need more.]"})
+            return {"paragraphs": sections, "tables": tables, "total_paragraphs": total, "truncated": total > 80}
 
         try:
             return await asyncio.get_event_loop().run_in_executor(None, _read)

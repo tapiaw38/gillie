@@ -119,6 +119,7 @@ class LangChainService:
             max_retries=3,
         )
 
+
         # Initialize memory manager
         self.memory_manager = ConversationMemoryManager(max_messages=20)
 
@@ -531,6 +532,24 @@ class LangChainService:
                         "round": round_num + 1,
                         "summary": _brief_result(tool_name, tool_result_str),
                     })
+
+                # Track local files accessed or modified during the session
+                if event_queue is not None and tool_name in (
+                    "read_docx", "modify_docx", "analyze_excel", "modify_excel",
+                    "read_excel", "write_excel", "write_docx",
+                ):
+                    try:
+                        import json as _j
+                        result_data = _j.loads(tool_result_str) if tool_result_str.startswith("{") else {}
+                        saved = result_data.get("saved_to") or result_data.get("path") or tool_args.get("file_name", "") or tool_args.get("path", "")
+                        if saved:
+                            await event_queue.put({
+                                "type": "local_file_used",
+                                "path": saved,
+                                "tool": tool_name,
+                            })
+                    except Exception:
+                        pass
 
                 messages.append(ToolMessage(content=tool_result_str, tool_call_id=tool_id))
 

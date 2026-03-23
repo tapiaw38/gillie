@@ -297,6 +297,29 @@ def _print_header(assistant_name: str, conv_id: str, mode: str = _Mode.CONFIRM_R
     console.print()
 
 
+def _print_workspace_summary(ws: "Path") -> None:
+    """Print a compact summary of workspace contents."""
+    try:
+        entries = sorted(ws.iterdir())
+        files = [e for e in entries if e.is_file() and not e.name.startswith(".")]
+        dirs  = [e for e in entries if e.is_dir()  and not e.name.startswith(".")]
+        if not files and not dirs:
+            return
+        parts = []
+        for d in dirs[:8]:
+            parts.append(f"[dim cyan]{d.name}/[/dim cyan]")
+        for f in files[:10]:
+            parts.append(f"[dim]{f.name}[/dim]")
+        extra = (len(files) + len(dirs)) - len(parts)
+        summary = "  ".join(parts)
+        if extra > 0:
+            summary += f"  [dim]+{extra} more[/dim]"
+        console.print(f"[dim]Workspace:[/dim] {summary}")
+        console.print()
+    except Exception:
+        pass
+
+
 def _print_user(text: str) -> None:
     console.print(f"[bold white]You[/bold white]  [dim]{text}[/dim]")
 
@@ -340,6 +363,7 @@ def _stream_assistant(
     mode: str = _Mode.CONFIRM_RISKY,
     always_approved: set = None,
     always_rejected: set = None,
+    session_local_files: list = None,
 ) -> str:
     """Stream the assistant reply token by token from the SSE endpoint.
 
@@ -395,6 +419,8 @@ def _stream_assistant(
 
     def _stop_spin():
         nonlocal spinner_thread
+        if _stop_spinner.is_set():
+            return
         _stop_spinner.set()
         if spinner_thread and spinner_thread.is_alive():
             spinner_thread.join()
@@ -450,6 +476,14 @@ def _stream_assistant(
                         sys.stdout.write(f"\r  \033[32m✓\033[0m \033[2m{summary}\033[0m\n")
                         sys.stdout.flush()
                     _start_spinner("Thinking...")
+                elif token.get("type") == "local_file_used":
+                    path = token.get("path", "")
+                    if path and session_local_files is not None:
+                        if path not in [f.get("path") for f in session_local_files]:
+                            session_local_files.append({
+                                "path": path,
+                                "tool": token.get("tool", ""),
+                            })
                 elif token.get("type") == "compaction":
                     _stop_spin()
                     console.print(
@@ -557,7 +591,8 @@ def _stream_assistant(
                 _stop_spin()
                 console.print(f"\n[red]✗[/red] {token[7:].strip()}")
                 break
-            _stop_spin()
+            if not _stop_spinner.is_set():
+                _stop_spin()
             sys.stdout.write(token)
             sys.stdout.flush()
             full_text += token
@@ -1148,8 +1183,15 @@ def agent(
 
     # Files uploaded during this conversation session.
     session_files: list = []
+    # Local files accessed or modified by AI tools during this session.
+    session_local_files: list = []
 
     _print_header(assistant_name, current_id, mode[0])
+
+    # Show workspace contents if available
+    ws = _workspace()
+    if ws.exists():
+        _print_workspace_summary(ws)
 
     # Show recent history if resuming
     messages = conversation.get("messages", [])
@@ -1273,8 +1315,10 @@ def agent(
             conversation = _create_conversation()
             current_id = conversation.get("id") or conversation.get("_id")
             session_files.clear()
+            session_local_files.clear()
             console.print(f"[green]✓[/green] New conversation: [bold]{current_id}[/bold]\n")
             _print_header(assistant_name, current_id, mode[0])
+            _print_workspace_summary(_workspace())
             continue
 
         if cmd in ("/clear",):
@@ -1301,21 +1345,33 @@ def agent(
             continue
 
         if cmd in ("/files", "/attachments"):
-            if not session_files:
-                console.print("[dim]No files uploaded in this conversation.[/dim]\n")
+            from rich.table import Table
+            from rich import box as rbox
+            has_any = bool(session_files or session_local_files)
+            if not has_any:
+                console.print("[dim]No files uploaded or accessed in this conversation.[/dim]\n")
             else:
-                from rich.table import Table
-                from rich import box as rbox
-                table = Table(box=rbox.SIMPLE, border_style="dim", show_lines=False)
-                table.add_column("#", style="dim", justify="right")
-                table.add_column("Name", style="bold")
-                table.add_column("URL", style="dim")
-                for i, f in enumerate(session_files, 1):
-                    name = f.get("name", "").split("/")[-1]
-                    url = f.get("url", "")
-                    table.add_row(str(i), name, url)
                 console.print()
-                console.print(table)
+                if session_files:
+                    console.print("[dim]Uploaded (session):[/dim]")
+                    table = Table(box=rbox.SIMPLE, border_style="dim", show_lines=False)
+                    table.add_column("#", style="dim", justify="right")
+                    table.add_column("Name", style="bold")
+                    table.add_column("URL", style="dim")
+                    for i, f in enumerate(session_files, 1):
+                        name = f.get("name", "").split("/")[-1]
+                        url = f.get("url", "")
+                        table.add_row(str(i), name, url)
+                    console.print(table)
+                if session_local_files:
+                    console.print("[dim]Local (session):[/dim]")
+                    ltable = Table(box=rbox.SIMPLE, border_style="dim", show_lines=False)
+                    ltable.add_column("#", style="dim", justify="right")
+                    ltable.add_column("Path", style="bold")
+                    ltable.add_column("Tool", style="dim")
+                    for i, f in enumerate(session_local_files, 1):
+                        ltable.add_row(str(i), f.get("path", ""), f.get("tool", ""))
+                    console.print(ltable)
                 console.print()
             continue
 
@@ -1343,6 +1399,7 @@ def agent(
                     current_id, assistant_name, attach_msg,
                     auto_approve=yolo, mode=mode[0],
                     always_approved=always_approved, always_rejected=always_rejected,
+                    session_local_files=session_local_files,
                 )
             continue
 
@@ -1390,4 +1447,5 @@ def agent(
             mode=mode[0],
             always_approved=always_approved,
             always_rejected=always_rejected,
+            session_local_files=session_local_files,
         )

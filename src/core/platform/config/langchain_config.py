@@ -11,7 +11,6 @@ class LangChainConfig:
     vector_store_type: str = "chroma"
     embedding_model: str = "text-embedding-ada-002"
     similarity_search_k: int = 5
-    enable_fallback: bool = True
     log_level: str = "INFO"
 
 class LangChainConfigService:
@@ -28,7 +27,6 @@ class LangChainConfigService:
             vector_store_type=self.config_service.get_env("LANGCHAIN_VECTOR_STORE", "chroma", str),
             embedding_model=self.config_service.get_env("LANGCHAIN_EMBEDDING_MODEL", "text-embedding-ada-002", str),
             similarity_search_k=self.config_service.get_env("LANGCHAIN_SIMILARITY_K", 5, int),
-            enable_fallback=self.config_service.get_env("LANGCHAIN_ENABLE_FALLBACK", True, bool),
             log_level=self.config_service.get_env("LANGCHAIN_LOG_LEVEL", "INFO", str)
         )
 

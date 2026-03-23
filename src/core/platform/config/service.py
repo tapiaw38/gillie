@@ -89,7 +89,6 @@ class LangChainConfig:
     enable_vectors: bool
     vector_store: str
     similarity_k: int
-    enable_fallback: bool
     log_level: str
 
 
@@ -295,7 +294,6 @@ def read_config() -> ConfigurationService:
         enable_vectors=get_env("LANGCHAIN_ENABLE_VECTORS", "true").lower() == "true",
         vector_store=get_env("LANGCHAIN_VECTOR_STORE", "qdrant"),
         similarity_k=int(get_env("LANGCHAIN_SIMILARITY_K", "5")),
-        enable_fallback=get_env("LANGCHAIN_ENABLE_FALLBACK", "true").lower() == "true",
         log_level=get_env("LANGCHAIN_LOG_LEVEL", "INFO"),
     )
 
@@ -481,7 +479,6 @@ def init_config_from_json(config_data: "AssistantConfig") -> None:
             enable_vectors=s.langchain.enable_vectors,
             vector_store=s.langchain.vector_store,
             similarity_k=s.langchain.similarity_k,
-            enable_fallback=s.langchain.enable_fallback,
             log_level="INFO",
         ),
         langsmith_config=LangSmithConfig(

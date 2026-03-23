@@ -101,6 +101,17 @@ class TelegramIntegration:
             logger.error(f"[telegram] Error downloading voice {file_id}: {e}", exc_info=True)
             return None
 
+    def send_typing_action(self, chat_id: str) -> None:
+        """Send a 'typing' chat action to show the bot is processing."""
+        try:
+            requests.post(
+                f"{self.api_url}/sendChatAction",
+                json={"chat_id": chat_id, "action": "typing"},
+                timeout=5,
+            )
+        except Exception as e:
+            logger.debug(f"[telegram] Could not send typing action to {chat_id}: {e}")
+
     def set_webhook(self, webhook_url: str) -> bool:
         """Register the webhook URL with Telegram."""
         data: Dict[str, Any] = {"url": webhook_url}
