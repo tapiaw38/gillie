@@ -21,6 +21,7 @@ boto3==1.42.70
 python-multipart==0.0.22
 pandas==3.0.1
 openpyxl==3.1.5
+python-docx==1.1.2
 PyPDF2==3.0.1
 requests==2.32.5
 pdf2image==1.17.0

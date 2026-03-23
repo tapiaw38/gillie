@@ -17,6 +17,7 @@ import os
 import re
 import sys
 import glob as _glob
+import mimetypes
 import typer
 import requests
 from pathlib import Path
@@ -190,6 +191,61 @@ def _delete(path: str) -> dict:
         return {}
 
 
+_ATTACH_EXTS = {".pdf", ".xlsx", ".xls", ".docx", ".doc", ".csv", ".txt", ".png", ".jpg", ".jpeg", ".gif", ".webp"}
+
+
+def _upload_file(path: Path) -> dict | None:
+    """Upload a file to the profile via multipart form data.
+
+    Returns the first file item from the response data on success,
+    or None if the request fails.
+    """
+    mime_type = mimetypes.guess_type(path.name)[0] or "application/octet-stream"
+    try:
+        with open(path, "rb") as fh:
+            resp = requests.post(
+                _base_url() + "/profile/files/upload",
+                files=[("files", (path.name, fh, mime_type))],
+                headers=_workspace_headers(),
+                timeout=60,
+            )
+        resp.raise_for_status()
+        return (resp.json().get("data") or [None])[0]
+    except requests.exceptions.ConnectionError:
+        console.print("\n[red]✗[/red] Cannot connect to API. Is [bold cyan]gillie start[/bold cyan] running?")
+        return None
+    except requests.exceptions.HTTPError as e:
+        console.print(f"\n[red]✗[/red] API error {e.response.status_code}: {e.response.text}")
+        return None
+
+
+def _is_file_path(text: str) -> Path | None:
+    """Return a resolved Path if *text* looks like a file path that exists.
+
+    Recognised patterns:
+      - Starts with ``/``, ``~/``, or ``./``
+      - Plain filename with a known attachment extension
+
+    Returns None if the path does not exist or is a directory.
+    """
+    stripped = text.strip()
+    looks_like_path = (
+        stripped.startswith("/")
+        or stripped.startswith("~/")
+        or stripped.startswith("./")
+        or (
+            "/" not in stripped
+            and Path(stripped).suffix.lower() in _ATTACH_EXTS
+        )
+    )
+    if not looks_like_path:
+        return None
+    candidate = Path(stripped).expanduser().resolve()
+    if candidate.exists() and candidate.is_file():
+        return candidate
+    return None
+
+
 # ─── Conversation helpers ──────────────────────────────────────────────────────
 
 def _find_cli_conversation() -> dict | None:
@@ -233,7 +289,8 @@ def _print_header(assistant_name: str, conv_id: str, mode: str = _Mode.CONFIRM_R
         f"[dim]Conversation: {conv_id}[/dim]\n"
         f"[dim]Workspace:    {ws}[/dim]\n"
         f"[dim]Mode: {mode} | /mode to change[/dim]\n"
-        f"[dim]/new · /list · /clear · /compact · /plan · /mode · /id · /exit[/dim]",
+        f"[dim]/new · /list · /clear · /compact · /plan · /mode · /attach · /files · /id · /exit[/dim]\n"
+        f"[dim]@path — work with local file · /attach path — upload to storage[/dim]",
         border_style="cyan",
         box=box.ROUNDED,
     ))
@@ -529,7 +586,10 @@ def _print_history(messages: list, assistant_name: str) -> None:
 _AT_URL_RE  = re.compile(r'@(https?://[^\s]+)')
 _AT_GLOB_RE = re.compile(r'@@([^\s]+)')
 _AT_DIR_RE  = re.compile(r'@([^\s@]+/)')
-_AT_FILE_RE = re.compile(r'@([^\s@/]+(?:\.[^\s@/]*)?)')  # matches with or without extension
+_AT_FILE_RE = re.compile(r'@([^\s@]+\.[^\s@/]*)')  # path (abs or rel) ending with .extension
+
+# Extensions treated as local binary documents (inject context, don't read as text)
+_LOCAL_DOC_EXTS = {".xlsx", ".xls", ".docx", ".doc", ".csv", ".pdf"}
 
 _URL_CAP        = 3_000
 _FILE_CAP       = 4_000
@@ -649,11 +709,28 @@ def _expand_dir(directory: str) -> tuple[str, str | None]:
 
 
 def _expand_file(filepath: str) -> tuple[str, str | None]:
-    """Read a single file relative to the workspace."""
-    base = _workspace()
-    fpath = base / filepath
+    """Read a single file (workspace-relative or absolute path).
+
+    For binary document files (.xlsx, .docx, .pdf, etc.) injects a structured
+    context block so the AI can use file tools to work with the local file directly.
+    """
+    candidate = Path(filepath).expanduser()
+    fpath = candidate if candidate.is_absolute() else _workspace() / filepath
     if not fpath.exists():
         return "", f"File not found: {filepath}"
+
+    ext = fpath.suffix.lower()
+    if ext in _LOCAL_DOC_EXTS:
+        # Binary document — tell the AI where it lives so it can use file tools
+        block = (
+            f"[Local file on disk: {fpath} (name: {fpath.name})]\n"
+            f"This is a local binary document. Do NOT try to read its raw content.\n"
+            f"To work with it use the appropriate file tool and pass file_name=\"{fpath}\". "
+            f"Save changes back to the same path (save_as=\"{fpath}\") unless the user specifies otherwise. "
+            f"Do NOT re_upload unless the user explicitly asks to save it to cloud storage."
+        )
+        return block, None
+
     if _is_binary(fpath):
         return "", f"Skipped binary file: {filepath}"
     try:
@@ -1051,6 +1128,9 @@ def agent(
     always_approved: set = set()
     always_rejected: set = set()
 
+    # Files uploaded during this conversation session.
+    session_files: list = []
+
     _print_header(assistant_name, current_id, mode[0])
 
     # Show recent history if resuming
@@ -1073,6 +1153,8 @@ def agent(
                 "/clear",
                 "/compact",
                 "/plan", "/mode",
+                "/attach",
+                "/files",
                 "/id", "/exit",
             ]
 
@@ -1172,6 +1254,7 @@ def agent(
         if cmd in ("/new",):
             conversation = _create_conversation()
             current_id = conversation.get("id") or conversation.get("_id")
+            session_files.clear()
             console.print(f"[green]✓[/green] New conversation: [bold]{current_id}[/bold]\n")
             _print_header(assistant_name, current_id, mode[0])
             continue
@@ -1197,6 +1280,52 @@ def agent(
         if cmd in ("/plan",):
             mode[0] = _Mode.PLAN
             console.print(f"[green]✓[/green] Mode: [bold]plan[/bold] (describe changes, never apply)\n")
+            continue
+
+        if cmd in ("/files", "/attachments"):
+            if not session_files:
+                console.print("[dim]No files uploaded in this conversation.[/dim]\n")
+            else:
+                from rich.table import Table
+                from rich import box as rbox
+                table = Table(box=rbox.SIMPLE, border_style="dim", show_lines=False)
+                table.add_column("#", style="dim", justify="right")
+                table.add_column("Name", style="bold")
+                table.add_column("URL", style="dim")
+                for i, f in enumerate(session_files, 1):
+                    name = f.get("name", "").split("/")[-1]
+                    url = f.get("url", "")
+                    table.add_row(str(i), name, url)
+                console.print()
+                console.print(table)
+                console.print()
+            continue
+
+        if user_input.lower().startswith("/attach"):
+            parts = user_input.split(None, 1)
+            if len(parts) < 2:
+                console.print("[dim]Usage: /attach <path/to/file>[/dim]\n")
+                continue
+            attach_path = Path(parts[1].strip()).expanduser().resolve()
+            if not attach_path.exists() or not attach_path.is_file():
+                console.print(f"[red]✗[/red] File not found: {attach_path}\n")
+                continue
+            if attach_path.suffix.lower() not in _ATTACH_EXTS:
+                console.print(f"[yellow]⚠[/yellow] Extension '{attach_path.suffix}' may not be supported.\n")
+            console.print(f"[dim]📎 Uploading {attach_path.name}...[/dim]")
+            file_info = _upload_file(attach_path)
+            if file_info:
+                file_url = file_info.get("url", "")
+                file_name = attach_path.name
+                session_files.append(file_info)
+                console.print(f"[green]✓[/green] Uploaded: [bold]{file_name}[/bold]\n")
+                attach_msg = f"I've just uploaded the file '{file_name}' (url: {file_url}). Please use it in our conversation when relevant."
+                _print_user(attach_msg)
+                _stream_assistant(
+                    current_id, assistant_name, attach_msg,
+                    auto_approve=yolo, mode=mode[0],
+                    always_approved=always_approved, always_rejected=always_rejected,
+                )
             continue
 
         if user_input.lower().startswith("/mode"):

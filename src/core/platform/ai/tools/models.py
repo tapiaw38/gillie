@@ -80,6 +80,32 @@ _DEFAULT_TOOL_PROMPTS: Dict[str, str] = {
         "Use when the user asks about data in a named spreadsheet. "
         "Provide the file name, not a URL."
     ),
+    "write_excel": (
+        "Create a new Excel file or overwrite/update an existing one with structured data. "
+        "Use when the user asks to generate, export, or modify a spreadsheet. "
+        "Provide the file path and a dict of sheet names to row data."
+    ),
+    "read_docx": (
+        "Read the full text content of a Word (.docx) document uploaded by the user. "
+        "Use when the user asks about the contents of a Word file."
+    ),
+    "write_docx": (
+        "Create a new Word (.docx) document or modify an existing one. "
+        "Use when the user asks to generate, write, or edit a Word document. "
+        "Content supports headings (#, ##, ###), bold (**text**), italic (*text*), bullets (- item), and numbered lists (1. item)."
+    ),
+    "modify_excel": (
+        "Modify an existing Excel file from profile storage or workspace. "
+        "Supports: update cells, add/delete rows, add/rename/delete sheets. "
+        "Downloads from storage if not already in workspace. Saves working copy locally. "
+        "Use re_upload=True if the user wants to save back to their storage."
+    ),
+    "modify_docx": (
+        "Modify an existing Word (.docx) file from profile storage or workspace. "
+        "Supports text replacements and appending new content. "
+        "Downloads from storage if not already in workspace. Saves working copy locally. "
+        "Use re_upload=True if the user wants to save back to their storage."
+    ),
     "describe_image": (
         "Describe the visual content of an image using its URL. "
         "Use after search_images returns image URLs and the user wants to know what an image shows."
@@ -338,6 +364,60 @@ class AnalyzeExcelArgs(BaseModel):
     file_name: str = Field(
         description="Name (or partial name) of the Excel file uploaded by the user, e.g. 'datos.xlsx'"
     )
+
+
+class WriteExcelArgs(BaseModel):
+    """Arguments for creating or modifying an Excel file"""
+    path: str = Field(description="Path to the Excel file to create or modify (e.g. 'report.xlsx')")
+    sheets: dict = Field(description=(
+        "Dict of sheet_name -> list of rows. Each row is a list of cell values. "
+        "First row is treated as headers. Example: {'Sheet1': [['Name','Age'],['Ana',30]]}"
+    ))
+    mode: str = Field(default="overwrite", description="'overwrite' to replace the file, 'update' to modify existing sheets")
+
+
+class ReadDocxArgs(BaseModel):
+    """Arguments for reading a Word document"""
+    file_name: str = Field(description="Name (or partial name) of the .docx file, e.g. 'report.docx'")
+
+
+class WriteDocxArgs(BaseModel):
+    """Arguments for creating or modifying a Word document"""
+    path: str = Field(description="Path to the .docx file to create or modify (e.g. 'report.docx')")
+    content: str = Field(description=(
+        "Document content in a simple markdown-like format:\n"
+        "# Heading 1\n## Heading 2\n### Heading 3\n"
+        "Regular paragraph text.\n**bold** and *italic* inline.\n"
+        "- bullet item\n1. numbered item"
+    ))
+    mode: str = Field(default="overwrite", description="'overwrite' to replace the file, 'append' to add content at the end")
+
+
+class ModifyExcelArgs(BaseModel):
+    """Arguments for modifying an existing Excel file"""
+    file_name: str = Field(description="Name of the Excel file in profile files or workspace (e.g. 'ventas.xlsx')")
+    operations: List[dict] = Field(description=(
+        "List of operations to apply. Each operation is a dict with 'type' and params:\n"
+        "- update_cell: {type, sheet, row (1-based int), col (letter or 1-based int), value}\n"
+        "- add_row: {type, sheet, data (list of values)}\n"
+        "- delete_row: {type, sheet, row (1-based int)}\n"
+        "- add_sheet: {type, name, rows (list of lists)}\n"
+        "- rename_sheet: {type, old_name, new_name}\n"
+        "- delete_sheet: {type, name}"
+    ))
+    save_as: Optional[str] = Field(default=None, description="Output filename in workspace. Defaults to same name as input.")
+    re_upload: bool = Field(default=False, description="If True, re-upload the modified file to storage after saving")
+
+
+class ModifyDocxArgs(BaseModel):
+    """Arguments for modifying an existing Word document"""
+    file_name: str = Field(description="Name of the .docx file in profile files or workspace (e.g. 'report.docx')")
+    replacements: Optional[List[dict]] = Field(default=None, description=(
+        "List of text replacements: [{old: 'text to find', new: 'replacement text'}]"
+    ))
+    append: Optional[str] = Field(default=None, description="Markdown-like content to append at the end of the document")
+    save_as: Optional[str] = Field(default=None, description="Output filename in workspace. Defaults to same name as input.")
+    re_upload: bool = Field(default=False, description="If True, re-upload the modified file to storage after saving")
 
 
 class DescribeImageArgs(BaseModel):
@@ -805,6 +885,322 @@ def create_langchain_tools(openai_integration, profile, skill_manager=None, stor
         if not file:
             return {"error": f"No se encontró ningún archivo con el nombre '{file_name}' en los archivos del usuario."}
         return await openai_integration.analyze_excel_file(file.url)
+
+    async def write_excel_tool(path: str, sheets: dict, mode: str = "overwrite") -> Dict[str, Any]:
+        """Create or modify an Excel file with structured data."""
+        import asyncio
+        from pathlib import Path as _Path
+        import openpyxl
+
+        resolved = (_Path(client_workspace) / path) if client_workspace else _Path(path)
+
+        def _write():
+            if mode == "update" and resolved.exists():
+                wb = openpyxl.load_workbook(resolved)
+            else:
+                wb = openpyxl.Workbook()
+                wb.remove(wb.active)
+
+            for sheet_name, rows in sheets.items():
+                if sheet_name in wb.sheetnames:
+                    ws = wb[sheet_name]
+                    ws.delete_rows(1, ws.max_row)
+                else:
+                    ws = wb.create_sheet(title=sheet_name)
+                for row in rows:
+                    ws.append(row)
+
+            resolved.parent.mkdir(parents=True, exist_ok=True)
+            wb.save(resolved)
+            total_rows = sum(len(r) for r in sheets.values())
+            return {"path": str(resolved), "sheets": list(sheets.keys()), "rows_written": total_rows}
+
+        try:
+            return await asyncio.get_event_loop().run_in_executor(None, _write)
+        except Exception as e:
+            return {"error": str(e)}
+
+    async def read_docx_tool(file_name: str) -> Dict[str, Any]:
+        """Read the text content of a Word (.docx) document."""
+        import asyncio
+
+        file = _find_file_by_name(profile.files, file_name)
+        if not file:
+            return {"error": f"No se encontró ningún archivo con el nombre '{file_name}' en los archivos del usuario."}
+
+        def _read():
+            try:
+                from docx import Document
+            except ImportError:
+                return {"error": "python-docx not installed. Run: pip install python-docx"}
+
+            import io, requests as _requests
+            resp = _requests.get(file.url, timeout=30)
+            resp.raise_for_status()
+            doc = Document(io.BytesIO(resp.content))
+
+            sections = []
+            for para in doc.paragraphs:
+                if para.text.strip():
+                    sections.append({"style": para.style.name, "text": para.text})
+
+            tables = []
+            for table in doc.tables:
+                rows = [[cell.text for cell in row.cells] for row in table.rows]
+                tables.append(rows)
+
+            return {"paragraphs": sections, "tables": tables, "total_paragraphs": len(sections)}
+
+        try:
+            return await asyncio.get_event_loop().run_in_executor(None, _read)
+        except Exception as e:
+            return {"error": str(e)}
+
+    async def write_docx_tool(path: str, content: str, mode: str = "overwrite") -> Dict[str, Any]:
+        """Create or modify a Word (.docx) document."""
+        import asyncio
+        from pathlib import Path as _Path
+
+        resolved = (_Path(client_workspace) / path) if client_workspace else _Path(path)
+
+        def _write():
+            try:
+                from docx import Document
+                from docx.shared import Pt
+            except ImportError:
+                return {"error": "python-docx not installed. Run: pip install python-docx"}
+
+            if mode == "append" and resolved.exists():
+                doc = Document(str(resolved))
+            else:
+                doc = Document()
+
+            for line in content.splitlines():
+                stripped = line.rstrip()
+                if stripped.startswith("### "):
+                    doc.add_heading(stripped[4:], level=3)
+                elif stripped.startswith("## "):
+                    doc.add_heading(stripped[3:], level=2)
+                elif stripped.startswith("# "):
+                    doc.add_heading(stripped[2:], level=1)
+                elif stripped.startswith("- ") or stripped.startswith("* "):
+                    doc.add_paragraph(stripped[2:], style="List Bullet")
+                elif stripped and stripped[0].isdigit() and ". " in stripped[:4]:
+                    doc.add_paragraph(stripped.split(". ", 1)[1], style="List Number")
+                elif stripped == "":
+                    doc.add_paragraph("")
+                else:
+                    para = doc.add_paragraph()
+                    # Handle inline **bold** and *italic*
+                    import re as _re
+                    parts = _re.split(r'(\*\*[^*]+\*\*|\*[^*]+\*)', stripped)
+                    for part in parts:
+                        if part.startswith("**") and part.endswith("**"):
+                            run = para.add_run(part[2:-2])
+                            run.bold = True
+                        elif part.startswith("*") and part.endswith("*"):
+                            run = para.add_run(part[1:-1])
+                            run.italic = True
+                        else:
+                            para.add_run(part)
+
+            resolved.parent.mkdir(parents=True, exist_ok=True)
+            doc.save(str(resolved))
+            return {"path": str(resolved), "paragraphs_written": len(content.splitlines())}
+
+        try:
+            return await asyncio.get_event_loop().run_in_executor(None, _write)
+        except Exception as e:
+            return {"error": str(e)}
+
+
+    async def modify_excel_tool(file_name: str, operations: List[dict], save_as: str = None, re_upload: bool = False) -> Dict[str, Any]:
+        """Download and modify an Excel file with targeted operations, save to workspace."""
+        import asyncio, io
+        import openpyxl
+        from pathlib import Path as _Path
+
+        def _execute():
+            output_name = save_as or file_name
+            ws_path = _Path(client_workspace) / output_name if client_workspace else _Path(output_name)
+
+            local_input = _Path(client_workspace) / file_name if client_workspace else _Path(file_name)
+            if local_input.exists():
+                wb = openpyxl.load_workbook(local_input)
+            else:
+                profile_file = _find_file_by_name(profile.files, file_name)
+                if not profile_file:
+                    return {"error": f"File '{file_name}' not found in profile files or workspace."}
+                import requests as _req
+                resp = _req.get(profile_file.url, timeout=30)
+                resp.raise_for_status()
+                wb = openpyxl.load_workbook(io.BytesIO(resp.content))
+
+            applied = []
+            errors = []
+            for op in operations:
+                op_type = op.get("type")
+                try:
+                    if op_type == "update_cell":
+                        ws = wb[op["sheet"]]
+                        row, col = int(op["row"]), op["col"]
+                        if isinstance(col, str) and col.isalpha():
+                            ws[f"{col.upper()}{row}"] = op["value"]
+                        else:
+                            ws.cell(row=row, column=int(col)).value = op["value"]
+                        applied.append(f"update_cell: {op['sheet']}!{col}{row}={op['value']}")
+                    elif op_type == "add_row":
+                        ws = wb[op["sheet"]]
+                        ws.append(op["data"])
+                        applied.append(f"add_row: {op['sheet']}")
+                    elif op_type == "delete_row":
+                        ws = wb[op["sheet"]]
+                        ws.delete_rows(int(op["row"]))
+                        applied.append(f"delete_row: {op['sheet']} row {op['row']}")
+                    elif op_type == "add_sheet":
+                        ws = wb.create_sheet(title=op["name"])
+                        for row_data in op.get("rows", []):
+                            ws.append(row_data)
+                        applied.append(f"add_sheet: {op['name']}")
+                    elif op_type == "rename_sheet":
+                        wb[op["old_name"]].title = op["new_name"]
+                        applied.append(f"rename_sheet: {op['old_name']} -> {op['new_name']}")
+                    elif op_type == "delete_sheet":
+                        del wb[op["name"]]
+                        applied.append(f"delete_sheet: {op['name']}")
+                    else:
+                        errors.append(f"Unknown operation type: {op_type}")
+                except Exception as ex:
+                    errors.append(f"{op_type} failed: {ex}")
+
+            ws_path.parent.mkdir(parents=True, exist_ok=True)
+            wb.save(ws_path)
+            return {"saved_to": str(ws_path), "operations_applied": applied, "errors": errors}
+
+        result = await asyncio.get_event_loop().run_in_executor(None, _execute)
+
+        if re_upload and "error" not in result:
+            saved_path = _Path(result["saved_to"])
+            if saved_path.exists():
+                import aiohttp
+                try:
+                    with open(saved_path, "rb") as fh:
+                        data = aiohttp.FormData()
+                        data.add_field("files", fh, filename=saved_path.name, content_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+                        async with aiohttp.ClientSession() as session:
+                            async with session.post("http://localhost:8000/profile/files/upload", data=data) as resp:
+                                if resp.status == 200:
+                                    result["re_uploaded"] = True
+                                else:
+                                    result["re_upload_error"] = f"HTTP {resp.status}"
+                except Exception as e:
+                    result["re_upload_error"] = str(e)
+
+        return result
+
+    async def modify_docx_tool(file_name: str, replacements: List[dict] = None, append: str = None, save_as: str = None, re_upload: bool = False) -> Dict[str, Any]:
+        """Download and modify a Word document: replace text and/or append content."""
+        import asyncio, io
+        from pathlib import Path as _Path
+
+        def _execute():
+            try:
+                from docx import Document
+            except ImportError:
+                return {"error": "python-docx not installed. Run: pip install python-docx"}
+
+            output_name = save_as or file_name
+            ws_path = _Path(client_workspace) / output_name if client_workspace else _Path(output_name)
+
+            local_input = _Path(client_workspace) / file_name if client_workspace else _Path(file_name)
+            if local_input.exists():
+                doc = Document(str(local_input))
+            else:
+                profile_file = _find_file_by_name(profile.files, file_name)
+                if not profile_file:
+                    return {"error": f"File '{file_name}' not found in profile files or workspace."}
+                import requests as _req
+                resp = _req.get(profile_file.url, timeout=30)
+                resp.raise_for_status()
+                doc = Document(io.BytesIO(resp.content))
+
+            applied = []
+
+            if replacements:
+                for rep in replacements:
+                    old, new = rep.get("old", ""), rep.get("new", "")
+                    count = 0
+                    for para in doc.paragraphs:
+                        if old in para.text:
+                            for run in para.runs:
+                                if old in run.text:
+                                    run.text = run.text.replace(old, new)
+                                    count += 1
+                    for table in doc.tables:
+                        for row in table.rows:
+                            for cell in row.cells:
+                                for para in cell.paragraphs:
+                                    if old in para.text:
+                                        for run in para.runs:
+                                            if old in run.text:
+                                                run.text = run.text.replace(old, new)
+                                                count += 1
+                    applied.append(f"replace '{old}' -> '{new}' ({count} occurrences)")
+
+            if append:
+                import re as _re
+                for line in append.splitlines():
+                    stripped = line.rstrip()
+                    if stripped.startswith("### "):
+                        doc.add_heading(stripped[4:], level=3)
+                    elif stripped.startswith("## "):
+                        doc.add_heading(stripped[3:], level=2)
+                    elif stripped.startswith("# "):
+                        doc.add_heading(stripped[2:], level=1)
+                    elif stripped.startswith("- ") or stripped.startswith("* "):
+                        doc.add_paragraph(stripped[2:], style="List Bullet")
+                    elif stripped and stripped[0].isdigit() and ". " in stripped[:4]:
+                        doc.add_paragraph(stripped.split(". ", 1)[1], style="List Number")
+                    elif not stripped:
+                        doc.add_paragraph("")
+                    else:
+                        para = doc.add_paragraph()
+                        parts = _re.split(r'(\*\*[^*]+\*\*|\*[^*]+\*)', stripped)
+                        for part in parts:
+                            if part.startswith("**") and part.endswith("**"):
+                                run = para.add_run(part[2:-2])
+                                run.bold = True
+                            elif part.startswith("*") and part.endswith("*"):
+                                run = para.add_run(part[1:-1])
+                                run.italic = True
+                            else:
+                                para.add_run(part)
+                applied.append(f"appended {len(append.splitlines())} lines")
+
+            ws_path.parent.mkdir(parents=True, exist_ok=True)
+            doc.save(str(ws_path))
+            return {"saved_to": str(ws_path), "operations_applied": applied}
+
+        result = await asyncio.get_event_loop().run_in_executor(None, _execute)
+
+        if re_upload and "error" not in result:
+            saved_path = _Path(result["saved_to"])
+            if saved_path.exists():
+                import aiohttp
+                try:
+                    with open(saved_path, "rb") as fh:
+                        data = aiohttp.FormData()
+                        data.add_field("files", fh, filename=saved_path.name, content_type="application/vnd.openxmlformats-officedocument.wordprocessingml.document")
+                        async with aiohttp.ClientSession() as session:
+                            async with session.post("http://localhost:8000/profile/files/upload", data=data) as resp:
+                                if resp.status == 200:
+                                    result["re_uploaded"] = True
+                                else:
+                                    result["re_upload_error"] = f"HTTP {resp.status}"
+                except Exception as e:
+                    result["re_upload_error"] = str(e)
+
+        return result
 
     async def describe_image_tool(image_url: str) -> str:
         """Describe an image from its URL or local file path"""
@@ -2288,6 +2684,11 @@ user_pref("devtools.debugger.force-local", true);
         _tool("analyze_pdf",            prompts["analyze_pdf"],            analyze_pdf_tool,     AnalyzePDFArgs),
         _tool("extract_text_from_pdf",  prompts["extract_text_from_pdf"],  extract_text_tool,    ExtractTextArgs),
         _tool("analyze_excel",          prompts["analyze_excel"],          analyze_excel_tool,   AnalyzeExcelArgs),
+        _tool("write_excel",            prompts["write_excel"],            write_excel_tool,     WriteExcelArgs),
+        _tool("read_docx",              prompts["read_docx"],              read_docx_tool,       ReadDocxArgs),
+        _tool("write_docx",             prompts["write_docx"],             write_docx_tool,      WriteDocxArgs),
+        _tool("modify_excel",           prompts["modify_excel"],           modify_excel_tool,    ModifyExcelArgs),
+        _tool("modify_docx",            prompts["modify_docx"],            modify_docx_tool,     ModifyDocxArgs),
         _tool("describe_image",         prompts["describe_image"],         describe_image_tool,  DescribeImageArgs),
         _tool("take_screenshot",        prompts.get("take_screenshot",    _DEFAULT_TOOL_PROMPTS["take_screenshot"]),    take_screenshot_tool,    TakeScreenshotArgs),
         _tool("browser_connect",              prompts.get("browser_connect",             _DEFAULT_TOOL_PROMPTS["browser_connect"]),             browser_connect_tool,             BrowserConnectArgs),
