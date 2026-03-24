@@ -19,6 +19,7 @@ from src.core.use_cases.profile import (
     AddFilesUseCase as ProfileAddFilesUseCase,
     DeleteFileByIdUseCase as ProfileDeleteFileByIdUseCase,
     AddIntegrationUseCase as ProfileAddIntegrationUseCase,
+    DeleteIntegrationUseCase as ProfileDeleteIntegrationUseCase,
     ListOptionsUseCase as ProfileListOptionsUseCase,
     FindByWhatsAppBusinessIdUseCase as ProfileFindByWhatsAppBusinessIdUseCase,
     FindWithActiveWhatsAppIntegrationUseCase as ProfileFindWithActiveWhatsAppIntegrationUseCase,
@@ -91,6 +92,7 @@ class Profile:
     add_files_usecase: ProfileAddFilesUseCase
     delete_file_by_id_usecase: ProfileDeleteFileByIdUseCase
     add_integration_usecase: ProfileAddIntegrationUseCase
+    delete_integration_usecase: ProfileDeleteIntegrationUseCase
     list_options_usecase: ProfileListOptionsUseCase
     find_by_whatsapp_business_id_usecase: ProfileFindByWhatsAppBusinessIdUseCase
     find_with_active_whatsapp_integration_usecase: ProfileFindWithActiveWhatsAppIntegrationUseCase
@@ -207,6 +209,7 @@ def create_usecases(context_factory: Factory) -> Usecases:
             add_files_usecase=ProfileAddFilesUseCase(context_factory),
             delete_file_by_id_usecase=ProfileDeleteFileByIdUseCase(context_factory),
             add_integration_usecase=ProfileAddIntegrationUseCase(context_factory),
+            delete_integration_usecase=ProfileDeleteIntegrationUseCase(context_factory),
             list_options_usecase=ProfileListOptionsUseCase(context_factory),
             find_by_whatsapp_business_id_usecase=ProfileFindByWhatsAppBusinessIdUseCase(context_factory),
             find_with_active_whatsapp_integration_usecase=ProfileFindWithActiveWhatsAppIntegrationUseCase(context_factory),

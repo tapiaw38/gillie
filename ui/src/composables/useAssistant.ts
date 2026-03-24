@@ -54,6 +54,10 @@ export const useAssistant = () => {
     isAddIntegrationSuccess,
     isAddIntegrationError,
     addIntegrationError,
+
+    isRemoveIntegrationByIdPending,
+    isRemoveIntegrationByIdError,
+    removeIntegrationByIdError,
   } = storeToRefs(assistantStore)
 
   const {
@@ -65,6 +69,7 @@ export const useAssistant = () => {
     addFiles,
     removeFileById,
     addIntegration,
+    removeIntegrationById,
   } = assistantStore
 
   return {
@@ -111,6 +116,10 @@ export const useAssistant = () => {
     isAddIntegrationError,
     addIntegrationError,
 
+    isRemoveIntegrationByIdPending,
+    isRemoveIntegrationByIdError,
+    removeIntegrationByIdError,
+
     // Methods
     addAssistantProfile,
     getAssistantProfile,
@@ -120,6 +129,7 @@ export const useAssistant = () => {
     addFiles,
     removeFileById,
     addIntegration,
+    removeIntegrationById,
     reset: assistantStore.$reset,
   }
 }

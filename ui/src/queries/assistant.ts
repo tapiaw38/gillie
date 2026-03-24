@@ -55,6 +55,10 @@ export const useAssistantQueries = (assistantService: IAssistantService) => {
     mutationFn: assistantService.addIntegration.bind(assistantService),
   })
 
+  const removeIntegrationByIdMutation = useMutation<IntegrationResponse, Error, string>({
+    mutationFn: assistantService.removeIntegrationById.bind(assistantService),
+  })
+
   return {
     addAssistantProfileMutation,
     getAssistantProfileQuery,
@@ -64,5 +68,6 @@ export const useAssistantQueries = (assistantService: IAssistantService) => {
     addFilesMutation,
     removeFileByIdMutation,
     addIntegrationMutation,
+    removeIntegrationByIdMutation,
   }
 }

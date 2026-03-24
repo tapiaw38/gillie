@@ -720,32 +720,57 @@ class ExecuteSQLArgs(BaseModel):
     )
 
 
-def _get_sql_integration(profile):
-    """Return a SQLDatabaseIntegration if the profile has sqldatabase activated, else None."""
+def _get_sql_integrations(profile):
+    """Return list of (slug, SQLDatabaseIntegration) for all active DB integrations."""
+    import re as _re
     if not profile or not profile.integrations:
-        return None
+        return []
+
+    results = []
+    seen_slugs = set()
+
     for integration in profile.integrations:
-        if integration.name == "sqldatabase" and integration.activated:
-            config = integration.config or {}
-            connection_string = config.get("connection_string")
+        is_db = (integration.type == "database" or integration.name == "sqldatabase")
+        if not is_db or not integration.activated:
+            continue
 
-            # Support both new format (allowed_tables list) and old format (allowed_table string)
-            allowed_tables = config.get("allowed_tables")
-            if not allowed_tables:
-                single_table = config.get("allowed_table")
-                if single_table:
-                    allowed_tables = [{"name": single_table, "description": config.get("table_description", "")}]
+        config = integration.config or {}
+        connection_string = config.get("connection_string")
 
-            if not connection_string or not allowed_tables:
-                return None
+        allowed_tables = config.get("allowed_tables")
+        if not allowed_tables:
+            single = config.get("allowed_table")
+            if single:
+                allowed_tables = [{"name": single, "description": config.get("table_description", "")}]
 
-            from src.adapters.web.integrations.sqldatabase.sqldatabase import SQLDatabaseIntegration
-            return SQLDatabaseIntegration(
-                connection_string=connection_string,
-                allowed_tables=allowed_tables,
-                blocked_keywords=config.get("blocked_keywords", None),  # None = use default (block all DML)
-            )
-    return None
+        if not connection_string or not allowed_tables:
+            continue
+
+        from src.adapters.web.integrations.sqldatabase.sqldatabase import SQLDatabaseIntegration
+        inst = SQLDatabaseIntegration(
+            connection_string=connection_string,
+            allowed_tables=allowed_tables,
+            blocked_keywords=config.get("blocked_keywords", None),
+        )
+
+        # Build a unique valid slug from integration name
+        base_slug = _re.sub(r"[^a-z0-9]", "_", integration.name.lower()).strip("_") or "db"
+        slug = base_slug
+        counter = 2
+        while slug in seen_slugs:
+            slug = f"{base_slug}_{counter}"
+            counter += 1
+        seen_slugs.add(slug)
+
+        results.append((slug, inst))
+
+    return results
+
+
+def _get_sql_integration(profile):
+    """Deprecated: use _get_sql_integrations. Returns first active DB integration or None."""
+    results = _get_sql_integrations(profile)
+    return results[0][1] if results else None
 
 
 def _find_file_by_name(files, file_name: str):
@@ -2690,7 +2715,8 @@ user_pref("devtools.debugger.force-local", true);
     # ── End of file editing tools ─────────────────────────────────────────────
 
     prompts = _get_tool_prompts(profile)
-    sql_integration = _get_sql_integration(profile)
+    sql_integrations = _get_sql_integrations(profile)
+    sql_integration = sql_integrations[0][1] if sql_integrations else None
 
     if sql_integration is not None and "search_documents" not in (json.loads(profile.tool_prompts) if getattr(profile, "tool_prompts", None) else {}):
         prompts["search_documents"] = (
@@ -2819,60 +2845,58 @@ user_pref("devtools.debugger.force-local", true);
         _tool("search_documents",       prompts["search_documents"],       search_documents_tool, SearchDocumentsArgs),
     ]))
 
-    if sql_integration is not None and "query_database" not in disabled:
-        async def query_database_tool(
-            table: str,
-            columns: List[str] = None,
-            filters: Optional[str] = None,
-            limit: int = 20,
-        ) -> Dict[str, Any]:
-            """Query an allowed database table and return matching rows."""
-            return await sql_integration.query(
-                table=table,
-                columns=columns or ["*"],
-                filters=filters,
-                limit=limit,
+    for _db_slug, _db_inst in sql_integrations:
+        _query_tool_name = f"query_{_db_slug}"
+        _exec_tool_name = f"execute_sql_{_db_slug}"
+
+        def _make_query_fn(inst):
+            async def _query(table: str, columns: List[str] = None, filters: Optional[str] = None, limit: int = 20) -> Dict[str, Any]:
+                return await inst.query(table=table, columns=columns or ["*"], filters=filters, limit=limit)
+            return _query
+
+        def _make_exec_fn(inst):
+            async def _exec(sql: str) -> Dict[str, Any]:
+                return await inst.execute(sql)
+            return _exec
+
+        if _query_tool_name not in disabled and "query_database" not in disabled:
+            _qfn = _make_query_fn(_db_inst)
+            _db_description = prompts.get("query_database", _DEFAULT_TOOL_PROMPTS["query_database"])
+            _tables_summary = "; ".join(
+                f"{name}: {desc}" if desc else name
+                for name, desc in _db_inst.tables_info.items()
+            )
+            _db_description += f" Base de datos: {_db_slug}. Tablas disponibles: {_tables_summary}."
+
+            tools.append(
+                StructuredTool(
+                    name=_query_tool_name,
+                    description=_db_description,
+                    func=_qfn,
+                    args_schema=QueryDatabaseArgs,
+                    coroutine=_qfn,
+                )
             )
 
-        db_description = prompts.get("query_database", _DEFAULT_TOOL_PROMPTS["query_database"])
-        tables_summary = "; ".join(
-            f"{name}: {desc}" if desc else name
-            for name, desc in sql_integration.tables_info.items()
-        )
-        db_description += f" Tablas disponibles: {tables_summary}."
-
-        tools.append(
-            StructuredTool(
-                name="query_database",
-                description=db_description,
-                func=query_database_tool,
-                args_schema=QueryDatabaseArgs,
-                coroutine=query_database_tool,
+        if _exec_tool_name not in disabled and "execute_sql" not in disabled:
+            _efn = _make_exec_fn(_db_inst)
+            _ops = _db_inst.allowed_operations
+            _ops_str = ", ".join(_ops) if _ops else "SELECT"
+            _exec_description = (
+                f"Execute a raw SQL statement on the '{_db_slug}' database. "
+                f"Allowed operations: {_ops_str}. "
+                f"Only these tables may be referenced: {', '.join(_db_inst.table_names)}. "
+                f"Use for INSERT, UPDATE, DELETE or complex queries."
             )
-        )
-
-    if sql_integration is not None and "execute_sql" not in disabled:
-        async def execute_sql_tool(sql: str) -> Dict[str, Any]:
-            """Execute a SQL statement on the connected database."""
-            return await sql_integration.execute(sql)
-
-        ops = sql_integration.allowed_operations
-        ops_str = ", ".join(ops) if ops else "SELECT"
-        exec_description = (
-            f"Execute a raw SQL statement on the connected database. "
-            f"Allowed operations: {ops_str}. "
-            f"Only these tables may be referenced: {', '.join(sql_integration.table_names)}. "
-            f"Use for INSERT, UPDATE, DELETE or complex queries not covered by query_database."
-        )
-        tools.append(
-            StructuredTool(
-                name="execute_sql",
-                description=exec_description,
-                func=execute_sql_tool,
-                args_schema=ExecuteSQLArgs,
-                coroutine=execute_sql_tool,
+            tools.append(
+                StructuredTool(
+                    name=_exec_tool_name,
+                    description=_exec_description,
+                    func=_efn,
+                    args_schema=ExecuteSQLArgs,
+                    coroutine=_efn,
+                )
             )
-        )
 
     if skill_manager is not None:
         async def save_memory_tool(content: str, category: str = "General") -> str:

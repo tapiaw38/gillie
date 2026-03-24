@@ -103,6 +103,17 @@ async def add_integration(
     return integration
 
 
+@router.delete("/integrations/{integration_id}", status_code=status.HTTP_200_OK)
+async def delete_integration(
+    integration_id: str,
+    request: Request,
+    usecases: Usecases = Depends(get_usecases)
+):
+    user_id = request.state.user.get("user_id")
+    result = await usecases.profile.delete_integration_usecase.execute(user_id, integration_id)
+    return result
+
+
 @router.get("/options", status_code=status.HTTP_200_OK)
 async def list_options(
     request: Request,

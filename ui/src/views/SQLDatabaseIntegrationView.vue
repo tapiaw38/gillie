@@ -1,6 +1,6 @@
 <script setup lang="ts">
-import type { IntegrationParams, SQLDatabaseIntegrationConfig, SQLDatabaseTableEntry } from '@/types/assistant'
-import { onMounted, reactive, ref, computed, watch } from 'vue'
+import type { IntegrationParams, Integration, SQLDatabaseIntegrationConfig, SQLDatabaseTableEntry } from '@/types/assistant'
+import { onMounted, reactive, ref, computed } from 'vue'
 import { useAssistant } from '@/composables/useAssistant'
 import { useErrorToast } from '@/composables/useErrorToast'
 import Toast from 'primevue/toast'
@@ -12,57 +12,127 @@ import InputSwitch from 'primevue/inputswitch'
 
 const {
   addIntegration,
+  removeIntegrationById,
   getAssistantProfile,
   assistantProfile,
   isAddIntegrationError,
   addIntegrationError,
+  isRemoveIntegrationByIdError,
+  removeIntegrationByIdError,
   isGetAssistantProfileError,
   getAssistantProfileError,
 } = useAssistant()
 
 const errorWatchers = [
   { flag: isAddIntegrationError, summary: 'Error al guardar configuración', detail: addIntegrationError },
+  { flag: isRemoveIntegrationByIdError, summary: 'Error al eliminar base de datos', detail: removeIntegrationByIdError },
   { flag: isGetAssistantProfileError, summary: 'Error al cargar perfil', detail: getAssistantProfileError },
 ]
 
 const { toast } = useErrorToast(errorWatchers)
 
-const connection_string = ref('')
-const activated = ref(false)
-const allowed_tables = reactive<SQLDatabaseTableEntry[]>([{ name: '', description: '' }])
+// ── Form state ──────────────────────────────────────────────────────────────
+const showAddForm = ref(false)
+const editingId = ref<string | null>(null)
 
-// DML permissions — true = operation is ALLOWED (not blocked)
-const dml_permissions = reactive({ INSERT: false, UPDATE: false, DELETE: false })
+const formAlias = ref('')
+const formConnectionString = ref('')
+const formAllowedTables = reactive<SQLDatabaseTableEntry[]>([{ name: '', description: '' }])
+const formDmlPermissions = reactive({ INSERT: false, UPDATE: false, DELETE: false })
+const formActivated = ref(false)
 
-const ALWAYS_BLOCKED = ['DROP', 'TRUNCATE', 'ALTER', 'CREATE', 'GRANT', 'REVOKE', 'EXEC', 'EXECUTE']
-
-const buildBlockedKeywords = (): string[] =>
-  (['INSERT', 'UPDATE', 'DELETE'] as const).filter((op) => !dml_permissions[op])
-
-const validationErrors = reactive({
+const formValidationErrors = reactive({
+  alias: '',
   connection_string: '',
   tables: '',
 })
 
+// ── Constants ────────────────────────────────────────────────────────────────
+const ALWAYS_BLOCKED = ['DROP', 'TRUNCATE', 'ALTER', 'CREATE', 'GRANT', 'REVOKE', 'EXEC', 'EXECUTE']
+
+const buildBlockedKeywords = (): string[] =>
+  (['INSERT', 'UPDATE', 'DELETE'] as const).filter((op) => !formDmlPermissions[op])
+
+// ── Computed list ────────────────────────────────────────────────────────────
+const dbIntegrations = computed<Integration[]>(() =>
+  assistantProfile.value?.integrations?.filter(
+    (i) => i.type === 'database' || i.name === 'sqldatabase',
+  ) ?? [],
+)
+
+// ── Table helpers ────────────────────────────────────────────────────────────
 const addTable = () => {
-  allowed_tables.push({ name: '', description: '' })
+  formAllowedTables.push({ name: '', description: '' })
 }
 
 const removeTable = (index: number) => {
-  if (allowed_tables.length > 1) {
-    allowed_tables.splice(index, 1)
+  if (formAllowedTables.length > 1) {
+    formAllowedTables.splice(index, 1)
   }
 }
 
-const saveConfig = async () => {
-  validationErrors.connection_string = !connection_string.value.trim()
+// ── Form open / close ────────────────────────────────────────────────────────
+const clearForm = () => {
+  formAlias.value = ''
+  formConnectionString.value = ''
+  formAllowedTables.splice(0, formAllowedTables.length, { name: '', description: '' })
+  formDmlPermissions.INSERT = false
+  formDmlPermissions.UPDATE = false
+  formDmlPermissions.DELETE = false
+  formActivated.value = false
+  formValidationErrors.alias = ''
+  formValidationErrors.connection_string = ''
+  formValidationErrors.tables = ''
+}
+
+const openAddForm = () => {
+  clearForm()
+  editingId.value = null
+  showAddForm.value = true
+}
+
+const openEditForm = (integration: Integration) => {
+  clearForm()
+  editingId.value = integration.id
+  formAlias.value = integration.name
+  formActivated.value = integration.activated ?? false
+
+  const saved = integration.config as unknown as Record<string, unknown>
+  formConnectionString.value = (saved.connection_string as string) || ''
+
+  if (Array.isArray(saved.allowed_tables) && saved.allowed_tables.length > 0) {
+    formAllowedTables.splice(0, formAllowedTables.length, ...(saved.allowed_tables as SQLDatabaseTableEntry[]))
+  } else if (saved.allowed_table) {
+    formAllowedTables.splice(0, formAllowedTables.length, {
+      name: saved.allowed_table as string,
+      description: (saved.table_description as string) || '',
+    })
+  }
+
+  const savedBlocked = saved.blocked_keywords as string[] | undefined
+  const blocked = savedBlocked ?? ['INSERT', 'UPDATE', 'DELETE']
+  formDmlPermissions.INSERT = !blocked.includes('INSERT')
+  formDmlPermissions.UPDATE = !blocked.includes('UPDATE')
+  formDmlPermissions.DELETE = !blocked.includes('DELETE')
+
+  showAddForm.value = true
+}
+
+const cancelForm = () => {
+  showAddForm.value = false
+  editingId.value = null
+}
+
+// ── Save ─────────────────────────────────────────────────────────────────────
+const saveForm = async () => {
+  formValidationErrors.alias = !formAlias.value.trim() ? 'El nombre/alias es obligatorio.' : ''
+  formValidationErrors.connection_string = !formConnectionString.value.trim()
     ? 'La cadena de conexión es obligatoria.'
     : ''
+  const hasValidTable = formAllowedTables.some((t) => t.name.trim())
+  formValidationErrors.tables = !hasValidTable ? 'Agregá al menos una tabla con nombre.' : ''
 
-  const hasValidTable = allowed_tables.some((t) => t.name.trim())
-  validationErrors.tables = !hasValidTable ? 'Agregá al menos una tabla con nombre.' : ''
-
-  if (validationErrors.connection_string || validationErrors.tables) {
+  if (formValidationErrors.alias || formValidationErrors.connection_string || formValidationErrors.tables) {
     toast.add({
       severity: 'warn',
       summary: 'Campos requeridos',
@@ -73,12 +143,13 @@ const saveConfig = async () => {
   }
 
   const params: IntegrationParams = {
-    name: 'sqldatabase',
-    type: 'integration',
-    activated: activated.value,
+    ...(editingId.value ? { id: editingId.value } : {}),
+    name: formAlias.value.trim(),
+    type: 'database',
+    activated: formActivated.value,
     config: {
-      connection_string: connection_string.value,
-      allowed_tables: allowed_tables.filter((t) => t.name.trim()),
+      connection_string: formConnectionString.value,
+      allowed_tables: formAllowedTables.filter((t) => t.name.trim()),
       blocked_keywords: buildBlockedKeywords(),
     } as SQLDatabaseIntegrationConfig,
   }
@@ -86,68 +157,40 @@ const saveConfig = async () => {
   try {
     await addIntegration(params)
     await getAssistantProfile()
-    toast.add({ severity: 'success', summary: 'Configuración guardada', life: 3000 })
+    toast.add({
+      severity: 'success',
+      summary: editingId.value ? 'Base de datos actualizada' : 'Base de datos guardada',
+      life: 3000,
+    })
+    showAddForm.value = false
+    editingId.value = null
   } catch (error) {
-    console.error('Error al guardar la configuración:', error)
+    console.error('Error al guardar la base de datos:', error)
   }
 }
 
-const updateIntegration = async () => {
-  const params: IntegrationParams = {
-    name: 'sqldatabase',
-    type: 'integration',
-    activated: activated.value,
-    config: {
-      connection_string: connection_string.value,
-      allowed_tables: allowed_tables.filter((t) => t.name.trim()),
-      blocked_keywords: buildBlockedKeywords(),
-    } as SQLDatabaseIntegrationConfig,
+// ── Delete ───────────────────────────────────────────────────────────────────
+const deleteDb = async (id: string) => {
+  if (!id) {
+    toast.add({ severity: 'warn', summary: 'No se puede eliminar', detail: 'Esta integración no tiene ID', life: 3000 })
+    return
   }
+  const confirmed = confirm('¿Estás seguro de que querés eliminar esta base de datos?')
+  if (!confirmed) return
 
   try {
-    await addIntegration(params)
+    await removeIntegrationById(id)
     await getAssistantProfile()
+    toast.add({ severity: 'success', summary: 'Base de datos eliminada', life: 3000 })
   } catch (error) {
-    console.error('Error al actualizar integración:', error)
+    console.error('Error al eliminar la base de datos:', error)
+    toast.add({ severity: 'error', summary: 'Error al eliminar', detail: String(error), life: 4000 })
   }
 }
 
-watch(activated, async () => {
-  await updateIntegration()
-})
-
-const currentIntegration = computed(() =>
-  assistantProfile.value?.integrations?.find((i) => i.name === 'sqldatabase'),
-)
-
-const currentConfig = computed(
-  () => currentIntegration.value?.config as unknown as SQLDatabaseIntegrationConfig | undefined,
-)
-
+// ── Mount ────────────────────────────────────────────────────────────────────
 onMounted(async () => {
   await getAssistantProfile()
-  assistantProfile.value?.integrations?.forEach((integration) => {
-    if (integration.name === 'sqldatabase') {
-      activated.value = integration.activated || false
-      const saved = integration.config as unknown as Record<string, unknown>
-      connection_string.value = (saved.connection_string as string) || ''
-
-      if (Array.isArray(saved.allowed_tables) && saved.allowed_tables.length > 0) {
-        allowed_tables.splice(0, allowed_tables.length, ...saved.allowed_tables as SQLDatabaseTableEntry[])
-      } else if (saved.allowed_table) {
-        allowed_tables.splice(0, allowed_tables.length, {
-          name: saved.allowed_table as string,
-          description: (saved.table_description as string) || '',
-        })
-      }
-
-      const savedBlocked = saved.blocked_keywords as string[] | undefined
-      const blocked = savedBlocked ?? ['INSERT', 'UPDATE', 'DELETE']
-      dml_permissions.INSERT = !blocked.includes('INSERT')
-      dml_permissions.UPDATE = !blocked.includes('UPDATE')
-      dml_permissions.DELETE = !blocked.includes('DELETE')
-    }
-  })
 })
 </script>
 
@@ -160,56 +203,75 @@ onMounted(async () => {
           <i class="pi pi-database"></i>
         </div>
         <div class="header-content">
-          <h1 class="integration-title">Base de Datos SQL</h1>
+          <h1 class="integration-title">Bases de Datos SQL</h1>
           <p class="integration-subtitle">
-            Conecta el asistente a tablas de PostgreSQL para consultar datos en tiempo real
+            Conecta el asistente a múltiples bases de datos PostgreSQL para consultar datos en tiempo real
           </p>
         </div>
       </div>
 
-      <div class="activation-toggle">
-        <div class="toggle-content">
-          <div class="toggle-info">
-            <span class="toggle-label">Estado de la integración</span>
-            <span class="toggle-status" :class="{ active: activated }">
-              {{ activated ? 'Activa' : 'Inactiva' }}
-            </span>
-          </div>
-          <InputSwitch v-model="activated" class="modern-switch" />
-        </div>
-      </div>
+      <Button
+        label="Agregar base de datos"
+        icon="pi pi-plus"
+        @click="openAddForm"
+      />
     </div>
 
-    <!-- Config Card -->
-    <Card class="config-card" :class="{ 'card-disabled': !activated }">
+    <!-- Add / Edit Form -->
+    <Card v-if="showAddForm" class="form-card">
       <template #content>
-        <form class="config-form" @submit.prevent="saveConfig">
+        <h3 class="form-title">{{ editingId ? 'Editar base de datos' : 'Nueva base de datos' }}</h3>
+
+        <form class="config-form" @submit.prevent="saveForm">
           <div class="form-grid">
 
+            <!-- Alias -->
             <div class="field-group">
-              <label for="connection_string" class="field-label">
+              <label for="form_alias" class="field-label">
+                <i class="pi pi-tag field-icon"></i>
+                Nombre / Alias
+                <span class="required">*</span>
+              </label>
+              <div class="input-wrapper">
+                <InputText
+                  id="form_alias"
+                  v-model="formAlias"
+                  placeholder="CRM, ERP, Inventario..."
+                  :invalid="!!formValidationErrors.alias"
+                  class="w-full"
+                />
+              </div>
+              <Message v-if="formValidationErrors.alias" severity="error" class="field-error">
+                {{ formValidationErrors.alias }}
+              </Message>
+              <small class="field-help">Nombre identificador de esta conexión.</small>
+            </div>
+
+            <!-- Connection string -->
+            <div class="field-group">
+              <label for="form_connection_string" class="field-label">
                 <i class="pi pi-link field-icon"></i>
                 Cadena de conexión
                 <span class="required">*</span>
               </label>
               <div class="input-wrapper">
                 <InputText
-                  id="connection_string"
-                  v-model="connection_string"
+                  id="form_connection_string"
+                  v-model="formConnectionString"
                   placeholder="postgresql://user:password@host:5432/database"
-                  :disabled="!activated"
-                  :invalid="!!validationErrors.connection_string"
+                  :invalid="!!formValidationErrors.connection_string"
                   class="w-full"
                 />
               </div>
-              <Message v-if="validationErrors.connection_string" severity="error" class="field-error">
-                {{ validationErrors.connection_string }}
+              <Message v-if="formValidationErrors.connection_string" severity="error" class="field-error">
+                {{ formValidationErrors.connection_string }}
               </Message>
               <small class="field-help">
-                Usá un usuario con permisos <strong>solo de lectura</strong> en las tablas permitidas
+                Usá un usuario con permisos <strong>solo de lectura</strong> en las tablas permitidas.
               </small>
             </div>
 
+            <!-- Allowed tables -->
             <div class="field-group">
               <div class="tables-section">
                 <div class="tables-header">
@@ -224,45 +286,41 @@ onMounted(async () => {
                     icon="pi pi-plus"
                     outlined
                     size="small"
-                    :disabled="!activated"
                     @click="addTable"
                   />
                 </div>
 
                 <div class="tables-list">
                   <div
-                    v-for="(table, index) in allowed_tables"
+                    v-for="(table, index) in formAllowedTables"
                     :key="index"
                     class="table-row"
                   >
                     <InputText
                       v-model="table.name"
                       placeholder="nombre_tabla"
-                      :disabled="!activated"
                       class="table-name-field"
                     />
                     <InputText
                       v-model="table.description"
                       placeholder="Catálogo de productos con columnas: id, nombre, precio, stock..."
-                      :disabled="!activated"
                       class="table-desc-field"
                     />
                     <Button
-                      v-if="allowed_tables.length > 1"
+                      v-if="formAllowedTables.length > 1"
                       type="button"
                       icon="pi pi-trash"
                       severity="danger"
                       text
                       size="small"
-                      :disabled="!activated"
                       class="table-remove-btn"
                       @click="removeTable(index)"
                     />
                   </div>
                 </div>
 
-                <Message v-if="validationErrors.tables" severity="error" class="field-error">
-                  {{ validationErrors.tables }}
+                <Message v-if="formValidationErrors.tables" severity="error" class="field-error">
+                  {{ formValidationErrors.tables }}
                 </Message>
                 <small class="field-help">
                   El asistente solo podrá consultar estas tablas. Describí las columnas para que sepa qué puede consultar.
@@ -270,6 +328,7 @@ onMounted(async () => {
               </div>
             </div>
 
+            <!-- Permissions -->
             <div class="field-group">
               <div class="permissions-section">
                 <div class="permissions-header">
@@ -280,7 +339,6 @@ onMounted(async () => {
                 </div>
 
                 <div class="permissions-list">
-                  <!-- Configurable DML -->
                   <div v-for="op in (['INSERT', 'UPDATE', 'DELETE'] as const)" :key="op" class="permission-row">
                     <div class="permission-info">
                       <span class="permission-name">{{ op }}</span>
@@ -290,10 +348,9 @@ onMounted(async () => {
                         'Eliminar filas'
                       }}</span>
                     </div>
-                    <InputSwitch v-model="dml_permissions[op]" :disabled="!activated" />
+                    <InputSwitch v-model="formDmlPermissions[op]" />
                   </div>
 
-                  <!-- Always blocked DDL — read-only -->
                   <div class="always-blocked-row">
                     <i class="pi pi-lock always-blocked-icon"></i>
                     <span class="always-blocked-label">Siempre bloqueado:</span>
@@ -309,70 +366,79 @@ onMounted(async () => {
               </div>
             </div>
 
+            <!-- Activated toggle -->
+            <div class="field-group">
+              <div class="activation-toggle">
+                <div class="toggle-content">
+                  <div class="toggle-info">
+                    <span class="toggle-label">Estado de la integración</span>
+                    <span class="toggle-status" :class="{ active: formActivated }">
+                      {{ formActivated ? 'Activa' : 'Inactiva' }}
+                    </span>
+                  </div>
+                  <InputSwitch v-model="formActivated" class="modern-switch" />
+                </div>
+              </div>
+            </div>
+
           </div>
 
           <div class="form-actions">
             <Button
+              type="button"
+              label="Cancelar"
+              severity="secondary"
+              outlined
+              @click="cancelForm"
+            />
+            <Button
               type="submit"
-              label="Guardar Configuración"
+              :label="editingId ? 'Actualizar' : 'Guardar'"
               icon="pi pi-save"
               severity="primary"
-              :disabled="!activated"
             />
           </div>
         </form>
       </template>
     </Card>
 
-    <!-- Status Card -->
-    <Card class="status-card">
-      <template #header>
-        <div class="status-header">
-          <i class="pi pi-cog status-icon"></i>
-          <span class="status-title">Configuración Actual</span>
-        </div>
-      </template>
-      <template #content>
-        <div class="status-grid">
-          <div class="status-item">
-            <div class="status-label"><i class="pi pi-link"></i> Conexión</div>
-            <div class="status-value">
-              {{ currentConfig?.connection_string || 'No configurado' }}
-            </div>
-          </div>
-          <div class="status-item">
-            <div class="status-label"><i class="pi pi-table"></i> Tablas configuradas</div>
-            <div class="status-value">
-              <template v-if="currentConfig?.allowed_tables?.length">
-                <div class="tables-tags">
-                  <span
-                    v-for="table in currentConfig.allowed_tables"
-                    :key="table.name"
-                    class="table-tag"
-                    :title="table.description || undefined"
-                  >{{ table.name }}</span>
-                </div>
-              </template>
-              <template v-else>No configurado</template>
-            </div>
-          </div>
-          <div class="status-item">
-            <div class="status-label"><i class="pi pi-shield"></i> Operaciones permitidas</div>
-            <div class="status-value">
-              <div class="tables-tags">
-                <span class="table-tag allowed-tag">SELECT</span>
-                <template v-for="op in ['INSERT', 'UPDATE', 'DELETE']" :key="op">
-                  <span
-                    v-if="!(currentConfig?.blocked_keywords ?? ['INSERT','UPDATE','DELETE']).includes(op)"
-                    class="table-tag allowed-tag"
-                  >{{ op }}</span>
-                </template>
-              </div>
-            </div>
-          </div>
-        </div>
-      </template>
-    </Card>
+    <!-- Empty state -->
+    <div v-if="dbIntegrations.length === 0 && !showAddForm" class="empty-state">
+      No hay bases de datos configuradas. Agrega una para comenzar.
+    </div>
+
+    <!-- Database list -->
+    <div
+      v-for="db in dbIntegrations"
+      :key="db.id"
+      class="db-card"
+    >
+      <div class="db-card-header">
+        <span class="db-name">{{ db.name }}</span>
+        <span class="db-status" :class="{ active: db.activated }">
+          {{ db.activated ? 'Activa' : 'Inactiva' }}
+        </span>
+      </div>
+      <div class="db-card-body">
+        <span class="db-conn">{{ (db.config as any).connection_string }}</span>
+        <span class="db-tables">{{ (db.config as any).allowed_tables?.length ?? 0 }} tabla(s)</span>
+      </div>
+      <div class="db-card-actions">
+        <Button
+          icon="pi pi-pencil"
+          outlined
+          size="small"
+          @click="openEditForm(db)"
+        />
+        <Button
+          icon="pi pi-trash"
+          severity="danger"
+          text
+          size="small"
+          @click="deleteDb(db.id)"
+        />
+      </div>
+    </div>
 
     <Toast position="top-right" />
   </div>
@@ -388,13 +454,19 @@ onMounted(async () => {
   box-sizing: border-box;
 }
 
-.header-section { margin-bottom: 1.25rem; }
+.header-section {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 1.25rem;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+}
 
 .integration-header {
   display: flex;
   align-items: center;
   gap: 1rem;
-  margin-bottom: 1rem;
 }
 
 .icon-wrapper {
@@ -458,6 +530,30 @@ onMounted(async () => {
 
 :deep(.modern-switch) { transform: scale(1.1); }
 
+/* Form card — mirrors config-card */
+.form-card {
+  margin-bottom: 1.25rem;
+  border-radius: 0.75rem;
+  overflow: hidden;
+  box-shadow: 0 8px 30px rgba(0, 0, 0, 0.08);
+  border: 1px solid #e2e8f0;
+  transition: all 0.2s ease;
+}
+
+.form-card:hover {
+  box-shadow: 0 14px 40px rgba(0, 0, 0, 0.12);
+  transform: translateY(-2px);
+}
+
+:deep(.form-card .p-card-content) { padding: 1rem; }
+
+.form-title {
+  font-size: 1.1rem;
+  font-weight: 700;
+  color: #1e293b;
+  margin: 0 0 1rem 0;
+}
+
 .config-card {
   margin-bottom: 1.25rem;
   border-radius: 0.75rem;
@@ -508,6 +604,7 @@ onMounted(async () => {
 .form-actions {
   display: flex;
   justify-content: flex-end;
+  gap: 0.5rem;
   padding-top: 0.75rem;
   border-top: 1px solid #e2e8f0;
 }
@@ -597,7 +694,99 @@ onMounted(async () => {
   margin-top: 4px;
 }
 
-/* Status card */
+/* Empty state */
+.empty-state {
+  text-align: center;
+  color: #94a3b8;
+  font-size: 0.95rem;
+  padding: 2rem;
+  background: white;
+  border-radius: 0.75rem;
+  border: 1px dashed #e2e8f0;
+  margin-bottom: 1.25rem;
+}
+
+/* Database list cards */
+.db-card {
+  background: white;
+  border: 1px solid #e2e8f0;
+  border-radius: 0.75rem;
+  padding: 1rem;
+  margin-bottom: 0.75rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  box-shadow: 0 3px 14px rgba(0, 0, 0, 0.05);
+  transition: box-shadow 0.2s ease, transform 0.2s ease;
+}
+
+.db-card:hover {
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.1);
+  transform: translateY(-1px);
+}
+
+.db-card-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.db-name {
+  font-weight: 700;
+  font-size: 1rem;
+  color: #1e293b;
+}
+
+.db-status {
+  font-size: 0.78rem;
+  font-weight: 600;
+  padding: 2px 10px;
+  border-radius: 999px;
+  background: #fee2e2;
+  color: var(--color-danger, #dc2626);
+  transition: background 0.3s ease, color 0.3s ease;
+}
+
+.db-status.active {
+  background: #dcfce7;
+  color: var(--color-success, #15803d);
+}
+
+.db-card-body {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  margin: 0.25rem 0;
+  flex-wrap: wrap;
+}
+
+.db-conn {
+  font-family: 'SF Mono', 'Monaco', 'Consolas', monospace;
+  font-size: 0.82rem;
+  color: #64748b;
+  max-width: 300px;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.db-tables {
+  font-size: 0.78rem;
+  font-weight: 600;
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: #e0f2fe;
+  color: #0369a1;
+  white-space: nowrap;
+}
+
+.db-card-actions {
+  display: flex;
+  gap: 0.5rem;
+  justify-content: flex-end;
+}
+
+/* Status card (kept for potential reuse) */
 .status-card {
   border-radius: 0.75rem;
   overflow: hidden;
@@ -671,22 +860,13 @@ onMounted(async () => {
 
 @media (max-width: 768px) {
   .integration-container { padding: 0.75rem; }
+  .header-section { flex-direction: column; align-items: flex-start; }
   .integration-header { flex-direction: column; text-align: center; gap: 0.75rem; }
   .toggle-content { flex-direction: column; gap: 0.75rem; text-align: center; }
-  .form-actions { justify-content: stretch; }
+  .form-actions { justify-content: stretch; flex-direction: column-reverse; }
   .table-row { flex-wrap: wrap; }
   .table-name-field { min-width: 100%; flex-shrink: unset; }
   .table-desc-field { width: 100%; }
-}
-
-@media (min-width: 992px) {
-  .integration-container {
-    display: grid;
-    grid-template-columns: 1fr 380px;
-    gap: 1rem;
-    align-items: start;
-  }
-  .config-card { grid-column: 1 / 2; }
-  .status-card { grid-column: 2 / 3; position: sticky; top: 5.2rem; align-self: start; }
+  .db-conn { max-width: 100%; }
 }
 </style>

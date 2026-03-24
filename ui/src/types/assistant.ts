@@ -126,6 +126,7 @@ export interface SQLDatabaseIntegrationConfig {
 }
 
 export interface IntegrationParams {
+  id?: string
   name: string
   type: string
   activated: boolean

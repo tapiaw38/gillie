@@ -21,6 +21,7 @@ export interface IAssistantService {
   addFiles(files: File[]): Promise<AssistantFileResponse>
   removeFileById(fileId: string): Promise<AssistantFileRemoveResponse>
   addIntegration(integration: IntegrationParams): Promise<IntegrationResponse>
+  removeIntegrationById(integrationId: string): Promise<IntegrationResponse>
 }
 
 export class AssistantService implements IAssistantService {
@@ -76,6 +77,11 @@ export class AssistantService implements IAssistantService {
 
   async addIntegration(integration: IntegrationParams): Promise<IntegrationResponse> {
     const { data } = await this.api.post<IntegrationResponse>('/profile/integrations', integration)
+    return data
+  }
+
+  async removeIntegrationById(integrationId: string): Promise<IntegrationResponse> {
+    const { data } = await this.api.delete<IntegrationResponse>(`/profile/integrations/${integrationId}`)
     return data
   }
 
