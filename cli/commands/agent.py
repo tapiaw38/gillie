@@ -290,6 +290,7 @@ def _print_header(assistant_name: str, conv_id: str, mode: str = _Mode.CONFIRM_R
         f"[dim]Workspace:    {ws}[/dim]\n"
         f"[dim]Mode: {mode} | /mode to change[/dim]\n"
         f"[dim]/new · /list · /clear · /compact · /plan · /mode · /attach · /files · /id · /exit[/dim]\n"
+        f"[dim]Esc — cancel running agent[/dim]\n"
         f"[dim]@path — work with local file · /attach path — upload to storage[/dim]",
         border_style="cyan",
         box=box.ROUNDED,
@@ -372,6 +373,8 @@ def _stream_assistant(
     determined by the current mode and the per-session always_approved /
     always_rejected sets.
 
+    Press Escape at any time to cancel the running agent.
+
     Args:
         conv_id: Conversation ID to stream from.
         name: Assistant display name.
@@ -399,6 +402,49 @@ def _stream_assistant(
     _FRAMES = ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"]
     _stop_spinner = threading.Event()
     _spinner_label = ["Thinking..."]
+
+    # ── Escape-to-cancel ──────────────────────────────────────────────────────
+    _cancel_requested = threading.Event()
+    _stream_done      = threading.Event()
+    _resp_holder      = [None]   # filled after the request is established
+
+    def _escape_watcher() -> None:
+        """Background thread: set _cancel_requested and close the response when ESC."""
+        try:
+            import termios, tty, select as _select
+            if not sys.stdin.isatty():
+                return
+            fd = sys.stdin.fileno()
+            old_settings = termios.tcgetattr(fd)
+            try:
+                tty.setraw(fd)
+                while not _stream_done.is_set():
+                    r, _, _ = _select.select([fd], [], [], 0.05)
+                    if not r:
+                        continue
+                    ch = os.read(fd, 1)
+                    if ch == b"\x1b":
+                        _cancel_requested.set()
+                        if _resp_holder[0] is not None:
+                            try:
+                                _resp_holder[0].close()
+                            except Exception:
+                                pass
+                        break
+                    elif ch == b"\x03":  # Ctrl+C → keep original behaviour
+                        import signal as _signal
+                        os.kill(os.getpid(), _signal.SIGINT)
+                        break
+            finally:
+                termios.tcsetattr(fd, termios.TCSADRAIN, old_settings)
+        except Exception:
+            pass
+
+    _escape_thread: threading.Thread | None = None
+    if sys.stdin.isatty():
+        _escape_thread = threading.Thread(target=_escape_watcher, daemon=True)
+        _escape_thread.start()
+    # ─────────────────────────────────────────────────────────────────────────
 
     def _spinner():
         i = 0
@@ -441,9 +487,12 @@ def _stream_assistant(
             timeout=900,
         )
         resp.raise_for_status()
+        _resp_holder[0] = resp
         import json as _json
         audio_url = None
         for raw_line in resp.iter_lines():
+            if _cancel_requested.is_set():
+                break
             if not raw_line:
                 continue
             line = raw_line.decode("utf-8") if isinstance(raw_line, bytes) else raw_line
@@ -597,13 +646,25 @@ def _stream_assistant(
             sys.stdout.flush()
             full_text += token
     except requests.exceptions.ConnectionError:
-        _stop_spin()
-        console.print("\n[red]✗[/red] Cannot connect to API.")
+        if not _cancel_requested.is_set():
+            _stop_spin()
+            console.print("\n[red]✗[/red] Cannot connect to API.")
     except requests.exceptions.HTTPError as e:
         _stop_spin()
         console.print(f"\n[red]✗[/red] API error {e.response.status_code}")
     finally:
         _stop_spin()
+        _stream_done.set()
+        if _escape_thread and _escape_thread.is_alive():
+            _escape_thread.join(timeout=0.5)
+
+    if _cancel_requested.is_set():
+        sys.stdout.write("\n")
+        sys.stdout.flush()
+        console.print("[yellow]⏹  Cancelled[/yellow]")
+        console.print(Rule(style="dim"))
+        console.print()
+        return full_text
 
     sys.stdout.write("\n")
     sys.stdout.flush()

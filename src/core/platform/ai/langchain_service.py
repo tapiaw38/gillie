@@ -228,7 +228,7 @@ class LangChainService:
 
         async with self.semaphore:
             try:
-                system_prompt = self._build_system_prompt(profile, context)
+                system_prompt = self._build_system_prompt(profile, context, client_workspace)
 
                 messages = self._convert_messages_to_langchain(
                     previous_messages=previous_messages,
@@ -312,7 +312,7 @@ class LangChainService:
 
         async with self.semaphore:
             try:
-                system_prompt = self._build_system_prompt(profile, context)
+                system_prompt = self._build_system_prompt(profile, context, client_workspace)
                 messages = self._convert_messages_to_langchain(
                     previous_messages=previous_messages,
                     system_prompt=system_prompt,
@@ -581,10 +581,87 @@ class LangChainService:
             content = "(Las herramientas se ejecutaron correctamente. Tarea completada.)"
         return content
 
+    @staticmethod
+    def _build_workspace_map(workspace: str, max_files: int = 180) -> str:
+        """
+        Build a compact file tree of the workspace to inject into the system prompt.
+        Extracts top-level symbols (classes/functions) from Python and TypeScript files.
+        Modeled after Aider's RepoMap — gives the AI instant orientation without exploration.
+        """
+        import re as _re
+
+        SKIP_DIRS = {
+            ".git", ".hg", ".svn", "node_modules", "__pycache__", ".venv", "venv",
+            "env", ".env", "dist", "build", ".next", ".nuxt", "coverage", ".pytest_cache",
+            ".mypy_cache", ".tox", "eggs", "*.egg-info", ".cache", "tmp", "temp",
+        }
+        SKIP_EXTS = {
+            ".pyc", ".pyo", ".pyd", ".so", ".dll", ".dylib", ".exe",
+            ".png", ".jpg", ".jpeg", ".gif", ".svg", ".ico", ".woff", ".woff2",
+            ".ttf", ".eot", ".pdf", ".zip", ".tar", ".gz", ".lock",
+            ".min.js", ".min.css",
+        }
+        SYMBOL_LANGS = {
+            ".py":  _re.compile(r"^(class|def|async def)\s+([A-Za-z_]\w*)"),
+            ".ts":  _re.compile(r"^(?:export\s+)?(?:async\s+)?(?:class|function|const|interface|type|enum)\s+([A-Za-z_]\w*)"),
+            ".vue": _re.compile(r"^(?:export\s+)?(?:const|function)\s+([A-Za-z_]\w*)"),
+        }
+
+        lines = [f"## Workspace: {workspace}\n"]
+        file_count = 0
+
+        for root, dirs, files in os.walk(workspace):
+            # Prune noise dirs in-place
+            dirs[:] = sorted(d for d in dirs if d not in SKIP_DIRS and not d.startswith("."))
+
+            rel_root = os.path.relpath(root, workspace)
+            depth = 0 if rel_root == "." else rel_root.count(os.sep) + 1
+            indent = "  " * depth
+            folder = os.path.basename(root) if rel_root != "." else ""
+            if folder:
+                lines.append(f"{indent}{folder}/")
+
+            for fname in sorted(files):
+                if file_count >= max_files:
+                    lines.append("  ... (truncated)")
+                    return "\n".join(lines)
+
+                _, ext = os.path.splitext(fname)
+                if ext in SKIP_EXTS or fname.endswith(".min.js") or fname.endswith(".min.css"):
+                    continue
+
+                file_count += 1
+                fpath = os.path.join(root, fname)
+                file_indent = "  " * (depth + 1)
+
+                # Try to extract top-level symbols for supported languages
+                symbols = []
+                pattern = SYMBOL_LANGS.get(ext)
+                if pattern:
+                    try:
+                        with open(fpath, "r", encoding="utf-8", errors="ignore") as f:
+                            for line in f:
+                                m = pattern.match(line)
+                                if m:
+                                    sym = m.group(2) if ext == ".py" else m.group(1)
+                                    if sym and not sym.startswith("_"):
+                                        symbols.append(sym)
+                    except OSError:
+                        pass
+
+                if symbols:
+                    lines.append(f"{file_indent}{fname}  ({', '.join(symbols[:6])}{'…' if len(symbols) > 6 else ''})")
+                else:
+                    lines.append(f"{file_indent}{fname}")
+
+        lines.append(f"\n({file_count} files)")
+        return "\n".join(lines)
+
     def _build_system_prompt(
         self,
         profile: Profile,
-        context: Optional[str]
+        context: Optional[str],
+        client_workspace: str = "",
     ) -> str:
         """
         Build system prompt from profile and context.
@@ -634,6 +711,20 @@ class LangChainService:
                 "4. SOLO si NO encuentras la respuesta en las FAQs del contexto, entonces puedes usar herramientas de búsqueda\n"
                 "5. Las respuestas de las FAQs son oficiales y pre-aprobadas, tienen prioridad sobre cualquier otra información\n"
             )
+
+        if client_workspace and os.path.isdir(client_workspace):
+            try:
+                workspace_map = self._build_workspace_map(client_workspace)
+                system_prompt += (
+                    "\n\n## Mapa del workspace\n"
+                    "El siguiente es el árbol de archivos del directorio de trabajo actual.\n"
+                    "Usá esta información para ubicar archivos directamente sin necesidad de "
+                    "explorar con repo_map o find_files. Los símbolos entre paréntesis son "
+                    "las clases/funciones principales de cada archivo.\n\n"
+                    + workspace_map
+                )
+            except Exception as e:
+                logger.warning(f"Could not build workspace map: {e}")
 
         return system_prompt
 
