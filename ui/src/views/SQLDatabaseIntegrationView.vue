@@ -1,11 +1,10 @@
 <script setup lang="ts">
-import type { IntegrationParams, SQLDatabaseIntegrationConfig } from '@/types/assistant'
-import { onMounted, reactive, computed, watch } from 'vue'
+import type { IntegrationParams, SQLDatabaseIntegrationConfig, SQLDatabaseTableEntry } from '@/types/assistant'
+import { onMounted, reactive, ref, computed, watch } from 'vue'
 import { useAssistant } from '@/composables/useAssistant'
 import { useErrorToast } from '@/composables/useErrorToast'
 import Toast from 'primevue/toast'
 import InputText from 'primevue/inputtext'
-import Textarea from 'primevue/textarea'
 import Button from 'primevue/button'
 import Card from 'primevue/card'
 import Message from 'primevue/message'
@@ -28,33 +27,42 @@ const errorWatchers = [
 
 const { toast } = useErrorToast(errorWatchers)
 
-const sqlIntegration = reactive<IntegrationParams>({
-  name: 'sqldatabase',
-  type: 'integration',
-  activated: false,
-  config: {
-    connection_string: '',
-    allowed_table: '',
-    table_description: '',
-  } as SQLDatabaseIntegrationConfig,
-})
+const connection_string = ref('')
+const activated = ref(false)
+const allowed_tables = reactive<SQLDatabaseTableEntry[]>([{ name: '', description: '' }])
+
+// DML permissions — true = operation is ALLOWED (not blocked)
+const dml_permissions = reactive({ INSERT: false, UPDATE: false, DELETE: false })
+
+const ALWAYS_BLOCKED = ['DROP', 'TRUNCATE', 'ALTER', 'CREATE', 'GRANT', 'REVOKE', 'EXEC', 'EXECUTE']
+
+const buildBlockedKeywords = (): string[] =>
+  (['INSERT', 'UPDATE', 'DELETE'] as const).filter((op) => !dml_permissions[op])
 
 const validationErrors = reactive({
   connection_string: '',
-  allowed_table: '',
+  tables: '',
 })
 
-const saveConfig = async () => {
-  const config = sqlIntegration.config as SQLDatabaseIntegrationConfig
+const addTable = () => {
+  allowed_tables.push({ name: '', description: '' })
+}
 
-  validationErrors.connection_string = !config.connection_string
+const removeTable = (index: number) => {
+  if (allowed_tables.length > 1) {
+    allowed_tables.splice(index, 1)
+  }
+}
+
+const saveConfig = async () => {
+  validationErrors.connection_string = !connection_string.value.trim()
     ? 'La cadena de conexión es obligatoria.'
     : ''
-  validationErrors.allowed_table = !config.allowed_table
-    ? 'El nombre de la tabla es obligatorio.'
-    : ''
 
-  if (validationErrors.connection_string || validationErrors.allowed_table) {
+  const hasValidTable = allowed_tables.some((t) => t.name.trim())
+  validationErrors.tables = !hasValidTable ? 'Agregá al menos una tabla con nombre.' : ''
+
+  if (validationErrors.connection_string || validationErrors.tables) {
     toast.add({
       severity: 'warn',
       summary: 'Campos requeridos',
@@ -64,8 +72,19 @@ const saveConfig = async () => {
     return
   }
 
+  const params: IntegrationParams = {
+    name: 'sqldatabase',
+    type: 'integration',
+    activated: activated.value,
+    config: {
+      connection_string: connection_string.value,
+      allowed_tables: allowed_tables.filter((t) => t.name.trim()),
+      blocked_keywords: buildBlockedKeywords(),
+    } as SQLDatabaseIntegrationConfig,
+  }
+
   try {
-    await addIntegration(sqlIntegration)
+    await addIntegration(params)
     await getAssistantProfile()
     toast.add({ severity: 'success', summary: 'Configuración guardada', life: 3000 })
   } catch (error) {
@@ -74,15 +93,26 @@ const saveConfig = async () => {
 }
 
 const updateIntegration = async () => {
+  const params: IntegrationParams = {
+    name: 'sqldatabase',
+    type: 'integration',
+    activated: activated.value,
+    config: {
+      connection_string: connection_string.value,
+      allowed_tables: allowed_tables.filter((t) => t.name.trim()),
+      blocked_keywords: buildBlockedKeywords(),
+    } as SQLDatabaseIntegrationConfig,
+  }
+
   try {
-    await addIntegration(sqlIntegration)
+    await addIntegration(params)
     await getAssistantProfile()
   } catch (error) {
     console.error('Error al actualizar integración:', error)
   }
 }
 
-watch(() => sqlIntegration.activated, async () => {
+watch(activated, async () => {
   await updateIntegration()
 })
 
@@ -90,16 +120,32 @@ const currentIntegration = computed(() =>
   assistantProfile.value?.integrations?.find((i) => i.name === 'sqldatabase'),
 )
 
+const currentConfig = computed(
+  () => currentIntegration.value?.config as unknown as SQLDatabaseIntegrationConfig | undefined,
+)
+
 onMounted(async () => {
   await getAssistantProfile()
   assistantProfile.value?.integrations?.forEach((integration) => {
     if (integration.name === 'sqldatabase') {
-      sqlIntegration.activated = integration.activated || false
-      const config = sqlIntegration.config as SQLDatabaseIntegrationConfig
-      const saved = integration.config as unknown as SQLDatabaseIntegrationConfig
-      config.connection_string = saved.connection_string || ''
-      config.allowed_table = saved.allowed_table || ''
-      config.table_description = saved.table_description || ''
+      activated.value = integration.activated || false
+      const saved = integration.config as unknown as Record<string, unknown>
+      connection_string.value = (saved.connection_string as string) || ''
+
+      if (Array.isArray(saved.allowed_tables) && saved.allowed_tables.length > 0) {
+        allowed_tables.splice(0, allowed_tables.length, ...saved.allowed_tables as SQLDatabaseTableEntry[])
+      } else if (saved.allowed_table) {
+        allowed_tables.splice(0, allowed_tables.length, {
+          name: saved.allowed_table as string,
+          description: (saved.table_description as string) || '',
+        })
+      }
+
+      const savedBlocked = saved.blocked_keywords as string[] | undefined
+      const blocked = savedBlocked ?? ['INSERT', 'UPDATE', 'DELETE']
+      dml_permissions.INSERT = !blocked.includes('INSERT')
+      dml_permissions.UPDATE = !blocked.includes('UPDATE')
+      dml_permissions.DELETE = !blocked.includes('DELETE')
     }
   })
 })
@@ -116,7 +162,7 @@ onMounted(async () => {
         <div class="header-content">
           <h1 class="integration-title">Base de Datos SQL</h1>
           <p class="integration-subtitle">
-            Conecta el asistente a una tabla de PostgreSQL para consultar datos en tiempo real
+            Conecta el asistente a tablas de PostgreSQL para consultar datos en tiempo real
           </p>
         </div>
       </div>
@@ -125,17 +171,17 @@ onMounted(async () => {
         <div class="toggle-content">
           <div class="toggle-info">
             <span class="toggle-label">Estado de la integración</span>
-            <span class="toggle-status" :class="{ active: sqlIntegration.activated }">
-              {{ sqlIntegration.activated ? 'Activa' : 'Inactiva' }}
+            <span class="toggle-status" :class="{ active: activated }">
+              {{ activated ? 'Activa' : 'Inactiva' }}
             </span>
           </div>
-          <InputSwitch v-model="sqlIntegration.activated" class="modern-switch" />
+          <InputSwitch v-model="activated" class="modern-switch" />
         </div>
       </div>
     </div>
 
     <!-- Config Card -->
-    <Card class="config-card" :class="{ 'card-disabled': !sqlIntegration.activated }">
+    <Card class="config-card" :class="{ 'card-disabled': !activated }">
       <template #content>
         <form class="config-form" @submit.prevent="saveConfig">
           <div class="form-grid">
@@ -149,9 +195,9 @@ onMounted(async () => {
               <div class="input-wrapper">
                 <InputText
                   id="connection_string"
-                  v-model="(sqlIntegration.config as SQLDatabaseIntegrationConfig).connection_string"
+                  v-model="connection_string"
                   placeholder="postgresql://user:password@host:5432/database"
-                  :disabled="!sqlIntegration.activated"
+                  :disabled="!activated"
                   :invalid="!!validationErrors.connection_string"
                   class="w-full"
                 />
@@ -160,52 +206,107 @@ onMounted(async () => {
                 {{ validationErrors.connection_string }}
               </Message>
               <small class="field-help">
-                Usá un usuario con permisos <strong>solo de lectura</strong> en la tabla permitida
+                Usá un usuario con permisos <strong>solo de lectura</strong> en las tablas permitidas
               </small>
             </div>
 
             <div class="field-group">
-              <label for="allowed_table" class="field-label">
-                <i class="pi pi-table field-icon"></i>
-                Tabla permitida
-                <span class="required">*</span>
-              </label>
-              <div class="input-wrapper">
-                <InputText
-                  id="allowed_table"
-                  v-model="(sqlIntegration.config as SQLDatabaseIntegrationConfig).allowed_table"
-                  placeholder="productos"
-                  :disabled="!sqlIntegration.activated"
-                  :invalid="!!validationErrors.allowed_table"
-                  class="w-full"
-                />
+              <div class="tables-section">
+                <div class="tables-header">
+                  <label class="field-label">
+                    <i class="pi pi-table field-icon"></i>
+                    Tablas permitidas
+                    <span class="required">*</span>
+                  </label>
+                  <Button
+                    type="button"
+                    label="Agregar tabla"
+                    icon="pi pi-plus"
+                    outlined
+                    size="small"
+                    :disabled="!activated"
+                    @click="addTable"
+                  />
+                </div>
+
+                <div class="tables-list">
+                  <div
+                    v-for="(table, index) in allowed_tables"
+                    :key="index"
+                    class="table-row"
+                  >
+                    <InputText
+                      v-model="table.name"
+                      placeholder="nombre_tabla"
+                      :disabled="!activated"
+                      class="table-name-field"
+                    />
+                    <InputText
+                      v-model="table.description"
+                      placeholder="Catálogo de productos con columnas: id, nombre, precio, stock..."
+                      :disabled="!activated"
+                      class="table-desc-field"
+                    />
+                    <Button
+                      v-if="allowed_tables.length > 1"
+                      type="button"
+                      icon="pi pi-trash"
+                      severity="danger"
+                      text
+                      size="small"
+                      :disabled="!activated"
+                      class="table-remove-btn"
+                      @click="removeTable(index)"
+                    />
+                  </div>
+                </div>
+
+                <Message v-if="validationErrors.tables" severity="error" class="field-error">
+                  {{ validationErrors.tables }}
+                </Message>
+                <small class="field-help">
+                  El asistente solo podrá consultar estas tablas. Describí las columnas para que sepa qué puede consultar.
+                </small>
               </div>
-              <Message v-if="validationErrors.allowed_table" severity="error" class="field-error">
-                {{ validationErrors.allowed_table }}
-              </Message>
-              <small class="field-help">
-                El asistente solo podrá consultar esta tabla. Las demás permanecen inaccesibles.
-              </small>
             </div>
 
             <div class="field-group">
-              <label for="table_description" class="field-label">
-                <i class="pi pi-info-circle field-icon"></i>
-                Descripción de la tabla
-              </label>
-              <div class="input-wrapper">
-                <Textarea
-                  id="table_description"
-                  v-model="(sqlIntegration.config as SQLDatabaseIntegrationConfig).table_description"
-                  placeholder="Catálogo de productos con columnas: id, nombre, precio, stock, categoria, descripcion"
-                  :disabled="!sqlIntegration.activated"
-                  rows="3"
-                  class="w-full"
-                />
+              <div class="permissions-section">
+                <div class="permissions-header">
+                  <label class="field-label">
+                    <i class="pi pi-shield field-icon"></i>
+                    Permisos de operaciones
+                  </label>
+                </div>
+
+                <div class="permissions-list">
+                  <!-- Configurable DML -->
+                  <div v-for="op in (['INSERT', 'UPDATE', 'DELETE'] as const)" :key="op" class="permission-row">
+                    <div class="permission-info">
+                      <span class="permission-name">{{ op }}</span>
+                      <span class="permission-desc">{{
+                        op === 'INSERT' ? 'Insertar nuevas filas' :
+                        op === 'UPDATE' ? 'Modificar filas existentes' :
+                        'Eliminar filas'
+                      }}</span>
+                    </div>
+                    <InputSwitch v-model="dml_permissions[op]" :disabled="!activated" />
+                  </div>
+
+                  <!-- Always blocked DDL — read-only -->
+                  <div class="always-blocked-row">
+                    <i class="pi pi-lock always-blocked-icon"></i>
+                    <span class="always-blocked-label">Siempre bloqueado:</span>
+                    <div class="always-blocked-tags">
+                      <span v-for="kw in ALWAYS_BLOCKED" :key="kw" class="blocked-tag">{{ kw }}</span>
+                    </div>
+                  </div>
+                </div>
+
+                <small class="field-help">
+                  SELECT siempre está permitido. DDL (DROP, ALTER…) no puede habilitarse.
+                </small>
               </div>
-              <small class="field-help">
-                Describí las columnas disponibles para que el asistente sepa qué puede consultar
-              </small>
             </div>
 
           </div>
@@ -216,7 +317,7 @@ onMounted(async () => {
               label="Guardar Configuración"
               icon="pi pi-save"
               severity="primary"
-              :disabled="!sqlIntegration.activated"
+              :disabled="!activated"
             />
           </div>
         </form>
@@ -236,25 +337,37 @@ onMounted(async () => {
           <div class="status-item">
             <div class="status-label"><i class="pi pi-link"></i> Conexión</div>
             <div class="status-value">
-              {{ currentIntegration
-                ? (currentIntegration.config as unknown as SQLDatabaseIntegrationConfig).connection_string || 'No configurado'
-                : 'No configurado' }}
+              {{ currentConfig?.connection_string || 'No configurado' }}
             </div>
           </div>
           <div class="status-item">
-            <div class="status-label"><i class="pi pi-table"></i> Tabla permitida</div>
+            <div class="status-label"><i class="pi pi-table"></i> Tablas configuradas</div>
             <div class="status-value">
-              {{ currentIntegration
-                ? (currentIntegration.config as unknown as SQLDatabaseIntegrationConfig).allowed_table || 'No configurado'
-                : 'No configurado' }}
+              <template v-if="currentConfig?.allowed_tables?.length">
+                <div class="tables-tags">
+                  <span
+                    v-for="table in currentConfig.allowed_tables"
+                    :key="table.name"
+                    class="table-tag"
+                    :title="table.description || undefined"
+                  >{{ table.name }}</span>
+                </div>
+              </template>
+              <template v-else>No configurado</template>
             </div>
           </div>
           <div class="status-item">
-            <div class="status-label"><i class="pi pi-info-circle"></i> Descripción</div>
-            <div class="status-value description-value">
-              {{ currentIntegration
-                ? (currentIntegration.config as unknown as SQLDatabaseIntegrationConfig).table_description || 'No configurado'
-                : 'No configurado' }}
+            <div class="status-label"><i class="pi pi-shield"></i> Operaciones permitidas</div>
+            <div class="status-value">
+              <div class="tables-tags">
+                <span class="table-tag allowed-tag">SELECT</span>
+                <template v-for="op in ['INSERT', 'UPDATE', 'DELETE']" :key="op">
+                  <span
+                    v-if="!(currentConfig?.blocked_keywords ?? ['INSERT','UPDATE','DELETE']).includes(op)"
+                    class="table-tag allowed-tag"
+                  >{{ op }}</span>
+                </template>
+              </div>
             </div>
           </div>
         </div>
@@ -399,6 +512,92 @@ onMounted(async () => {
   border-top: 1px solid #e2e8f0;
 }
 
+/* Permissions section */
+.permissions-section { display: flex; flex-direction: column; gap: 0.5rem; }
+
+.permissions-header { display: flex; align-items: center; justify-content: space-between; }
+
+.permissions-list { display: flex; flex-direction: column; gap: 0.4rem; }
+
+.permission-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0.5rem 0.75rem;
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 0.5rem;
+}
+
+.permission-info { display: flex; flex-direction: column; gap: 0.1rem; }
+
+.permission-name { font-family: 'SF Mono', 'Consolas', monospace; font-size: 0.85rem; font-weight: 600; color: #1e293b; }
+
+.permission-desc { font-size: 0.8rem; color: #64748b; }
+
+.always-blocked-row {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+  padding: 0.5rem 0.75rem;
+  background: #fef9f0;
+  border: 1px dashed #d1d5db;
+  border-radius: 0.5rem;
+}
+
+.always-blocked-icon { color: #9ca3af; font-size: 0.85rem; }
+
+.always-blocked-label { font-size: 0.8rem; color: #9ca3af; font-weight: 600; white-space: nowrap; }
+
+.always-blocked-tags { display: flex; flex-wrap: wrap; gap: 0.3rem; }
+
+.blocked-tag {
+  font-family: 'SF Mono', 'Consolas', monospace;
+  font-size: 0.75rem;
+  color: #9ca3af;
+  background: #f3f4f6;
+  border: 1px solid #e5e7eb;
+  padding: 1px 6px;
+  border-radius: 4px;
+}
+
+.allowed-tag { background: #dcfce7; color: #15803d; }
+
+/* Tables section */
+.tables-section { display: flex; flex-direction: column; gap: 0.5rem; }
+
+.tables-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.tables-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.table-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.5rem;
+}
+
+.table-name-field {
+  min-width: 160px;
+  flex-shrink: 0;
+}
+
+.table-desc-field { flex: 1; }
+
+.table-remove-btn {
+  flex-shrink: 0;
+  margin-top: 4px;
+}
+
+/* Status card */
 .status-card {
   border-radius: 0.75rem;
   overflow: hidden;
@@ -455,9 +654,19 @@ onMounted(async () => {
   overflow-wrap: break-word;
 }
 
-.description-value {
-  font-family: inherit;
-  white-space: pre-wrap;
+.tables-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+}
+
+.table-tag {
+  background: #e0f2fe;
+  color: #0369a1;
+  padding: 2px 8px;
+  border-radius: 999px;
+  font-size: 0.8rem;
+  font-family: 'SF Mono', 'Monaco', 'Consolas', monospace;
 }
 
 @media (max-width: 768px) {
@@ -465,6 +674,9 @@ onMounted(async () => {
   .integration-header { flex-direction: column; text-align: center; gap: 0.75rem; }
   .toggle-content { flex-direction: column; gap: 0.75rem; text-align: center; }
   .form-actions { justify-content: stretch; }
+  .table-row { flex-wrap: wrap; }
+  .table-name-field { min-width: 100%; flex-shrink: unset; }
+  .table-desc-field { width: 100%; }
 }
 
 @media (min-width: 992px) {

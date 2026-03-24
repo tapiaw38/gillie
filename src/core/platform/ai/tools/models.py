@@ -115,8 +115,10 @@ _DEFAULT_TOOL_PROMPTS: Dict[str, str] = {
         "Use when the user asks a question that may be answered by their uploaded files."
     ),
     "query_database": (
-        "Query the database to retrieve information. "
-        "Use when the user asks for data that lives in the connected database."
+        "Query the LIVE connected PostgreSQL database and return actual rows of data. "
+        "Use this tool — NOT code exploration tools — when the user asks about records, "
+        "tables, data, or wants to verify/inspect what is stored in the database. "
+        "Do NOT use repo_map, find_files, or read_file for database questions."
     ),
     "fetch_url": (
         "Fetch and extract the text content of a specific web page URL. "
@@ -683,6 +685,9 @@ class CheckCodeArgs(BaseModel):
 
 class QueryDatabaseArgs(BaseModel):
     """Arguments for querying the database"""
+    table: str = Field(
+        description="Table name to query. Must be one of the allowed tables configured in the integration."
+    )
     columns: List[str] = Field(
         default=["*"],
         description="Column names to retrieve. Use ['*'] for all columns."
@@ -704,6 +709,17 @@ class QueryDatabaseArgs(BaseModel):
     )
 
 
+class ExecuteSQLArgs(BaseModel):
+    """Arguments for executing a raw SQL statement"""
+    sql: str = Field(
+        description=(
+            "The full SQL statement to execute. "
+            "Only tables in the allowed list may be referenced. "
+            "DML operations (INSERT, UPDATE, DELETE) are allowed only if not blocked by the integration config."
+        )
+    )
+
+
 def _get_sql_integration(profile):
     """Return a SQLDatabaseIntegration if the profile has sqldatabase activated, else None."""
     if not profile or not profile.integrations:
@@ -712,14 +728,22 @@ def _get_sql_integration(profile):
         if integration.name == "sqldatabase" and integration.activated:
             config = integration.config or {}
             connection_string = config.get("connection_string")
-            allowed_table = config.get("allowed_table")
-            if not connection_string or not allowed_table:
+
+            # Support both new format (allowed_tables list) and old format (allowed_table string)
+            allowed_tables = config.get("allowed_tables")
+            if not allowed_tables:
+                single_table = config.get("allowed_table")
+                if single_table:
+                    allowed_tables = [{"name": single_table, "description": config.get("table_description", "")}]
+
+            if not connection_string or not allowed_tables:
                 return None
+
             from src.adapters.web.integrations.sqldatabase.sqldatabase import SQLDatabaseIntegration
             return SQLDatabaseIntegration(
                 connection_string=connection_string,
-                allowed_table=allowed_table,
-                table_description=config.get("table_description", ""),
+                allowed_tables=allowed_tables,
+                blocked_keywords=config.get("blocked_keywords", None),  # None = use default (block all DML)
             )
     return None
 
@@ -2797,19 +2821,25 @@ user_pref("devtools.debugger.force-local", true);
 
     if sql_integration is not None and "query_database" not in disabled:
         async def query_database_tool(
+            table: str,
             columns: List[str] = None,
             filters: Optional[str] = None,
             limit: int = 20,
         ) -> Dict[str, Any]:
-            """Query the allowed database table and return matching rows."""
+            """Query an allowed database table and return matching rows."""
             return await sql_integration.query(
+                table=table,
                 columns=columns or ["*"],
                 filters=filters,
                 limit=limit,
             )
 
         db_description = prompts.get("query_database", _DEFAULT_TOOL_PROMPTS["query_database"])
-        db_description += f" Tabla: {sql_integration.allowed_table}. {sql_integration.table_description}"
+        tables_summary = "; ".join(
+            f"{name}: {desc}" if desc else name
+            for name, desc in sql_integration.tables_info.items()
+        )
+        db_description += f" Tablas disponibles: {tables_summary}."
 
         tools.append(
             StructuredTool(
@@ -2818,6 +2848,29 @@ user_pref("devtools.debugger.force-local", true);
                 func=query_database_tool,
                 args_schema=QueryDatabaseArgs,
                 coroutine=query_database_tool,
+            )
+        )
+
+    if sql_integration is not None and "execute_sql" not in disabled:
+        async def execute_sql_tool(sql: str) -> Dict[str, Any]:
+            """Execute a SQL statement on the connected database."""
+            return await sql_integration.execute(sql)
+
+        ops = sql_integration.allowed_operations
+        ops_str = ", ".join(ops) if ops else "SELECT"
+        exec_description = (
+            f"Execute a raw SQL statement on the connected database. "
+            f"Allowed operations: {ops_str}. "
+            f"Only these tables may be referenced: {', '.join(sql_integration.table_names)}. "
+            f"Use for INSERT, UPDATE, DELETE or complex queries not covered by query_database."
+        )
+        tools.append(
+            StructuredTool(
+                name="execute_sql",
+                description=exec_description,
+                func=execute_sql_tool,
+                args_schema=ExecuteSQLArgs,
+                coroutine=execute_sql_tool,
             )
         )
 

@@ -114,10 +114,15 @@ export interface GoogleDriveIntegrationConfig {
   is_connected?: boolean
 }
 
+export interface SQLDatabaseTableEntry {
+  name: string
+  description: string
+}
+
 export interface SQLDatabaseIntegrationConfig {
   connection_string: string
-  allowed_table: string
-  table_description: string
+  allowed_tables: SQLDatabaseTableEntry[]
+  blocked_keywords?: string[]
 }
 
 export interface IntegrationParams {
