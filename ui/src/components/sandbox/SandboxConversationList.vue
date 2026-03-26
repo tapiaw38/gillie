@@ -57,7 +57,6 @@ const getMessageCount = (conversation: SandboxConversation) => {
 <template>
   <div class="sandbox-conversation-list">
     <div class="list-header mb-3">
-      <h3 class="m-0 text-lg font-semibold">Conversaciones</h3>
       <Button
         label="Nueva"
         icon="pi pi-plus"

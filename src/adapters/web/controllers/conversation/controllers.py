@@ -1,6 +1,5 @@
 
 from fastapi import APIRouter, status, Depends, Request, Query, HTTPException, Form, File, UploadFile
-from pydantic import BaseModel
 from fastapi.responses import StreamingResponse
 from src.schemas import (
     ConversationInput,
@@ -103,22 +102,28 @@ async def add_message(
     )
     return messages
 
-class MessageStreamInput(BaseModel):
-    content: str
-
 @router.post("/{conversation_id}/message/stream")
 async def add_message_stream(
     conversation_id: str,
     request: Request,
-    body: MessageStreamInput,
     usecases: Usecases = Depends(get_usecases),
+    content: Optional[str] = Form(default=None),
 ):
     """Stream AI response tokens as Server-Sent Events (SSE).
 
+    Accepts both form-encoded (CLI) and JSON body (UI) requests.
     Each event is JSON-encoded so newlines inside tokens are safely escaped.
     Client must json.loads() each data payload.
     """
     import json
+    # Support JSON body (UI) when form field is absent
+    if content is None:
+        try:
+            body = await request.json()
+            content = body.get("content", "")
+        except Exception:
+            content = ""
+
     user_id = request.state.user.get("user_id")
     client_workspace = request.headers.get("X-Gillie-Workspace", "")
     plan_mode = request.headers.get("X-Gillie-Mode", "") == "plan"
@@ -127,7 +132,7 @@ async def add_message_stream(
         try:
             async for token in usecases.conversation.add_message_usecase.execute_stream(
                 conversation_id=conversation_id,
-                content=body.content,
+                content=content,
                 user_id=user_id,
                 client_workspace=client_workspace,
                 plan_mode=plan_mode,

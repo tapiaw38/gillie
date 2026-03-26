@@ -21,6 +21,14 @@ vision_app = typer.Typer(help="Configure vision AI provider for image descriptio
 app.add_typer(vision_app, name="vision")
 console = Console()
 
+_OPENROUTER_BASE = "https://openrouter.ai/api/v1"
+
+def _provider_display_name(name: str, preset: dict) -> str:
+    """Return a display name with backend hint for OpenRouter-based providers."""
+    if preset.get("base_url") == _OPENROUTER_BASE:
+        return f"{name} (OpenRouter)"
+    return name
+
 _VISION_PRESETS: dict = {
     "deepseek": {"base_url": "https://api.deepseek.com",                                "model": "deepseek-vl2"},
     "gemini":   {"base_url": "https://generativelanguage.googleapis.com/v1beta/openai/", "model": "gemini-2.0-flash"},
@@ -47,11 +55,13 @@ def provider_list():
 
     current_api_key = ""
     current_base_url = ""
+    current_model = ""
     if config_exists():
         try:
             cfg = load_config()
             current_api_key = cfg.services.openai.api_key
             current_base_url = cfg.services.openai.base_url
+            current_model = cfg.services.openai.model
         except Exception:
             pass
 
@@ -70,11 +80,12 @@ def provider_list():
         else:
             has_creds = bool(current_api_key)
             status = "[green]credentials found[/green]" if has_creds else "[yellow]no credentials[/yellow]"
-        active_marker = ""
-        if current_base_url and current_base_url == preset["base_url"]:
-            active_marker = " [bold cyan]*[/bold cyan]"
+        # Match by both base_url AND model so shared-URL presets don't both get *
+        is_active = (current_base_url == preset["base_url"] and current_model == preset["model"])
+        active_marker = " [bold cyan]*[/bold cyan]" if is_active else ""
+        display = _provider_display_name(name, preset)
         table.add_row(
-            f"{name}{active_marker}",
+            f"{display}{active_marker}",
             preset["base_url"],
             preset["model"],
             status,
@@ -89,7 +100,7 @@ def provider_list():
 
 @app.command("use")
 def provider_use(
-    provider: Optional[str] = typer.Argument(None, help="Provider name (deepseek, openrouter, anthropic, openai, claude, kimi, gemini, groq)"),
+    provider: Optional[str] = typer.Argument(None, help="Provider name (deepseek-chat, kimi-k2, anthropic, openai, claude, kimi, gemini, groq, deepseek)"),
     api_key: Optional[str] = typer.Option(None, "--api-key", "-k", help="API key (skips interactive prompt)"),
 ):
     """Switch to a provider and update the configuration."""
@@ -108,15 +119,11 @@ def provider_use(
         _has_claude_session = (_Path.home() / ".claude" / ".credentials.json").exists()
 
         def _choice_label(name: str, preset: dict) -> str:
-            active = " *" if preset["base_url"] == _current_base_url else "  "
-            if preset.get("auth_type") == "bearer":
-                cred_hint = " [session]" if _has_claude_session else " [no session]"
-            else:
-                same = preset["base_url"] == _current_base_url
-                cred_hint = f"  {preset['model']}"
-                if same and _cfg.services.openai.api_key:
-                    cred_hint += "  [key set]"
-            return f"{active} {name:<14} {preset['model']}"
+            is_active = (preset["base_url"] == _current_base_url and
+                         preset["model"] == _cfg.services.openai.model)
+            active = " *" if is_active else "  "
+            display = _provider_display_name(name, preset)
+            return f"{active} {display:<26} {preset['model']}"
 
         choices = [
             {"name": _choice_label(n, p), "value": n}

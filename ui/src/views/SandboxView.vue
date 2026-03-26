@@ -136,13 +136,6 @@ const toggleMobileMenu = () => {
         <!-- Sidebar header -->
         <div class="sidebar-header">
           <h2 class="sidebar-title">Conversaciones</h2>
-          <Button
-            icon="pi pi-plus"
-            label="Nueva"
-            severity="info"
-            size="small"
-            @click="handleCreateConversation"
-          />
         </div>
 
         <!-- Conversation list -->
