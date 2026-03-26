@@ -292,7 +292,7 @@ def _print_header(assistant_name: str, conv_id: str, mode: str = _Mode.CONFIRM_R
         f"[dim]Conversation: {conv_id}[/dim]\n"
         f"[dim]Workspace:    {ws}[/dim]\n"
         f"[dim]Mode: {mode} | /mode to change[/dim]\n"
-        f"[dim]/new · /list · /clear · /compact · /plan · /mode · /attach · /files · /id · /exit[/dim]\n"
+        f"[dim]/new · /list · /clear · /compact · /plan · /mode · /model · /attach · /files · /id · /exit[/dim]\n"
         f"[dim]Esc — cancel running agent[/dim]\n"
         f"[dim]@path — work with local file · /attach path — upload to storage[/dim]",
         border_style="cyan",
@@ -1319,6 +1319,7 @@ def agent(
                 "/clear",
                 "/compact",
                 "/plan", "/mode",
+                "/model", "/provider",
                 "/attach",
                 "/files",
                 "/id", "/exit",
@@ -1397,6 +1398,27 @@ def agent(
 
         if cmd in ("/id",):
             console.print(f"[dim]Conversation ID: [bold]{current_id}[/bold][/dim]\n")
+            continue
+
+        if cmd in ("/model", "/provider"):
+            from cli.config.manager import config_exists as _cfg_exists, load_config as _load_cfg
+            from src.core.platform.config.service import _PROVIDER_PRESETS
+            if _cfg_exists():
+                _cfg = _load_cfg()
+                s = _cfg.services.openai
+                _provider = next(
+                    (n for n, p in _PROVIDER_PRESETS.items() if p["base_url"] == s.base_url),
+                    "custom",
+                )
+                _key_status = "[green]set[/green]" if s.api_key else "[red]missing[/red]"
+                console.print()
+                console.print(f"  [bold]Provider:[/bold] [cyan]{_provider}[/cyan]")
+                console.print(f"  [bold]Model   :[/bold] {s.model}")
+                console.print(f"  [bold]Base URL:[/bold] [dim]{s.base_url}[/dim]")
+                console.print(f"  [bold]API key :[/bold] {_key_status}")
+                console.print()
+            else:
+                console.print("[dim]No config found.[/dim]\n")
             continue
 
         if cmd in ("/list", "/ls", "/conversations", "/convs"):
