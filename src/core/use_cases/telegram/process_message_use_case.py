@@ -156,7 +156,19 @@ class ProcessTelegramMessageUseCase:
                         logger.info(f"[telegram] parsed segments: {segments}")
                         for segment in segments:
                             if segment["type"] == "image":
-                                last_sent = tg_client.send_image(chat_id, segment["content"])
+                                url = segment["content"]
+                                # Verify local files exist before sending to avoid hallucinated URLs
+                                if tg_client._is_local_url(url):
+                                    store = getattr(context, "store_service", None)
+                                    base_url = getattr(store, "base_url", None)
+                                    if base_url and url.startswith(base_url):
+                                        key = url[len(base_url):].lstrip("/")
+                                        try:
+                                            store.get_object(key)
+                                        except Exception:
+                                            logger.warning(f"[telegram] Skipping hallucinated image URL (file not found): {url}")
+                                            continue
+                                last_sent = tg_client.send_image(chat_id, url)
                             elif segment["type"] == "document":
                                 last_sent = tg_client.send_document(chat_id, segment["content"])
                             elif segment["content"]:

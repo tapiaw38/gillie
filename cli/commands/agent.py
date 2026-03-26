@@ -534,6 +534,8 @@ def _stream_assistant(
                 elif token.get("type") == "tool_call":
                     _stop_live()
                     _stop_spin()
+                    # Reset full_text so post-tool response renders fresh (avoids repeating pre-tool text)
+                    full_text = ""
                     tool_name = token.get("name", "tool")
                     round_n   = token.get("round", "")
                     arg       = token.get("arg", "")
@@ -548,8 +550,6 @@ def _stream_assistant(
                     if summary:
                         console.print(f"  [green]✓[/green] [dim]{summary}[/dim]")
                     _start_spinner("Thinking...")
-                    if full_text:
-                        _start_live()
                 elif token.get("type") == "local_file_used":
                     path = token.get("path", "")
                     if path and session_local_files is not None:

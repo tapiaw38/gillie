@@ -247,14 +247,16 @@ _DEFAULT_TOOL_PROMPTS: Dict[str, str] = {
         "(WhatsApp, Telegram, Slack, etc.). "
         "Use whenever the user asks to receive a file, report, PDF, CSV, or any other file. "
         "Works with any file type. "
-        "After uploading, the returned URL is automatically delivered as a file message."
+        "IMPORTANT: You MUST call this tool to get a real URL. NEVER invent or guess a URL. "
+        "Only include the URL returned by this tool in your response."
     ),
     "send_screenshot": (
         "Capture the desktop screen and send it directly to the user as an image in the chat "
         "(WhatsApp, Telegram, Slack, etc.). "
         "Use this tool whenever the user asks for a screenshot, screen capture, or photo of the screen. "
         "Do NOT use take_screenshot for this — that tool only describes the screen without sending. "
-        "send_screenshot uploads the image and delivers it directly to the user."
+        "IMPORTANT: You MUST call this tool to get a real URL. NEVER invent or guess a URL. "
+        "Only include the URL returned by this tool in your response."
     ),
     "take_screenshot": (
         "Take a screenshot of the current desktop screen and describe what is visible. "

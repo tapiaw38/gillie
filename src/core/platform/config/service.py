@@ -47,7 +47,7 @@ _PROVIDER_PRESETS: dict = {
     "kimi":       {"base_url": "https://api.moonshot.cn/v1",                             "model": "kimi-k2",                 "auth_type": "api_key"},
     "gemini":     {"base_url": "https://generativelanguage.googleapis.com/v1beta/openai/","model": "gemini-2.0-flash",        "auth_type": "api_key"},
     "groq":       {"base_url": "https://api.groq.com/openai/v1",                         "model": "llama-3.3-70b-versatile", "auth_type": "api_key"},
-    "claude":     {"base_url": "https://api.anthropic.com/v1",                           "model": "claude-sonnet-4-6",       "auth_type": "bearer"},
+    "claude":     {"base_url": "https://api.anthropic.com/v1",                           "model": "claude-haiku-4-5-20251001","auth_type": "bearer"},
 }
 
 
