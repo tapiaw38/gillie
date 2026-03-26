@@ -198,14 +198,6 @@ const integrations = [
     enabled: true,
   },
   {
-    name: 'Mercado Libre',
-    description: 'Integración Mercado Libre, Contestar preguntas sin responder',
-    icon: 'pi pi-chat',
-    tone: 'warning',
-    to: 'meli-integration',
-    enabled: false,
-  },
-  {
     name: 'Google Calendar',
     description: 'Integración Google Calendar, gestiona eventos y sincronización',
     icon: 'pi pi-calendar',
@@ -380,12 +372,37 @@ const integrations = [
                 <ToggleSwitch :modelValue="ttsEnabled" @update:modelValue="toggleTts" />
               </div>
 
-              <div class="profile-actions">
-                <RouterLink class="sandbox-button" :to="{ name: 'sandbox' }">
-                  <i class="pi pi-shield"></i>
-                  Sandbox Testing
-                </RouterLink>
+            </div>
+          </template>
+        </Card>
+
+        <!-- Quick Access Card -->
+        <Card v-if="assistantProfile" class="quick-access-card">
+          <template #header>
+            <div class="quick-access-header">
+              <div class="quick-access-icon"><i class="pi pi-comments"></i></div>
+              <div>
+                <h3>Chat</h3>
+                <p>Chatea con tu asistente desde la interfaz web</p>
               </div>
+            </div>
+          </template>
+          <template #content>
+            <div class="quick-access-actions">
+              <RouterLink class="qa-btn qa-btn--primary" :to="{ name: 'sandbox' }">
+                <i class="pi pi-comment"></i>
+                <div>
+                  <span class="qa-btn-label">Chat UI</span>
+                  <span class="qa-btn-desc">Conversación con IA en tiempo real</span>
+                </div>
+              </RouterLink>
+              <RouterLink class="qa-btn qa-btn--secondary" :to="{ name: 'conversation' }">
+                <i class="pi pi-list"></i>
+                <div>
+                  <span class="qa-btn-label">Conversaciones</span>
+                  <span class="qa-btn-desc">Historial de todas las conversaciones</span>
+                </div>
+              </RouterLink>
             </div>
           </template>
         </Card>
@@ -655,13 +672,11 @@ const integrations = [
 /* Profile Section */
 .profile-section {
   display: flex;
-  flex-direction: row;
+  flex-direction: column;
   gap: 0.85rem;
-  align-items: flex-start;
 }
 
 .profile-section > * {
-  flex: 1;
   min-width: 0;
 }
 
@@ -822,6 +837,98 @@ const integrations = [
 
 .sandbox-button i {
   font-size: 1.1rem;
+}
+
+/* Quick Access Card */
+.quick-access-card {
+  margin-top: 1rem;
+}
+
+.quick-access-header {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 1rem 1rem 0;
+}
+
+.quick-access-header h3 {
+  margin: 0;
+  font-size: 0.95rem;
+  font-weight: 600;
+  color: var(--do-text);
+}
+
+.quick-access-header p {
+  margin: 0;
+  font-size: 0.75rem;
+  color: var(--do-text-muted);
+}
+
+.quick-access-icon {
+  width: 2.2rem;
+  height: 2.2rem;
+  border-radius: 0.5rem;
+  background: linear-gradient(135deg, #3b82f6, #06b6d4);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  font-size: 1rem;
+  color: #fff;
+}
+
+.quick-access-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.qa-btn {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.65rem 0.85rem;
+  border-radius: 0.5rem;
+  text-decoration: none;
+  transition: background 0.15s, transform 0.15s;
+  border: 1px solid rgba(255,255,255,0.06);
+}
+
+.qa-btn i {
+  font-size: 1.1rem;
+  flex-shrink: 0;
+}
+
+.qa-btn-label {
+  display: block;
+  font-size: 0.85rem;
+  font-weight: 600;
+}
+
+.qa-btn-desc {
+  display: block;
+  font-size: 0.72rem;
+  opacity: 0.6;
+}
+
+.qa-btn--primary {
+  background: rgba(59,130,246,0.12);
+  color: #60a5fa;
+}
+
+.qa-btn--primary:hover {
+  background: rgba(59,130,246,0.22);
+  transform: translateX(3px);
+}
+
+.qa-btn--secondary {
+  background: rgba(255,255,255,0.04);
+  color: var(--do-text-secondary);
+}
+
+.qa-btn--secondary:hover {
+  background: rgba(255,255,255,0.08);
+  transform: translateX(3px);
 }
 
 /* Stats Card */

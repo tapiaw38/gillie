@@ -10,10 +10,7 @@ const { isActive, cause } = useBackendStatus()
 const isActiveLink = (path: string) => route.path === path
 const canGoBack = () => route.path !== '/app/dashboard'
 
-const routerLinks = [
-  { icon: 'pi pi-th-large', label: 'Panel', url: '/app/dashboard' },
-  { icon: 'pi pi-comments', label: 'Conversaciones', url: '/app/conversation' },
-]
+const routerLinks: { icon: string; label: string; url: string }[] = []
 </script>
 
 <template>

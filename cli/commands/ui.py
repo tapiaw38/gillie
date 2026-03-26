@@ -105,11 +105,11 @@ def start(
         cmd += [
             "--ozone-platform=wayland",
             "--enable-features=WaylandWindowDecorations",
-            "--use-angle=swiftshader",
+            "--disable-gpu",
         ]
         env["ELECTRON_OZONE_PLATFORM_HINT"] = "wayland"
     elif not os.environ.get("DISPLAY"):
-        cmd += ["--ozone-platform-hint=auto", "--use-angle=swiftshader"]
+        cmd += ["--ozone-platform-hint=auto", "--disable-gpu"]
         env.setdefault("ELECTRON_OZONE_PLATFORM_HINT", "auto")
 
     subprocess.run(cmd, cwd=UI_DIR, env=env)
@@ -141,10 +141,16 @@ def dev(
     if port:
         cmd += ["--port", str(port)]
 
+    env = os.environ.copy()
+    if os.environ.get("WAYLAND_DISPLAY"):
+        env["ELECTRON_OZONE_PLATFORM_HINT"] = "wayland"
+    elif not os.environ.get("DISPLAY"):
+        env.setdefault("ELECTRON_OZONE_PLATFORM_HINT", "auto")
+
     console.print(f"  Command: [dim]{' '.join(cmd)}[/dim]")
     console.print()
 
-    _run(cmd, check=False)
+    subprocess.run(cmd, cwd=UI_DIR, env=env)
 
 
 @app.command("build")

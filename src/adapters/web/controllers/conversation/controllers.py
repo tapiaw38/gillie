@@ -1,5 +1,6 @@
 
 from fastapi import APIRouter, status, Depends, Request, Query, HTTPException, Form, File, UploadFile
+from pydantic import BaseModel
 from fastapi.responses import StreamingResponse
 from src.schemas import (
     ConversationInput,
@@ -102,11 +103,14 @@ async def add_message(
     )
     return messages
 
+class MessageStreamInput(BaseModel):
+    content: str
+
 @router.post("/{conversation_id}/message/stream")
 async def add_message_stream(
     conversation_id: str,
     request: Request,
-    content: str = Form(...),
+    body: MessageStreamInput,
     usecases: Usecases = Depends(get_usecases),
 ):
     """Stream AI response tokens as Server-Sent Events (SSE).
@@ -123,7 +127,7 @@ async def add_message_stream(
         try:
             async for token in usecases.conversation.add_message_usecase.execute_stream(
                 conversation_id=conversation_id,
-                content=content,
+                content=body.content,
                 user_id=user_id,
                 client_workspace=client_workspace,
                 plan_mode=plan_mode,

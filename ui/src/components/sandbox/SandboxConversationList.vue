@@ -57,9 +57,9 @@ const getMessageCount = (conversation: SandboxConversation) => {
 <template>
   <div class="sandbox-conversation-list">
     <div class="list-header mb-3">
-      <h3 class="m-0 text-lg font-semibold">Conversaciones de Prueba</h3>
+      <h3 class="m-0 text-lg font-semibold">Conversaciones</h3>
       <Button
-        label="Nueva Conversación"
+        label="Nueva"
         icon="pi pi-plus"
         @click="handleCreate"
         class="p-button-sm"
@@ -78,9 +78,9 @@ const getMessageCount = (conversation: SandboxConversation) => {
 
     <div v-else-if="conversations.length === 0" class="empty-state">
       <i class="pi pi-inbox text-4xl text-color-secondary mb-2"></i>
-      <p class="text-sm text-color-secondary">No hay conversaciones de prueba aún</p>
+      <p class="text-sm text-color-secondary">No hay conversaciones aún</p>
       <Button
-        label="Crear Primera Conversación"
+        label="Nueva conversación"
         icon="pi pi-plus"
         @click="handleCreate"
         class="p-button-sm"
@@ -122,10 +122,6 @@ const getMessageCount = (conversation: SandboxConversation) => {
               </span>
             </div>
 
-            <div v-if="conversation.is_sandbox" class="sandbox-indicator mt-2">
-              <i class="pi pi-shield text-xs"></i>
-              <span class="text-xs">Modo Sandbox</span>
-            </div>
           </div>
         </template>
       </Card>

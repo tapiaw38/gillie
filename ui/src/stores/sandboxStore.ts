@@ -87,7 +87,7 @@ export const useSandboxStore = (sandboxService: ISandboxService) =>
         error.value = null
 
         const response = await sandboxService.createSandboxConversation({
-          title: 'Nueva Conversación de Prueba',
+          title: 'Nueva Conversación',
           is_sandbox: true,
         })
 
