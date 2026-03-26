@@ -190,6 +190,7 @@ const toggleMobileMenu = () => {
             :api-key="apiKey"
             :initial-messages="storeMessages"
             @message-sent="() => {}"
+            @new-conversation="handleCreateConversation"
           />
         </div>
       </main>

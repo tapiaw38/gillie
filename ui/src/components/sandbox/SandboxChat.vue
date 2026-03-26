@@ -19,7 +19,7 @@ interface ToolCallEvent {
 
 interface ChatMessage {
   id: string
-  role: 'user' | 'assistant'
+  role: 'user' | 'assistant' | 'system'
   content: string
   toolCalls: ToolCallEvent[]
   shellOutput: string[]
@@ -51,6 +51,7 @@ interface Props {
 
 interface Emits {
   (event: 'messageSent'): void
+  (event: 'newConversation'): void
 }
 
 const props = defineProps<Props>()
@@ -71,9 +72,34 @@ const approvalVisible = ref(false)
 const approvalFeedback = ref('')
 const approvalLoading = ref(false)
 
+// Workspace state
+const currentWorkspace = ref('')
+
+// Autocomplete state
+const autocompleteVisible = ref(false)
+const autocompleteItems = ref<{ label: string; value: string; hint?: string }[]>([])
+const autocompleteIndex = ref(0)
+// Position in inputText where the current @ or / token starts (for replacement on select)
+const tokenStart = ref(0)
+const tokenIsAt = ref(false) // true = @ token, false = / command
+
 // ── Constants ─────────────────────────────────────────────────────────────────
 
 const BASE_URL = import.meta.env.VITE_API_URL ?? 'http://localhost:8000'
+
+const SLASH_COMMANDS = [
+  { label: '/new', value: '/new', hint: 'Start a new conversation' },
+  { label: '/clear', value: '/clear', hint: 'Clear messages in this view' },
+  { label: '/workspace', value: '/workspace ', hint: 'Set or show current workspace path' },
+  { label: '/model', value: '/model', hint: 'Show current provider info' },
+]
+
+const AT_HINTS = [
+  { label: '@file.ext', value: '@', hint: 'Inject a file as context' },
+  { label: '@dir/', value: '@', hint: 'List directory contents' },
+  { label: '@https://...', value: '@', hint: 'Fetch a URL as context' },
+  { label: '@@glob/**', value: '@@', hint: 'Glob-expand a file pattern' },
+]
 
 const TOOL_ICONS: Record<string, string> = {
   read_file: 'pi-file',
@@ -90,8 +116,6 @@ const TOOL_ICONS: Record<string, string> = {
 
 marked.setOptions({ breaks: true, gfm: true } as object)
 
-// Open all links in system browser (prevents Electron from navigating away)
-// marked v12 calls link renderer with positional args: (href, title, text)
 marked.use({
   renderer: {
     link(href: string, title: string | null | undefined, text: string) {
@@ -111,7 +135,9 @@ const renderMarkdown = (content: string): string => {
 
 // ── Computed ──────────────────────────────────────────────────────────────────
 
-const canSend = computed(() => inputText.value.trim().length > 0 && !isStreaming.value && props.conversationId !== null)
+const canSend = computed(
+  () => inputText.value.trim().length > 0 && !isStreaming.value && props.conversationId !== null,
+)
 
 const lastAssistantMessage = computed(() => {
   for (let i = messages.value.length - 1; i >= 0; i--) {
@@ -154,19 +180,194 @@ const toggleShell = (messageId: string) => {
 
 const isShellExpanded = (messageId: string) => expandedShell.value.has(messageId)
 
+// ── System message helper ─────────────────────────────────────────────────────
+
+const addSystemMessage = (content: string) => {
+  messages.value.push({
+    id: crypto.randomUUID(),
+    role: 'system',
+    content,
+    toolCalls: [],
+    shellOutput: [],
+  })
+  scrollToBottom()
+}
+
+// ── Slash command handler ─────────────────────────────────────────────────────
+
+/**
+ * Returns true if the input was a slash command (handled client-side).
+ */
+const handleSlashCommand = (text: string): boolean => {
+  const trimmed = text.trim()
+
+  if (trimmed === '/new') {
+    emit('newConversation')
+    return true
+  }
+
+  if (trimmed === '/clear') {
+    messages.value = []
+    return true
+  }
+
+  if (trimmed === '/model') {
+    addSystemMessage(
+      `Current provider: configured in backend. Use \`/model\` in the CLI to see full provider details (e.g. \`gillie /model\`).`,
+    )
+    return true
+  }
+
+  if (trimmed.startsWith('/workspace')) {
+    const arg = trimmed.slice('/workspace'.length).trim()
+    if (!arg) {
+      const info = currentWorkspace.value
+        ? `Current workspace: \`${currentWorkspace.value}\``
+        : 'No workspace set. Use `/workspace /path/to/dir` to set one.'
+      addSystemMessage(info)
+    } else {
+      currentWorkspace.value = arg
+      addSystemMessage(`Workspace set to: \`${arg}\``)
+    }
+    return true
+  }
+
+  return false
+}
+
+// ── @ reference expansion ─────────────────────────────────────────────────────
+
+declare global {
+  interface Window {
+    electronAPI?: {
+      readFile: (filePath: string) => Promise<string>
+      listDir: (dirPath: string) => Promise<string[]>
+      listDirShallow: (dirPath: string) => Promise<string[]>
+      glob: (pattern: string, base: string) => Promise<string[]>
+      fetchUrl: (url: string) => Promise<string>
+    }
+  }
+}
+
+/**
+ * Expand all @references in the text before sending to the backend.
+ * Prepends context blocks and returns the enriched message string.
+ */
+const expandAtReferences = async (text: string): Promise<string> => {
+  const api = window.electronAPI
+  if (!api) return text
+
+  // Match patterns: @@glob, @https://..., @file/path or @relative
+  const atPattern = /@@([^\s]+)|@(https?:\/\/[^\s]+)|@([^\s@]+)/g
+  const contexts: string[] = []
+  let match: RegExpExecArray | null
+
+  const promises: Promise<void>[] = []
+
+  // Collect all matches first to run in parallel
+  const allMatches: RegExpExecArray[] = []
+  while ((match = atPattern.exec(text)) !== null) {
+    allMatches.push({ ...match, index: match.index, input: match.input } as RegExpExecArray)
+  }
+
+  for (const m of allMatches) {
+    const globPattern = m[1] // @@glob
+    const urlRef = m[2]      // @https://...
+    const fileRef = m[3]     // @path
+
+    if (globPattern) {
+      promises.push(
+        api
+          .glob(globPattern, currentWorkspace.value || '.')
+          .then((files) => {
+            if (files.length > 0) {
+              contexts.push(`[Files matching @@${globPattern}]\n${files.join('\n')}`)
+            } else {
+              contexts.push(`[@@${globPattern}: no files matched]`)
+            }
+          })
+          .catch((err: unknown) => {
+            contexts.push(`[@@${globPattern}: error - ${err instanceof Error ? err.message : String(err)}]`)
+          }),
+      )
+    } else if (urlRef) {
+      promises.push(
+        api
+          .fetchUrl(urlRef)
+          .then((content) => {
+            contexts.push(`[Context from @${urlRef}]\n${content}`)
+          })
+          .catch((err: unknown) => {
+            contexts.push(`[@${urlRef}: fetch error - ${err instanceof Error ? err.message : String(err)}]`)
+          }),
+      )
+    } else if (fileRef) {
+      // Directory listing (ends with /) vs file read
+      if (fileRef.endsWith('/')) {
+        const dirPath = fileRef.startsWith('/')
+          ? fileRef
+          : `${currentWorkspace.value || '.'}/${fileRef}`
+        promises.push(
+          api
+            .listDir(dirPath)
+            .then((files) => {
+              contexts.push(`[Directory listing: @${fileRef}]\n${files.join('\n')}`)
+            })
+            .catch((err: unknown) => {
+              contexts.push(`[@${fileRef}: listDir error - ${err instanceof Error ? err.message : String(err)}]`)
+            }),
+        )
+      } else {
+        const filePath = fileRef.startsWith('/')
+          ? fileRef
+          : `${currentWorkspace.value || '.'}/${fileRef}`
+        promises.push(
+          api
+            .readFile(filePath)
+            .then((content) => {
+              contexts.push(`[Context from @${fileRef}]\n${content}`)
+            })
+            .catch((err: unknown) => {
+              contexts.push(`[@${fileRef}: read error - ${err instanceof Error ? err.message : String(err)}]`)
+            }),
+        )
+      }
+    }
+  }
+
+  await Promise.all(promises)
+
+  if (contexts.length === 0) return text
+
+  const contextBlock = contexts.join('\n\n')
+  return `${contextBlock}\n\n---\n\n${text}`
+}
+
 // ── Streaming send ─────────────────────────────────────────────────────────────
 
 const sendMessage = async () => {
   if (!canSend.value) return
 
-  const content = inputText.value.trim()
+  const rawContent = inputText.value.trim()
   inputText.value = ''
+  autocompleteVisible.value = false
 
-  // Push user message
+  // Handle slash commands client-side
+  if (handleSlashCommand(rawContent)) return
+
+  // Expand @ references
+  let content: string
+  try {
+    content = await expandAtReferences(rawContent)
+  } catch {
+    content = rawContent
+  }
+
+  // Push user message (show original text, not the expanded context)
   messages.value.push({
     id: crypto.randomUUID(),
     role: 'user',
-    content,
+    content: rawContent,
     toolCalls: [],
     shellOutput: [],
   })
@@ -189,14 +390,19 @@ const sendMessage = async () => {
   const assistantMsg = messages.value.find((m) => m.id === assistantId)!
 
   try {
+    const headers: Record<string, string> = {
+      'Content-Type': 'application/json',
+      'x-api-key': props.apiKey,
+    }
+    if (currentWorkspace.value) {
+      headers['X-Gillie-Workspace'] = currentWorkspace.value
+    }
+
     const response = await fetch(
       `${BASE_URL}/conversation/${props.conversationId}/message/stream`,
       {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'x-api-key': props.apiKey,
-        },
+        headers,
         body: JSON.stringify({ content }),
       },
     )
@@ -230,7 +436,6 @@ const sendMessage = async () => {
         try {
           payload = JSON.parse(rawData)
         } catch {
-          // If JSON.parse fails, treat rawData as a plain string
           payload = rawData
         }
 
@@ -300,7 +505,6 @@ const processStreamEvent = async (msg: ChatMessage, payload: unknown) => {
     }
 
     case 'tool_result': {
-      // Mark the most recent undone tool call as done
       const pending = [...msg.toolCalls].reverse().find((t) => !t.done)
       if (pending) pending.done = true
       break
@@ -308,7 +512,6 @@ const processStreamEvent = async (msg: ChatMessage, payload: unknown) => {
 
     case 'shell_output': {
       msg.shellOutput.push(String(event.line ?? ''))
-      // Auto-expand on first line
       if (msg.shellOutput.length === 1) {
         expandedShell.value.add(msg.id)
       }
@@ -380,13 +583,201 @@ const handleApproval = async (approved: boolean) => {
   }
 }
 
+// ── Autocomplete ──────────────────────────────────────────────────────────────
+
+/** Get the raw <textarea> element from PrimeVue's wrapper */
+const getRawTextarea = (): HTMLTextAreaElement | null => {
+  const el = textareaEl.value as HTMLElement | null
+  return (el?.querySelector?.('textarea') ?? el) as HTMLTextAreaElement | null
+}
+
+/** Find the @ or @@ token that ends at `cursorPos` in `text`. Returns null if none. */
+const findAtToken = (text: string, cursorPos: number): { start: number; partial: string } | null => {
+  let i = cursorPos - 1
+  // Walk back until whitespace
+  while (i >= 0 && !/\s/.test(text[i])) i--
+  const start = i + 1
+  const token = text.slice(start, cursorPos)
+  if (token.startsWith('@')) return { start, partial: token }
+  return null
+}
+
+/** Fetch directory entries for a partial path and return autocomplete items */
+const fetchPathCompletions = async (
+  partial: string, // e.g. "@/home/ta" or "@rel/pa"
+): Promise<{ label: string; value: string; hint: string }[]> => {
+  if (!window.electronAPI) return []
+
+  // Strip leading @ / @@
+  const isDouble = partial.startsWith('@@')
+  const pathPart = partial.slice(isDouble ? 2 : 1) // path after @ or @@
+
+  // Determine dir to list and prefix to filter
+  const lastSlash = pathPart.lastIndexOf('/')
+  const dirToList = lastSlash >= 0 ? pathPart.slice(0, lastSlash + 1) : ''
+  const prefix = lastSlash >= 0 ? pathPart.slice(lastSlash + 1).toLowerCase() : pathPart.toLowerCase()
+
+  // Resolve dir: if absolute use as-is, else relative to workspace or cwd
+  let absDir: string
+  if (dirToList.startsWith('/')) {
+    absDir = dirToList
+  } else {
+    const base = currentWorkspace.value || '/'
+    absDir = base.endsWith('/') ? base + dirToList : base + '/' + dirToList
+  }
+
+  try {
+    // listDirShallow returns entries like "file.txt" or "dir/" (dirs have trailing /)
+    const entries = await window.electronAPI!.listDirShallow(absDir)
+    const atPrefix = isDouble ? '@@' : '@'
+    return entries
+      .filter((e) => e.toLowerCase().startsWith(prefix.toLowerCase()))
+      .slice(0, 20)
+      .map((e) => {
+        const isDir = e.endsWith('/')
+        const name = isDir ? e.slice(0, -1) : e
+        const fullPath = dirToList + name
+        return {
+          label: e,                                         // "dirname/" or "file.txt"
+          value: atPrefix + fullPath + (isDir ? '/' : ''), // "@/full/dir/" or "@/full/file.txt"
+          hint: isDir ? 'directorio' : 'archivo',
+        }
+      })
+  } catch {
+    return []
+  }
+}
+
+const updateAutocomplete = async (value: string) => {
+  const ta = getRawTextarea()
+  const cursor = ta?.selectionStart ?? value.length
+
+  // ── Slash commands (only when input starts with / and has no space before cursor) ──
+  const textToCursor = value.slice(0, cursor)
+  if (value.startsWith('/') && !value.slice(0, cursor).includes(' ')) {
+    const partial = textToCursor.toLowerCase()
+    const filtered = SLASH_COMMANDS.filter((c) => c.value.toLowerCase().startsWith(partial))
+    autocompleteItems.value = filtered
+    autocompleteVisible.value = filtered.length > 0
+    autocompleteIndex.value = 0
+    tokenStart.value = 0
+    tokenIsAt.value = false
+    return
+  }
+
+  // ── @ references ──
+  const atToken = findAtToken(value, cursor)
+  if (atToken) {
+    tokenStart.value = atToken.start
+    tokenIsAt.value = true
+
+    const partial = atToken.partial
+
+    // Static hints when user just typed @ or @@
+    if (partial === '@' || partial === '@@') {
+      autocompleteItems.value = AT_HINTS
+      autocompleteVisible.value = true
+      autocompleteIndex.value = 0
+      return
+    }
+
+    // Skip URL — no completion for http
+    if (partial.startsWith('@http')) {
+      autocompleteVisible.value = false
+      return
+    }
+
+    // Filesystem path completion
+    const items = await fetchPathCompletions(partial)
+    autocompleteItems.value = items
+    autocompleteVisible.value = items.length > 0
+    autocompleteIndex.value = 0
+    return
+  }
+
+  autocompleteVisible.value = false
+}
+
+const selectAutocompleteItem = (item: { label: string; value: string }) => {
+  const ta = getRawTextarea()
+  const cursor = ta?.selectionStart ?? inputText.value.length
+
+  if (tokenIsAt.value) {
+    // Replace only the @ token portion
+    const before = inputText.value.slice(0, tokenStart.value)
+    const after = inputText.value.slice(cursor)
+    inputText.value = before + item.value + after
+    // Place cursor after inserted text
+    nextTick(() => {
+      const pos = tokenStart.value + item.value.length
+      ta?.setSelectionRange(pos, pos)
+      ta?.focus()
+      // If it ends with / (directory), trigger completion again
+      if (item.value.endsWith('/')) updateAutocomplete(inputText.value)
+    })
+  } else {
+    // Slash command — replace whole input
+    inputText.value = item.value
+    autocompleteVisible.value = false
+    nextTick(() => {
+      ta?.focus()
+      const pos = inputText.value.length
+      ta?.setSelectionRange(pos, pos)
+    })
+  }
+
+  if (!item.value.endsWith('/')) autocompleteVisible.value = false
+}
+
 // ── Keyboard handler ──────────────────────────────────────────────────────────
 
 const handleKeydown = (e: KeyboardEvent) => {
-  if ((e.key === 'Enter' && !e.shiftKey) || (e.key === 'Enter' && e.ctrlKey)) {
+  // Always intercept Tab inside the textarea
+  if (e.key === 'Tab') {
+    e.preventDefault()
+    if (autocompleteVisible.value && autocompleteItems.value.length > 0) {
+      const item = autocompleteItems.value[autocompleteIndex.value]
+      if (item) selectAutocompleteItem(item)
+    }
+    return
+  }
+
+  if (autocompleteVisible.value) {
+    if (e.key === 'ArrowDown') {
+      e.preventDefault()
+      autocompleteIndex.value = (autocompleteIndex.value + 1) % autocompleteItems.value.length
+      return
+    }
+    if (e.key === 'ArrowUp') {
+      e.preventDefault()
+      autocompleteIndex.value =
+        (autocompleteIndex.value - 1 + autocompleteItems.value.length) %
+        autocompleteItems.value.length
+      return
+    }
+    if (e.key === 'Enter' && !e.shiftKey) {
+      const item = autocompleteItems.value[autocompleteIndex.value]
+      if (item) {
+        e.preventDefault()
+        selectAutocompleteItem(item)
+        return
+      }
+    }
+    if (e.key === 'Escape') {
+      e.preventDefault()
+      autocompleteVisible.value = false
+      return
+    }
+  }
+
+  if (e.key === 'Enter' && !e.shiftKey) {
     e.preventDefault()
     sendMessage()
   }
+}
+
+const handleInput = () => {
+  updateAutocomplete(inputText.value)
 }
 
 // ── Diff parser ───────────────────────────────────────────────────────────────
@@ -420,7 +811,6 @@ watch(
   },
 )
 
-// Load historical messages when they arrive from the store (after switchConversation fetches them)
 watch(
   () => props.initialMessages,
   (incoming) => {
@@ -440,100 +830,163 @@ watch(
     <div v-if="!conversationId" class="chat-empty-state">
       <i class="pi pi-comments chat-empty-icon" />
       <h3 class="chat-empty-title">Selecciona o crea una conversación</h3>
-      <p class="chat-empty-subtitle">Elige una conversación del panel izquierdo o crea una nueva para comenzar.</p>
+      <p class="chat-empty-subtitle">
+        Elige una conversación del panel izquierdo o crea una nueva para comenzar.
+      </p>
     </div>
 
     <!-- Chat UI -->
     <template v-else>
+      <!-- Workspace chip in header area -->
+      <div v-if="currentWorkspace" class="workspace-bar">
+        <i class="pi pi-folder-open workspace-bar-icon" />
+        <span class="workspace-bar-path">{{ currentWorkspace }}</span>
+        <button class="workspace-bar-clear" @click="currentWorkspace = ''" title="Clear workspace">
+          <i class="pi pi-times" />
+        </button>
+      </div>
+
       <!-- Messages area -->
       <div ref="messagesEl" class="chat-messages">
         <!-- Empty conversation -->
         <div v-if="messages.length === 0 && !isStreaming" class="chat-placeholder">
           <i class="pi pi-sparkles chat-placeholder-icon" />
-          <p class="chat-placeholder-text">Escribe un mensaje para comenzar la conversación</p>
+          <p class="chat-placeholder-text">
+            Escribe un mensaje para comenzar la conversación
+          </p>
+          <p class="chat-placeholder-hint">
+            Use <code>/new</code>, <code>/clear</code>, <code>/workspace /path</code>, <code>/model</code> &mdash; or
+            <code>@file</code>, <code>@dir/</code>, <code>@https://...</code>, <code>@@glob/**</code>
+          </p>
         </div>
 
         <!-- Message list -->
-        <div
-          v-for="msg in messages"
-          :key="msg.id"
-          :class="['msg-row', msg.role === 'user' ? 'msg-row--user' : 'msg-row--assistant']"
-        >
-          <!-- Avatar -->
-          <div :class="['msg-avatar', msg.role === 'user' ? 'msg-avatar--user' : 'msg-avatar--assistant']">
-            <i :class="['pi', msg.role === 'user' ? 'pi-user' : 'pi-android']" />
+        <template v-for="msg in messages" :key="msg.id">
+          <!-- System message (centered, muted) -->
+          <div v-if="msg.role === 'system'" class="msg-system">
+            <i class="pi pi-info-circle msg-system-icon" />
+            <span class="msg-system-text">{{ msg.content }}</span>
           </div>
 
-          <!-- Bubble -->
-          <div :class="['msg-bubble', msg.role === 'user' ? 'msg-bubble--user' : 'msg-bubble--assistant']">
-
-            <!-- Tool call chips -->
-            <div v-if="msg.toolCalls.length > 0" class="tool-chips">
-              <div
-                v-for="(tool, idx) in msg.toolCalls"
-                :key="idx"
-                :class="['tool-chip', tool.done ? 'tool-chip--done' : 'tool-chip--pending']"
-              >
-                <i :class="['pi', getToolIcon(tool.name), 'tool-chip-icon']" />
-                <span class="tool-chip-name">{{ tool.name }}</span>
-                <span v-if="tool.arg" class="tool-chip-arg">{{ tool.arg }}</span>
-                <i v-if="tool.done" class="pi pi-check tool-chip-status" />
-                <span v-else class="tool-chip-spinner" />
-              </div>
-            </div>
-
-            <!-- Shell output -->
-            <div v-if="msg.shellOutput.length > 0" class="shell-block">
-              <button class="shell-toggle" @click="toggleShell(msg.id)">
-                <i class="pi pi-terminal shell-toggle-icon" />
-                <span>Terminal output ({{ msg.shellOutput.length }} líneas)</span>
-                <i :class="['pi', isShellExpanded(msg.id) ? 'pi-chevron-up' : 'pi-chevron-down', 'shell-toggle-chevron']" />
-              </button>
-              <div v-if="isShellExpanded(msg.id)" class="shell-output">
-                <div v-for="(line, i) in msg.shellOutput" :key="i" class="shell-line">{{ line }}</div>
-              </div>
-            </div>
-
-            <!-- Thinking indicator -->
-            <div v-if="msg.isStreaming && msg.content === '' && msg.toolCalls.filter(t => !t.done).length === 0" class="thinking-indicator">
-              <span class="thinking-dot" />
-              <span class="thinking-dot" />
-              <span class="thinking-dot" />
-              <span class="thinking-label">pensando...</span>
-            </div>
-
-            <!-- Content: markdown for assistant messages -->
+          <!-- User / assistant message -->
+          <div
+            v-else
+            :class="['msg-row', msg.role === 'user' ? 'msg-row--user' : 'msg-row--assistant']"
+          >
+            <!-- Avatar -->
             <div
-              v-if="msg.content && msg.role === 'assistant'"
-              class="msg-content msg-content--markdown"
-              v-html="renderMarkdown(msg.content)"
-            />
-            <!-- Content: plain text for user messages -->
-            <div v-else-if="msg.content" class="msg-content">{{ msg.content }}</div>
-
-            <!-- Audio player -->
-            <div v-if="msg.audioUrl" class="msg-audio">
-              <audio :src="msg.audioUrl" controls class="msg-audio-player" />
+              :class="[
+                'msg-avatar',
+                msg.role === 'user' ? 'msg-avatar--user' : 'msg-avatar--assistant',
+              ]"
+            >
+              <i :class="['pi', msg.role === 'user' ? 'pi-user' : 'pi-android']" />
             </div>
 
-            <!-- Streaming cursor -->
-            <span v-if="msg.isStreaming && msg.content !== ''" class="stream-cursor" />
+            <!-- Bubble -->
+            <div
+              :class="[
+                'msg-bubble',
+                msg.role === 'user' ? 'msg-bubble--user' : 'msg-bubble--assistant',
+              ]"
+            >
+              <!-- Tool call chips -->
+              <div v-if="msg.toolCalls.length > 0" class="tool-chips">
+                <div
+                  v-for="(tool, idx) in msg.toolCalls"
+                  :key="idx"
+                  :class="['tool-chip', tool.done ? 'tool-chip--done' : 'tool-chip--pending']"
+                >
+                  <i :class="['pi', getToolIcon(tool.name), 'tool-chip-icon']" />
+                  <span class="tool-chip-name">{{ tool.name }}</span>
+                  <span v-if="tool.arg" class="tool-chip-arg">{{ tool.arg }}</span>
+                  <i v-if="tool.done" class="pi pi-check tool-chip-status" />
+                  <span v-else class="tool-chip-spinner" />
+                </div>
+              </div>
+
+              <!-- Shell output -->
+              <div v-if="msg.shellOutput.length > 0" class="shell-block">
+                <button class="shell-toggle" @click="toggleShell(msg.id)">
+                  <i class="pi pi-terminal shell-toggle-icon" />
+                  <span>Terminal output ({{ msg.shellOutput.length }} líneas)</span>
+                  <i
+                    :class="[
+                      'pi',
+                      isShellExpanded(msg.id) ? 'pi-chevron-up' : 'pi-chevron-down',
+                      'shell-toggle-chevron',
+                    ]"
+                  />
+                </button>
+                <div v-if="isShellExpanded(msg.id)" class="shell-output">
+                  <div v-for="(line, i) in msg.shellOutput" :key="i" class="shell-line">
+                    {{ line }}
+                  </div>
+                </div>
+              </div>
+
+              <!-- Thinking indicator -->
+              <div
+                v-if="
+                  msg.isStreaming &&
+                  msg.content === '' &&
+                  msg.toolCalls.filter((t) => !t.done).length === 0
+                "
+                class="thinking-indicator"
+              >
+                <span class="thinking-dot" />
+                <span class="thinking-dot" />
+                <span class="thinking-dot" />
+                <span class="thinking-label">pensando...</span>
+              </div>
+
+              <!-- Content: markdown for assistant messages -->
+              <div
+                v-if="msg.content && msg.role === 'assistant'"
+                class="msg-content msg-content--markdown"
+                v-html="renderMarkdown(msg.content)"
+              />
+              <!-- Content: plain text for user messages -->
+              <div v-else-if="msg.content" class="msg-content">{{ msg.content }}</div>
+
+              <!-- Audio player -->
+              <div v-if="msg.audioUrl" class="msg-audio">
+                <audio :src="msg.audioUrl" controls class="msg-audio-player" />
+              </div>
+
+              <!-- Streaming cursor -->
+              <span v-if="msg.isStreaming && msg.content !== ''" class="stream-cursor" />
+            </div>
           </div>
-        </div>
+        </template>
       </div>
 
       <!-- Input area -->
       <div class="chat-input-area">
+        <!-- Autocomplete dropdown (positioned above input) -->
+        <div v-if="autocompleteVisible && autocompleteItems.length > 0" class="autocomplete-dropdown">
+          <div
+            v-for="(item, idx) in autocompleteItems"
+            :key="item.label"
+            :class="['autocomplete-item', idx === autocompleteIndex ? 'autocomplete-item--active' : '']"
+            @mousedown.prevent="selectAutocompleteItem(item)"
+          >
+            <span class="autocomplete-item-label">{{ item.label }}</span>
+            <span v-if="item.hint" class="autocomplete-item-hint">{{ item.hint }}</span>
+          </div>
+        </div>
+
         <div class="chat-input-wrapper">
           <Textarea
             ref="textareaEl"
             v-model="inputText"
-            placeholder="Escribe un mensaje... (Enter para enviar, Shift+Enter para nueva línea)"
+            placeholder="Message... (/ for commands, @ to reference files/URLs)"
             :disabled="isStreaming || !conversationId"
             :rows="1"
             auto-resize
             class="chat-textarea"
             @keydown="handleKeydown"
+            @input="handleInput"
           />
           <Button
             icon="pi pi-send"
@@ -546,7 +999,9 @@ watch(
           />
         </div>
         <p class="chat-input-hint">
-          Enter para enviar &middot; Shift+Enter para nueva línea
+          Enter to send &middot; Shift+Enter for new line &middot;
+          <span class="hint-code">/</span> commands &middot;
+          <span class="hint-code">@</span> references
         </p>
       </div>
     </template>
@@ -579,7 +1034,9 @@ watch(
               v-for="(line, i) in parseDiffLines(pendingApproval.diff)"
               :key="i"
               :class="['diff-line', `diff-line--${line.type}`]"
-            >{{ line.text }}</div>
+            >
+              {{ line.text }}
+            </div>
           </div>
         </div>
 
@@ -685,6 +1142,71 @@ watch(
   margin: 0;
 }
 
+.chat-placeholder-hint {
+  font-size: 0.78rem;
+  color: var(--do-text-muted);
+  opacity: 0.6;
+  margin: 0;
+}
+
+.chat-placeholder-hint code {
+  font-family: 'JetBrains Mono', 'Fira Code', monospace;
+  font-size: 0.8em;
+  background: rgba(255, 255, 255, 0.07);
+  border-radius: 3px;
+  padding: 0.1em 0.35em;
+  color: var(--do-blue);
+}
+
+/* ── Workspace bar ────────────────────────────────────────────────────── */
+.workspace-bar {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.35rem 1rem;
+  background: rgba(10, 207, 131, 0.06);
+  border-bottom: 1px solid rgba(10, 207, 131, 0.15);
+  flex-shrink: 0;
+}
+
+.workspace-bar-icon {
+  font-size: 0.75rem;
+  color: var(--do-success);
+  flex-shrink: 0;
+}
+
+.workspace-bar-path {
+  font-size: 0.78rem;
+  font-family: 'JetBrains Mono', 'Fira Code', monospace;
+  color: var(--do-success);
+  opacity: 0.85;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  flex: 1;
+}
+
+.workspace-bar-clear {
+  background: none;
+  border: none;
+  cursor: pointer;
+  color: var(--do-text-muted);
+  padding: 0.15rem 0.25rem;
+  border-radius: 3px;
+  display: flex;
+  align-items: center;
+  transition: color 0.15s;
+  flex-shrink: 0;
+}
+
+.workspace-bar-clear:hover {
+  color: var(--do-text);
+}
+
+.workspace-bar-clear .pi {
+  font-size: 0.65rem;
+}
+
 /* ── Messages area ────────────────────────────────────────────────────── */
 .chat-messages {
   flex: 1;
@@ -707,6 +1229,34 @@ watch(
 .chat-messages::-webkit-scrollbar-thumb {
   background: rgba(255, 255, 255, 0.1);
   border-radius: 2px;
+}
+
+/* ── System message ───────────────────────────────────────────────────── */
+.msg-system {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.4rem;
+  padding: 0.35rem 0.75rem;
+  align-self: center;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.07);
+  border-radius: 1rem;
+  max-width: 85%;
+}
+
+.msg-system-icon {
+  font-size: 0.7rem;
+  color: var(--do-text-muted);
+  flex-shrink: 0;
+}
+
+.msg-system-text {
+  font-size: 0.78rem;
+  color: var(--do-text-muted);
+  font-style: italic;
+  white-space: pre-wrap;
+  word-break: break-word;
 }
 
 /* ── Message rows ─────────────────────────────────────────────────────── */
@@ -788,7 +1338,6 @@ watch(
   white-space: normal;
 }
 
-/* Markdown rendered content */
 .msg-content--markdown :deep(p) {
   margin: 0 0 0.5em;
 }
@@ -898,8 +1447,13 @@ watch(
 }
 
 @keyframes blink {
-  0%, 100% { opacity: 1; }
-  50% { opacity: 0; }
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0;
+  }
 }
 
 /* ── Thinking indicator ───────────────────────────────────────────────── */
@@ -918,12 +1472,24 @@ watch(
   animation: thinking-bounce 1.2s ease-in-out infinite;
 }
 
-.thinking-dot:nth-child(2) { animation-delay: 0.2s; }
-.thinking-dot:nth-child(3) { animation-delay: 0.4s; }
+.thinking-dot:nth-child(2) {
+  animation-delay: 0.2s;
+}
+.thinking-dot:nth-child(3) {
+  animation-delay: 0.4s;
+}
 
 @keyframes thinking-bounce {
-  0%, 80%, 100% { transform: translateY(0); opacity: 0.4; }
-  40% { transform: translateY(-5px); opacity: 1; }
+  0%,
+  80%,
+  100% {
+    transform: translateY(0);
+    opacity: 0.4;
+  }
+  40% {
+    transform: translateY(-5px);
+    opacity: 1;
+  }
 }
 
 .thinking-label {
@@ -1000,7 +1566,9 @@ watch(
 }
 
 @keyframes spin {
-  to { transform: rotate(360deg); }
+  to {
+    transform: rotate(360deg);
+  }
 }
 
 /* ── Shell block ──────────────────────────────────────────────────────── */
@@ -1068,16 +1636,60 @@ watch(
 /* ── Input area ───────────────────────────────────────────────────────── */
 .chat-input-area {
   flex-shrink: 0;
-  padding: 0.875rem 1rem 0.625rem;
+  padding: 0.625rem 1rem 0.375rem;
   background: rgba(6, 13, 26, 0.95);
   border-top: 1px solid rgba(255, 255, 255, 0.07);
   backdrop-filter: blur(12px);
+  position: relative;
 }
 
 .chat-input-wrapper {
   display: flex;
   gap: 0.5rem;
   align-items: flex-end;
+}
+
+/* ── Autocomplete dropdown ────────────────────────────────────────────── */
+.autocomplete-dropdown {
+  position: absolute;
+  bottom: calc(100% - 0.875rem);
+  left: 1rem;
+  right: 3.5rem;
+  background: #0f1e35;
+  border: 1px solid rgba(59, 130, 246, 0.3);
+  border-radius: 0.5rem;
+  overflow: hidden;
+  z-index: 100;
+  box-shadow: 0 -4px 16px rgba(0, 0, 0, 0.4);
+}
+
+.autocomplete-item {
+  display: flex;
+  align-items: baseline;
+  gap: 0.75rem;
+  padding: 0.45rem 0.75rem;
+  cursor: pointer;
+  transition: background 0.1s;
+}
+
+.autocomplete-item:hover,
+.autocomplete-item--active {
+  background: rgba(59, 130, 246, 0.12);
+}
+
+.autocomplete-item-label {
+  font-family: 'JetBrains Mono', 'Fira Code', monospace;
+  font-size: 0.82rem;
+  color: var(--do-blue);
+  white-space: nowrap;
+}
+
+.autocomplete-item-hint {
+  font-size: 0.75rem;
+  color: var(--do-text-muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .chat-textarea {
@@ -1091,7 +1703,9 @@ watch(
   background: rgba(255, 255, 255, 0.05) !important;
   border: 1.5px solid rgba(255, 255, 255, 0.1) !important;
   color: var(--do-text) !important;
-  transition: border-color 0.15s, box-shadow 0.15s;
+  transition:
+    border-color 0.15s,
+    box-shadow 0.15s;
 }
 
 .chat-textarea:focus {
@@ -1112,6 +1726,15 @@ watch(
   color: var(--do-text-muted);
   margin: 0.35rem 0 0;
   text-align: right;
+}
+
+.hint-code {
+  font-family: 'JetBrains Mono', 'Fira Code', monospace;
+  font-size: 0.85em;
+  background: rgba(255, 255, 255, 0.06);
+  border-radius: 3px;
+  padding: 0.05em 0.3em;
+  color: var(--do-blue);
 }
 
 /* ── Approval dialog ──────────────────────────────────────────────────── */
