@@ -355,7 +355,7 @@ onMounted(async () => {
   margin: 0 auto;
   padding: 1rem 1.25rem;
   min-height: 100vh;
-  background: linear-gradient(135deg, #f8fafc 0%, #e2e8f0 100%);
+  background: var(--do-bg);
   box-sizing: border-box;
 }
 
@@ -394,28 +394,24 @@ onMounted(async () => {
 .integration-title {
   font-size: 1.6rem;
   font-weight: 700;
-  color: #1e293b;
   margin: 0 0 0.25rem 0;
-  background: linear-gradient(135deg, #1e293b 0%, #475569 100%);
-  -webkit-background-clip: text;
-  -webkit-text-fill-color: transparent;
-  background-clip: text;
+  color: var(--do-text);
 }
 
 .integration-subtitle {
   font-size: 0.95rem;
-  color: #64748b;
+  color: var(--do-text-muted);
   margin: 0;
   font-weight: 400;
 }
 
 /* Activation Toggle */
 .activation-toggle {
-  background: white;
+  background: rgba(255,255,255,0.04);
   border-radius: 0.75rem;
   padding: 1rem;
   box-shadow: 0 3px 14px rgba(0, 0, 0, 0.06);
-  border: 1px solid #e2e8f0;
+  border: 1px solid var(--vt-c-gray-200);
 }
 
 .toggle-content {
@@ -433,7 +429,7 @@ onMounted(async () => {
 .toggle-label {
   font-size: 0.95rem;
   font-weight: 600;
-  color: #374151;
+  color: var(--do-text);
 }
 
 .toggle-status {
@@ -457,7 +453,7 @@ onMounted(async () => {
   border-radius: 0.75rem;
   overflow: hidden;
   box-shadow: 0 8px 30px rgba(0, 0, 0, 0.08);
-  border: 1px solid #e2e8f0;
+  border: 1px solid var(--vt-c-gray-200);
   transition: all 0.2s ease;
 }
 
@@ -520,13 +516,13 @@ onMounted(async () => {
   border-radius: 0.75rem;
   overflow: hidden;
   box-shadow: 0 8px 30px rgba(0, 0, 0, 0.08);
-  border: 1px solid #e2e8f0;
+  border: 1px solid var(--vt-c-gray-200);
 }
 
 :deep(.info-card .p-card-header) {
-  background: linear-gradient(135deg, #f8fafc 0%, #e2e8f0 100%);
+  background: rgba(255,255,255,0.04);
   padding: 1rem 1.25rem;
-  border-bottom: 1px solid #e2e8f0;
+  border-bottom: 1px solid var(--vt-c-gray-200);
 }
 
 .info-header {
@@ -543,7 +539,7 @@ onMounted(async () => {
 .info-title {
   font-size: 1.05rem;
   font-weight: 600;
-  color: #374151;
+  color: var(--do-text);
 }
 
 :deep(.info-card .p-card-content) {
@@ -561,9 +557,9 @@ onMounted(async () => {
   flex-direction: column;
   gap: 0.5rem;
   padding: 0.75rem;
-  background: #f8fafc;
+  background: rgba(255,255,255,0.04);
   border-radius: 0.6rem;
-  border: 1px solid #e2e8f0;
+  border: 1px solid var(--vt-c-gray-200);
 }
 
 .info-label {
@@ -572,7 +568,7 @@ onMounted(async () => {
   gap: 0.5rem;
   font-size: 0.85rem;
   font-weight: 600;
-  color: #64748b;
+  color: var(--do-text-muted);
 }
 
 .info-label i {
@@ -581,20 +577,20 @@ onMounted(async () => {
 
 .info-value {
   font-size: 0.95rem;
-  color: #374151;
+  color: var(--do-text);
   padding-left: 1.5rem;
 }
 
 .capabilities-section {
   margin-top: 1rem;
   padding-top: 1rem;
-  border-top: 1px solid #e2e8f0;
+  border-top: 1px solid var(--vt-c-gray-200);
 }
 
 .capabilities-title {
   font-size: 1rem;
   font-weight: 600;
-  color: #374151;
+  color: var(--do-text);
   margin-bottom: 0.75rem;
 }
 
@@ -612,7 +608,7 @@ onMounted(async () => {
   align-items: center;
   gap: 0.5rem;
   font-size: 0.9rem;
-  color: #475569;
+  color: var(--do-text-muted);
 }
 
 .capabilities-list li i {

@@ -14,6 +14,9 @@ from PyPDF2 import PdfReader
 import asyncio
 import aiohttp
 import tempfile
+import json
+import time
+from pathlib import Path
 
 
 class OpenAIIntegration:
@@ -555,6 +558,80 @@ class OpenAIIntegration:
             self.logger.error(f"Error in hybrid text extraction: {e}")
             return f"Error extracting text: {str(e)}"
 
+    def _refresh_claude_code_token(self) -> Optional[str]:
+        """
+        Read the Claude Code OAuth credentials from ~/.claude/.credentials.json.
+
+        Returns the current accessToken if still valid, or attempts to refresh
+        it using the stored refreshToken.  Writes the updated credentials back
+        to disk so subsequent calls pick up the fresh token.
+
+        Returns the accessToken string, or None on failure.
+        """
+        creds_path = Path.home() / ".claude" / ".credentials.json"
+        if not creds_path.exists():
+            self.logger.warning(f"Claude Code credentials not found at {creds_path}")
+            return None
+
+        try:
+            creds = json.loads(creds_path.read_text())
+            oauth = creds.get("claudeAiOauth", {})
+            access_token = oauth.get("accessToken")
+            refresh_token = oauth.get("refreshToken")
+            expires_at_ms = oauth.get("expiresAt", 0)
+
+            if not access_token:
+                self.logger.warning("No accessToken in Claude Code credentials")
+                return None
+
+            # Use current token if still valid (with a 60-second buffer)
+            if time.time() * 1000 < expires_at_ms - 60_000:
+                self.logger.info("Claude Code token still valid; reusing existing accessToken")
+                return access_token
+
+            # Token is expired — try to refresh
+            if not refresh_token:
+                self.logger.warning("Token expired and no refreshToken available")
+                return None
+
+            self.logger.info("Claude Code token expired; refreshing via OAuth endpoint")
+            import urllib.request
+            payload = json.dumps({
+                "grant_type": "refresh_token",
+                "refresh_token": refresh_token,
+            }).encode()
+            req = urllib.request.Request(
+                "https://claude.ai/api/auth/oauth/token",
+                data=payload,
+                headers={"Content-Type": "application/json"},
+                method="POST",
+            )
+            with urllib.request.urlopen(req, timeout=10) as resp:
+                body = json.loads(resp.read())
+
+            new_access = body.get("access_token")
+            new_refresh = body.get("refresh_token", refresh_token)
+            new_expires = body.get("expires_in")  # seconds from now
+
+            if not new_access:
+                self.logger.warning(f"Token refresh response missing access_token: {body}")
+                return None
+
+            # Persist the refreshed credentials
+            oauth["accessToken"] = new_access
+            oauth["refreshToken"] = new_refresh
+            if new_expires:
+                oauth["expiresAt"] = int((time.time() + new_expires) * 1000)
+            creds["claudeAiOauth"] = oauth
+            creds_path.write_text(json.dumps(creds))
+
+            self.logger.info("Claude Code token refreshed and persisted successfully")
+            return new_access
+
+        except Exception as e:
+            self.logger.error(f"Failed to refresh Claude Code token: {e}")
+            return None
+
     def _handle_bearer_401(self) -> bool:
         """
         Attempt to recover from a 401 by refreshing the Claude Code OAuth token.
@@ -572,7 +649,7 @@ class OpenAIIntegration:
             return False
 
         self.api_key = new_token
-        self.client = self._build_client(self._extra_headers)
+        self.client = self._build_client()
         self.logger.info("Token refreshed and client rebuilt successfully")
         return True
 

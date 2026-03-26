@@ -6,10 +6,11 @@ logger = logging.getLogger(__name__)
 
 
 class TelegramIntegration:
-    def __init__(self, bot_token: str, secret_token: str = ""):
+    def __init__(self, bot_token: str, secret_token: str = "", store_service=None):
         self.bot_token = bot_token
         self.secret_token = secret_token
         self.api_url = f"https://api.telegram.org/bot{bot_token}"
+        self._store_service = store_service
 
     def send_message(self, chat_id: str, text: str) -> bool:
         url = f"{self.api_url}/sendMessage"
@@ -26,11 +27,45 @@ class TelegramIntegration:
             logger.error(f"[telegram] Exception sending message: {e}", exc_info=True)
             return False
 
-    def send_image(self, chat_id: str, image_url: str, caption: str = "") -> bool:
-        url = f"{self.api_url}/sendPhoto"
-        data = {"chat_id": chat_id, "photo": image_url, "caption": caption}
+    @staticmethod
+    def _is_local_url(url: str) -> bool:
+        return "localhost" in url or "127.0.0.1" in url or "0.0.0.0" in url
+
+    def _fetch_bytes(self, url: str) -> Optional[bytes]:
+        # For local URLs, read directly from storage to avoid HTTP self-request deadlock
+        if self._store_service is not None and self._is_local_url(url):
+            try:
+                base_url = getattr(self._store_service, "base_url", None)
+                if base_url and url.startswith(base_url):
+                    key = url[len(base_url):].lstrip("/")
+                    return self._store_service.get_object(key)
+            except Exception as e:
+                logger.error(f"[telegram] Failed to read local file {url}: {e}")
+                return None
         try:
-            response = requests.post(url, json=data, timeout=10)
+            resp = requests.get(url, timeout=15)
+            resp.raise_for_status()
+            return resp.content
+        except Exception as e:
+            logger.error(f"[telegram] Failed to fetch file from {url}: {e}")
+            return None
+
+    def send_image(self, chat_id: str, image_url: str, caption: str = "") -> bool:
+        api_url = f"{self.api_url}/sendPhoto"
+        try:
+            if self._is_local_url(image_url):
+                file_bytes = self._fetch_bytes(image_url)
+                if not file_bytes:
+                    return False
+                filename = image_url.split("?")[0].rsplit("/", 1)[-1] or "image.png"
+                response = requests.post(
+                    api_url,
+                    data={"chat_id": chat_id, "caption": caption},
+                    files={"photo": (filename, file_bytes)},
+                    timeout=30,
+                )
+            else:
+                response = requests.post(api_url, json={"chat_id": chat_id, "photo": image_url, "caption": caption}, timeout=10)
             result = response.json()
             if result.get("ok"):
                 logger.info(f"[telegram] Image sent to {chat_id}")
@@ -111,6 +146,36 @@ class TelegramIntegration:
             )
         except Exception as e:
             logger.debug(f"[telegram] Could not send typing action to {chat_id}: {e}")
+
+    def send_document(self, chat_id: str, file_url: str, caption: str = "") -> bool:
+        """Send a file/document to a Telegram chat."""
+        api_url = f"{self.api_url}/sendDocument"
+        filename = file_url.split("?")[0].rsplit("/", 1)[-1] or "file"
+        try:
+            if self._is_local_url(file_url):
+                file_bytes = self._fetch_bytes(file_url)
+                if not file_bytes:
+                    return False
+                response = requests.post(
+                    api_url,
+                    data={"chat_id": chat_id, "caption": caption},
+                    files={"document": (filename, file_bytes)},
+                    timeout=30,
+                )
+            else:
+                data: Dict[str, Any] = {"chat_id": chat_id, "document": file_url}
+                if caption:
+                    data["caption"] = caption
+                response = requests.post(api_url, json=data, timeout=15)
+            result = response.json()
+            if result.get("ok"):
+                logger.info(f"[telegram] Document sent to {chat_id}")
+                return True
+            logger.error(f"[telegram] Error sending document: {result}")
+            return False
+        except Exception as e:
+            logger.error(f"[telegram] Exception sending document: {e}", exc_info=True)
+            return False
 
     def set_webhook(self, webhook_url: str) -> bool:
         """Register the webhook URL with Telegram."""

@@ -86,7 +86,7 @@ const getMethodColor = (method?: string) => {
 
 .node-url {
   font-size: 0.75rem;
-  color: #64748b;
+  color: var(--do-text-muted);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;

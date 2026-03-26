@@ -79,6 +79,34 @@ class WhatsAppIntegration:
             logger.error(f"Exception while sending WhatsApp image: {str(e)}", exc_info=True)
             return False
 
+    def send_document(self, recipient: str, file_url: str, caption: str = "", filename: str = "") -> bool:
+        import logging
+        logger = logging.getLogger(__name__)
+
+        recipient = "".join(filter(str.isdigit, recipient))
+        if not filename:
+            filename = file_url.split("?")[0].rsplit("/", 1)[-1] or "file"
+        headers = {
+            "Authorization": f"Bearer {self.access_token}",
+            "Content-Type": "application/json",
+        }
+        data = {
+            "messaging_product": "whatsapp",
+            "to": recipient,
+            "type": "document",
+            "document": {"link": file_url, "caption": caption, "filename": filename},
+        }
+        try:
+            response = requests.post(self.api_url, headers=headers, json=data)
+            if response.status_code == 200:
+                logger.info(f"Document sent successfully to {recipient}")
+                return True
+            logger.error(f"Error sending document: status={response.status_code}, response={response.text}")
+            return False
+        except Exception as e:
+            logger.error(f"Exception while sending WhatsApp document: {str(e)}", exc_info=True)
+            return False
+
     def receive_message(self, payload):
         import logging
 

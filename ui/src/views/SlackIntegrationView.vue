@@ -82,12 +82,9 @@ const currentIntegration = computed(() =>
   assistantProfile.value?.integrations?.find((i) => i.name === 'slack'),
 )
 
-const webhookUrl = computed(() => {
-  const base = window.location.origin.includes('localhost')
-    ? 'http://localhost:8000'
-    : window.location.origin
-  return `${base}/api/slack/events`
-})
+const API_BASE = (import.meta.env.VITE_ASSISTANT_BASE_URL as string || 'http://localhost:8000').replace(/\/$/, '')
+
+const webhookUrl = computed(() => `${API_BASE}/api/slack/events`)
 
 onMounted(async () => {
   await getAssistantProfile()
@@ -263,7 +260,7 @@ onMounted(async () => {
   margin: 0 auto;
   padding: 1rem 1.25rem;
   min-height: 100vh;
-  background: linear-gradient(135deg, #f8fafc 0%, #e2e8f0 100%);
+  background: var(--do-bg);
   box-sizing: border-box;
 }
 
@@ -296,25 +293,22 @@ onMounted(async () => {
   font-size: 1.6rem;
   font-weight: 700;
   margin: 0 0 0.25rem 0;
-  background: linear-gradient(135deg, #1e293b 0%, #475569 100%);
-  -webkit-background-clip: text;
-  -webkit-text-fill-color: transparent;
-  background-clip: text;
+  color: var(--do-text);
 }
 
-.integration-subtitle { font-size: 0.95rem; color: #64748b; margin: 0; }
+.integration-subtitle { font-size: 0.95rem; color: var(--do-text-muted); margin: 0; }
 
 .activation-toggle {
-  background: white;
+  background: rgba(255,255,255,0.04);
   border-radius: 0.75rem;
   padding: 1rem;
   box-shadow: 0 3px 14px rgba(0, 0, 0, 0.06);
-  border: 1px solid #e2e8f0;
+  border: 1px solid var(--vt-c-gray-200);
 }
 
 .toggle-content { display: flex; align-items: center; justify-content: space-between; }
 .toggle-info { display: flex; flex-direction: column; gap: 0.25rem; }
-.toggle-label { font-size: 0.95rem; font-weight: 600; color: #374151; }
+.toggle-label { font-size: 0.95rem; font-weight: 600; color: var(--do-text); }
 .toggle-status { font-size: 0.85rem; font-weight: 500; color: var(--color-danger); transition: color 0.3s; }
 .toggle-status.active { color: var(--color-success); }
 :deep(.modern-switch) { transform: scale(1.1); }
@@ -324,7 +318,7 @@ onMounted(async () => {
   border-radius: 0.75rem;
   overflow: hidden;
   box-shadow: 0 8px 30px rgba(0, 0, 0, 0.08);
-  border: 1px solid #e2e8f0;
+  border: 1px solid var(--vt-c-gray-200);
   transition: all 0.2s ease;
 }
 
@@ -343,7 +337,7 @@ onMounted(async () => {
   gap: 0.5rem;
   font-size: 0.95rem;
   font-weight: 600;
-  color: #374151;
+  color: var(--do-text);
 }
 
 .required { color: var(--color-danger); }
@@ -351,31 +345,31 @@ onMounted(async () => {
 .input-wrapper { position: relative; }
 .w-full { width: 100%; }
 .field-error { margin-top: 0.35rem; }
-.field-help { color: #64748b; font-size: 0.85rem; font-style: italic; }
+.field-help { color: var(--do-text-muted); font-size: 0.85rem; font-style: italic; }
 
 .form-actions {
   display: flex;
   justify-content: flex-end;
   padding-top: 0.75rem;
-  border-top: 1px solid #e2e8f0;
+  border-top: 1px solid var(--vt-c-gray-200);
 }
 
 .status-card {
   border-radius: 0.75rem;
   overflow: hidden;
   box-shadow: 0 8px 30px rgba(0, 0, 0, 0.08);
-  border: 1px solid #e2e8f0;
+  border: 1px solid var(--vt-c-gray-200);
 }
 
 :deep(.status-card .p-card-header) {
-  background: linear-gradient(135deg, #f8fafc 0%, #e2e8f0 100%);
+  background: rgba(255,255,255,0.04);
   padding: 1rem 1.25rem;
-  border-bottom: 1px solid #e2e8f0;
+  border-bottom: 1px solid var(--vt-c-gray-200);
 }
 
 .status-header { display: flex; align-items: center; gap: 0.5rem; }
 .status-icon { color: var(--color-primary); font-size: 1.125rem; }
-.status-title { font-size: 1.05rem; font-weight: 600; color: #374151; }
+.status-title { font-size: 1.05rem; font-weight: 600; color: var(--do-text); }
 
 :deep(.status-card .p-card-content) { padding: 1rem; }
 
@@ -386,9 +380,9 @@ onMounted(async () => {
   flex-direction: column;
   gap: 0.35rem;
   padding: 0.75rem;
-  background: #f8fafc;
+  background: rgba(255,255,255,0.04);
   border-radius: 0.6rem;
-  border: 1px solid #e2e8f0;
+  border: 1px solid var(--vt-c-gray-200);
 }
 
 .status-label {
@@ -397,7 +391,7 @@ onMounted(async () => {
   gap: 0.5rem;
   font-size: 0.85rem;
   font-weight: 600;
-  color: #64748b;
+  color: var(--do-text-muted);
 }
 
 .status-label i { color: var(--color-primary); }
@@ -405,20 +399,20 @@ onMounted(async () => {
 .status-value {
   font-family: 'SF Mono', 'Monaco', 'Consolas', monospace;
   font-size: 0.85rem;
-  color: #374151;
-  background: white;
+  color: var(--do-text);
+  background: rgba(255,255,255,0.04);
   padding: 0.6rem;
   border-radius: 0.4rem;
-  border: 1px solid #e2e8f0;
+  border: 1px solid var(--vt-c-gray-200);
   word-break: break-all;
 }
 
 .webhook-url { color: #4a154b; font-weight: 600; }
 
 .setup-steps {
-  background: #f8fafc;
+  background: rgba(255,255,255,0.04);
   border-radius: 0.6rem;
-  border: 1px solid #e2e8f0;
+  border: 1px solid var(--vt-c-gray-200);
   padding: 0.9rem;
 }
 
@@ -428,7 +422,7 @@ onMounted(async () => {
   gap: 0.4rem;
   font-size: 0.9rem;
   font-weight: 600;
-  color: #374151;
+  color: var(--do-text);
   margin: 0 0 0.6rem;
 }
 
@@ -442,15 +436,15 @@ onMounted(async () => {
   gap: 0.35rem;
 }
 
-.steps-list li { font-size: 0.85rem; color: #475569; }
+.steps-list li { font-size: 0.85rem; color: var(--do-text-muted); }
 
 .steps-list code {
-  background: #e2e8f0;
+  background: rgba(255,255,255,0.08);
   padding: 0.1rem 0.35rem;
   border-radius: 0.25rem;
   font-family: 'SF Mono', monospace;
   font-size: 0.8rem;
-  color: #1e293b;
+  color: var(--do-text);
 }
 
 @media (max-width: 768px) {

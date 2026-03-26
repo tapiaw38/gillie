@@ -242,6 +242,20 @@ _DEFAULT_TOOL_PROMPTS: Dict[str, str] = {
         "Specify files to stage specific changes, or leave empty to stage all changes. "
         "Only use when the user explicitly asks to commit."
     ),
+    "send_file": (
+        "Upload a local file to storage and send it to the user through the current chat "
+        "(WhatsApp, Telegram, Slack, etc.). "
+        "Use whenever the user asks to receive a file, report, PDF, CSV, or any other file. "
+        "Works with any file type. "
+        "After uploading, the returned URL is automatically delivered as a file message."
+    ),
+    "send_screenshot": (
+        "Capture the desktop screen and send it directly to the user as an image in the chat "
+        "(WhatsApp, Telegram, Slack, etc.). "
+        "Use this tool whenever the user asks for a screenshot, screen capture, or photo of the screen. "
+        "Do NOT use take_screenshot for this — that tool only describes the screen without sending. "
+        "send_screenshot uploads the image and delivers it directly to the user."
+    ),
     "take_screenshot": (
         "Take a screenshot of the current desktop screen and describe what is visible. "
         "Use when the user asks what is on their screen, what windows are open, "
@@ -427,6 +441,17 @@ class DescribeImageArgs(BaseModel):
     image_url: str = Field(
         description="URL of the image to describe (e.g. obtained from search_images results)"
     )
+
+
+class SendFileArgs(BaseModel):
+    """Arguments for sending a file to the user via chat."""
+    file_path: str = Field(description="Absolute or home-relative path to the file (e.g. ~/report.pdf, /tmp/data.csv)")
+    caption: str = Field(default="", description="Optional caption or description to accompany the file")
+
+
+class SendScreenshotArgs(BaseModel):
+    """Arguments for sending a desktop screenshot to the user via chat."""
+    caption: str = Field(default="", description="Optional caption to include with the screenshot")
 
 
 class TakeScreenshotArgs(BaseModel):
@@ -1363,14 +1388,16 @@ def create_langchain_tools(openai_integration, profile, skill_manager=None, stor
         except Exception as e:
             return f"Error fetching image from URL: {e}"
 
-    async def take_screenshot_tool(question: str = "Describe what is visible on the screen.") -> str:
-        """Capture the desktop screen and describe its contents using vision AI."""
+    async def _capture_screen() -> str:
+        """
+        Capture the desktop to a temp PNG file and return its path.
+        The caller is responsible for deleting the file after use.
+        Returns the file path on success, or an error string starting with 'ERROR:'.
+        """
         import asyncio
-        import base64 as b64
         import tempfile
         import os
 
-        # Detect display server to pick the right tool
         is_wayland = bool(os.environ.get("WAYLAND_DISPLAY"))
         desktop = os.environ.get("XDG_CURRENT_DESKTOP", "").lower()
 
@@ -1378,72 +1405,53 @@ def create_langchain_tools(openai_integration, profile, skill_manager=None, stor
         tmp.close()
         path = tmp.name
 
-        # Some Wayland compositors (MangoWM, etc.) don't implement wlr-screencopy
-        # properly and grim produces a black image. For those, use X11/XWayland first.
         _wlroots_compositors = {"sway", "wayfire", "river", "hyprland", "labwc"}
         grim_likely_works = any(d in desktop for d in _wlroots_compositors)
 
         if is_wayland and grim_likely_works:
-            _CAPTURE_CMDS = [
-                ["grim", path],
-                ["gnome-screenshot", "-f", path],
-                ["spectacle", "-b", "-o", path],
-                ["scrot", path],
-                ["import", "-window", "root", path],
-            ]
+            cmds = [["grim", path], ["gnome-screenshot", "-f", path], ["spectacle", "-b", "-o", path], ["scrot", path], ["import", "-window", "root", path]]
         elif is_wayland:
-            # Wayland compositor without reliable wlr-screencopy — try X11 tools first
-            _CAPTURE_CMDS = [
-                ["scrot", path],
-                ["import", "-window", "root", path],
-                ["gnome-screenshot", "-f", path],
-                ["spectacle", "-b", "-o", path],
-                ["grim", path],
-            ]
+            cmds = [["scrot", path], ["import", "-window", "root", path], ["gnome-screenshot", "-f", path], ["spectacle", "-b", "-o", path], ["grim", path]]
         else:
-            _CAPTURE_CMDS = [
-                ["scrot", path],
-                ["maim", path],
-                ["import", "-window", "root", path],
-                ["gnome-screenshot", "-f", path],
-                ["spectacle", "-b", "-o", path],
-            ]
+            cmds = [["scrot", path], ["maim", path], ["import", "-window", "root", path], ["gnome-screenshot", "-f", path], ["spectacle", "-b", "-o", path]]
 
-        # Pass display env vars explicitly so subprocesses can reach the Wayland/X11 session
-        import pwd
         uid = os.getuid()
-        capture_env = {
+        env = {
             **os.environ,
             "WAYLAND_DISPLAY": os.environ.get("WAYLAND_DISPLAY", "wayland-0"),
             "DISPLAY": os.environ.get("DISPLAY", ":0"),
             "XDG_RUNTIME_DIR": os.environ.get("XDG_RUNTIME_DIR", f"/run/user/{uid}"),
         }
 
-        captured = False
-        for cmd in _CAPTURE_CMDS:
+        for cmd in cmds:
             try:
                 proc = await asyncio.create_subprocess_exec(
                     *cmd,
                     stdout=asyncio.subprocess.DEVNULL,
                     stderr=asyncio.subprocess.PIPE,
-                    env=capture_env,
+                    env=env,
                 )
                 await asyncio.wait_for(proc.wait(), timeout=10)
                 if proc.returncode == 0 and os.path.getsize(path) > 0:
-                    captured = True
-                    break
+                    return path
             except (FileNotFoundError, asyncio.TimeoutError):
                 continue
 
-        if not captured:
-            os.unlink(path)
-            install_hint = (
-                "grim (Wayland), gnome-screenshot, or spectacle"
-                if is_wayland else
-                "scrot, maim, imagemagick, gnome-screenshot, or spectacle"
-            )
-            return f"Could not take a screenshot. Running on {'Wayland' if is_wayland else 'X11'}. Install: {install_hint}"
+        os.unlink(path)
+        hint = ("grim (Wayland), gnome-screenshot, or spectacle" if is_wayland
+                else "scrot, maim, imagemagick, gnome-screenshot, or spectacle")
+        return f"ERROR: Could not take a screenshot. Running on {'Wayland' if is_wayland else 'X11'}. Install: {hint}"
 
+    async def take_screenshot_tool(question: str = "Describe what is visible on the screen.") -> str:
+        """Capture the desktop screen and describe its contents using vision AI."""
+        import base64 as b64
+        import os
+
+        result = await _capture_screen()
+        if result.startswith("ERROR:"):
+            return result.removeprefix("ERROR: ")
+
+        path = result
         try:
             with open(path, "rb") as f:
                 image_base64 = b64.b64encode(f.read()).decode()
@@ -1452,12 +1460,108 @@ def create_langchain_tools(openai_integration, profile, skill_manager=None, stor
 
         prompt = f"Screenshot of the user's desktop. {question}"
         try:
-            description = await openai_integration.describe_image_from_base64(
-                image_base64, prompt=prompt
-            )
-            return description
+            return await openai_integration.describe_image_from_base64(image_base64, prompt=prompt)
         except Exception as e:
             return f"Screenshot captured but vision analysis failed: {e}"
+
+    async def send_screenshot_tool(caption: str = "") -> str:
+        """
+        Capture the desktop screen and send it directly to the user via chat
+        (WhatsApp, Telegram, Slack, etc.).
+
+        Use this tool whenever the user asks to receive a screenshot, capture,
+        or photo of the screen. It uploads the image to storage and returns a
+        URL that will be delivered as an image message in the chat.
+
+        Args:
+            caption: Optional caption to include with the screenshot.
+        """
+        import io
+        import os
+        from uuid import uuid4
+
+        if not store_service:
+            return "Storage service is not available. Cannot send screenshot."
+
+        result = await _capture_screen()
+        if result.startswith("ERROR:"):
+            return result.removeprefix("ERROR: ")
+
+        path = result
+        try:
+            with open(path, "rb") as f:
+                file_bytes = f.read()
+        finally:
+            os.unlink(path)
+
+        try:
+            filename = f"screenshot_{uuid4().hex[:8]}.png"
+            key = store_service.put_object(
+                file=io.BytesIO(file_bytes),
+                user_file=profile.user_id,
+                filename=filename,
+                size=len(file_bytes),
+                object_id=uuid4().hex[:12],
+            )
+            url = store_service.generate_url(key)
+            result_msg = f"Screenshot ready. URL: {url}"
+            if caption:
+                result_msg += f"\nCaption: {caption}"
+            result_msg += "\nInclude this URL in your response so it gets delivered as an image to the user."
+            return result_msg
+        except Exception as e:
+            return f"Screenshot captured but upload failed: {e}"
+
+    async def send_file_tool(file_path: str, caption: str = "") -> str:
+        """
+        Upload a local file to storage and return its public URL so it can be
+        sent to the user in the current chat (WhatsApp, Telegram, Slack, etc.).
+
+        Supports any file type: images (png, jpg, gif…), documents (pdf, xlsx,
+        csv, txt, docx…), archives (zip, gz…), audio/video (mp3, mp4, ogg…).
+
+        After this tool returns, include the URL literally in your reply text —
+        the chat platform will automatically deliver it as a file/image message.
+
+        Args:
+            file_path: Absolute or home-relative path to the file to send.
+                       Supports ~ expansion (e.g. ~/Documents/report.pdf).
+            caption:   Optional caption / description to accompany the file.
+        """
+        import io
+        import mimetypes
+        import os
+        from uuid import uuid4
+
+        path = os.path.expanduser(file_path)
+        if not os.path.isfile(path):
+            return f"File not found: {file_path}"
+
+        if not store_service:
+            return "Storage service is not available. Cannot upload file."
+
+        filename = os.path.basename(path)
+        mime = mimetypes.guess_type(filename)[0] or "application/octet-stream"
+
+        try:
+            with open(path, "rb") as f:
+                file_bytes = f.read()
+
+            key = store_service.put_object(
+                file=io.BytesIO(file_bytes),
+                user_file=profile.user_id,
+                filename=filename,
+                size=len(file_bytes),
+                object_id=uuid4().hex[:12],
+            )
+            url = store_service.generate_url(key)
+            result = f"File uploaded successfully. URL: {url}"
+            if caption:
+                result += f"\nCaption: {caption}"
+            result += "\nInclude this URL in your response so it gets delivered to the user."
+            return result
+        except Exception as e:
+            return f"Failed to upload file: {e}"
 
     # ── Browser session (Playwright) ──────────────────────────────────────────
     # _browser_state is module-level (defined above create_langchain_tools) so
@@ -2831,6 +2935,8 @@ user_pref("devtools.debugger.force-local", true);
         _tool("modify_excel",           prompts["modify_excel"],           modify_excel_tool,    ModifyExcelArgs),
         _tool("modify_docx",            prompts["modify_docx"],            modify_docx_tool,     ModifyDocxArgs),
         _tool("describe_image",         prompts["describe_image"],         describe_image_tool,  DescribeImageArgs),
+        _tool("send_file",              prompts.get("send_file",          _DEFAULT_TOOL_PROMPTS["send_file"]),          send_file_tool,          SendFileArgs),
+        _tool("send_screenshot",        prompts.get("send_screenshot",    _DEFAULT_TOOL_PROMPTS["send_screenshot"]),    send_screenshot_tool,    SendScreenshotArgs),
         _tool("take_screenshot",        prompts.get("take_screenshot",    _DEFAULT_TOOL_PROMPTS["take_screenshot"]),    take_screenshot_tool,    TakeScreenshotArgs),
         _tool("browser_connect",              prompts.get("browser_connect",             _DEFAULT_TOOL_PROMPTS["browser_connect"]),             browser_connect_tool,             BrowserConnectArgs),
         _tool("browser_switch_tab",           prompts.get("browser_switch_tab",          _DEFAULT_TOOL_PROMPTS["browser_switch_tab"]),          browser_switch_tab_tool,          BrowserSwitchTabArgs),

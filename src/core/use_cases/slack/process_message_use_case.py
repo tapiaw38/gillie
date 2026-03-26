@@ -104,7 +104,14 @@ class ProcessSlackMessageUseCase:
 
                 add_message_usecase = AddMessageUseCase(self.context_factory)
 
-                message_input = MessageInput(content=message_text, context=None)
+                message_input = MessageInput(
+                    content=message_text,
+                    context=(
+                        "[CANAL: slack] El usuario está chateando por Slack. "
+                        "Si el usuario pide una captura de pantalla o imagen de la pantalla, usa send_screenshot. "
+                        "Si el usuario pide recibir un archivo, usa send_file."
+                    ),
+                )
                 await add_message_usecase.execute(
                     conversation_id=conversation_id,
                     message=message_input,
@@ -149,6 +156,8 @@ class ProcessSlackMessageUseCase:
                         for segment in parse_message_segments(assistant_msg.content):
                             if segment["type"] == "image":
                                 last_sent = slack_client.send_image(channel, segment["content"])
+                            elif segment["type"] == "document":
+                                last_sent = slack_client.send_document(channel, segment["content"])
                             elif segment["content"]:
                                 last_sent = slack_client.send_message(channel, segment["content"])
 

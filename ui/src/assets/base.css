@@ -1,3 +1,5 @@
+@import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap');
+
 /* Digital Ocean-inspired color palette */
 :root {
   /* Core whites / blacks */
@@ -10,17 +12,17 @@
   --vt-c-black-mute: #282828;
 
   /* Digital Ocean Brand */
-  --do-blue: #0069FF;
-  --do-blue-dark: #0052CC;
+  --do-blue: #3b82f6;
+  --do-blue-dark: #2563eb;
   --do-blue-darker: #003D99;
-  --do-navy: #1B1F22;
-  --do-bg: #F5F5F5;
-  --do-bg-white: #FFFFFF;
-  --do-border: #D1D5DA;
-  --do-border-light: #E8EBED;
-  --do-text: #1B1F22;
-  --do-text-secondary: #4D5059;
-  --do-text-muted: #8C9098;
+  --do-navy: #0f1e3a;
+  --do-bg: #060d1a;
+  --do-bg-white: #0d1b2e;
+  --do-border: rgba(255,255,255,0.1);
+  --do-border-light: rgba(255,255,255,0.07);
+  --do-text: #f1f5f9;
+  --do-text-secondary: #94a3b8;
+  --do-text-muted: #64748b;
   --do-success: #0ACF83;
   --do-warning: #F5A623;
   --do-danger: #FF4444;
@@ -58,9 +60,9 @@
   --vt-c-info-lighter: #A0C4FF;
 
   /* Gray/Neutral Colors */
-  --vt-c-gray-50: #F9FAFB;
-  --vt-c-gray-100: #F3F4F6;
-  --vt-c-gray-200: #E8EBED;
+  --vt-c-gray-50: #0f1e3a;
+  --vt-c-gray-100: #162033;
+  --vt-c-gray-200: rgba(255,255,255,0.08);
   --vt-c-gray-300: #D1D5DA;
   --vt-c-gray-400: #8C9098;
   --vt-c-gray-500: #6B7280;
@@ -82,7 +84,7 @@
 
 /* Semantic color variables */
 :root {
-  --color-background: var(--vt-c-white);
+  --color-background: #060d1a;
   --color-background-soft: var(--vt-c-white-soft);
   --color-background-mute: var(--vt-c-white-mute);
 
@@ -93,7 +95,7 @@
   --color-text: var(--vt-c-text-light-1);
 
   /* Gradients */
-  --gradient-primary: linear-gradient(135deg, #0069FF 0%, #0052CC 100%);
+  --gradient-primary: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%);
   --gradient-background: linear-gradient(135deg, #0052CC 0%, #1B1F22 100%);
   --gradient-text: linear-gradient(135deg, #2F82FF 0%, #82B4FF 100%);
 
@@ -137,24 +139,15 @@
 
 body {
   min-height: 100vh;
-  color: var(--do-text);
-  background: var(--do-bg);
+  color: #f1f5f9;
+  background: #060d1a;
   transition:
     color 0.5s,
     background-color 0.5s;
   line-height: 1.6;
   font-family:
+    'Plus Jakarta Sans',
     Inter,
-    -apple-system,
-    BlinkMacSystemFont,
-    'Segoe UI',
-    Roboto,
-    Oxygen,
-    Ubuntu,
-    Cantarell,
-    'Fira Sans',
-    'Droid Sans',
-    'Helvetica Neue',
     sans-serif;
   font-size: 14px;
   text-rendering: optimizeLegibility;

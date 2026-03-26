@@ -1,41 +1,29 @@
 <script setup lang="ts">
-import { RouterLink, useRoute } from 'vue-router'
-import { computed } from 'vue'
-import { useAssistant } from '@/composables/useAssistant'
-import gillieIcon from '@/assets/icons/gillie.png'
+import { RouterLink, useRoute, useRouter } from 'vue-router'
+import gillieIcon from '@/assets/icons/gillie-logo.png'
+import { useBackendStatus } from '@/composables/useBackendStatus'
 
-const { assistantProfile } = useAssistant()
 const route = useRoute()
+const router = useRouter()
+const { isActive, cause } = useBackendStatus()
 
-const isActive = (path: string) => route.path === path
+const isActiveLink = (path: string) => route.path === path
+const canGoBack = () => route.path !== '/app/dashboard'
 
 const routerLinks = [
-  {
-    icon: 'pi pi-th-large',
-    label: 'Panel',
-    url: '/dashboard',
-  },
-  {
-    icon: 'pi pi-comments',
-    label: 'Conversaciones',
-    url: '/conversation',
-  },
-  {
-    icon: 'pi pi-cog',
-    label: 'Mi Cuenta',
-    url: '/my-account',
-  },
+  { icon: 'pi pi-th-large', label: 'Panel', url: '/app/dashboard' },
+  { icon: 'pi pi-comments', label: 'Conversaciones', url: '/app/conversation' },
 ]
-
-const assistantName = computed(() => assistantProfile.value?.assistant_name || 'Gillie')
 </script>
 
 <template>
   <nav class="navbar">
     <!-- Brand -->
-    <div class="navbar-brand d-flex">
+    <div class="navbar-brand">
+      <button v-if="canGoBack()" class="back-btn" @click="router.back()" title="Volver">
+        <i class="pi pi-arrow-left" />
+      </button>
       <img :src="gillieIcon" alt="Gillie" class="brand-logo" />
-      <span class="brand-name">{{ assistantName }}</span>
     </div>
 
     <!-- Navigation links -->
@@ -45,18 +33,21 @@ const assistantName = computed(() => assistantProfile.value?.assistant_name || '
         :key="link.url"
         :to="link.url"
         class="nav-item"
-        :class="{ 'nav-item--active': isActive(link.url) }"
+        :class="{ 'nav-item--active': isActiveLink(link.url) }"
       >
-        <i :class="link.icon" class="mr-2" />
-        <span>{{ link.label }}</span>
+        <i :class="link.icon" />
+        <span class="nav-label">{{ link.label }}</span>
       </RouterLink>
     </div>
 
-    <!-- Right side status indicator -->
+    <!-- Status -->
     <div class="navbar-end">
-      <div class="status-indicator">
-        <span class="status-dot"></span>
-        <span class="status-label">Activo</span>
+      <div class="status-indicator" :class="isActive ? 'status--active' : 'status--inactive'">
+        <span class="status-dot" />
+        <div class="status-text">
+          <span class="status-label">{{ isActive ? 'Activo' : 'Inactivo' }}</span>
+          <span v-if="!isActive && cause" class="status-cause">{{ cause }}</span>
+        </div>
       </div>
     </div>
   </nav>
@@ -67,16 +58,16 @@ const assistantName = computed(() => assistantProfile.value?.assistant_name || '
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 0 1.5rem;
+  padding: 0 1.25rem;
   height: 3.25rem;
-  background: var(--do-bg-white);
-  border-bottom: 1px solid var(--do-border-light);
+  background: rgba(6,13,26,0.9);
+  backdrop-filter: blur(20px);
+  border-bottom: 1px solid rgba(255,255,255,0.08);
   position: fixed;
   top: 0;
   left: 0;
   right: 0;
   z-index: 1000;
-  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.06);
 }
 
 /* Brand */
@@ -84,27 +75,41 @@ const assistantName = computed(() => assistantProfile.value?.assistant_name || '
   display: flex;
   align-items: center;
   gap: 0.5rem;
-  text-decoration: none;
   flex-shrink: 0;
 }
 
-.brand-logo {
-  width: 6rem;
-  height: 6rem;
-  object-fit: contain;
+.back-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.9rem;
+  height: 1.9rem;
+  border: none;
+  background: rgba(255,255,255,0.06);
+  color: var(--do-text-secondary);
+  border-radius: 0.4rem;
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s;
+  flex-shrink: 0;
 }
 
-.brand-name {
-  font-size: 0.9rem;
-  font-weight: 700;
+.back-btn:hover {
+  background: rgba(255,255,255,0.1);
   color: var(--do-text);
-  letter-spacing: -0.01em;
 }
 
+.brand-logo {
+  width: 2.2rem;
+  height: 2.2rem;
+  object-fit: contain;
+  filter: drop-shadow(0 0 8px rgba(59,130,246,0.4));
+}
+
+/* Nav links */
 .navbar-center {
   display: flex;
   align-items: center;
-  gap: 0.25rem;
+  gap: 0.2rem;
   position: absolute;
   left: 50%;
   transform: translateX(-50%);
@@ -120,25 +125,21 @@ const assistantName = computed(() => assistantProfile.value?.assistant_name || '
   font-size: 0.8125rem;
   padding: 0.35rem 0.65rem;
   border-radius: 0.375rem;
-  transition:
-    background 0.15s ease,
-    color 0.15s ease;
+  transition: background 0.15s ease, color 0.15s ease;
+  white-space: nowrap;
 }
 
 .nav-item:hover {
-  background: var(--do-bg);
+  background: rgba(255,255,255,0.06);
   color: var(--do-text);
 }
 
 .nav-item--active {
-  background: rgba(0, 105, 255, 0.08);
+  background: rgba(59,130,246,0.15);
   color: var(--do-blue);
 }
 
-.nav-item--active i {
-  color: var(--do-blue);
-}
-
+/* Status */
 .navbar-end {
   display: flex;
   align-items: center;
@@ -150,29 +151,64 @@ const assistantName = computed(() => assistantProfile.value?.assistant_name || '
   align-items: center;
   gap: 0.4rem;
   padding: 0.25rem 0.6rem;
-  background: rgba(10, 207, 131, 0.08);
-  border: 1px solid rgba(10, 207, 131, 0.2);
   border-radius: 1rem;
+  transition: background 0.3s, border-color 0.3s;
+}
+
+.status--active {
+  background: rgba(10,207,131,0.08);
+  border: 1px solid rgba(10,207,131,0.2);
+}
+
+.status--inactive {
+  background: rgba(255,68,68,0.08);
+  border: 1px solid rgba(255,68,68,0.2);
 }
 
 .status-dot {
   width: 0.45rem;
   height: 0.45rem;
   border-radius: 50%;
-  background: var(--do-success);
   flex-shrink: 0;
+  transition: background 0.3s;
+}
+
+.status--active .status-dot {
+  background: var(--color-success);
+  box-shadow: 0 0 6px rgba(10,207,131,0.6);
+}
+
+.status--inactive .status-dot {
+  background: var(--color-danger);
+  box-shadow: 0 0 6px rgba(255,68,68,0.6);
+}
+
+.status-text {
+  display: flex;
+  flex-direction: column;
+  line-height: 1.2;
 }
 
 .status-label {
   font-size: 0.75rem;
   font-weight: 600;
-  color: var(--do-success);
+  transition: color 0.3s;
 }
 
-/* Responsive */
-@media (max-width: 768px) {
+.status--active .status-label { color: var(--color-success); }
+.status--inactive .status-label { color: var(--color-danger); }
+
+.status-cause {
+  font-size: 0.65rem;
+  font-weight: 400;
+  color: var(--do-text-muted);
+  white-space: nowrap;
+}
+
+/* Mobile */
+@media (max-width: 640px) {
   .navbar {
-    padding: 0 1rem;
+    padding: 0 0.75rem;
   }
 
   .navbar-center {
@@ -181,22 +217,26 @@ const assistantName = computed(() => assistantProfile.value?.assistant_name || '
     gap: 0.1rem;
   }
 
-  .nav-item span {
+  .nav-label {
     display: none;
   }
 
-  .brand-name {
-    display: none;
+  .nav-item {
+    padding: 0.4rem;
+    font-size: 1rem;
   }
 
-  .status-label {
+  .brand-logo {
+    width: 1.9rem;
+    height: 1.9rem;
+  }
+
+  .status-cause {
     display: none;
   }
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .nav-item {
-    transition: none;
-  }
+  .nav-item, .status-indicator { transition: none; }
 }
 </style>

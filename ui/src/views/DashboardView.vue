@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { ref, reactive, watch, computed, onMounted } from 'vue'
+import ToggleSwitch from 'primevue/toggleswitch'
 import Card from 'primevue/card'
 import Button from 'primevue/button'
 import InputText from 'primevue/inputtext'
@@ -47,6 +48,21 @@ const {
 
   assistantProfile,
 } = useAssistant()
+
+const ttsEnabled = computed(() => assistantProfile.value?.tts_enabled ?? false)
+
+const toggleTts = async (value: boolean) => {
+  try {
+    await updateAssistantProfile({ tts_enabled: value })
+    toast.add({
+      severity: 'success',
+      summary: value ? 'Audio activado' : 'Audio desactivado',
+      life: 2000,
+    })
+  } catch {
+    toast.add({ severity: 'error', summary: 'Error al cambiar audio', life: 3000 })
+  }
+}
 
 const errorWatchers = [
   {
@@ -261,6 +277,14 @@ const integrations = [
     to: 'functions',
     enabled: true,
   },
+  {
+    name: 'API Keys',
+    description: 'Gestiona las API keys para acceder al asistente desde aplicaciones externas',
+    icon: 'pi pi-key',
+    tone: 'warning',
+    to: 'my-account',
+    enabled: true,
+  },
 ]
 </script>
 
@@ -348,6 +372,14 @@ const integrations = [
                   <p>{{ assistantProfile?.business_context }}</p>
                 </ScrollPanel>
               </div>
+              <div class="tts-row">
+                <div class="tts-info">
+                  <i class="pi pi-volume-up tts-icon"></i>
+                  <span class="tts-label">Respuestas en Audio</span>
+                </div>
+                <ToggleSwitch :modelValue="ttsEnabled" @update:modelValue="toggleTts" />
+              </div>
+
               <div class="profile-actions">
                 <RouterLink class="sandbox-button" :to="{ name: 'sandbox' }">
                   <i class="pi pi-shield"></i>
@@ -564,11 +596,11 @@ const integrations = [
   display: flex;
   justify-content: space-between;
   align-items: center;
-  background: var(--do-bg-white);
+  background: rgba(255,255,255,0.03);
   padding: 0.85rem 1rem;
   border-radius: 0.75rem;
-  box-shadow: 0 1px 4px var(--shadow-light);
-  border: 1px solid var(--do-border-light);
+  box-shadow: none;
+  border: 1px solid rgba(255,255,255,0.07);
   margin-bottom: 1rem;
 }
 
@@ -607,7 +639,7 @@ const integrations = [
 
 .dashboard-subtitle {
   font-size: 0.85rem;
-  color: var(--do-text-muted);
+  color: var(--do-text-secondary);
   margin: 0;
   line-height: 1.5;
 }
@@ -647,7 +679,7 @@ const integrations = [
 
 .section-header p {
   font-size: 0.85rem;
-  color: var(--do-text-muted);
+  color: var(--do-text-secondary);
   line-height: 1.6;
 }
 
@@ -690,7 +722,7 @@ const integrations = [
 }
 
 .profile-details p {
-  color: var(--do-text-muted);
+  color: var(--do-text-secondary);
   margin: 0;
 }
 
@@ -727,10 +759,35 @@ const integrations = [
   line-height: 1.6;
 }
 
+.tts-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0.5rem 0;
+  border-top: 1px solid rgba(255,255,255,0.07);
+}
+
+.tts-info {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.tts-icon {
+  color: var(--do-blue);
+  font-size: 0.9rem;
+}
+
+.tts-label {
+  font-size: 0.875rem;
+  font-weight: 500;
+  color: var(--do-text);
+}
+
 .profile-actions {
   margin-top: 0.65rem;
   padding-top: 0.65rem;
-  border-top: 1px solid var(--do-border-light);
+  border-top: 1px solid rgba(255,255,255,0.07);
   display: flex;
   gap: 0.75rem;
   flex-wrap: wrap;
@@ -808,9 +865,9 @@ const integrations = [
 .stat-item {
   text-align: center;
   padding: 0.65rem;
-  background: var(--vt-c-gray-50);
+  background: rgba(255,255,255,0.04);
   border-radius: 0.5rem;
-  border: 1px solid var(--do-border-light);
+  border: 1px solid rgba(255,255,255,0.07);
   position: relative;
 }
 
@@ -823,7 +880,7 @@ const integrations = [
 
 .stat-label {
   font-size: 0.75rem;
-  color: var(--do-text-muted);
+  color: var(--do-text-secondary);
   font-weight: 500;
 }
 
@@ -863,8 +920,8 @@ const integrations = [
 /* Integration Buttons */
 .integration-button {
   position: relative;
-  border: 1px solid var(--do-border);
-  background: var(--do-bg-white);
+  border: 1px solid rgba(255,255,255,0.08);
+  background: rgba(255,255,255,0.03);
   width: 100%;
   text-align: left;
   padding: 0.55rem 0.7rem;
@@ -875,13 +932,15 @@ const integrations = [
   transition:
     border-color var(--transition-fast),
     box-shadow var(--transition-fast),
-    transform var(--transition-fast);
+    transform var(--transition-fast),
+    background var(--transition-fast);
 }
 
 .integration-button:not(.is-disabled):hover,
 .integration-button:not(.is-disabled):focus-visible {
-  border-color: var(--do-blue);
-  box-shadow: 0 3px 10px var(--shadow-light);
+  border-color: rgba(59,130,246,0.4);
+  background: rgba(59,130,246,0.06);
+  box-shadow: 0 0 0 1px rgba(59,130,246,0.2);
   outline: none;
 }
 
@@ -915,8 +974,8 @@ const integrations = [
   font-size: 0.72rem;
   font-weight: 600;
   color: var(--do-text-secondary);
-  border: 1px solid var(--do-border-light);
-  background: var(--vt-c-gray-50);
+  border: 1px solid rgba(255,255,255,0.1);
+  background: rgba(255,255,255,0.05);
   border-radius: 999px;
   padding: 0.15rem 0.45rem;
 }
@@ -1075,7 +1134,9 @@ const integrations = [
 
 :deep(.form-field .p-inputtext),
 :deep(.form-field .p-inputtextarea) {
-  border: 2px solid var(--do-border-light);
+  background: rgba(255,255,255,0.05);
+  border: 1.5px solid rgba(255,255,255,0.1);
+  color: var(--do-text);
   border-radius: 0.5rem;
   padding: 0.55rem;
   transition: all 0.3s ease;
@@ -1092,7 +1153,23 @@ const integrations = [
   justify-content: flex-end;
   gap: 0.6rem;
   padding-top: 0.65rem;
-  border-top: 1px solid var(--do-border-light);
+  border-top: 1px solid rgba(255,255,255,0.07);
+}
+
+/* PrimeVue Card Dark Overrides */
+:deep(.p-card) {
+  background: rgba(255,255,255,0.03);
+  border: 1px solid rgba(255,255,255,0.07);
+  color: var(--do-text);
+}
+
+:deep(.p-card-header) {
+  border-bottom: 1px solid rgba(255,255,255,0.07);
+  background: transparent;
+}
+
+:deep(.p-card-content) {
+  background: transparent;
 }
 
 /* Responsive Design */

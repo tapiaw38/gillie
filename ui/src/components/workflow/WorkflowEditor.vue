@@ -440,7 +440,7 @@ watch(
   align-items: center;
   gap: 0.5rem;
   font-size: 0.875rem;
-  color: #64748b;
+  color: var(--do-text-muted);
 }
 
 .panel-content i {

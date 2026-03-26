@@ -368,6 +368,40 @@ class NeonizeIntegration:
             )
             return None
 
+    async def send_document(self, device_id: str, jid: str, file_url: str, caption: str = "", filename: str = "") -> Optional[str]:
+        """Download a file from file_url and send it as a document to the given JID."""
+        import aiohttp
+        import mimetypes
+        from neonize.utils.jid import build_jid
+
+        if "@" in jid:
+            user, server = jid.rsplit("@", 1)
+        else:
+            user, server = jid, "s.whatsapp.net"
+        jid_proto = build_jid(user, server)
+
+        try:
+            async with aiohttp.ClientSession() as session:
+                async with session.get(file_url) as resp:
+                    resp.raise_for_status()
+                    file_bytes = await resp.read()
+                    content_type = resp.headers.get("Content-Type", "application/octet-stream").split(";")[0]
+
+            if not filename:
+                filename = file_url.split("?")[0].rsplit("/", 1)[-1] or "file"
+
+            mime = content_type or (mimetypes.guess_type(filename)[0] or "application/octet-stream")
+
+            client = await self.get_client(device_id)
+            result = await client.send_document(jid_proto, file_bytes, caption=caption, filename=filename, mimetype=mime)
+            msg_id = str(result.id) if hasattr(result, "id") else str(result)
+            logger.info(f"[neonize] Sent document '{filename}' to {jid} via device {device_id}: id={msg_id}")
+            return msg_id
+
+        except Exception as e:
+            logger.error(f"[neonize] Failed to send document to {jid} via device {device_id}: {e}", exc_info=True)
+            return None
+
     async def send_audio(self, device_id: str, jid: str, audio_url: str) -> Optional[str]:
         """
         Descarga el audio desde audio_url, lo convierte a MP3 y lo envía al JID.

@@ -450,7 +450,7 @@ onMounted(async () => {
   margin: 0 auto;
   padding: 1rem 1.25rem;
   min-height: 100vh;
-  background: linear-gradient(135deg, #f8fafc 0%, #e2e8f0 100%);
+  background: var(--do-bg);
   box-sizing: border-box;
 }
 
@@ -489,24 +489,21 @@ onMounted(async () => {
   font-size: 1.6rem;
   font-weight: 700;
   margin: 0 0 0.25rem 0;
-  background: linear-gradient(135deg, #1e293b 0%, #475569 100%);
-  -webkit-background-clip: text;
-  -webkit-text-fill-color: transparent;
-  background-clip: text;
+  color: var(--do-text);
 }
 
 .integration-subtitle {
   font-size: 0.95rem;
-  color: #64748b;
+  color: var(--do-text-muted);
   margin: 0;
 }
 
 .activation-toggle {
-  background: white;
+  background: rgba(255,255,255,0.04);
   border-radius: 0.75rem;
   padding: 1rem;
-  box-shadow: 0 3px 14px rgba(0, 0, 0, 0.06);
-  border: 1px solid #e2e8f0;
+  box-shadow: none;
+  border: 1px solid rgba(255,255,255,0.08);
 }
 
 .toggle-content {
@@ -517,7 +514,7 @@ onMounted(async () => {
 
 .toggle-info { display: flex; flex-direction: column; gap: 0.25rem; }
 
-.toggle-label { font-size: 0.95rem; font-weight: 600; color: #374151; }
+.toggle-label { font-size: 0.95rem; font-weight: 600; color: var(--do-text); }
 
 .toggle-status {
   font-size: 0.85rem;
@@ -535,8 +532,8 @@ onMounted(async () => {
   margin-bottom: 1.25rem;
   border-radius: 0.75rem;
   overflow: hidden;
-  box-shadow: 0 8px 30px rgba(0, 0, 0, 0.08);
-  border: 1px solid #e2e8f0;
+  box-shadow: none;
+  border: 1px solid rgba(255,255,255,0.08);
   transition: all 0.2s ease;
 }
 
@@ -550,7 +547,7 @@ onMounted(async () => {
 .form-title {
   font-size: 1.1rem;
   font-weight: 700;
-  color: #1e293b;
+  color: var(--do-text);
   margin: 0 0 1rem 0;
 }
 
@@ -558,8 +555,8 @@ onMounted(async () => {
   margin-bottom: 1.25rem;
   border-radius: 0.75rem;
   overflow: hidden;
-  box-shadow: 0 8px 30px rgba(0, 0, 0, 0.08);
-  border: 1px solid #e2e8f0;
+  box-shadow: none;
+  border: 1px solid rgba(255,255,255,0.08);
   transition: all 0.2s ease;
 }
 
@@ -586,7 +583,7 @@ onMounted(async () => {
   gap: 0.5rem;
   font-size: 0.95rem;
   font-weight: 600;
-  color: #374151;
+  color: var(--do-text);
 }
 
 .required { color: var(--color-danger); }
@@ -599,14 +596,14 @@ onMounted(async () => {
 
 .field-error { margin-top: 0.35rem; }
 
-.field-help { color: #64748b; font-size: 0.85rem; font-style: italic; }
+.field-help { color: var(--do-text-muted); font-size: 0.85rem; font-style: italic; }
 
 .form-actions {
   display: flex;
   justify-content: flex-end;
   gap: 0.5rem;
   padding-top: 0.75rem;
-  border-top: 1px solid #e2e8f0;
+  border-top: 1px solid rgba(255,255,255,0.08);
 }
 
 /* Permissions section */
@@ -621,16 +618,16 @@ onMounted(async () => {
   align-items: center;
   justify-content: space-between;
   padding: 0.5rem 0.75rem;
-  background: #f8fafc;
-  border: 1px solid #e2e8f0;
+  background: rgba(255,255,255,0.04);
+  border: 1px solid rgba(255,255,255,0.08);
   border-radius: 0.5rem;
 }
 
 .permission-info { display: flex; flex-direction: column; gap: 0.1rem; }
 
-.permission-name { font-family: 'SF Mono', 'Consolas', monospace; font-size: 0.85rem; font-weight: 600; color: #1e293b; }
+.permission-name { font-family: 'SF Mono', 'Consolas', monospace; font-size: 0.85rem; font-weight: 600; color: var(--do-text); }
 
-.permission-desc { font-size: 0.8rem; color: #64748b; }
+.permission-desc { font-size: 0.8rem; color: var(--do-text-muted); }
 
 .always-blocked-row {
   display: flex;
@@ -638,8 +635,8 @@ onMounted(async () => {
   flex-wrap: wrap;
   gap: 0.4rem;
   padding: 0.5rem 0.75rem;
-  background: #fef9f0;
-  border: 1px dashed #d1d5db;
+  background: rgba(255,255,255,0.03);
+  border: 1px dashed rgba(255,255,255,0.12);
   border-radius: 0.5rem;
 }
 
@@ -652,14 +649,14 @@ onMounted(async () => {
 .blocked-tag {
   font-family: 'SF Mono', 'Consolas', monospace;
   font-size: 0.75rem;
-  color: #9ca3af;
-  background: #f3f4f6;
-  border: 1px solid #e5e7eb;
+  color: var(--do-text-secondary);
+  background: rgba(255,255,255,0.06);
+  border: 1px solid rgba(255,255,255,0.1);
   padding: 1px 6px;
   border-radius: 4px;
 }
 
-.allowed-tag { background: #dcfce7; color: #15803d; }
+.allowed-tag { background: rgba(16,185,129,0.15); color: #6ee7b7; border-color: rgba(16,185,129,0.3); }
 
 /* Tables section */
 .tables-section { display: flex; flex-direction: column; gap: 0.5rem; }
@@ -697,31 +694,31 @@ onMounted(async () => {
 /* Empty state */
 .empty-state {
   text-align: center;
-  color: #94a3b8;
+  color: var(--do-text-secondary);
   font-size: 0.95rem;
   padding: 2rem;
-  background: white;
+  background: rgba(255,255,255,0.04);
   border-radius: 0.75rem;
-  border: 1px dashed #e2e8f0;
+  border: 1px dashed rgba(255,255,255,0.1);
   margin-bottom: 1.25rem;
 }
 
 /* Database list cards */
 .db-card {
-  background: white;
-  border: 1px solid #e2e8f0;
+  background: rgba(255,255,255,0.04);
+  border: 1px solid rgba(255,255,255,0.08);
   border-radius: 0.75rem;
   padding: 1rem;
   margin-bottom: 0.75rem;
   display: flex;
   flex-direction: column;
   gap: 0.5rem;
-  box-shadow: 0 3px 14px rgba(0, 0, 0, 0.05);
+  box-shadow: none;
   transition: box-shadow 0.2s ease, transform 0.2s ease;
 }
 
 .db-card:hover {
-  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.1);
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3);
   transform: translateY(-1px);
 }
 
@@ -734,7 +731,7 @@ onMounted(async () => {
 .db-name {
   font-weight: 700;
   font-size: 1rem;
-  color: #1e293b;
+  color: var(--do-text);
 }
 
 .db-status {
@@ -742,14 +739,14 @@ onMounted(async () => {
   font-weight: 600;
   padding: 2px 10px;
   border-radius: 999px;
-  background: #fee2e2;
-  color: var(--color-danger, #dc2626);
+  background: rgba(255,68,68,0.15);
+  color: #fca5a5;
   transition: background 0.3s ease, color 0.3s ease;
 }
 
 .db-status.active {
-  background: #dcfce7;
-  color: var(--color-success, #15803d);
+  background: rgba(16,185,129,0.15);
+  color: #6ee7b7;
 }
 
 .db-card-body {
@@ -763,7 +760,7 @@ onMounted(async () => {
 .db-conn {
   font-family: 'SF Mono', 'Monaco', 'Consolas', monospace;
   font-size: 0.82rem;
-  color: #64748b;
+  color: var(--do-text-muted);
   max-width: 300px;
   overflow: hidden;
   white-space: nowrap;
@@ -775,8 +772,8 @@ onMounted(async () => {
   font-weight: 600;
   padding: 2px 8px;
   border-radius: 999px;
-  background: #e0f2fe;
-  color: #0369a1;
+  background: rgba(59,130,246,0.15);
+  color: #93c5fd;
   white-space: nowrap;
 }
 
@@ -790,21 +787,21 @@ onMounted(async () => {
 .status-card {
   border-radius: 0.75rem;
   overflow: hidden;
-  box-shadow: 0 8px 30px rgba(0, 0, 0, 0.08);
-  border: 1px solid #e2e8f0;
+  box-shadow: none;
+  border: 1px solid rgba(255,255,255,0.08);
 }
 
 :deep(.status-card .p-card-header) {
-  background: linear-gradient(135deg, #f8fafc 0%, #e2e8f0 100%);
+  background: rgba(255,255,255,0.04);
   padding: 1rem 1.25rem;
-  border-bottom: 1px solid #e2e8f0;
+  border-bottom: 1px solid rgba(255,255,255,0.08);
 }
 
 .status-header { display: flex; align-items: center; gap: 0.5rem; }
 
 .status-icon { color: var(--color-primary); font-size: 1.125rem; }
 
-.status-title { font-size: 1.05rem; font-weight: 600; color: #374151; }
+.status-title { font-size: 1.05rem; font-weight: 600; color: var(--do-text); }
 
 :deep(.status-card .p-card-content) { padding: 1rem; }
 
@@ -815,9 +812,9 @@ onMounted(async () => {
   flex-direction: column;
   gap: 0.5rem;
   padding: 0.75rem;
-  background: #f8fafc;
+  background: rgba(255,255,255,0.04);
   border-radius: 0.6rem;
-  border: 1px solid #e2e8f0;
+  border: 1px solid rgba(255,255,255,0.08);
 }
 
 .status-label {
@@ -826,7 +823,7 @@ onMounted(async () => {
   gap: 0.5rem;
   font-size: 0.85rem;
   font-weight: 600;
-  color: #64748b;
+  color: var(--do-text-secondary);
 }
 
 .status-label i { color: var(--color-primary); }
@@ -834,11 +831,11 @@ onMounted(async () => {
 .status-value {
   font-family: 'SF Mono', 'Monaco', 'Consolas', monospace;
   font-size: 0.85rem;
-  color: #374151;
-  background: white;
+  color: #cbd5e1;
+  background: rgba(255,255,255,0.04);
   padding: 0.6rem;
   border-radius: 0.4rem;
-  border: 1px solid #e2e8f0;
+  border: 1px solid rgba(255,255,255,0.08);
   word-break: break-all;
   overflow-wrap: break-word;
 }
@@ -850,8 +847,8 @@ onMounted(async () => {
 }
 
 .table-tag {
-  background: #e0f2fe;
-  color: #0369a1;
+  background: rgba(59,130,246,0.15);
+  color: #93c5fd;
   padding: 2px 8px;
   border-radius: 999px;
   font-size: 0.8rem;

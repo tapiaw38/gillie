@@ -511,7 +511,7 @@ const handleWorkflowChange = () => {
   margin: 0 auto;
   padding: 2rem;
   min-height: 100vh;
-  background: linear-gradient(135deg, var(--vt-c-gray-50) 0%, var(--do-border-light) 100%);
+  background: var(--do-bg);
 }
 
 /* Header Section */
@@ -523,7 +523,7 @@ const handleWorkflowChange = () => {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  background: white;
+  background: rgba(255,255,255,0.04);
   padding: 2rem;
   border-radius: 1rem;
   box-shadow: 0 4px 20px var(--shadow-light);
@@ -554,7 +554,7 @@ const handleWorkflowChange = () => {
 }
 
 .page-title {
-  font-size: 2.5rem;
+  font-size: 1.6rem;
   font-weight: 700;
   color: var(--do-text);
   margin: 0 0 0.5rem 0;
@@ -648,7 +648,7 @@ const handleWorkflowChange = () => {
   min-width: 250px;
   border-radius: 0.75rem;
   border: 2px solid var(--do-border-light);
-  background: white;
+  background: rgba(255,255,255,0.04);
   transition: all 0.3s ease;
 }
 
@@ -844,7 +844,7 @@ const handleWorkflowChange = () => {
 }
 
 :deep(.json-editor.editor-readonly) {
-  background: var(--vt-c-gray-50);
+  background: rgba(255,255,255,0.03);
   color: var(--do-text-muted);
   cursor: not-allowed;
 }

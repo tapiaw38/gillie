@@ -61,9 +61,15 @@ def provider_list():
     table.add_column("Default Model")
     table.add_column("Status")
 
+    from pathlib import Path as _Path
+    _has_claude_session = (_Path.home() / ".claude" / ".credentials.json").exists()
+
     for name, preset in _PROVIDER_PRESETS.items():
-        has_creds = bool(current_api_key)
-        status = "[green]credentials found[/green]" if has_creds else "[yellow]no credentials[/yellow]"
+        if preset.get("auth_type") == "bearer":
+            status = "[green]session found[/green]" if _has_claude_session else "[yellow]no session[/yellow]"
+        else:
+            has_creds = bool(current_api_key)
+            status = "[green]credentials found[/green]" if has_creds else "[yellow]no credentials[/yellow]"
         active_marker = ""
         if current_base_url and current_base_url == preset["base_url"]:
             active_marker = " [bold cyan]*[/bold cyan]"
@@ -83,7 +89,7 @@ def provider_list():
 
 @app.command("use")
 def provider_use(
-    provider: str = typer.Argument(..., help="Provider name (deepseek, openrouter, anthropic, openai)"),
+    provider: str = typer.Argument(..., help="Provider name (deepseek, openrouter, anthropic, openai, claude, kimi, gemini, groq)"),
     api_key: Optional[str] = typer.Option(None, "--api-key", "-k", help="API key (skips interactive prompt)"),
 ):
     """Switch to a provider and update the configuration."""
@@ -101,7 +107,32 @@ def provider_use(
 
     preset = _PROVIDER_PRESETS[provider]
 
-    if api_key:
+    if preset.get("auth_type") == "bearer":
+        # Bearer providers use a local OAuth token instead of an API key.
+        # Read it from ~/.claude/.credentials.json (Claude Code session).
+        import json
+        from pathlib import Path
+        creds_path = Path.home() / ".claude" / ".credentials.json"
+        if creds_path.exists():
+            try:
+                creds = json.loads(creds_path.read_text())
+                resolved_key = creds.get("claudeAiOauth", {}).get("accessToken", "")
+            except Exception:
+                resolved_key = ""
+        else:
+            resolved_key = ""
+
+        if not resolved_key:
+            console.print("[yellow]Could not read Claude Code session from ~/.claude/.credentials.json[/yellow]")
+            console.print("[dim]Make sure you are logged in to Claude Code (claude.ai/code)[/dim]")
+            if api_key:
+                resolved_key = api_key
+            else:
+                console.print("[red]No bearer token available.[/red]")
+                raise typer.Exit(1)
+        else:
+            console.print("[dim]Using Claude Code session token from ~/.claude/.credentials.json[/dim]")
+    elif api_key:
         resolved_key = api_key
     else:
         resolved_key = typer.prompt(f"Enter API key for {provider}", hide_input=True)

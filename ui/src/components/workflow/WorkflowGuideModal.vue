@@ -396,7 +396,7 @@ const jsonExample = `[
   justify-content: center;
   font-weight: 600;
   background: #e2e8f0;
-  color: #64748b;
+  color: var(--do-text-muted);
   transition: all 0.3s ease;
 }
 
@@ -415,7 +415,7 @@ const jsonExample = `[
 .step-label {
   font-size: 0.875rem;
   font-weight: 500;
-  color: #64748b;
+  color: var(--do-text-muted);
 }
 
 .progress-step.active .step-label {
@@ -469,7 +469,7 @@ const jsonExample = `[
 
 .step-content p {
   text-align: center;
-  color: #64748b;
+  color: var(--do-text-muted);
   font-size: 1rem;
   line-height: 1.6;
 }
@@ -508,7 +508,7 @@ const jsonExample = `[
 .feature-item p {
   margin: 0;
   font-size: 0.75rem;
-  color: #64748b;
+  color: var(--do-text-muted);
   text-align: left;
 }
 
@@ -552,7 +552,7 @@ const jsonExample = `[
 .step-info p {
   margin: 0;
   font-size: 0.875rem;
-  color: #64748b;
+  color: var(--do-text-muted);
   text-align: left;
 }
 

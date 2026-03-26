@@ -94,6 +94,28 @@ class SlackIntegration:
             logger.error(f"Exception while sending Slack image: {str(e)}", exc_info=True)
             return False
 
+    def send_document(self, channel: str, file_url: str, caption: str = "", filename: str = "") -> bool:
+        """
+        Share a document/file in a Slack channel by posting its URL as a message.
+        Uses a simple text+snippet block so the file is accessible via link.
+        """
+        if not filename:
+            filename = file_url.split("?")[0].rsplit("/", 1)[-1] or "file"
+        text = f"{caption}\n{file_url}".strip() if caption else file_url
+        url = f"{self.api_url}/chat.postMessage"
+        payload = {"channel": channel, "text": text}
+        try:
+            response = requests.post(url, headers=self._build_headers(), json=payload, timeout=10)
+            result = response.json() if response.content else {}
+            if result.get("ok"):
+                logger.info(f"Slack document sent to channel={channel}: {filename}")
+                return True
+            logger.error(f"Slack send_document error: channel={channel}, error={result.get('error')}")
+            return False
+        except Exception as e:
+            logger.error(f"Exception while sending Slack document: {e}", exc_info=True)
+            return False
+
     def receive_message(self, payload: Dict[str, Any]) -> List[Dict[str, str]]:
         """
         Parse a Slack Events API payload and return a list of user messages.

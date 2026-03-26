@@ -6,7 +6,9 @@
     "cypress.config.*",
     "nightwatch.conf.*",
     "playwright.config.*",
-    "eslint.config.*"
+    "eslint.config.*",
+    "electron.vite.config.*",
+    "electron/**/*"
   ],
   "compilerOptions": {
     "noEmit": true,

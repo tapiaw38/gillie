@@ -24,6 +24,7 @@ from pathlib import Path
 from rich.console import Console
 from rich.panel import Panel
 from rich.markdown import Markdown
+from rich.live import Live
 from rich.rule import Rule
 from rich import box
 from rich.text import Text
@@ -327,10 +328,10 @@ def _print_user(text: str) -> None:
 
 
 def _print_assistant(name: str, text: str) -> None:
-    """Print assistant reply (plain, no typewriter — used for history)."""
+    """Print assistant reply with Markdown rendering — used for history."""
     console.print()
     console.print(f"[bold cyan]{name}[/bold cyan]")
-    console.print(text)
+    console.print(Markdown(text))
     console.print(Rule(style="dim"))
     console.print()
 
@@ -472,12 +473,34 @@ def _stream_assistant(
             spinner_thread.join()
 
     spinner_thread = None
-    _start_spinner("Thinking...")
 
+    # Print name header BEFORE starting the spinner to avoid stdout race condition
     console.print()
     console.print(f"[bold cyan]{name}[/bold cyan]")
+    _start_spinner("Thinking...")
 
     full_text = ""
+    _had_error = False
+    _live_ctx: "Live | None" = None
+
+    def _stop_live() -> None:
+        nonlocal _live_ctx
+        if _live_ctx is not None:
+            _live_ctx.stop()
+            _live_ctx = None
+
+    def _start_live() -> None:
+        nonlocal _live_ctx
+        if _live_ctx is None:
+            _live_ctx = Live(
+                Markdown(full_text or "\u200b"),
+                console=console,
+                refresh_per_second=12,
+                vertical_overflow="visible",
+                transient=False,
+            )
+            _live_ctx.start()
+
     try:
         resp = requests.post(
             _base_url() + f"/conversation/{conv_id}/message/stream",
@@ -509,22 +532,24 @@ def _stream_assistant(
                 if token.get("type") == "audio":
                     audio_url = token.get("url")
                 elif token.get("type") == "tool_call":
+                    _stop_live()
                     _stop_spin()
                     tool_name = token.get("name", "tool")
                     round_n   = token.get("round", "")
                     arg       = token.get("arg", "")
                     prefix    = f"[{round_n}] " if round_n else ""
-                    suffix    = f" · \033[36m{arg}\033[0m" if arg else ""
-                    sys.stdout.write(f"\r\033[2m🔧 {prefix}{tool_name}{suffix}\033[0m\n")
-                    sys.stdout.flush()
+                    suffix    = f" · [cyan]{arg}[/cyan]" if arg else ""
+                    console.print(f"[dim]🔧 {prefix}{tool_name}{suffix}[/dim]")
                     _start_spinner("Running tool...")
                 elif token.get("type") == "tool_result":
+                    _stop_live()
                     _stop_spin()
                     summary = token.get("summary", "")
                     if summary:
-                        sys.stdout.write(f"\r  \033[32m✓\033[0m \033[2m{summary}\033[0m\n")
-                        sys.stdout.flush()
+                        console.print(f"  [green]✓[/green] [dim]{summary}[/dim]")
                     _start_spinner("Thinking...")
+                    if full_text:
+                        _start_live()
                 elif token.get("type") == "local_file_used":
                     path = token.get("path", "")
                     if path and session_local_files is not None:
@@ -534,17 +559,17 @@ def _stream_assistant(
                                 "tool": token.get("tool", ""),
                             })
                 elif token.get("type") == "compaction":
+                    _stop_live()
                     _stop_spin()
-                    console.print(
-                        f"[dim]Conversation compacted to optimise context[/dim]"
-                    )
+                    console.print("[dim]Conversation compacted to optimise context[/dim]")
                 elif token.get("type") == "shell_output":
                     line_text = token.get("line", "")
                     if line_text:
+                        _stop_live()
                         _stop_spin()
-                        sys.stdout.write(f"\r\033[2m{line_text}\033[0m\n")
-                        sys.stdout.flush()
+                        console.print(f"[dim]{line_text}[/dim]")
                 elif token.get("type") == "approval_request":
+                    _stop_live()
                     _stop_spin()
 
                     request_id = token.get("request_id", "")
@@ -635,39 +660,58 @@ def _stream_assistant(
 
                     # Restart the spinner while the backend continues processing.
                     _start_spinner("Thinking...")
+                    if full_text:
+                        _start_live()
                 continue
             if isinstance(token, str) and token.startswith("[ERROR]"):
+                _stop_live()
                 _stop_spin()
                 console.print(f"\n[red]✗[/red] {token[7:].strip()}")
                 break
+            # Content token — switch from spinner to Live Markdown renderer
             if not _stop_spinner.is_set():
                 _stop_spin()
-            sys.stdout.write(token)
-            sys.stdout.flush()
+            if _live_ctx is None:
+                _start_live()
             full_text += token
+            if _live_ctx is not None:
+                _live_ctx.update(Markdown(full_text))
     except requests.exceptions.ConnectionError:
         if not _cancel_requested.is_set():
+            _stop_live()
             _stop_spin()
-            console.print("\n[red]✗[/red] Cannot connect to API.")
+            _had_error = True
+            sys.stdout.write("\n")
+            console.print("[red]✗[/red] Cannot connect to API.")
     except requests.exceptions.HTTPError as e:
+        _stop_live()
         _stop_spin()
-        console.print(f"\n[red]✗[/red] API error {e.response.status_code}")
+        _had_error = True
+        sys.stdout.write("\n")
+        try:
+            body = e.response.json()
+            msg = body.get("error", {}).get("message", "") or body.get("detail", "") or str(body)
+        except Exception:
+            msg = e.response.text
+        console.print(f"[red]✗[/red] API error {e.response.status_code}: {msg}")
     finally:
+        _stop_live()
         _stop_spin()
         _stream_done.set()
         if _escape_thread and _escape_thread.is_alive():
             _escape_thread.join(timeout=0.5)
 
+    if _had_error:
+        console.print(Rule(style="dim red"))
+        console.print()
+        return full_text
+
     if _cancel_requested.is_set():
-        sys.stdout.write("\n")
-        sys.stdout.flush()
         console.print("[yellow]⏹  Cancelled[/yellow]")
         console.print(Rule(style="dim"))
         console.print()
         return full_text
 
-    sys.stdout.write("\n")
-    sys.stdout.flush()
     console.print(Rule(style="dim"))
     console.print()
 

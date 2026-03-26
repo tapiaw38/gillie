@@ -1,47 +1,62 @@
 """
-Utility for parsing AI response messages into text and image segments.
+Utility for parsing AI response messages into text, image, and document segments.
 
-Detects image URLs embedded in a response and splits the message into
+Detects file URLs embedded in a response and splits the message into
 ordered segments so callers can send each part appropriately.
 """
 
 import re
 from typing import Dict, List
 
-# Matches http/https URLs ending in common image extensions (with optional query string)
-_IMAGE_URL_RE = re.compile(
-    r"https?://[^\s\)\]\"\'<>]+\.(?:jpg|jpeg|png|gif|webp|bmp|svg)(?:\?[^\s\)\]\"\'<>]*)?",
+_URL_BASE = r"https?://[^\s\)\]\"\'<>]+"
+
+# Combined pattern: any file URL with a recognised extension
+_ANY_FILE_URL_RE = re.compile(
+    _URL_BASE + r"\.(?:jpg|jpeg|png|gif|webp|bmp|svg"
+                r"|pdf|doc|docx|xls|xlsx|csv|txt|ppt|pptx"
+                r"|zip|tar|gz|json|xml|mp4|mp3|ogg|wav)"
+                r"(?:\?[^\s\)\]\"\'<>]*)?",
     re.IGNORECASE,
 )
+
+_IMAGE_EXTS = {"jpg", "jpeg", "png", "gif", "webp", "bmp", "svg"}
+
+
+def _classify_url(url: str) -> str:
+    """Return 'image' or 'document' based on the URL file extension."""
+    ext = url.split("?")[0].rsplit(".", 1)[-1].lower()
+    return "image" if ext in _IMAGE_EXTS else "document"
 
 
 def parse_message_segments(text: str) -> List[Dict[str, str]]:
     """
-    Split a message string into ordered text and image segments.
+    Split a message string into ordered text, image, and document segments.
 
     Each segment is a dict with:
-      - "type": "text" | "image"
-      - "content": the text chunk or the image URL
+      - "type": "text" | "image" | "document"
+      - "content": the text chunk or the file URL
 
     Example:
-        "Aquí está el producto: https://example.com/img.png Precio: $5"
+        "Reporte: https://cdn.example.com/report.pdf  Foto: https://cdn.example.com/img.png"
         →
         [
-            {"type": "text",  "content": "Aquí está el producto:"},
-            {"type": "image", "content": "https://example.com/img.png"},
-            {"type": "text",  "content": "Precio: $5"},
+            {"type": "text",     "content": "Reporte:"},
+            {"type": "document", "content": "https://cdn.example.com/report.pdf"},
+            {"type": "text",     "content": "Foto:"},
+            {"type": "image",    "content": "https://cdn.example.com/img.png"},
         ]
 
-    If no image URLs are found, returns a single text segment.
+    If no file URLs are found, returns a single text segment.
     """
     segments: List[Dict[str, str]] = []
     last_end = 0
 
-    for match in _IMAGE_URL_RE.finditer(text):
+    for match in _ANY_FILE_URL_RE.finditer(text):
         before = text[last_end : match.start()].strip()
         if before:
             segments.append({"type": "text", "content": before})
-        segments.append({"type": "image", "content": match.group(0)})
+        url = match.group(0)
+        segments.append({"type": _classify_url(url), "content": url})
         last_end = match.end()
 
     remaining = text[last_end:].strip()

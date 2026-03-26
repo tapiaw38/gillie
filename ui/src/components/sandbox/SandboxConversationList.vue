@@ -139,7 +139,7 @@ const getMessageCount = (conversation: SandboxConversation) => {
   width: 100%;
   display: flex;
   flex-direction: column;
-  background: var(--vt-c-white);
+  background: rgba(255,255,255,0.04);
   padding: 1rem;
 }
 

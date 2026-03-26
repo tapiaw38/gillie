@@ -40,10 +40,14 @@ class ServerConfig:
     encryption_algorithm: str
 
 _PROVIDER_PRESETS: dict = {
-    "deepseek":    {"base_url": "https://api.deepseek.com",          "model": "deepseek-chat",          "auth_type": "api_key"},
-    "openrouter":  {"base_url": "https://openrouter.ai/api/v1",      "model": "deepseek/deepseek-chat", "auth_type": "api_key"},
-    "anthropic":   {"base_url": "https://api.anthropic.com/v1",      "model": "claude-sonnet-4-6",      "auth_type": "api_key"},
-    "openai":      {"base_url": "https://api.openai.com/v1",         "model": "gpt-4o",                 "auth_type": "api_key"},
+    "deepseek":   {"base_url": "https://api.deepseek.com",                               "model": "deepseek-chat",           "auth_type": "api_key"},
+    "openrouter": {"base_url": "https://openrouter.ai/api/v1",                           "model": "deepseek/deepseek-chat",  "auth_type": "api_key"},
+    "anthropic":  {"base_url": "https://api.anthropic.com/v1",                           "model": "claude-sonnet-4-6",       "auth_type": "api_key"},
+    "openai":     {"base_url": "https://api.openai.com/v1",                              "model": "gpt-4o",                  "auth_type": "api_key"},
+    "kimi":       {"base_url": "https://api.moonshot.cn/v1",                             "model": "kimi-k2",                 "auth_type": "api_key"},
+    "gemini":     {"base_url": "https://generativelanguage.googleapis.com/v1beta/openai/","model": "gemini-2.0-flash",        "auth_type": "api_key"},
+    "groq":       {"base_url": "https://api.groq.com/openai/v1",                         "model": "llama-3.3-70b-versatile", "auth_type": "api_key"},
+    "claude":     {"base_url": "https://api.anthropic.com/v1",                           "model": "claude-sonnet-4-6",       "auth_type": "bearer"},
 }
 
 

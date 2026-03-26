@@ -389,7 +389,7 @@ const hasChanges = computed(() => {
 }
 
 .form-field small {
-  color: #64748b;
+  color: var(--do-text-muted);
   font-size: 0.75rem;
 }
 
@@ -434,7 +434,7 @@ const hasChanges = computed(() => {
 }
 
 .config-panel::-webkit-scrollbar-track {
-  background: #f1f5f9;
+  background: var(--do-text);
 }
 
 .config-panel::-webkit-scrollbar-thumb {
@@ -443,6 +443,6 @@ const hasChanges = computed(() => {
 }
 
 .config-panel::-webkit-scrollbar-thumb:hover {
-  background: #94a3b8;
+  background: var(--do-text-secondary);
 }
 </style>

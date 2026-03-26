@@ -52,11 +52,9 @@ interface RunResult {
 
 // ─── API helpers ──────────────────────────────────────────────────────────────
 
-const baseUrl = computed(() => {
-  const env = import.meta.env.VITE_ASSISTANT_BASE_URL as string | undefined
-  if (env) return env.replace(/\/$/, '')
-  return window.location.origin.includes('localhost') ? 'http://localhost:8000' : window.location.origin
-})
+const baseUrl = computed(() =>
+  (import.meta.env.VITE_ASSISTANT_BASE_URL as string || 'http://localhost:8000').replace(/\/$/, '')
+)
 
 const apiHeaders = computed<Record<string, string>>(() => {
   const headers: Record<string, string> = { 'Content-Type': 'application/json' }
@@ -745,7 +743,7 @@ onMounted(loadJobs)
   margin: 0 auto;
   padding: 1rem 1.25rem;
   min-height: 100vh;
-  background: linear-gradient(135deg, #f8fafc 0%, #e2e8f0 100%);
+  background: var(--do-bg);
   box-sizing: border-box;
 }
 
@@ -788,15 +786,12 @@ onMounted(loadJobs)
   font-size: 1.6rem;
   font-weight: 700;
   margin: 0 0 0.25rem 0;
-  background: linear-gradient(135deg, #1e293b 0%, #475569 100%);
-  -webkit-background-clip: text;
-  -webkit-text-fill-color: transparent;
-  background-clip: text;
+  color: var(--do-text);
 }
 
 .integration-subtitle {
   font-size: 0.95rem;
-  color: #64748b;
+  color: var(--do-text-muted);
   margin: 0;
 }
 
@@ -827,17 +822,17 @@ onMounted(loadJobs)
 }
 
 .empty-icon {
-  color: #94a3b8;
+  color: var(--do-text-secondary);
 }
 
 .centered-state h3 {
   margin: 0;
-  color: #374151;
+  color: var(--do-text);
 }
 
 .centered-state p {
   margin: 0;
-  color: #64748b;
+  color: var(--do-text-muted);
   font-size: 0.95rem;
 }
 
@@ -853,7 +848,7 @@ onMounted(loadJobs)
   border-radius: 0.75rem;
   overflow: hidden;
   box-shadow: 0 4px 16px rgba(0, 0, 0, 0.06);
-  border: 1px solid #e2e8f0;
+  border: 1px solid var(--vt-c-gray-200);
   transition: box-shadow 0.2s ease, transform 0.2s ease;
 }
 
@@ -889,7 +884,7 @@ onMounted(loadJobs)
 .job-name {
   font-size: 1rem;
   font-weight: 700;
-  color: #1e293b;
+  color: var(--do-text);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -897,7 +892,7 @@ onMounted(loadJobs)
 
 .job-description {
   font-size: 0.82rem;
-  color: #64748b;
+  color: var(--do-text-muted);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -923,8 +918,8 @@ onMounted(loadJobs)
   display: flex;
   flex-direction: column;
   gap: 0.25rem;
-  background: #f8fafc;
-  border: 1px solid #e2e8f0;
+  background: rgba(255,255,255,0.04);
+  border: 1px solid var(--vt-c-gray-200);
   border-radius: 0.5rem;
   padding: 0.5rem 0.65rem;
 }
@@ -939,7 +934,7 @@ onMounted(loadJobs)
   gap: 0.35rem;
   font-size: 0.75rem;
   font-weight: 600;
-  color: #64748b;
+  color: var(--do-text-muted);
   text-transform: uppercase;
   letter-spacing: 0.03em;
 }
@@ -950,15 +945,15 @@ onMounted(loadJobs)
 
 .meta-value {
   font-size: 0.85rem;
-  color: #374151;
+  color: var(--do-text);
 }
 
 .cron-value {
   font-family: 'SF Mono', 'Monaco', 'Consolas', monospace;
-  background: #e2e8f0;
+  background: rgba(255,255,255,0.08);
   padding: 0.15rem 0.4rem;
   border-radius: 0.3rem;
-  color: #1e293b;
+  color: var(--do-text);
   font-size: 0.82rem;
 }
 
@@ -977,18 +972,18 @@ onMounted(loadJobs)
 }
 
 .flow-badge.source {
-  background: #dbeafe;
-  color: #1d4ed8;
+  background: rgba(59,130,246,0.15);
+  color: #93c5fd;
 }
 
 .flow-badge.dest {
-  background: #dcfce7;
-  color: #15803d;
+  background: rgba(16,185,129,0.15);
+  color: #6ee7b7;
 }
 
 .flow-arrow {
   font-size: 0.7rem;
-  color: #94a3b8;
+  color: var(--do-text-secondary);
 }
 
 .result-value {
@@ -1009,7 +1004,7 @@ onMounted(loadJobs)
   display: flex;
   gap: 0.5rem;
   padding-top: 0.5rem;
-  border-top: 1px solid #e2e8f0;
+  border-top: 1px solid var(--vt-c-gray-200);
 }
 
 /* ─── Create form ─────────────────────────────────────────────────────────── */
@@ -1028,7 +1023,7 @@ onMounted(loadJobs)
 
 .field-group--indented {
   padding-left: 1rem;
-  border-left: 3px solid #e2e8f0;
+  border-left: 3px solid var(--vt-c-gray-200);
 }
 
 .field-group--row {
@@ -1043,7 +1038,7 @@ onMounted(loadJobs)
   gap: 0.5rem;
   font-size: 0.95rem;
   font-weight: 600;
-  color: #374151;
+  color: var(--do-text);
 }
 
 .required {
@@ -1053,7 +1048,7 @@ onMounted(loadJobs)
 .optional {
   font-size: 0.8rem;
   font-weight: 400;
-  color: #94a3b8;
+  color: var(--do-text-secondary);
 }
 
 .field-icon {
@@ -1067,17 +1062,17 @@ onMounted(loadJobs)
 
 .field-help {
   font-size: 0.82rem;
-  color: #64748b;
+  color: var(--do-text-muted);
   font-style: italic;
 }
 
 .field-help code {
-  background: #e2e8f0;
+  background: rgba(255,255,255,0.08);
   padding: 0.1rem 0.3rem;
   border-radius: 0.25rem;
   font-family: 'SF Mono', monospace;
   font-size: 0.8rem;
-  color: #1e293b;
+  color: var(--do-text);
 }
 
 .w-full {
@@ -1096,7 +1091,7 @@ onMounted(loadJobs)
 
 .examples-label {
   font-size: 0.8rem;
-  color: #64748b;
+  color: var(--do-text-muted);
   font-weight: 600;
   flex-shrink: 0;
 }
@@ -1105,26 +1100,26 @@ onMounted(loadJobs)
   display: inline-flex;
   align-items: center;
   gap: 0.3rem;
-  background: #f1f5f9;
-  border: 1px solid #cbd5e1;
+  background: rgba(255,255,255,0.06);
+  border: 1px solid var(--vt-c-gray-200);
   border-radius: 999px;
   padding: 0.2rem 0.6rem;
   font-size: 0.78rem;
-  color: #334155;
+  color: var(--do-text-muted);
   cursor: pointer;
   transition: background 0.15s, border-color 0.15s;
 }
 
 .cron-chip:hover {
-  background: #e2e8f0;
-  border-color: #94a3b8;
+  background: rgba(255,255,255,0.1);
+  border-color: var(--do-text-secondary);
 }
 
 .cron-chip code {
   font-family: 'SF Mono', 'Monaco', 'Consolas', monospace;
   font-size: 0.75rem;
-  color: #1d4ed8;
-  background: #dbeafe;
+  color: #93c5fd;
+  background: rgba(59,130,246,0.15);
   padding: 0.05rem 0.3rem;
   border-radius: 0.25rem;
 }
@@ -1136,7 +1131,7 @@ onMounted(loadJobs)
   justify-content: flex-end;
   gap: 0.5rem;
   padding-top: 1rem;
-  border-top: 1px solid #e2e8f0;
+  border-top: 1px solid var(--vt-c-gray-200);
   margin-top: 0.5rem;
 }
 
@@ -1158,7 +1153,7 @@ onMounted(loadJobs)
 
 .confirm-body p {
   margin: 0;
-  color: #374151;
+  color: var(--do-text);
   line-height: 1.5;
 }
 

@@ -1,0 +1,91 @@
+<script setup lang="ts">
+import { useRouter } from 'vue-router'
+
+const router = useRouter()
+
+function enter() {
+  router.push('/app/dashboard')
+}
+</script>
+
+<template>
+  <div class="welcome">
+    <div class="welcome-content">
+      <h1 class="welcome-title">Gillie <span class="accent">AI</span></h1>
+      <img src="/assets/abyssal-fish.png" alt="Gillie" class="welcome-fish" />
+      <p class="welcome-subtitle">Tu asistente inteligente para automatizar tareas, procesar documentos y conectar tus servicios.</p>
+      <button class="welcome-btn" @click="enter">Comenzar</button>
+    </div>
+  </div>
+</template>
+
+<style scoped>
+.welcome {
+  min-height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: radial-gradient(ellipse at 60% 40%, var(--do-navy) 0%, var(--do-bg) 60%, #000 100%);
+  padding: 2rem;
+}
+
+.welcome-content {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  gap: 1.5rem;
+  max-width: 480px;
+}
+
+.welcome-fish {
+  width: 180px;
+  height: 180px;
+  object-fit: contain;
+  margin: 3rem 0 1.5rem;
+  filter: drop-shadow(0 0 40px rgba(59, 130, 246, 0.5));
+  animation: float 4s ease-in-out infinite;
+}
+
+.welcome-title {
+  font-size: 3rem;
+  font-weight: 800;
+  color: #fff;
+  margin: 0;
+  letter-spacing: -0.02em;
+}
+
+.accent {
+  color: var(--do-blue);
+}
+
+.welcome-subtitle {
+  font-size: 1.05rem;
+  color: var(--do-text-secondary);
+  margin: 0;
+  line-height: 1.6;
+}
+
+.welcome-btn {
+  margin-top: 0.5rem;
+  padding: 0.85rem 2.5rem;
+  background: var(--do-blue);
+  color: #fff;
+  border: none;
+  border-radius: 999px;
+  font-size: 1rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.2s, transform 0.2s;
+}
+
+.welcome-btn:hover {
+  background: var(--do-blue-dark);
+  transform: translateY(-2px);
+}
+
+@keyframes float {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-12px); }
+}
+</style>

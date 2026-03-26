@@ -301,7 +301,7 @@ onMounted(async () => {
   margin: 0 auto;
   padding: 1rem 1.25rem;
   min-height: 100vh;
-  background: linear-gradient(135deg, #f8fafc 0%, #e2e8f0 100%);
+  background: var(--do-bg);
   box-sizing: border-box;
 }
 
@@ -330,15 +330,12 @@ onMounted(async () => {
   font-size: 1.6rem;
   font-weight: 700;
   margin: 0 0 0.25rem;
-  background: linear-gradient(135deg, #1e293b 0%, #475569 100%);
-  -webkit-background-clip: text;
-  -webkit-text-fill-color: transparent;
-  background-clip: text;
+  color: var(--do-text);
 }
 
 .page-subtitle {
   font-size: 0.9rem;
-  color: #64748b;
+  color: var(--do-text-muted);
   margin: 0;
 }
 
@@ -362,22 +359,22 @@ onMounted(async () => {
 .tab-label {
   font-weight: 600;
   font-size: 0.95rem;
-  color: #374151;
+  color: var(--do-text);
   transition: opacity 0.2s;
 }
 
 .tab-badge {
   font-size: 0.75rem;
   font-weight: 600;
-  background: #dbeafe;
-  color: #1d4ed8;
+  background: rgba(59,130,246,0.15);
+  color: #93c5fd;
   padding: 0.15rem 0.5rem;
   border-radius: 999px;
 }
 
 .tab-badge--disabled {
-  background: #fee2e2;
-  color: #b91c1c;
+  background: rgba(255,68,68,0.15);
+  color: #fca5a5;
 }
 
 .tool-toggle {
@@ -394,7 +391,7 @@ onMounted(async () => {
 
 .tool-hint {
   font-size: 0.85rem;
-  color: #64748b;
+  color: var(--do-text-muted);
   font-style: italic;
   margin: 0;
 }
@@ -412,9 +409,8 @@ onMounted(async () => {
   display: flex;
   justify-content: flex-end;
   padding: 1rem;
-  background: white;
+  background: rgba(255,255,255,0.04);
   border-radius: 0.75rem;
-  box-shadow: 0 3px 14px rgba(0, 0, 0, 0.06);
-  border: 1px solid #e2e8f0;
+  border: 1px solid rgba(255,255,255,0.08);
 }
 </style>

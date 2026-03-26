@@ -660,9 +660,9 @@ onMounted(() => {
   display: flex;
   justify-content: center;
   padding: 1rem;
-  background: white;
+  background: #ffffff;
   border-radius: 8px;
-  border: 2px solid var(--surface-border);
+  border: 2px solid var(--vt-c-gray-200);
 }
 
 .qr-code {

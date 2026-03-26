@@ -74,7 +74,7 @@ defineProps<Props>()
 
 .condition-text {
   font-size: 0.75rem;
-  color: #64748b;
+  color: var(--do-text-muted);
   font-family: monospace;
   background: #f8fafc;
   padding: 0.5rem;

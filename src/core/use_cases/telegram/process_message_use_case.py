@@ -46,6 +46,7 @@ class ProcessTelegramMessageUseCase:
             tg_client = TelegramIntegration(
                 bot_token=bot_token,
                 secret_token=telegram_integration.config.get("secret_token", ""),
+                store_service=getattr(context, "store_service", None),
             )
 
             messages = tg_client.receive_message(payload)
@@ -114,7 +115,14 @@ class ProcessTelegramMessageUseCase:
                 from src.core.use_cases.conversation import AddMessageUseCase
 
                 add_message_usecase = AddMessageUseCase(self.context_factory)
-                message_input = MessageInput(content=message_text, context=None)
+                message_input = MessageInput(
+                    content=message_text,
+                    context=(
+                        "[CANAL: telegram] El usuario está chateando por Telegram. "
+                        "Si el usuario pide una captura de pantalla o imagen de la pantalla, usa send_screenshot. "
+                        "Si el usuario pide recibir un archivo, usa send_file."
+                    ),
+                )
                 await add_message_usecase.execute(
                     conversation_id=conversation_id,
                     message=message_input,
@@ -143,9 +151,14 @@ class ProcessTelegramMessageUseCase:
 
                     last_sent = False
                     for assistant_msg in new_assistant_messages:
-                        for segment in parse_message_segments(assistant_msg.content):
+                        logger.info(f"[telegram] assistant msg content (len={len(assistant_msg.content)}): {assistant_msg.content!r}")
+                        segments = parse_message_segments(assistant_msg.content)
+                        logger.info(f"[telegram] parsed segments: {segments}")
+                        for segment in segments:
                             if segment["type"] == "image":
                                 last_sent = tg_client.send_image(chat_id, segment["content"])
+                            elif segment["type"] == "document":
+                                last_sent = tg_client.send_document(chat_id, segment["content"])
                             elif segment["content"]:
                                 last_sent = tg_client.send_message(chat_id, segment["content"])
                         if not last_sent:
