@@ -5,7 +5,6 @@ import DOMPurify from 'dompurify'
 import Button from 'primevue/button'
 import Dialog from 'primevue/dialog'
 import Textarea from 'primevue/textarea'
-import ProgressSpinner from 'primevue/progressspinner'
 import { useToast } from 'primevue/usetoast'
 import Toast from 'primevue/toast'
 
@@ -272,8 +271,8 @@ const expandAtReferences = async (text: string): Promise<string> => {
 
   for (const m of allMatches) {
     const globPattern = m[1] // @@glob
-    const urlRef = m[2]      // @https://...
-    const fileRef = m[3]     // @path
+    const urlRef = m[2] // @https://...
+    const fileRef = m[3] // @path
 
     if (globPattern) {
       promises.push(
@@ -287,7 +286,9 @@ const expandAtReferences = async (text: string): Promise<string> => {
             }
           })
           .catch((err: unknown) => {
-            contexts.push(`[@@${globPattern}: error - ${err instanceof Error ? err.message : String(err)}]`)
+            contexts.push(
+              `[@@${globPattern}: error - ${err instanceof Error ? err.message : String(err)}]`,
+            )
           }),
       )
     } else if (urlRef) {
@@ -298,7 +299,9 @@ const expandAtReferences = async (text: string): Promise<string> => {
             contexts.push(`[Context from @${urlRef}]\n${content}`)
           })
           .catch((err: unknown) => {
-            contexts.push(`[@${urlRef}: fetch error - ${err instanceof Error ? err.message : String(err)}]`)
+            contexts.push(
+              `[@${urlRef}: fetch error - ${err instanceof Error ? err.message : String(err)}]`,
+            )
           }),
       )
     } else if (fileRef) {
@@ -314,7 +317,9 @@ const expandAtReferences = async (text: string): Promise<string> => {
               contexts.push(`[Directory listing: @${fileRef}]\n${files.join('\n')}`)
             })
             .catch((err: unknown) => {
-              contexts.push(`[@${fileRef}: listDir error - ${err instanceof Error ? err.message : String(err)}]`)
+              contexts.push(
+                `[@${fileRef}: listDir error - ${err instanceof Error ? err.message : String(err)}]`,
+              )
             }),
         )
       } else {
@@ -328,7 +333,9 @@ const expandAtReferences = async (text: string): Promise<string> => {
               contexts.push(`[Context from @${fileRef}]\n${content}`)
             })
             .catch((err: unknown) => {
-              contexts.push(`[@${fileRef}: read error - ${err instanceof Error ? err.message : String(err)}]`)
+              contexts.push(
+                `[@${fileRef}: read error - ${err instanceof Error ? err.message : String(err)}]`,
+              )
             }),
         )
       }
@@ -568,7 +575,7 @@ const handleApproval = async (approved: boolean) => {
         feedback: approvalFeedback.value,
       }),
     })
-  } catch (err) {
+  } catch {
     toast.add({
       severity: 'error',
       summary: 'Error',
@@ -592,7 +599,10 @@ const getRawTextarea = (): HTMLTextAreaElement | null => {
 }
 
 /** Find the @ or @@ token that ends at `cursorPos` in `text`. Returns null if none. */
-const findAtToken = (text: string, cursorPos: number): { start: number; partial: string } | null => {
+const findAtToken = (
+  text: string,
+  cursorPos: number,
+): { start: number; partial: string } | null => {
   let i = cursorPos - 1
   // Walk back until whitespace
   while (i >= 0 && !/\s/.test(text[i])) i--
@@ -615,7 +625,8 @@ const fetchPathCompletions = async (
   // Determine dir to list and prefix to filter
   const lastSlash = pathPart.lastIndexOf('/')
   const dirToList = lastSlash >= 0 ? pathPart.slice(0, lastSlash + 1) : ''
-  const prefix = lastSlash >= 0 ? pathPart.slice(lastSlash + 1).toLowerCase() : pathPart.toLowerCase()
+  const prefix =
+    lastSlash >= 0 ? pathPart.slice(lastSlash + 1).toLowerCase() : pathPart.toLowerCase()
 
   // Resolve dir: if absolute use as-is, else relative to workspace or cwd
   let absDir: string
@@ -638,7 +649,7 @@ const fetchPathCompletions = async (
         const name = isDir ? e.slice(0, -1) : e
         const fullPath = dirToList + name
         return {
-          label: e,                                         // "dirname/" or "file.txt"
+          label: e, // "dirname/" or "file.txt"
           value: atPrefix + fullPath + (isDir ? '/' : ''), // "@/full/dir/" or "@/full/file.txt"
           hint: isDir ? 'directorio' : 'archivo',
         }
@@ -851,12 +862,11 @@ watch(
         <!-- Empty conversation -->
         <div v-if="messages.length === 0 && !isStreaming" class="chat-placeholder">
           <i class="pi pi-sparkles chat-placeholder-icon" />
-          <p class="chat-placeholder-text">
-            Escribe un mensaje para comenzar la conversación
-          </p>
+          <p class="chat-placeholder-text">Escribe un mensaje para comenzar la conversación</p>
           <p class="chat-placeholder-hint">
-            Use <code>/new</code>, <code>/clear</code>, <code>/workspace /path</code>, <code>/model</code> &mdash; or
-            <code>@file</code>, <code>@dir/</code>, <code>@https://...</code>, <code>@@glob/**</code>
+            Use <code>/new</code>, <code>/clear</code>, <code>/workspace /path</code>,
+            <code>/model</code> &mdash; or <code>@file</code>, <code>@dir/</code>,
+            <code>@https://...</code>, <code>@@glob/**</code>
           </p>
         </div>
 
@@ -964,11 +974,17 @@ watch(
       <!-- Input area -->
       <div class="chat-input-area">
         <!-- Autocomplete dropdown (positioned above input) -->
-        <div v-if="autocompleteVisible && autocompleteItems.length > 0" class="autocomplete-dropdown">
+        <div
+          v-if="autocompleteVisible && autocompleteItems.length > 0"
+          class="autocomplete-dropdown"
+        >
           <div
             v-for="(item, idx) in autocompleteItems"
             :key="item.label"
-            :class="['autocomplete-item', idx === autocompleteIndex ? 'autocomplete-item--active' : '']"
+            :class="[
+              'autocomplete-item',
+              idx === autocompleteIndex ? 'autocomplete-item--active' : '',
+            ]"
             @mousedown.prevent="selectAutocompleteItem(item)"
           >
             <span class="autocomplete-item-label">{{ item.label }}</span>
@@ -1081,6 +1097,8 @@ watch(
   display: flex;
   flex-direction: column;
   height: 100%;
+  flex: 1;
+  min-height: 0;
   overflow: hidden;
   background: var(--do-bg);
   position: relative;

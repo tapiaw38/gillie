@@ -153,11 +153,7 @@ const toggleMobileMenu = () => {
       </aside>
 
       <!-- Mobile overlay -->
-      <div
-        v-if="isMobileMenuOpen"
-        class="sidebar-overlay"
-        @click="isMobileMenuOpen = false"
-      />
+      <div v-if="isMobileMenuOpen" class="sidebar-overlay" @click="isMobileMenuOpen = false" />
 
       <!-- Main chat area -->
       <main class="chat-main">
@@ -173,7 +169,6 @@ const toggleMobileMenu = () => {
               </p>
             </div>
           </div>
-
         </div>
 
         <!-- Chat component -->
@@ -295,7 +290,7 @@ const toggleMobileMenu = () => {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 0.75rem 1.25rem;
+  padding: 0.35rem 1.25rem;
   background: rgba(13, 27, 46, 0.6);
   border-bottom: 1px solid rgba(255, 255, 255, 0.07);
   flex-shrink: 0;
@@ -309,13 +304,13 @@ const toggleMobileMenu = () => {
 }
 
 .chat-header-icon {
-  font-size: 1.25rem;
+  font-size: 1rem;
   color: var(--do-success);
   opacity: 0.85;
 }
 
 .chat-header-title {
-  font-size: 0.95rem;
+  font-size: 0.85rem;
   font-weight: 600;
   color: var(--do-text);
   margin: 0;
@@ -325,7 +320,7 @@ const toggleMobileMenu = () => {
   display: flex;
   align-items: center;
   gap: 0.35rem;
-  font-size: 0.75rem;
+  font-size: 0.7rem;
   color: var(--do-text-muted);
   margin: 0;
 }
@@ -346,9 +341,8 @@ const toggleMobileMenu = () => {
 .chat-body {
   flex: 1;
   overflow: hidden;
-  display: flex;
-  flex-direction: column;
   min-height: 0;
+  height: 0;
 }
 
 /* ── Responsive ───────────────────────────────────────────────────────── */
