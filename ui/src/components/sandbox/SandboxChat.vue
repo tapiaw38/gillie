@@ -35,9 +35,18 @@ interface ApprovalRequest {
 
 // ── Props & Emits ─────────────────────────────────────────────────────────────
 
+interface HistoricalMessage {
+  id: string
+  content: string
+  sender: 'user' | 'assistant'
+  created_at: string
+  audio_url?: string
+}
+
 interface Props {
   conversationId: string | null
   apiKey: string
+  initialMessages?: HistoricalMessage[]
 }
 
 interface Emits {
@@ -81,11 +90,22 @@ const TOOL_ICONS: Record<string, string> = {
 
 marked.setOptions({ breaks: true, gfm: true } as object)
 
+// Open all links in system browser (prevents Electron from navigating away)
+// marked v12 calls link renderer with positional args: (href, title, text)
+marked.use({
+  renderer: {
+    link(href: string, title: string | null | undefined, text: string) {
+      const titleAttr = title ? ` title="${title}"` : ''
+      return `<a href="${href}" target="_blank" rel="noopener noreferrer"${titleAttr}>${text}</a>`
+    },
+  },
+})
+
 const renderMarkdown = (content: string): string => {
   const raw = marked.parse(content) as string
   return DOMPurify.sanitize(raw, {
     ADD_TAGS: ['pre', 'code'],
-    ADD_ATTR: ['class'],
+    ADD_ATTR: ['class', 'target', 'rel'],
   })
 }
 
@@ -381,11 +401,33 @@ const parseDiffLines = (diff: string) => {
 
 // ── Watch ─────────────────────────────────────────────────────────────────────
 
+const mapHistoricalMessages = (historical: HistoricalMessage[]): ChatMessage[] =>
+  historical.map((m) => ({
+    id: m.id,
+    role: m.sender,
+    content: m.content,
+    toolCalls: [],
+    shellOutput: [],
+    audioUrl: m.audio_url,
+  }))
+
 watch(
   () => props.conversationId,
   () => {
-    messages.value = []
     isStreaming.value = false
+    messages.value = props.initialMessages ? mapHistoricalMessages(props.initialMessages) : []
+    scrollToBottom()
+  },
+)
+
+// Load historical messages when they arrive from the store (after switchConversation fetches them)
+watch(
+  () => props.initialMessages,
+  (incoming) => {
+    if (!isStreaming.value && incoming) {
+      messages.value = mapHistoricalMessages(incoming)
+      scrollToBottom()
+    }
   },
 )
 </script>

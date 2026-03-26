@@ -30,6 +30,17 @@ function createWindow(): void {
     return { action: 'deny' }
   })
 
+  // Prevent the main window from navigating away from the app (e.g. clicking image links)
+  mainWindow.webContents.on('will-navigate', (event, url) => {
+    const appBase = is.dev
+      ? process.env['ELECTRON_RENDERER_URL']
+      : `file://${join(__dirname, '../renderer/')}`
+    if (appBase && !url.startsWith(appBase)) {
+      event.preventDefault()
+      shell.openExternal(url)
+    }
+  })
+
   if (is.dev && process.env['ELECTRON_RENDERER_URL']) {
     mainWindow.loadURL(process.env['ELECTRON_RENDERER_URL'])
   } else {

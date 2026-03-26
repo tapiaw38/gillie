@@ -17,6 +17,7 @@ const { getApiKey } = useApiKey()
 
 const {
   currentConversationId,
+  messages: storeMessages,
   isLoadingConversations,
   error,
   currentConversation,
@@ -187,6 +188,7 @@ const toggleMobileMenu = () => {
           <SandboxChat
             :conversation-id="currentConversationId"
             :api-key="apiKey"
+            :initial-messages="storeMessages"
             @message-sent="() => {}"
           />
         </div>
