@@ -59,3 +59,15 @@ DriveIndexNotFoundError = ErrorDetails(
     status_code=404,
     message="file index entry not found",
 )
+
+DriveCredentialsError = ErrorDetails(
+    internal_code="drive:credentials:save-error",
+    status_code=500,
+    message="error saving Google Drive credentials",
+)
+
+DriveOperationError = ErrorDetails(
+    internal_code="drive:operation:error",
+    status_code=502,
+    message="error performing Google Drive operation",
+)

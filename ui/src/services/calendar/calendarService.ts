@@ -8,6 +8,7 @@ import type {
 } from '@/types/calendar'
 
 export interface ICalendarService {
+  saveCredentials(clientId: string, clientSecret: string, redirectUri?: string): Promise<void>
   getAuthorizationUrl(profileId?: string): Promise<CalendarAuthorizationResponse>
   checkStatus(profileId?: string): Promise<CalendarStatusResponse>
   createEvent(event: CalendarEventInput, profileId?: string): Promise<CalendarEventResponse>
@@ -28,6 +29,14 @@ export interface ICalendarService {
 export class CalendarService implements ICalendarService {
   constructor(private readonly api: AxiosInstance) {
     this.api = api
+  }
+
+  async saveCredentials(clientId: string, clientSecret: string, redirectUri?: string): Promise<void> {
+    await this.api.post('/calendar/credentials', {
+      client_id: clientId,
+      client_secret: clientSecret,
+      ...(redirectUri ? { redirect_uri: redirectUri } : {}),
+    })
   }
 
   async getAuthorizationUrl(profileId?: string): Promise<CalendarAuthorizationResponse> {

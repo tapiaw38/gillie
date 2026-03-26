@@ -100,18 +100,19 @@ jobs_client = MongoDBClient(
 )
 
 calendar_sessions_client = None
-calendar_events_client = None
-gc_cfg = config_service.google_calendar_config
-if gc_cfg and gc_cfg.enabled and config_service.nosql_config.calendar_sessions:
+if config_service.nosql_config.calendar_sessions:
     calendar_sessions_client = MongoDBClient(
         config_service.nosql_config.calendar_sessions.database_uri,
         config_service.nosql_config.calendar_sessions.database,
         config_service.nosql_config.calendar_sessions.collection,
     )
-    calendar_events_client = MongoDBClient(
-        config_service.nosql_config.calendar_events.database_uri,
-        config_service.nosql_config.calendar_events.database,
-        config_service.nosql_config.calendar_events.collection,
+
+drive_sessions_client = None
+if config_service.nosql_config.drive_sessions:
+    drive_sessions_client = MongoDBClient(
+        config_service.nosql_config.drive_sessions.database_uri,
+        config_service.nosql_config.drive_sessions.database,
+        config_service.nosql_config.drive_sessions.collection,
     )
 
 profiles_client.run_migrations(migrations_client.get_collection(), execute_migrations())
@@ -135,7 +136,7 @@ datasources = Datasources.create_datasources(
     no_sql_profiles_client=profiles_client,
     no_sql_faqs_client=faqs_client,
     no_sql_calendar_sessions_client=calendar_sessions_client,
-    no_sql_calendar_events_client=calendar_events_client,
+    no_sql_drive_sessions_client=drive_sessions_client,
     no_sql_whatsapp_devices_client=whatsapp_devices_client,
     no_sql_jobs_client=jobs_client,
 )
@@ -146,7 +147,7 @@ repositories = Repositories.create_repositories(datasources)
 # ─── Integrations & Services ──────────────────────────────────────────────────
 skill_manager = SkillManager()
 
-integrations = create_integrations(config_service, calendar_repository=repositories.calendar)
+integrations = create_integrations(config_service, calendar_repository=repositories.calendar, drive_repository=repositories.drive)
 
 integrations.openai.set_skill_manager(skill_manager)
 integrations.openai.set_store_service(store_service)

@@ -7,7 +7,7 @@ class Datasources:
         no_sql_profiles_client: Client,
         no_sql_faqs_client: Client,
         no_sql_calendar_sessions_client: Client = None,
-        no_sql_calendar_events_client: Client = None,
+        no_sql_drive_sessions_client: Client = None,
         no_sql_whatsapp_devices_client: Client = None,
         no_sql_jobs_client: Client = None,
     ):
@@ -15,7 +15,7 @@ class Datasources:
         self.no_sql_profiles_client = no_sql_profiles_client
         self.no_sql_faqs_client = no_sql_faqs_client
         self.no_sql_calendar_sessions_client = no_sql_calendar_sessions_client
-        self.no_sql_calendar_events_client = no_sql_calendar_events_client
+        self.no_sql_drive_sessions_client = no_sql_drive_sessions_client
         self.no_sql_whatsapp_devices_client = no_sql_whatsapp_devices_client
         self.no_sql_jobs_client = no_sql_jobs_client
 
@@ -26,7 +26,7 @@ class Datasources:
         no_sql_profiles_client: Client,
         no_sql_faqs_client: Client,
         no_sql_calendar_sessions_client: Client = None,
-        no_sql_calendar_events_client: Client = None,
+        no_sql_drive_sessions_client: Client = None,
         no_sql_whatsapp_devices_client: Client = None,
         no_sql_jobs_client: Client = None,
     ) -> "Datasources":
@@ -35,7 +35,7 @@ class Datasources:
             no_sql_profiles_client=no_sql_profiles_client,
             no_sql_faqs_client=no_sql_faqs_client,
             no_sql_calendar_sessions_client=no_sql_calendar_sessions_client,
-            no_sql_calendar_events_client=no_sql_calendar_events_client,
+            no_sql_drive_sessions_client=no_sql_drive_sessions_client,
             no_sql_whatsapp_devices_client=no_sql_whatsapp_devices_client,
             no_sql_jobs_client=no_sql_jobs_client,
         )

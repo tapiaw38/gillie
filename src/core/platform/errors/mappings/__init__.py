@@ -96,6 +96,7 @@ __all__ = [
     "DriveSearchError",
     "DriveSyncError",
     "DriveIndexNotFoundError",
+    "DriveCredentialsError",
 
     # WhatsApp Device errors
     "WhatsAppDeviceCreateError",

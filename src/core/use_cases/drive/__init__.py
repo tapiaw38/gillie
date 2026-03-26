@@ -2,20 +2,20 @@ from .get_authorization_url_use_case import GetAuthorizationUrlUseCase
 from .handle_oauth_callback_use_case import HandleOAuthCallbackUseCase
 from .check_session_status_use_case import CheckSessionStatusUseCase
 from .list_files_use_case import ListFilesUseCase
-from .ingest_file_use_case import IngestFileUseCase
-from .sync_drive_use_case import SyncDriveUseCase
-from .search_drive_use_case import SearchDriveUseCase
-from .get_index_status_use_case import GetIndexStatusUseCase
-from .remove_file_index_use_case import RemoveFileIndexUseCase
+from .download_file_use_case import DownloadFileUseCase
+from .upload_file_use_case import UploadFileUseCase
+from .create_folder_use_case import CreateFolderUseCase
+from .move_file_use_case import MoveFileUseCase
+from .set_credentials_use_case import SetCredentialsUseCase
 
 __all__ = [
     "GetAuthorizationUrlUseCase",
     "HandleOAuthCallbackUseCase",
     "CheckSessionStatusUseCase",
     "ListFilesUseCase",
-    "IngestFileUseCase",
-    "SyncDriveUseCase",
-    "SearchDriveUseCase",
-    "GetIndexStatusUseCase",
-    "RemoveFileIndexUseCase",
+    "DownloadFileUseCase",
+    "UploadFileUseCase",
+    "CreateFolderUseCase",
+    "MoveFileUseCase",
+    "SetCredentialsUseCase",
 ]

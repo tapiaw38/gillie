@@ -5,6 +5,7 @@ from src.schemas.calendar import (
     CalendarEventListOutput,
     CalendarAuthorizationOutput,
     CalendarStatusOutput,
+    CalendarCredentialsInput,
 )
 from src.core.use_cases.use_cases import Usecases
 from typing import Optional
@@ -29,6 +30,21 @@ def get_usecases() -> Usecases:
     if _usecases_instance is None:
         raise Exception("Usecases not initialized. Call set_usecases first.")
     return _usecases_instance
+
+
+@router.post("/credentials", status_code=status.HTTP_200_OK)
+async def set_calendar_credentials(
+    creds: CalendarCredentialsInput,
+    usecases: Usecases = Depends(get_usecases),
+):
+    """Save Google OAuth2 app credentials (client_id / client_secret) to MongoDB."""
+    redirect_uri = creds.redirect_uri or "http://localhost:8000/api/v1/calendar/oauth/callback"
+    usecases.calendar.set_credentials_usecase.execute(
+        client_id=creds.client_id,
+        client_secret=creds.client_secret,
+        redirect_uri=redirect_uri,
+    )
+    return {"message": "Credentials saved successfully"}
 
 
 @router.get("/authorize", response_model=CalendarAuthorizationOutput, status_code=status.HTTP_200_OK)
@@ -138,7 +154,7 @@ async def update_calendar_event(
     request: Request,
     usecases: Usecases = Depends(get_usecases),
 ):
-    """Update an existing calendar event."""
+    """Update an existing calendar event. event_id is the Google Calendar event ID."""
     user_id = request.state.user.get("user_id")
 
     updated_event = usecases.calendar.update_event_usecase.execute(
@@ -160,7 +176,7 @@ async def delete_calendar_event(
     request: Request,
     usecases: Usecases = Depends(get_usecases),
 ):
-    """Delete a calendar event."""
+    """Delete a calendar event by its Google Calendar event ID."""
     user_id = request.state.user.get("user_id")
 
     usecases.calendar.delete_event_usecase.execute(
@@ -169,14 +185,3 @@ async def delete_calendar_event(
     )
 
     return {"message": "Event deleted successfully", "event_id": event_id}
-
-
-@router.post("/sync", status_code=status.HTTP_200_OK)
-async def sync_calendar_events(
-    request: Request,
-    usecases: Usecases = Depends(get_usecases),
-):
-    """Sync events from Google Calendar into local storage."""
-    user_id = request.state.user.get("user_id")
-    result = usecases.calendar.sync_events_usecase.execute(user_id=user_id)
-    return result

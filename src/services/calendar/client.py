@@ -107,25 +107,29 @@ class GoogleCalendarClient:
         service.events().delete(calendarId="primary", eventId=google_id).execute()
         logger.info(f"Google Calendar event deleted: {google_id}")
 
+    def get_event(self, service, google_id: str) -> Dict[str, Any]:
+        """Fetch a single event by its Google Calendar ID."""
+        return service.events().get(calendarId="primary", eventId=google_id).execute()
+
     def list_events(
         self,
         service,
-        time_min: datetime,
-        time_max: datetime,
+        time_min: Optional[datetime] = None,
+        time_max: Optional[datetime] = None,
+        limit: int = 50,
     ) -> List[Dict[str, Any]]:
-        """List events in a date range for sync."""
-        result = (
-            service.events()
-            .list(
-                calendarId="primary",
-                timeMin=time_min.isoformat() + "Z",
-                timeMax=time_max.isoformat() + "Z",
-                singleEvents=True,
-                orderBy="startTime",
-                maxResults=500,
-            )
-            .execute()
-        )
+        """List upcoming events, optionally filtered by date range."""
+        now = datetime.utcnow()
+        kwargs: Dict[str, Any] = {
+            "calendarId": "primary",
+            "timeMin": (time_min or now).isoformat() + "Z",
+            "singleEvents": True,
+            "orderBy": "startTime",
+            "maxResults": min(limit, 2500),
+        }
+        if time_max:
+            kwargs["timeMax"] = time_max.isoformat() + "Z"
+        result = service.events().list(**kwargs).execute()
         return result.get("items", [])
 
     def _build_flow(self):

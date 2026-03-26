@@ -4,6 +4,7 @@ from .calendar_schemas import (
     CalendarEventListOutput,
     CalendarAuthorizationOutput,
     CalendarStatusOutput,
+    CalendarCredentialsInput,
 )
 
 __all__ = [
@@ -12,4 +13,5 @@ __all__ = [
     "CalendarEventListOutput",
     "CalendarAuthorizationOutput",
     "CalendarStatusOutput",
+    "CalendarCredentialsInput",
 ]

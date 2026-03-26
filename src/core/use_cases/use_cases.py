@@ -46,18 +46,18 @@ from src.core.use_cases.calendar import (
     ListEventsUseCase,
     UpdateEventUseCase as CalendarUpdateEventUseCase,
     DeleteEventUseCase as CalendarDeleteEventUseCase,
-    SyncEventsUseCase,
+    SetCredentialsUseCase as CalendarSetCredentialsUseCase,
 )
 from src.core.use_cases.drive import (
     GetAuthorizationUrlUseCase as DriveGetAuthorizationUrlUseCase,
     HandleOAuthCallbackUseCase as DriveHandleOAuthCallbackUseCase,
     CheckSessionStatusUseCase as DriveCheckSessionStatusUseCase,
     ListFilesUseCase,
-    IngestFileUseCase,
-    SyncDriveUseCase,
-    SearchDriveUseCase,
-    GetIndexStatusUseCase,
-    RemoveFileIndexUseCase,
+    DownloadFileUseCase,
+    UploadFileUseCase,
+    CreateFolderUseCase,
+    MoveFileUseCase,
+    SetCredentialsUseCase as DriveSetCredentialsUseCase,
 )
 from src.core.use_cases.slack import ProcessSlackMessageUseCase
 from src.core.use_cases.telegram import ProcessTelegramMessageUseCase
@@ -135,7 +135,7 @@ class Calendar:
     list_events_usecase: ListEventsUseCase
     update_event_usecase: CalendarUpdateEventUseCase
     delete_event_usecase: CalendarDeleteEventUseCase
-    sync_events_usecase: SyncEventsUseCase
+    set_credentials_usecase: CalendarSetCredentialsUseCase
 
 
 @dataclass
@@ -144,11 +144,11 @@ class Drive:
     handle_oauth_callback_usecase: DriveHandleOAuthCallbackUseCase
     check_session_status_usecase: DriveCheckSessionStatusUseCase
     list_files_usecase: ListFilesUseCase
-    ingest_file_usecase: IngestFileUseCase
-    sync_drive_usecase: SyncDriveUseCase
-    search_drive_usecase: SearchDriveUseCase
-    get_index_status_usecase: GetIndexStatusUseCase
-    remove_file_index_usecase: RemoveFileIndexUseCase
+    download_file_usecase: DownloadFileUseCase
+    upload_file_usecase: UploadFileUseCase
+    create_folder_usecase: CreateFolderUseCase
+    move_file_usecase: MoveFileUseCase
+    set_credentials_usecase: DriveSetCredentialsUseCase
 
 
 @dataclass
@@ -244,18 +244,18 @@ def create_usecases(context_factory: Factory) -> Usecases:
             list_events_usecase=ListEventsUseCase(context_factory),
             update_event_usecase=CalendarUpdateEventUseCase(context_factory),
             delete_event_usecase=CalendarDeleteEventUseCase(context_factory),
-            sync_events_usecase=SyncEventsUseCase(context_factory),
+            set_credentials_usecase=CalendarSetCredentialsUseCase(context_factory),
         ),
         drive=Drive(
             get_authorization_url_usecase=DriveGetAuthorizationUrlUseCase(context_factory),
             handle_oauth_callback_usecase=DriveHandleOAuthCallbackUseCase(context_factory),
             check_session_status_usecase=DriveCheckSessionStatusUseCase(context_factory),
             list_files_usecase=ListFilesUseCase(context_factory),
-            ingest_file_usecase=IngestFileUseCase(context_factory),
-            sync_drive_usecase=SyncDriveUseCase(context_factory),
-            search_drive_usecase=SearchDriveUseCase(context_factory),
-            get_index_status_usecase=GetIndexStatusUseCase(context_factory),
-            remove_file_index_usecase=RemoveFileIndexUseCase(context_factory),
+            download_file_usecase=DownloadFileUseCase(context_factory),
+            upload_file_usecase=UploadFileUseCase(context_factory),
+            create_folder_usecase=CreateFolderUseCase(context_factory),
+            move_file_usecase=MoveFileUseCase(context_factory),
+            set_credentials_usecase=DriveSetCredentialsUseCase(context_factory),
         ),
         whatsapp_device=WhatsAppDevice(
             create_usecase=WhatsAppDeviceCreateUseCase(context_factory),

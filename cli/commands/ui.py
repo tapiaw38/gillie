@@ -184,6 +184,35 @@ def build(
         console.print("  [green]✓[/green] Build completed in [dim]./ui/out/[/dim]")
 
 
+@app.command("stop")
+def stop():
+    """Kill all running Gillie UI (Electron) processes."""
+    import signal
+
+    electron_bin = str(UI_DIR / "node_modules" / ".bin" / "electron")
+
+    killed = []
+    for proc_path in Path("/proc").iterdir():
+        if not proc_path.name.isdigit():
+            continue
+        try:
+            exe = (proc_path / "exe").resolve()
+            cmdline = (proc_path / "cmdline").read_bytes().replace(b"\x00", b" ").decode(errors="replace")
+            if str(exe) == electron_bin or "electron" in cmdline and UI_DIR.name in cmdline:
+                pid = int(proc_path.name)
+                os.kill(pid, signal.SIGTERM)
+                killed.append(pid)
+        except (PermissionError, FileNotFoundError, ProcessLookupError):
+            continue
+
+    console.print()
+    if killed:
+        console.print(f"[green]✓[/green] Stopped {len(killed)} process(es): [dim]{', '.join(str(p) for p in killed)}[/dim]")
+    else:
+        console.print("[dim]No running Gillie UI processes found.[/dim]")
+    console.print()
+
+
 @app.command("install")
 def install():
     """Install UI dependencies (node_modules)."""

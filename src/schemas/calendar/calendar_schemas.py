@@ -60,3 +60,10 @@ class CalendarStatusOutput(BaseModel):
     is_active: bool
     user_id: str
     profile_id: Optional[str] = None
+
+
+class CalendarCredentialsInput(BaseModel):
+    """Schema for saving Google OAuth2 app credentials"""
+    client_id: str
+    client_secret: str
+    redirect_uri: Optional[str] = None

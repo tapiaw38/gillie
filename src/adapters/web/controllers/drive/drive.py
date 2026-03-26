@@ -1,4 +1,5 @@
-from fastapi import APIRouter, Depends, Request, status
+from fastapi import APIRouter, Depends, Request, UploadFile, File, Form, status
+from fastapi.responses import Response
 from typing import Optional
 import logging
 
@@ -7,12 +8,12 @@ from src.schemas.drive import (
     DriveStatusOutput,
     DriveFileOutput,
     DriveFileListOutput,
-    DriveIngestOutput,
-    DriveSyncOutput,
-    DriveSearchInput,
-    DriveSearchOutput,
-    DriveSearchResultItem,
-    DriveIndexStatusOutput,
+    DriveUploadOutput,
+    DriveCreateFolderInput,
+    DriveFolderOutput,
+    DriveMoveFileInput,
+    DriveMoveFileOutput,
+    DriveCredentialsInput,
 )
 from src.core.use_cases.use_cases import Usecases
 
@@ -32,6 +33,16 @@ def get_usecases() -> Usecases:
     if _usecases_instance is None:
         raise Exception("Usecases not initialized. Call set_usecases first.")
     return _usecases_instance
+
+
+@router.post("/credentials", status_code=status.HTTP_204_NO_CONTENT)
+async def save_credentials(
+    body: DriveCredentialsInput,
+    usecases: Usecases = Depends(get_usecases),
+):
+    """Save Google Drive OAuth app credentials to MongoDB."""
+    redirect_uri = body.redirect_uri or "http://localhost:8000/api/v1/drive/oauth/callback"
+    usecases.drive.set_credentials_usecase.execute(body.client_id, body.client_secret, redirect_uri)
 
 
 @router.get("/authorize", response_model=DriveAuthorizationOutput, status_code=status.HTTP_200_OK)
@@ -75,7 +86,7 @@ async def list_files(
     folder_id: Optional[str] = None,
     usecases: Usecases = Depends(get_usecases),
 ):
-    """List available files in Google Drive (with index status)."""
+    """List all files and folders in Google Drive."""
     user_id = request.state.user.get("user_id")
     files = usecases.drive.list_files_usecase.execute(user_id, folder_id)
     return DriveFileListOutput(
@@ -84,69 +95,91 @@ async def list_files(
     )
 
 
-@router.post("/ingest/{file_id}", response_model=DriveIngestOutput, status_code=status.HTTP_200_OK)
-async def ingest_file(
+@router.get("/files/{file_id}", response_model=DriveFileOutput, status_code=status.HTTP_200_OK)
+async def get_file_metadata(
     file_id: str,
     request: Request,
     usecases: Usecases = Depends(get_usecases),
 ):
-    """Download and index a specific Drive file into Qdrant."""
+    """Get metadata for a specific file in Google Drive."""
+    from src.core.platform.errors import NewApplicationError
+    from src.core.platform.errors.mappings.drive import DriveOperationError
+    from src.core.use_cases.drive._helpers import get_drive_service
+
     user_id = request.state.user.get("user_id")
-    result = usecases.drive.ingest_file_usecase.execute(user_id, file_id)
-    return DriveIngestOutput(**result)
+    # Access context via any use case that holds it
+    ctx = usecases.drive.list_files_usecase.context_factory
+    service = get_drive_service(ctx, user_id)
+    meta = ctx.integrations.google_drive.get_file_metadata(service, file_id)
+    return DriveFileOutput(**meta)
 
 
-@router.post("/sync", response_model=DriveSyncOutput, status_code=status.HTTP_200_OK)
-async def sync_drive(
-    request: Request,
-    folder_id: Optional[str] = None,
-    usecases: Usecases = Depends(get_usecases),
-):
-    """Sync all Drive files to Qdrant. Skips unchanged files (md5 match)."""
-    user_id = request.state.user.get("user_id")
-    result = usecases.drive.sync_drive_usecase.execute(user_id, folder_id)
-    return DriveSyncOutput(**result)
-
-
-@router.post("/search", response_model=DriveSearchOutput, status_code=status.HTTP_200_OK)
-async def search_drive(
-    body: DriveSearchInput,
+@router.get("/files/{file_id}/download", status_code=status.HTTP_200_OK)
+async def download_file(
+    file_id: str,
     request: Request,
     usecases: Usecases = Depends(get_usecases),
 ):
-    """Semantic search over indexed Drive documents using Qdrant."""
+    """Download a file from Google Drive."""
     user_id = request.state.user.get("user_id")
-    results = usecases.drive.search_drive_usecase.execute(
+    result = usecases.drive.download_file_usecase.execute(user_id, file_id)
+    file_name = result["file_name"]
+    mime_type = result["mime_type"] or "application/octet-stream"
+    return Response(
+        content=result["content"],
+        media_type=mime_type,
+        headers={"Content-Disposition": f'attachment; filename="{file_name}"'},
+    )
+
+
+@router.post("/files/upload", response_model=DriveUploadOutput, status_code=status.HTTP_201_CREATED)
+async def upload_file(
+    request: Request,
+    file: UploadFile = File(...),
+    folder_id: Optional[str] = Form(default=None),
+    usecases: Usecases = Depends(get_usecases),
+):
+    """Upload a file to Google Drive."""
+    user_id = request.state.user.get("user_id")
+    file_bytes = await file.read()
+    result = usecases.drive.upload_file_usecase.execute(
         user_id=user_id,
-        query=body.query,
-        k=body.k,
-        file_id=body.file_id,
+        file_bytes=file_bytes,
+        file_name=file.filename,
+        mime_type=file.content_type or "application/octet-stream",
+        folder_id=folder_id,
     )
-    return DriveSearchOutput(
-        query=body.query,
-        results=[DriveSearchResultItem(**r) for r in results],
-        total=len(results),
-    )
+    return DriveUploadOutput(**result)
 
 
-@router.get("/index/status", response_model=DriveIndexStatusOutput, status_code=status.HTTP_200_OK)
-async def get_index_status(
+@router.post("/folders", response_model=DriveFolderOutput, status_code=status.HTTP_201_CREATED)
+async def create_folder(
+    body: DriveCreateFolderInput,
     request: Request,
     usecases: Usecases = Depends(get_usecases),
 ):
-    """Get a summary of what's indexed in Qdrant for this user."""
+    """Create a new folder in Google Drive."""
     user_id = request.state.user.get("user_id")
-    result = usecases.drive.get_index_status_usecase.execute(user_id)
-    return DriveIndexStatusOutput(**result)
+    result = usecases.drive.create_folder_usecase.execute(
+        user_id=user_id,
+        name=body.name,
+        parent_id=body.parent_id,
+    )
+    return DriveFolderOutput(**result)
 
 
-@router.delete("/index/{file_id}", status_code=status.HTTP_200_OK)
-async def remove_file_index(
+@router.patch("/files/{file_id}/move", response_model=DriveMoveFileOutput, status_code=status.HTTP_200_OK)
+async def move_file(
     file_id: str,
+    body: DriveMoveFileInput,
     request: Request,
     usecases: Usecases = Depends(get_usecases),
 ):
-    """Remove a file's vectors from Qdrant and its index entry from MongoDB."""
+    """Move a file to a different folder in Google Drive."""
     user_id = request.state.user.get("user_id")
-    usecases.drive.remove_file_index_usecase.execute(user_id, file_id)
-    return {"message": "File index removed", "file_id": file_id}
+    result = usecases.drive.move_file_usecase.execute(
+        user_id=user_id,
+        file_id=file_id,
+        new_folder_id=body.new_folder_id,
+    )
+    return DriveMoveFileOutput(**result)

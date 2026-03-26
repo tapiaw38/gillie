@@ -1,5 +1,5 @@
 from pydantic import BaseModel
-from typing import Optional, List, Dict, Any
+from typing import Optional, List
 
 
 class DriveAuthorizationOutput(BaseModel):
@@ -16,11 +16,10 @@ class DriveFileOutput(BaseModel):
     id: str
     name: str
     mimeType: str
-    md5Checksum: Optional[str] = None
+    size: Optional[str] = None
     modifiedTime: Optional[str] = None
     webViewLink: Optional[str] = None
-    index_status: str = "not_indexed"
-    chunks_count: int = 0
+    parents: Optional[List[str]] = None
 
 
 class DriveFileListOutput(BaseModel):
@@ -28,44 +27,39 @@ class DriveFileListOutput(BaseModel):
     total: int
 
 
-class DriveIngestOutput(BaseModel):
-    file_id: str
+class DriveCredentialsInput(BaseModel):
+    client_id: str
+    client_secret: str
+    redirect_uri: Optional[str] = None
+
+
+class DriveUploadInput(BaseModel):
     file_name: str
-    status: str
-    chunks: int = 0
-    collection: Optional[str] = None
-    reason: Optional[str] = None
+    mime_type: str
+    folder_id: Optional[str] = None
 
 
-class DriveSyncOutput(BaseModel):
-    total: int
-    indexed: int
-    skipped: int
-    failed: int
+class DriveUploadOutput(BaseModel):
+    id: str
+    name: str
+    webViewLink: Optional[str] = None
 
 
-class DriveSearchInput(BaseModel):
-    query: str
-    k: int = 5
-    file_id: Optional[str] = None
+class DriveCreateFolderInput(BaseModel):
+    name: str
+    parent_id: Optional[str] = None
 
 
-class DriveSearchResultItem(BaseModel):
-    content: str
-    score: float
-    metadata: Dict[str, Any]
+class DriveFolderOutput(BaseModel):
+    id: str
+    name: str
 
 
-class DriveSearchOutput(BaseModel):
-    query: str
-    results: List[DriveSearchResultItem]
-    total: int
+class DriveMoveFileInput(BaseModel):
+    new_folder_id: str
 
 
-class DriveIndexStatusOutput(BaseModel):
-    user_id: str
-    collection: str
-    total_files: int
-    indexed: int
-    failed: int
-    total_chunks: int
+class DriveMoveFileOutput(BaseModel):
+    id: str
+    name: str
+    parents: Optional[List[str]] = None

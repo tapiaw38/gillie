@@ -15,6 +15,9 @@ export const useCalendar = () => {
   const isLoading = ref(false)
 
   // Error states
+  const isSaveCredentialsError = ref(false)
+  const saveCredentialsError = ref<string>('')
+
   const isGetAuthUrlError = ref(false)
   const getAuthUrlError = ref<string>('')
 
@@ -37,6 +40,25 @@ export const useCalendar = () => {
   const isConnected = computed(() => statusData.value?.is_active ?? false)
 
   // Methods
+  const saveCredentials = async (clientId: string, clientSecret: string, redirectUri?: string) => {
+    isLoading.value = true
+    isSaveCredentialsError.value = false
+    saveCredentialsError.value = ''
+    try {
+      await services.calendarService.saveCredentials(clientId, clientSecret, redirectUri)
+    } catch (error: unknown) {
+      isSaveCredentialsError.value = true
+      saveCredentialsError.value =
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        (error as any)?.response?.data?.message ||
+        (error as Error)?.message ||
+        'Error al guardar credenciales'
+      throw error
+    } finally {
+      isLoading.value = false
+    }
+  }
+
   const getAuthorizationUrl = async (profileId?: string) => {
     isLoading.value = true
     isGetAuthUrlError.value = false
@@ -192,6 +214,8 @@ export const useCalendar = () => {
     isConnected,
 
     // Error states
+    isSaveCredentialsError,
+    saveCredentialsError,
     isGetAuthUrlError,
     getAuthUrlError,
     isCheckStatusError,
@@ -206,6 +230,7 @@ export const useCalendar = () => {
     deleteEventError,
 
     // Methods
+    saveCredentials,
     getAuthorizationUrl,
     checkStatus,
     createEvent,

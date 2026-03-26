@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import type { IntegrationParams, GoogleCalendarIntegrationConfig } from '@/types/assistant'
-import { onMounted, reactive, computed, watch } from 'vue'
+import { onMounted, reactive, computed, watch, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useAssistant } from '@/composables/useAssistant'
 import { useCalendar } from '@/composables/useCalendar'
@@ -10,6 +10,8 @@ import Button from 'primevue/button'
 import Card from 'primevue/card'
 import Message from 'primevue/message'
 import InputSwitch from 'primevue/inputswitch'
+import InputText from 'primevue/inputtext'
+import Password from 'primevue/password'
 
 const route = useRoute()
 const router = useRouter()
@@ -25,16 +27,60 @@ const {
 } = useAssistant()
 
 const {
+  saveCredentials,
   getAuthorizationUrl,
   checkStatus,
   isConnected,
+  isLoading,
+  isSaveCredentialsError,
+  saveCredentialsError,
   isGetAuthUrlError,
   getAuthUrlError,
   isCheckStatusError,
   checkStatusError,
 } = useCalendar()
 
+const credentials = reactive({
+  clientId: '',
+  clientSecret: '',
+  redirectUri: '',
+})
+const credentialsSaved = ref(false)
+
+const handleSaveCredentials = async () => {
+  if (!credentials.clientId || !credentials.clientSecret) {
+    toast.add({
+      severity: 'warn',
+      summary: 'Campos requeridos',
+      detail: 'Client ID y Client Secret son obligatorios',
+      life: 3000,
+    })
+    return
+  }
+  try {
+    await saveCredentials(
+      credentials.clientId,
+      credentials.clientSecret,
+      credentials.redirectUri || undefined,
+    )
+    credentialsSaved.value = true
+    toast.add({
+      severity: 'success',
+      summary: 'Credenciales guardadas',
+      detail: 'Las credenciales de Google OAuth se guardaron correctamente',
+      life: 3000,
+    })
+  } catch {
+    // handled by errorWatchers
+  }
+}
+
 const errorWatchers = [
+  {
+    flag: isSaveCredentialsError,
+    summary: 'Error al guardar credenciales',
+    detail: saveCredentialsError,
+  },
   {
     flag: isAddIntegrationError,
     summary: 'Error al guardar configuración',
@@ -220,6 +266,72 @@ onMounted(async () => {
         </div>
       </div>
     </div>
+
+    <!-- Credentials Card -->
+    <Card class="config-card credentials-card">
+      <template #content>
+        <div class="credentials-section">
+          <div class="credentials-header">
+            <i class="pi pi-key credentials-icon"></i>
+            <div>
+              <h3 class="credentials-title">Credenciales OAuth</h3>
+              <p class="credentials-subtitle">
+                Ingresa las credenciales de tu proyecto en Google Cloud Console
+              </p>
+            </div>
+          </div>
+
+          <div class="credentials-form">
+            <div class="field">
+              <label class="field-label">Client ID <span class="required">*</span></label>
+              <InputText
+                v-model="credentials.clientId"
+                placeholder="xxxxxxxx.apps.googleusercontent.com"
+                class="field-input"
+                :class="{ 'p-invalid': !credentials.clientId && credentialsSaved === false }"
+              />
+            </div>
+
+            <div class="field">
+              <label class="field-label">Client Secret <span class="required">*</span></label>
+              <Password
+                v-model="credentials.clientSecret"
+                placeholder="GOCSPX-..."
+                class="field-input"
+                :feedback="false"
+                toggleMask
+              />
+            </div>
+
+            <div class="field">
+              <label class="field-label">
+                Redirect URI
+                <span class="field-hint">(opcional)</span>
+              </label>
+              <InputText
+                v-model="credentials.redirectUri"
+                placeholder="http://localhost:8000/api/v1/calendar/oauth/callback"
+                class="field-input"
+              />
+            </div>
+
+            <div class="credentials-actions">
+              <Button
+                label="Guardar Credenciales"
+                icon="pi pi-save"
+                severity="primary"
+                :loading="isLoading"
+                :disabled="!credentials.clientId || !credentials.clientSecret"
+                @click="handleSaveCredentials"
+              />
+              <span v-if="credentialsSaved" class="saved-badge">
+                <i class="pi pi-check-circle"></i> Guardado
+              </span>
+            </div>
+          </div>
+        </div>
+      </template>
+    </Card>
 
     <!-- Connection Card -->
     <Card class="config-card" :class="{ 'card-disabled': !calendarIntegration.activated }">
@@ -445,6 +557,92 @@ onMounted(async () => {
 
 :deep(.modern-switch) {
   transform: scale(1.1);
+}
+
+/* Credentials Card */
+.credentials-section {
+  display: flex;
+  flex-direction: column;
+  gap: 1.25rem;
+}
+
+.credentials-header {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.credentials-icon {
+  font-size: 1.4rem;
+  color: var(--color-primary);
+}
+
+.credentials-title {
+  font-size: 1rem;
+  font-weight: 600;
+  color: var(--do-text);
+  margin: 0 0 0.2rem;
+}
+
+.credentials-subtitle {
+  font-size: 0.85rem;
+  color: var(--do-text-muted);
+  margin: 0;
+}
+
+.credentials-form {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+}
+
+.field-label {
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: var(--do-text-secondary);
+}
+
+.field-hint {
+  font-weight: 400;
+  color: var(--do-text-muted);
+}
+
+.required {
+  color: var(--color-danger);
+}
+
+.field-input {
+  width: 100%;
+}
+
+:deep(.field-input.p-password) {
+  width: 100%;
+}
+
+:deep(.field-input.p-password .p-inputtext) {
+  width: 100%;
+}
+
+.credentials-actions {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  padding-top: 0.25rem;
+}
+
+.saved-badge {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  font-size: 0.85rem;
+  font-weight: 500;
+  color: var(--color-success);
 }
 
 /* Connection Card */
@@ -678,12 +876,18 @@ onMounted(async () => {
     align-items: start;
   }
 
+  .header-section {
+    grid-column: 1 / 3;
+  }
+
+  .credentials-card,
   .config-card {
     grid-column: 1 / 2;
   }
 
   .info-card {
     grid-column: 2 / 3;
+    grid-row: 2 / 4;
     position: sticky;
     top: 5.2rem;
     align-self: start;
