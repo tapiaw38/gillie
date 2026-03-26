@@ -38,6 +38,8 @@ try:
 except ImportError:
     _PT_AVAILABLE = False
 
+from InquirerPy import inquirer as _inquirer
+
 from cli.config.manager import config_exists, load_config
 
 console = Console()
@@ -605,44 +607,43 @@ def _stream_assistant(
                     else:
                         approved = False
                         feedback = ""
-                        while True:
+                        try:
+                            choice = _inquirer.select(
+                                message="Apply?",
+                                choices=[
+                                    {"name": "  Yes — apply this change", "value": "y"},
+                                    {"name": "  No  — reject this change", "value": "n"},
+                                    {"name": "  Always — auto-accept this tool for session", "value": "a"},
+                                    {"name": "  Skip  — auto-reject this tool for session", "value": "s"},
+                                ],
+                                pointer="❯",
+                                qmark="",
+                            ).execute()
+                        except (KeyboardInterrupt, EOFError):
+                            choice = "n"
+
+                        if choice == "y":
+                            approved = True
+                        elif choice == "n":
+                            approved = False
                             try:
-                                choice = console.input(
-                                    "\nApply? "
-                                    "[[bold]y[/bold]]es / "
-                                    "[[bold]n[/bold]]o / "
-                                    "[[bold]a[/bold]]lways (this tool) / "
-                                    "[[bold]s[/bold]]kip session: "
-                                ).strip().lower()
+                                feedback = console.input(
+                                    "[dim]Reason (Enter to skip): [/dim]"
+                                ).strip()
                             except (KeyboardInterrupt, EOFError):
-                                choice = "n"
-                            if choice in ("y", "yes", ""):
-                                approved = True
-                                break
-                            elif choice in ("n", "no"):
-                                approved = False
-                                try:
-                                    feedback = console.input(
-                                        "[dim]Reason (Enter to skip): [/dim]"
-                                    ).strip()
-                                except (KeyboardInterrupt, EOFError):
-                                    feedback = ""
-                                break
-                            elif choice in ("a", "always"):
-                                approved = True
-                                always_approved.add(tool_name)
-                                console.print(
-                                    f"[dim]'{tool_name}' auto-accepted for the rest of this session[/dim]"
-                                )
-                                break
-                            elif choice in ("s", "skip"):
-                                approved = False
-                                always_rejected.add(tool_name)
-                                console.print(
-                                    f"[dim]'{tool_name}' skipped for the rest of this session[/dim]"
-                                )
-                                break
-                            # Any other input: re-prompt
+                                feedback = ""
+                        elif choice == "a":
+                            approved = True
+                            always_approved.add(tool_name)
+                            console.print(
+                                f"[dim]'{tool_name}' auto-accepted for the rest of this session[/dim]"
+                            )
+                        elif choice == "s":
+                            approved = False
+                            always_rejected.add(tool_name)
+                            console.print(
+                                f"[dim]'{tool_name}' skipped for the rest of this session[/dim]"
+                            )
 
                     try:
                         requests.post(

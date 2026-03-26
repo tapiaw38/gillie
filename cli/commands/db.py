@@ -5,6 +5,7 @@ from pathlib import Path
 from rich.console import Console
 from rich.table import Table
 from rich import box
+from InquirerPy import inquirer
 
 from cli.config.manager import config_exists, load_config
 
@@ -167,7 +168,14 @@ def reset(
 
     if not yes:
         console.print(f"[red]⚠[/red]  This will delete [bold]all data[/bold] in [bold]{db_name}[/bold].")
-        confirm = typer.confirm("Are you sure?")
+        try:
+            confirm = inquirer.select(
+                message="Are you sure?",
+                choices=[{"name": "  No, cancel", "value": False}, {"name": "  Yes, delete all data", "value": True}],
+                pointer="❯", qmark="",
+            ).execute()
+        except KeyboardInterrupt:
+            confirm = False
         if not confirm:
             console.print("Aborted.")
             raise typer.Exit(0)

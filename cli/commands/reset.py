@@ -3,6 +3,7 @@ import typer
 from pathlib import Path
 from rich.console import Console
 from rich.panel import Panel
+from InquirerPy import inquirer
 
 from cli.config.manager import config_exists, load_config, get_config_path, get_soul_path
 
@@ -34,12 +35,26 @@ def reset(
     console.print()
 
     if not yes:
-        confirm = typer.confirm("Are you sure you want to reset everything?")
+        try:
+            confirm = inquirer.select(
+                message="Are you sure you want to reset everything?",
+                choices=[{"name": "  No, cancel", "value": False}, {"name": "  Yes, reset", "value": True}],
+                pointer="❯", qmark="",
+            ).execute()
+        except KeyboardInterrupt:
+            confirm = False
         if not confirm:
             console.print("[dim]Reset cancelled.[/dim]")
             raise typer.Exit(0)
 
-        confirm2 = typer.confirm("This cannot be undone. Confirm again?")
+        try:
+            confirm2 = inquirer.select(
+                message="This cannot be undone. Confirm again?",
+                choices=[{"name": "  No, cancel", "value": False}, {"name": "  Yes, I'm sure", "value": True}],
+                pointer="❯", qmark="",
+            ).execute()
+        except KeyboardInterrupt:
+            confirm2 = False
         if not confirm2:
             console.print("[dim]Reset cancelled.[/dim]")
             raise typer.Exit(0)

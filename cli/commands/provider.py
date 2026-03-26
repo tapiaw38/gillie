@@ -89,15 +89,53 @@ def provider_list():
 
 @app.command("use")
 def provider_use(
-    provider: str = typer.Argument(..., help="Provider name (deepseek, openrouter, anthropic, openai, claude, kimi, gemini, groq)"),
+    provider: Optional[str] = typer.Argument(None, help="Provider name (deepseek, openrouter, anthropic, openai, claude, kimi, gemini, groq)"),
     api_key: Optional[str] = typer.Option(None, "--api-key", "-k", help="API key (skips interactive prompt)"),
 ):
     """Switch to a provider and update the configuration."""
+    from InquirerPy import inquirer as _inquirer
     from cli.config.manager import config_exists, load_config, save_config
 
     if not config_exists():
         console.print("[red]Not initialized.[/red] Run [bold cyan]gillie init[/bold cyan] first.")
         raise typer.Exit(1)
+
+    # Interactive provider selection when no argument given
+    if provider is None:
+        from pathlib import Path as _Path
+        _cfg = load_config()
+        _current_base_url = _cfg.services.openai.base_url or ""
+        _has_claude_session = (_Path.home() / ".claude" / ".credentials.json").exists()
+
+        def _choice_label(name: str, preset: dict) -> str:
+            active = " *" if preset["base_url"] == _current_base_url else "  "
+            if preset.get("auth_type") == "bearer":
+                cred_hint = " [session]" if _has_claude_session else " [no session]"
+            else:
+                same = preset["base_url"] == _current_base_url
+                cred_hint = f"  {preset['model']}"
+                if same and _cfg.services.openai.api_key:
+                    cred_hint += "  [key set]"
+            return f"{active} {name:<14} {preset['model']}"
+
+        choices = [
+            {"name": _choice_label(n, p), "value": n}
+            for n, p in _PROVIDER_PRESETS.items()
+        ]
+
+        try:
+            provider = _inquirer.select(
+                message="Select provider:",
+                choices=choices,
+                default=next(
+                    (n for n, p in _PROVIDER_PRESETS.items() if p["base_url"] == _current_base_url),
+                    choices[0]["value"],
+                ),
+                pointer="❯",
+                qmark="",
+            ).execute()
+        except KeyboardInterrupt:
+            raise typer.Exit(0)
 
     if provider not in _PROVIDER_PRESETS:
         valid = ", ".join(_PROVIDER_PRESETS.keys())
@@ -135,13 +173,45 @@ def provider_use(
     elif api_key:
         resolved_key = api_key
     else:
-        resolved_key = typer.prompt(f"Enter API key for {provider}", hide_input=True)
+        # Check if this provider already has a key saved in the current config
+        try:
+            cfg
+        except NameError:
+            cfg = load_config()
+        current_key = cfg.services.openai.api_key or ""
+        current_base_url = cfg.services.openai.base_url or ""
+        same_provider = current_base_url == preset["base_url"]
+
+        if current_key and same_provider:
+            masked = current_key[:8] + "..." + current_key[-4:]
+            try:
+                action = _inquirer.select(
+                    message=f"API key already configured: {masked}",
+                    choices=[
+                        {"name": "  Keep existing key", "value": "keep"},
+                        {"name": "  Change to a new key", "value": "change"},
+                    ],
+                    pointer="❯",
+                    qmark="",
+                ).execute()
+            except KeyboardInterrupt:
+                raise typer.Exit(0)
+            if action == "change":
+                resolved_key = typer.prompt(f"Enter new API key for {provider}", hide_input=True)
+            else:
+                resolved_key = current_key
+        else:
+            resolved_key = typer.prompt(f"Enter API key for {provider}", hide_input=True)
 
     if not resolved_key:
         console.print("[red]API key cannot be empty.[/red]")
         raise typer.Exit(1)
 
-    cfg = load_config()
+    # cfg may already be loaded above; reload only if needed
+    try:
+        cfg
+    except NameError:
+        cfg = load_config()
     cfg.services.openai.api_key = resolved_key
     cfg.services.openai.base_url = preset["base_url"]
     cfg.services.openai.model = preset["model"]
@@ -194,9 +264,39 @@ def vision_set(
     """Set the vision provider used for image description."""
     from cli.config.manager import config_exists, load_config, save_config
 
+    from InquirerPy import inquirer as _inquirer
+
     if not config_exists():
         console.print("[red]Not initialized.[/red] Run [bold cyan]gillie init[/bold cyan] first.")
         raise typer.Exit(1)
+
+    # Interactive preset selection when no provider given and no manual overrides
+    if provider is None and not base_url and not model:
+        _vcfg = load_config()
+        _current_vurl = _vcfg.services.vision.base_url or ""
+        choices = [
+            {
+                "name": f"{'*' if p['base_url'] == _current_vurl else ' '}  {n:<14} {p['model']}",
+                "value": n,
+            }
+            for n, p in _VISION_PRESETS.items()
+        ] + [{"name": "    custom           (enter base-url and model manually)", "value": "__custom__"}]
+
+        try:
+            provider = _inquirer.select(
+                message="Select vision provider:",
+                choices=choices,
+                default=next(
+                    (n for n, p in _VISION_PRESETS.items() if p["base_url"] == _current_vurl),
+                    choices[0]["value"],
+                ),
+                pointer="❯", qmark="",
+            ).execute()
+        except KeyboardInterrupt:
+            raise typer.Exit(0)
+
+        if provider == "__custom__":
+            provider = None
 
     preset = _VISION_PRESETS.get(provider, {}) if provider else {}
 

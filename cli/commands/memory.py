@@ -23,6 +23,7 @@ from rich.table import Table
 from rich.panel import Panel
 from rich import box
 from InquirerPy import inquirer
+from InquirerPy import inquirer
 from pathlib import Path
 
 from cli.config.manager import config_exists, load_config
@@ -269,7 +270,14 @@ def skills_delete(
         raise typer.Exit(1)
 
     if not yes:
-        confirm = typer.confirm(f"Delete {name}.skill.md?")
+        try:
+            confirm = inquirer.select(
+                message=f"Delete {name}.skill.md?",
+                choices=[{"name": "  No, cancel", "value": False}, {"name": "  Yes, delete", "value": True}],
+                pointer="❯", qmark="",
+            ).execute()
+        except KeyboardInterrupt:
+            confirm = False
         if not confirm:
             console.print("[dim]Cancelled.[/dim]")
             raise typer.Exit(0)
