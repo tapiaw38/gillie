@@ -329,6 +329,22 @@ _DEFAULT_TOOL_PROMPTS: Dict[str, str] = {
         "other issues before running. Supports pyright, mypy (Python), tsc (TypeScript), eslint (JS/TS). "
         "Use tool='auto' to auto-detect the right checker."
     ),
+    "read_pptx": (
+        "Read the content of a PowerPoint (.pptx) file uploaded by the user. "
+        "Returns all slides with their titles, text, and notes. "
+        "Use when the user asks about the contents of a presentation."
+    ),
+    "write_pptx": (
+        "Create a new PowerPoint (.pptx) presentation from structured slide data. "
+        "Use when the user asks to generate or create a presentation. "
+        "Each slide can have a title, body text (bullet points), and speaker notes."
+    ),
+    "modify_pptx": (
+        "Modify an existing PowerPoint (.pptx) file from profile storage or workspace. "
+        "Supports: replace text across all slides, add new slides, update slide titles. "
+        "Downloads from storage if not already in workspace. "
+        "Use re_upload=True if the user wants to save back to their storage."
+    ),
 }
 
 
@@ -435,6 +451,36 @@ class ModifyDocxArgs(BaseModel):
     ))
     append: Optional[str] = Field(default=None, description="Markdown-like content to append at the end of the document")
     save_as: Optional[str] = Field(default=None, description="Output filename in workspace. Defaults to same name as input.")
+    re_upload: bool = Field(default=False, description="If True, re-upload the modified file to storage after saving")
+
+
+class ReadPptxArgs(BaseModel):
+    """Arguments for reading a PowerPoint file"""
+    file_name: str = Field(description="Name (or partial name) of the .pptx file, e.g. 'presentacion.pptx'")
+
+
+class WritePptxArgs(BaseModel):
+    """Arguments for creating a PowerPoint presentation"""
+    path: str = Field(description="Output file path (e.g. 'presentacion.pptx')")
+    slides: List[dict] = Field(description=(
+        "List of slide dicts. Each slide can have:\n"
+        "  title (str): slide title\n"
+        "  body (list[str]): bullet point lines\n"
+        "  notes (str): speaker notes (optional)\n"
+        "Example: [{\"title\": \"Intro\", \"body\": [\"Point 1\", \"Point 2\"], \"notes\": \"Say hello\"}]"
+    ))
+
+
+class ModifyPptxArgs(BaseModel):
+    """Arguments for modifying an existing PowerPoint file"""
+    file_name: str = Field(description="Name of the .pptx file in profile files or workspace")
+    replacements: Optional[List[dict]] = Field(default=None, description=(
+        "List of text replacements across all slides: [{old: 'text to find', new: 'replacement'}]"
+    ))
+    add_slides: Optional[List[dict]] = Field(default=None, description=(
+        "List of new slides to append. Each slide: {title, body (list[str]), notes (optional str)}"
+    ))
+    save_as: Optional[str] = Field(default=None, description="Output filename. Defaults to same name as input.")
     re_upload: bool = Field(default=False, description="If True, re-upload the modified file to storage after saving")
 
 
@@ -1368,6 +1414,209 @@ def create_langchain_tools(openai_integration, profile, skill_manager=None, stor
                     result["re_upload_error"] = str(e)
 
         return result
+
+    # ── PowerPoint tools ──────────────────────────────────────────────────────
+
+    async def read_pptx_tool(file_name: str) -> Dict[str, Any]:
+        """Read content of a PowerPoint (.pptx) file."""
+        import asyncio, io
+
+        def _read():
+            try:
+                from pptx import Presentation as _Prs
+            except ImportError:
+                return {"error": "python-pptx not installed. Run: pip install python-pptx"}
+
+            local = _find_local_file(file_name, client_workspace)
+            if local:
+                prs = _Prs(str(local))
+            else:
+                profile_file = _find_file_by_name(profile.files, file_name)
+                if not profile_file:
+                    return {"error": f"File '{file_name}' not found in profile files or workspace."}
+                import requests as _req
+                resp = _req.get(profile_file.url, timeout=30)
+                resp.raise_for_status()
+                prs = _Prs(io.BytesIO(resp.content))
+
+            slides_data = []
+            for i, slide in enumerate(prs.slides, 1):
+                title = ""
+                body_lines = []
+                notes = ""
+                for shape in slide.shapes:
+                    if shape.has_text_frame:
+                        if shape.shape_type == 13:
+                            continue
+                        text = shape.text_frame.text.strip()
+                        if not text:
+                            continue
+                        if shape.name.lower().startswith("title") or (i == 1 and not title):
+                            title = text
+                        else:
+                            body_lines.extend([ln.strip() for ln in text.splitlines() if ln.strip()])
+                if slide.has_notes_slide:
+                    notes = slide.notes_slide.notes_text_frame.text.strip()
+                slides_data.append({"slide": i, "title": title, "body": body_lines, "notes": notes})
+
+            return {"slides": slides_data, "total_slides": len(slides_data)}
+
+        try:
+            return await asyncio.get_event_loop().run_in_executor(None, _read)
+        except Exception as e:
+            return {"error": str(e)}
+
+
+    async def write_pptx_tool(path: str, slides: List[dict]) -> Dict[str, Any]:
+        """Create a new PowerPoint presentation from slide data."""
+        import asyncio
+
+        resolved = _resolve_output_path(path, client_workspace)
+
+        def _write():
+            try:
+                from pptx import Presentation as _Prs
+                from pptx.util import Inches, Pt
+            except ImportError:
+                return {"error": "python-pptx not installed. Run: pip install python-pptx"}
+
+            prs = _Prs()
+            slide_layout_title_content = prs.slide_layouts[1]
+            slide_layout_title_only = prs.slide_layouts[5]
+
+            for slide_data in slides:
+                title_text = slide_data.get("title", "")
+                body_lines = slide_data.get("body", [])
+                notes_text = slide_data.get("notes", "")
+
+                layout = slide_layout_title_content if body_lines else slide_layout_title_only
+                slide = prs.slides.add_slide(layout)
+
+                if slide.shapes.title:
+                    slide.shapes.title.text = title_text
+
+                if body_lines and len(slide.placeholders) > 1:
+                    tf = slide.placeholders[1].text_frame
+                    tf.clear()
+                    for i, line in enumerate(body_lines):
+                        if i == 0:
+                            tf.paragraphs[0].text = line
+                        else:
+                            tf.add_paragraph().text = line
+
+                if notes_text:
+                    slide.notes_slide.notes_text_frame.text = notes_text
+
+            resolved.parent.mkdir(parents=True, exist_ok=True)
+            prs.save(str(resolved))
+            return {"path": str(resolved), "slides_written": len(slides)}
+
+        try:
+            return await asyncio.get_event_loop().run_in_executor(None, _write)
+        except Exception as e:
+            return {"error": str(e)}
+
+
+    async def modify_pptx_tool(
+        file_name: str,
+        replacements: List[dict] = None,
+        add_slides: List[dict] = None,
+        save_as: str = None,
+        re_upload: bool = False,
+    ) -> Dict[str, Any]:
+        """Modify an existing PowerPoint file."""
+        import asyncio, io
+
+        def _modify():
+            try:
+                from pptx import Presentation as _Prs
+                from pptx.util import Inches
+            except ImportError:
+                return {"error": "python-pptx not installed. Run: pip install python-pptx"}
+
+            output_name = save_as or file_name
+            ws_path = _resolve_output_path(output_name, client_workspace)
+
+            local = _find_local_file(file_name, client_workspace)
+            if local:
+                if not save_as:
+                    ws_path = local.parent / output_name
+                prs = _Prs(str(local))
+            else:
+                profile_file = _find_file_by_name(profile.files, file_name)
+                if not profile_file:
+                    return {"error": f"File '{file_name}' not found in profile files or workspace."}
+                import requests as _req
+                resp = _req.get(profile_file.url, timeout=30)
+                resp.raise_for_status()
+                prs = _Prs(io.BytesIO(resp.content))
+
+            applied = []
+
+            # Text replacements across all slides
+            if replacements:
+                for slide in prs.slides:
+                    for shape in slide.shapes:
+                        if not shape.has_text_frame:
+                            continue
+                        for para in shape.text_frame.paragraphs:
+                            for run in para.runs:
+                                for rep in replacements:
+                                    if rep.get("old") and rep["old"] in run.text:
+                                        run.text = run.text.replace(rep["old"], rep.get("new", ""))
+                                        applied.append(f"replaced: '{rep['old']}' → '{rep.get('new', '')}'")
+
+            # Add new slides
+            if add_slides:
+                layout_content = prs.slide_layouts[1]
+                layout_blank = prs.slide_layouts[5]
+                for slide_data in add_slides:
+                    body_lines = slide_data.get("body", [])
+                    layout = layout_content if body_lines else layout_blank
+                    slide = prs.slides.add_slide(layout)
+                    if slide.shapes.title:
+                        slide.shapes.title.text = slide_data.get("title", "")
+                    if body_lines and len(slide.placeholders) > 1:
+                        tf = slide.placeholders[1].text_frame
+                        tf.clear()
+                        for i, line in enumerate(body_lines):
+                            if i == 0:
+                                tf.paragraphs[0].text = line
+                            else:
+                                tf.add_paragraph().text = line
+                    notes_text = slide_data.get("notes", "")
+                    if notes_text:
+                        slide.notes_slide.notes_text_frame.text = notes_text
+                    applied.append(f"added slide: '{slide_data.get('title', '')}'")
+
+            ws_path.parent.mkdir(parents=True, exist_ok=True)
+            prs.save(str(ws_path))
+            result = {"path": str(ws_path), "applied": applied}
+
+            if re_upload and store_service:
+                try:
+                    import aiohttp, asyncio as _aio
+                    async def _up():
+                        async with aiohttp.ClientSession() as session:
+                            data = aiohttp.FormData()
+                            data.add_field("file", open(ws_path, "rb"), filename=ws_path.name)
+                            async with session.post("http://localhost:8000/profile/files/upload", data=data) as resp:
+                                if resp.status == 200:
+                                    result["re_uploaded"] = True
+                                else:
+                                    result["re_upload_error"] = f"HTTP {resp.status}"
+                    _aio.get_event_loop().run_until_complete(_up())
+                except Exception as e:
+                    result["re_upload_error"] = str(e)
+
+            return result
+
+        try:
+            return await asyncio.get_event_loop().run_in_executor(None, _modify)
+        except Exception as e:
+            return {"error": str(e)}
+
+    # ─────────────────────────────────────────────────────────────────────────
 
     async def describe_image_tool(image_url: str) -> str:
         """Describe an image from its URL or local file path"""
@@ -3183,5 +3432,30 @@ user_pref("devtools.debugger.force-local", true);
                 args_schema=CronRunArgs,
                 coroutine=cron_run_tool,
             ))
+
+    if "read_pptx" not in disabled:
+        tools.append(StructuredTool(
+            name="read_pptx",
+            description=prompts.get("read_pptx", _DEFAULT_TOOL_PROMPTS["read_pptx"]),
+            func=read_pptx_tool,
+            args_schema=ReadPptxArgs,
+            coroutine=read_pptx_tool,
+        ))
+    if "write_pptx" not in disabled:
+        tools.append(StructuredTool(
+            name="write_pptx",
+            description=prompts.get("write_pptx", _DEFAULT_TOOL_PROMPTS["write_pptx"]),
+            func=write_pptx_tool,
+            args_schema=WritePptxArgs,
+            coroutine=write_pptx_tool,
+        ))
+    if "modify_pptx" not in disabled:
+        tools.append(StructuredTool(
+            name="modify_pptx",
+            description=prompts.get("modify_pptx", _DEFAULT_TOOL_PROMPTS["modify_pptx"]),
+            func=modify_pptx_tool,
+            args_schema=ModifyPptxArgs,
+            coroutine=modify_pptx_tool,
+        ))
 
     return tools
