@@ -143,7 +143,7 @@ const connectGoogleCalendar = async () => {
 
     if (authData && authData.authorization_url) {
       openOAuthPopup(authData.authorization_url, async () => {
-        await checkConnectionStatus()
+        await activateAfterOAuth()
       })
     } else {
       toast.add({
@@ -182,26 +182,28 @@ const searchCalendarIntegration = computed(() => {
 
 const checkConnectionStatus = async () => {
   if (!assistantProfile.value?.id) return
-
   try {
-    const wasConnected = isConnected.value
     await checkStatus(assistantProfile.value.id)
-    if (!wasConnected && isConnected.value) {
-      // Auto-activate integration when OAuth connection is confirmed
-      calendarIntegration.activated = true
-      const config = calendarIntegration.config as GoogleCalendarIntegrationConfig
-      config.profile_id = assistantProfile.value.id
-      config.is_connected = true
-      await addIntegration(calendarIntegration)
-      toast.add({
-        severity: 'success',
-        summary: '¡Conectado!',
-        detail: 'Google Calendar conectado correctamente',
-        life: 4000,
-      })
-    }
   } catch (error) {
     console.error('Error al verificar estado de conexión:', error)
+  }
+}
+
+const activateAfterOAuth = async () => {
+  if (!assistantProfile.value?.id) return
+  await checkStatus(assistantProfile.value.id)
+  if (isConnected.value) {
+    calendarIntegration.activated = true
+    const config = calendarIntegration.config as GoogleCalendarIntegrationConfig
+    config.profile_id = assistantProfile.value.id
+    config.is_connected = true
+    await addIntegration(calendarIntegration)
+    toast.add({
+      severity: 'success',
+      summary: '¡Conectado!',
+      detail: 'Google Calendar conectado correctamente',
+      life: 4000,
+    })
   }
 }
 
