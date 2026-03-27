@@ -28,6 +28,7 @@ from rich.live import Live
 from rich.rule import Rule
 from rich import box
 from rich.text import Text
+from rich.spinner import Spinner as RSpinner
 
 try:
     from prompt_toolkit import PromptSession
@@ -359,6 +360,7 @@ def _play_audio(url: str) -> None:
     console.print("[yellow]⚠[/yellow] No audio player found. Install [bold]mpv[/bold] or [bold]ffplay[/bold].")
 
 
+
 def _stream_assistant(
     conv_id: str,
     name: str,
@@ -392,7 +394,6 @@ def _stream_assistant(
     """
     import sys
     import threading
-    import time
 
     if always_approved is None:
         always_approved = set()
@@ -401,10 +402,6 @@ def _stream_assistant(
 
     # --yolo flag maps to YOLO mode for backward compatibility.
     effective_mode = _Mode.YOLO if auto_approve else mode
-
-    _FRAMES = ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"]
-    _stop_spinner = threading.Event()
-    _spinner_label = ["Thinking..."]
 
     # ── Escape-to-cancel ──────────────────────────────────────────────────────
     _cancel_requested = threading.Event()
@@ -449,59 +446,112 @@ def _stream_assistant(
         _escape_thread.start()
     # ─────────────────────────────────────────────────────────────────────────
 
-    def _spinner():
-        i = 0
-        while not _stop_spinner.is_set():
-            sys.stdout.write(f"\r{_FRAMES[i % len(_FRAMES)]} {_spinner_label[0]}  ")
-            sys.stdout.flush()
-            time.sleep(0.08)
-            i += 1
-        sys.stdout.write(f"\r{' ' * 35}\r")
-        sys.stdout.flush()
+    import time as _time
+    import logging as _logging
+    import io as _io
 
-    def _start_spinner(label="Thinking..."):
-        nonlocal spinner_thread
-        _spinner_label[0] = label
-        _stop_spinner.clear()
-        spinner_thread = threading.Thread(target=_spinner, daemon=True)
-        spinner_thread.start()
+    # ── Debug log to file (doesn't pollute the terminal) ──────────────────────
+    _dbg = _logging.getLogger("gillie.stream")
+    if not _dbg.handlers:
+        _fh = _logging.FileHandler("/tmp/gillie_stream.log", mode="a")
+        _fh.setFormatter(_logging.Formatter("%(asctime)s %(message)s"))
+        _dbg.addHandler(_fh)
+        _dbg.setLevel(_logging.DEBUG)
 
-    def _stop_spin():
-        nonlocal spinner_thread
-        if _stop_spinner.is_set():
-            return
-        _stop_spinner.set()
-        if spinner_thread and spinner_thread.is_alive():
-            spinner_thread.join()
+    def _ldbg(msg: str) -> None:
+        _dbg.debug(msg)
 
-    spinner_thread = None
+    # Wrap console.file to capture raw bytes sent to terminal
+    _orig_console_file = console.file
 
-    # Print name header BEFORE starting the spinner to avoid stdout race condition
-    console.print()
-    console.print(f"[bold cyan]{name}[/bold cyan]")
-    _start_spinner("Thinking...")
+    class _LoggingFile:
+        def write(self, data: str) -> int:
+            _dbg.debug(f"TTY_WRITE: {repr(data)}")
+            return _orig_console_file.write(data)
+        def flush(self):
+            return _orig_console_file.flush()
+        def fileno(self):
+            return _orig_console_file.fileno()
+        def isatty(self):
+            return _orig_console_file.isatty()
+        def __getattr__(self, name):
+            return getattr(_orig_console_file, name)
 
+    console.file = _LoggingFile()
+
+    def _hard_wrap(text: str) -> str:
+        """Insert explicit \\n every console.width chars so Rich correctly counts
+        terminal lines when text wraps. Without this, Rich's Segment.get_shape()
+        only counts explicit newlines and underestimates the rendered height,
+        causing the erase sequence to only clear the last wrapped line."""
+        w = console.width or 80
+        lines = text.split("\n")
+        result = []
+        for line in lines:
+            while len(line) > w:
+                result.append(line[:w])
+                line = line[w:]
+            result.append(line)
+        return "\n".join(result)
+
+    # ── Rich Live (handles both spinner and streaming text — no sys.stdout mixing) ──
     full_text = ""
     _had_error = False
+    _last_live_update = 0.0
+    _LIVE_INTERVAL = 0.05  # throttle text updates to every 50 ms
     _live_ctx: "Live | None" = None
+    _live_render_count = 0
 
     def _stop_live() -> None:
         nonlocal _live_ctx
         if _live_ctx is not None:
-            _live_ctx.stop()
+            _ldbg(f"_stop_live: stopping (render_count={_live_render_count})")
+            _live_ctx.stop()   # transient=True erases the live area cleanly
             _live_ctx = None
 
-    def _start_live() -> None:
-        nonlocal _live_ctx
+    def _do_refresh(label: str) -> None:
+        nonlocal _live_render_count
         if _live_ctx is None:
+            return
+        _live_render_count += 1
+        try:
+            lr = _live_ctx._live_render
+            shape = getattr(lr, "_shape", "no_shape_attr")
+            is_jupyter = getattr(_live_ctx, "is_jupyter", "?")
+            is_dumb = getattr(console, "is_dumb_terminal", "?")
+            force_terminal = getattr(console, "_force_terminal", "?")
+        except Exception as e:
+            shape, is_jupyter, is_dumb, force_terminal = f"err:{e}", "?", "?", "?"
+        _ldbg(
+            f"refresh #{_live_render_count} from={label} "
+            f"shape={shape} text_len={len(full_text)} "
+            f"jupyter={is_jupyter} dumb={is_dumb} force_terminal={force_terminal}"
+        )
+        _live_ctx.refresh()
+
+    def _start_live_spinner(label: str = "Thinking...") -> None:
+        """Start or update Live with a static spinner label (auto_refresh=False)."""
+        nonlocal _live_ctx, _live_render_count
+        renderable = Text(f"⠋ {label}", style="dim")
+        if _live_ctx is None:
+            _live_render_count = 0
             _live_ctx = Live(
-                Markdown(full_text or "\u200b"),
+                renderable,
                 console=console,
-                refresh_per_second=12,
-                vertical_overflow="visible",
-                transient=False,
+                transient=True,
+                auto_refresh=False,
             )
             _live_ctx.start()
+            _ldbg(f"_start_live_spinner: started live, console.is_terminal={console.is_terminal}")
+            _do_refresh(f"start_spinner:{label}")
+        else:
+            _live_ctx.update(renderable)
+            _do_refresh(f"update_spinner:{label}")
+
+    console.print()
+    console.print(f"[bold cyan]{name}[/bold cyan]")
+    _ldbg(f"=== NEW STREAM for conv={conv_id} console.is_terminal={console.is_terminal} ===")
+    _start_live_spinner("Thinking...")
 
     try:
         resp = requests.post(
@@ -535,23 +585,24 @@ def _stream_assistant(
                     audio_url = token.get("url")
                 elif token.get("type") == "tool_call":
                     _stop_live()
-                    _stop_spin()
-                    # Reset full_text so post-tool response renders fresh (avoids repeating pre-tool text)
+                    # Commit pre-tool text as Markdown, then reset for post-tool text
+                    if full_text:
+                        console.print(Markdown(full_text))
                     full_text = ""
+                    _last_live_update = 0.0
                     tool_name = token.get("name", "tool")
                     round_n   = token.get("round", "")
                     arg       = token.get("arg", "")
                     prefix    = f"[{round_n}] " if round_n else ""
                     suffix    = f" · [cyan]{arg}[/cyan]" if arg else ""
                     console.print(f"[dim]🔧 {prefix}{tool_name}{suffix}[/dim]")
-                    _start_spinner("Running tool...")
+                    _start_live_spinner("Running tool...")
                 elif token.get("type") == "tool_result":
-                    _stop_live()
-                    _stop_spin()
                     summary = token.get("summary", "")
                     if summary:
+                        _stop_live()
                         console.print(f"  [green]✓[/green] [dim]{summary}[/dim]")
-                    _start_spinner("Thinking...")
+                    _start_live_spinner("Thinking...")
                 elif token.get("type") == "local_file_used":
                     path = token.get("path", "")
                     if path and session_local_files is not None:
@@ -562,17 +613,14 @@ def _stream_assistant(
                             })
                 elif token.get("type") == "compaction":
                     _stop_live()
-                    _stop_spin()
                     console.print("[dim]Conversation compacted to optimise context[/dim]")
                 elif token.get("type") == "shell_output":
                     line_text = token.get("line", "")
                     if line_text:
                         _stop_live()
-                        _stop_spin()
                         console.print(f"[dim]{line_text}[/dim]")
                 elif token.get("type") == "approval_request":
                     _stop_live()
-                    _stop_spin()
 
                     request_id = token.get("request_id", "")
                     tool_name  = token.get("tool", "tool")
@@ -659,36 +707,37 @@ def _stream_assistant(
                     except Exception:
                         pass  # best-effort; the backend will timeout after 120s
 
-                    # Restart the spinner while the backend continues processing.
-                    _start_spinner("Thinking...")
-                    if full_text:
-                        _start_live()
+                    # Restart spinner while the backend continues processing.
+                    _start_live_spinner("Thinking...")
                 continue
             if isinstance(token, str) and token.startswith("[ERROR]"):
                 _stop_live()
-                _stop_spin()
                 console.print(f"\n[red]✗[/red] {token[7:].strip()}")
                 break
-            # Content token — switch from spinner to Live Markdown renderer
-            if not _stop_spinner.is_set():
-                _stop_spin()
-            if _live_ctx is None:
-                _start_live()
+            # Content token — update the Live (reuses the same context, spinner → text)
             full_text += token
-            if _live_ctx is not None:
-                _live_ctx.update(Markdown(full_text))
+            if _live_ctx is None:
+                _ldbg("content token: _live_ctx is None — creating new Live")
+                _live_ctx = Live(
+                    Text(""),
+                    console=console,
+                    transient=True,
+                    auto_refresh=False,
+                )
+                _live_ctx.start()
+            now = _time.monotonic()
+            if now - _last_live_update >= _LIVE_INTERVAL:
+                _live_ctx.update(Text(_hard_wrap(full_text)))
+                _do_refresh("content_token")
+                _last_live_update = now
     except requests.exceptions.ConnectionError:
         if not _cancel_requested.is_set():
             _stop_live()
-            _stop_spin()
             _had_error = True
-            sys.stdout.write("\n")
             console.print("[red]✗[/red] Cannot connect to API.")
     except requests.exceptions.HTTPError as e:
         _stop_live()
-        _stop_spin()
         _had_error = True
-        sys.stdout.write("\n")
         try:
             body = e.response.json()
             msg = body.get("error", {}).get("message", "") or body.get("detail", "") or str(body)
@@ -697,10 +746,10 @@ def _stream_assistant(
         console.print(f"[red]✗[/red] API error {e.response.status_code}: {msg}")
     finally:
         _stop_live()
-        _stop_spin()
         _stream_done.set()
         if _escape_thread and _escape_thread.is_alive():
             _escape_thread.join(timeout=0.5)
+        console.file = _orig_console_file  # restore after debug capture
 
     if _had_error:
         console.print(Rule(style="dim red"))
@@ -708,11 +757,20 @@ def _stream_assistant(
         return full_text
 
     if _cancel_requested.is_set():
+        if full_text:
+            console.print(Markdown(full_text))
         console.print("[yellow]⏹  Cancelled[/yellow]")
         console.print(Rule(style="dim"))
         console.print()
         return full_text
 
+    # transient Live erases the plain-text view; render final Markdown once
+    _ldbg(f"final: calling _stop_live, then Markdown. render_count={_live_render_count} text_len={len(full_text)}")
+    _stop_live()
+    _ldbg("final: _stop_live done, printing Markdown")
+    if full_text:
+        console.print(Markdown(full_text))
+    _ldbg("final: Markdown printed")
     console.print(Rule(style="dim"))
     console.print()
 
