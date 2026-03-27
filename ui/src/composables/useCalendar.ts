@@ -14,6 +14,11 @@ export const useCalendar = () => {
   const statusData = ref<CalendarStatusResponse | null>(null)
   const isLoading = ref(false)
 
+  // Credentials state
+  const savedClientId = ref<string>('')
+  const savedRedirectUri = ref<string>('')
+  const hasSecret = ref(false)
+
   // Error states
   const isSaveCredentialsError = ref(false)
   const saveCredentialsError = ref<string>('')
@@ -40,6 +45,17 @@ export const useCalendar = () => {
   const isConnected = computed(() => statusData.value?.is_active ?? false)
 
   // Methods
+  const getCredentials = async () => {
+    try {
+      const data = await services.calendarService.getCredentials()
+      savedClientId.value = data.client_id || ''
+      savedRedirectUri.value = data.redirect_uri || ''
+      hasSecret.value = data.has_secret ?? false
+    } catch {
+      // ignore — credentials simply not configured yet
+    }
+  }
+
   const saveCredentials = async (clientId: string, clientSecret: string, redirectUri?: string) => {
     isLoading.value = true
     isSaveCredentialsError.value = false
@@ -212,6 +228,9 @@ export const useCalendar = () => {
     statusData,
     isLoading,
     isConnected,
+    savedClientId,
+    savedRedirectUri,
+    hasSecret,
 
     // Error states
     isSaveCredentialsError,
@@ -230,6 +249,7 @@ export const useCalendar = () => {
     deleteEventError,
 
     // Methods
+    getCredentials,
     saveCredentials,
     getAuthorizationUrl,
     checkStatus,

@@ -323,17 +323,26 @@ GLOBAL_WORKFLOWS: List[Dict[str, Any]] = [
 # ============================================================================
 
 def has_active_integration(profile, integration_name: str) -> bool:
-    """Return True if the profile has an active, connected integration by name."""
+    """Return True if the profile has an active, connected integration by name.
+
+    For integrations that store OAuth tokens in the profile config (e.g. google_drive),
+    we also verify access_token is present. For integrations that store tokens in a
+    separate collection (e.g. google_calendar), activated=True is sufficient — the
+    workflow HTTP call will fail gracefully if there is no valid session.
+    """
+    _PROFILE_TOKEN_INTEGRATIONS = {"google_drive"}
+
     if not profile or not hasattr(profile, "integrations") or not profile.integrations:
         return False
 
     for integration in profile.integrations:
-        if (
-            integration.name == integration_name
-            and integration.activated is True
-            and integration.config.get("is_connected", False) is True
-        ):
-            return True
+        if integration.name == integration_name and integration.activated is True:
+            if integration_name in _PROFILE_TOKEN_INTEGRATIONS:
+                config = integration.config or {}
+                if config.get("access_token"):
+                    return True
+            else:
+                return True
 
     return False
 

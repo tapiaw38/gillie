@@ -6,6 +6,7 @@ from .list_events_use_case import ListEventsUseCase
 from .update_event_use_case import UpdateEventUseCase
 from .delete_event_use_case import DeleteEventUseCase
 from .set_credentials_use_case import SetCredentialsUseCase
+from .get_credentials_use_case import GetCredentialsUseCase
 
 __all__ = [
     "GetAuthorizationUrlUseCase",
@@ -16,4 +17,5 @@ __all__ = [
     "UpdateEventUseCase",
     "DeleteEventUseCase",
     "SetCredentialsUseCase",
+    "GetCredentialsUseCase",
 ]

@@ -50,21 +50,23 @@ class GoogleDriveClient:
         self.client_secret = client_secret
         self.redirect_uri = redirect_uri
 
-    def get_authorization_url(self, state: str) -> str:
-        """Return the Google OAuth2 authorization URL (Drive scope only)."""
+    def get_authorization_url(self, state: str) -> tuple:
+        """Return (authorization_url, code_verifier). Caller must store code_verifier for later exchange."""
         flow = self._build_flow()
         auth_url, _ = flow.authorization_url(
             state=state,
             access_type="offline",
             prompt="consent",
-            include_granted_scopes="true",
         )
-        return auth_url
+        return auth_url, getattr(flow, "code_verifier", None)
 
-    def exchange_code(self, code: str) -> Dict[str, Any]:
-        """Exchange authorization code for tokens."""
+    def exchange_code(self, code: str, code_verifier: Optional[str] = None) -> Dict[str, Any]:
+        """Exchange authorization code for tokens. Pass code_verifier if PKCE was used."""
         flow = self._build_flow()
-        flow.fetch_token(code=code)
+        fetch_kwargs = {"code": code}
+        if code_verifier:
+            fetch_kwargs["code_verifier"] = code_verifier
+        flow.fetch_token(**fetch_kwargs)
         creds = flow.credentials
         return {
             "access_token": creds.token,

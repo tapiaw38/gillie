@@ -20,7 +20,10 @@ class CheckSessionStatusUseCase:
                 (i for i in (profile.integrations or []) if i.name == INTEGRATION_NAME),
                 None,
             )
-            return drive_integration is not None and drive_integration.activated
+            if drive_integration is None:
+                return False
+            config = drive_integration.config or {}
+            return bool(config.get("access_token"))
         except Exception as e:
             logger.error(f"Error checking Drive session: {e}", exc_info=True)
             return False

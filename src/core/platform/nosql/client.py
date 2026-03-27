@@ -1,5 +1,5 @@
 from pymongo import MongoClient as PyMongoClient, collection, errors
-from pymongo.results import InsertOneResult, UpdateResult, DeleteResult
+from pymongo.results import InsertOneResult, UpdateResult, DeleteResult, UpdateResult as ReplaceResult
 from pymongo.cursor import Cursor
 from typing import Protocol, Any, Optional, List
 from src.core.platform.nosql.migrations import Migration
@@ -14,6 +14,7 @@ class Client(Protocol):
     def find_one(self, filter: dict) -> Optional[dict]: ...
     def update_many(self, filter: dict, update: dict) -> UpdateResult: ...
     def update_one(self, filter: dict, update: dict) -> UpdateResult: ...
+    def replace_one(self, filter: dict, replacement: dict, upsert: bool = False) -> ReplaceResult: ...
     def delete_one(self, filter: dict) -> DeleteResult: ...
     def run_migrations(self, migration_collection: collection.Collection, migrations: List[Migration]) -> None: ...
 
@@ -44,6 +45,9 @@ class MongoDBClient(Client):
 
     def update_one(self, filter: dict, update: dict) -> UpdateResult:
         return self._collection.update_one(filter, update)
+
+    def replace_one(self, filter: dict, replacement: dict, upsert: bool = False) -> ReplaceResult:
+        return self._collection.replace_one(filter, replacement, upsert=upsert)
 
     def delete_one(self, filter: dict) -> DeleteResult:
         return self._collection.delete_one(filter)

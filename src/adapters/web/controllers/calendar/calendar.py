@@ -1,4 +1,5 @@
 from fastapi import APIRouter, Depends, Request, status
+from fastapi.responses import HTMLResponse
 from src.schemas.calendar import (
     CalendarEventInput,
     CalendarEventOutput,
@@ -14,7 +15,7 @@ import logging
 logger = logging.getLogger(__name__)
 
 router = APIRouter(
-    prefix="/calendar",
+    prefix="/api/v1/calendar",
     tags=["calendar"],
 )
 
@@ -30,6 +31,14 @@ def get_usecases() -> Usecases:
     if _usecases_instance is None:
         raise Exception("Usecases not initialized. Call set_usecases first.")
     return _usecases_instance
+
+
+@router.get("/credentials", status_code=status.HTTP_200_OK)
+async def get_calendar_credentials(
+    usecases: Usecases = Depends(get_usecases),
+):
+    """Get saved Google Calendar OAuth credentials (client_id only, secret never returned)."""
+    return usecases.calendar.get_credentials_usecase.execute() or {}
 
 
 @router.post("/credentials", status_code=status.HTTP_200_OK)
@@ -62,7 +71,7 @@ async def get_authorization_url(
     )
 
 
-@router.get("/oauth/callback", status_code=status.HTTP_200_OK)
+@router.get("/oauth/callback", response_class=HTMLResponse)
 async def oauth_callback(
     request: Request,
     code: str,
@@ -73,10 +82,25 @@ async def oauth_callback(
     Handle Google OAuth2 callback.
     Google redirects here after the user grants access.
     `state` carries the user_id set during authorization.
+    Returns an HTML page that closes the popup window.
     """
     user_id = state or request.state.user.get("user_id")
     usecases.calendar.handle_oauth_callback_usecase.execute(user_id=user_id, code=code)
-    return {"message": "Google Calendar connected successfully", "user_id": user_id}
+    return HTMLResponse(content="""
+<!DOCTYPE html>
+<html>
+<head><title>Autorización exitosa</title></head>
+<body>
+<p>Autorización exitosa. Cerrando ventana...</p>
+<script>
+  if (window.opener) {
+    try { window.opener.postMessage({ type: 'oauth_success', integration: 'google_calendar' }, '*'); } catch(e) {}
+  }
+  window.close();
+</script>
+</body>
+</html>
+""")
 
 
 @router.get("/status", response_model=CalendarStatusOutput, status_code=status.HTTP_200_OK)

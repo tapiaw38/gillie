@@ -1,5 +1,5 @@
 from fastapi import APIRouter, Depends, Request, UploadFile, File, Form, status
-from fastapi.responses import Response
+from fastapi.responses import Response, HTMLResponse
 from typing import Optional
 import logging
 
@@ -19,7 +19,7 @@ from src.core.use_cases.use_cases import Usecases
 
 logger = logging.getLogger(__name__)
 
-router = APIRouter(prefix="/drive", tags=["drive"])
+router = APIRouter(prefix="/api/v1/drive", tags=["drive"])
 
 _usecases_instance = None
 
@@ -33,6 +33,14 @@ def get_usecases() -> Usecases:
     if _usecases_instance is None:
         raise Exception("Usecases not initialized. Call set_usecases first.")
     return _usecases_instance
+
+
+@router.get("/credentials", status_code=status.HTTP_200_OK)
+async def get_drive_credentials(
+    usecases: Usecases = Depends(get_usecases),
+):
+    """Get saved Google Drive OAuth credentials (client_id only, secret never returned)."""
+    return usecases.drive.get_credentials_usecase.execute() or {}
 
 
 @router.post("/credentials", status_code=status.HTTP_204_NO_CONTENT)
@@ -56,17 +64,32 @@ async def get_authorization_url(
     return DriveAuthorizationOutput(authorization_url=auth_url, user_id=user_id)
 
 
-@router.get("/oauth/callback", status_code=status.HTTP_200_OK)
+@router.get("/oauth/callback", response_class=HTMLResponse)
 async def oauth_callback(
     request: Request,
     code: str,
     state: Optional[str] = None,
     usecases: Usecases = Depends(get_usecases),
 ):
-    """Handle Google Drive OAuth2 callback. `state` carries the user_id."""
+    """Handle Google Drive OAuth2 callback. `state` carries the user_id.
+    Returns an HTML page that closes the popup window."""
     user_id = state or request.state.user.get("user_id")
-    result = usecases.drive.handle_oauth_callback_usecase.execute(user_id=user_id, code=code)
-    return {"message": "Google Drive connected successfully", **result}
+    usecases.drive.handle_oauth_callback_usecase.execute(user_id=user_id, code=code)
+    return HTMLResponse(content="""
+<!DOCTYPE html>
+<html>
+<head><title>Autorización exitosa</title></head>
+<body>
+<p>Autorización exitosa. Cerrando ventana...</p>
+<script>
+  if (window.opener) {
+    try { window.opener.postMessage({ type: 'oauth_success', integration: 'google_drive' }, '*'); } catch(e) {}
+  }
+  window.close();
+</script>
+</body>
+</html>
+""")
 
 
 @router.get("/status", response_model=DriveStatusOutput, status_code=status.HTTP_200_OK)

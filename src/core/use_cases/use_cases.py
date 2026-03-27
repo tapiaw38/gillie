@@ -47,6 +47,7 @@ from src.core.use_cases.calendar import (
     UpdateEventUseCase as CalendarUpdateEventUseCase,
     DeleteEventUseCase as CalendarDeleteEventUseCase,
     SetCredentialsUseCase as CalendarSetCredentialsUseCase,
+    GetCredentialsUseCase as CalendarGetCredentialsUseCase,
 )
 from src.core.use_cases.drive import (
     GetAuthorizationUrlUseCase as DriveGetAuthorizationUrlUseCase,
@@ -58,6 +59,7 @@ from src.core.use_cases.drive import (
     CreateFolderUseCase,
     MoveFileUseCase,
     SetCredentialsUseCase as DriveSetCredentialsUseCase,
+    GetCredentialsUseCase as DriveGetCredentialsUseCase,
 )
 from src.core.use_cases.slack import ProcessSlackMessageUseCase
 from src.core.use_cases.telegram import ProcessTelegramMessageUseCase
@@ -136,6 +138,7 @@ class Calendar:
     update_event_usecase: CalendarUpdateEventUseCase
     delete_event_usecase: CalendarDeleteEventUseCase
     set_credentials_usecase: CalendarSetCredentialsUseCase
+    get_credentials_usecase: CalendarGetCredentialsUseCase
 
 
 @dataclass
@@ -149,6 +152,7 @@ class Drive:
     create_folder_usecase: CreateFolderUseCase
     move_file_usecase: MoveFileUseCase
     set_credentials_usecase: DriveSetCredentialsUseCase
+    get_credentials_usecase: DriveGetCredentialsUseCase
 
 
 @dataclass
@@ -245,6 +249,7 @@ def create_usecases(context_factory: Factory) -> Usecases:
             update_event_usecase=CalendarUpdateEventUseCase(context_factory),
             delete_event_usecase=CalendarDeleteEventUseCase(context_factory),
             set_credentials_usecase=CalendarSetCredentialsUseCase(context_factory),
+            get_credentials_usecase=CalendarGetCredentialsUseCase(context_factory),
         ),
         drive=Drive(
             get_authorization_url_usecase=DriveGetAuthorizationUrlUseCase(context_factory),
@@ -256,6 +261,7 @@ def create_usecases(context_factory: Factory) -> Usecases:
             create_folder_usecase=CreateFolderUseCase(context_factory),
             move_file_usecase=MoveFileUseCase(context_factory),
             set_credentials_usecase=DriveSetCredentialsUseCase(context_factory),
+            get_credentials_usecase=DriveGetCredentialsUseCase(context_factory),
         ),
         whatsapp_device=WhatsAppDevice(
             create_usecase=WhatsAppDeviceCreateUseCase(context_factory),

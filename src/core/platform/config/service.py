@@ -215,6 +215,10 @@ def get_env(key: str, fallback: str) -> str:
 def read_config() -> ConfigurationService:
     load_dotenv()
 
+    # Allow OAuth2 over HTTP in local development
+    if os.getenv("OAUTHLIB_INSECURE_TRANSPORT") == "1":
+        os.environ["OAUTHLIB_INSECURE_TRANSPORT"] = "1"
+
     database_uri = get_env("DATABASE_URI", "mongodb://localhost:27017")
     server_config = ServerConfig(
         mode=ModeServer(get_env("APP_MODE", "release")),

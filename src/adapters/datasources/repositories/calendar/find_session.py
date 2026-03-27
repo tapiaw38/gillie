@@ -9,6 +9,7 @@ def find_active_session(client, user_id: str) -> Optional[CalendarSession]:
     try:
         doc = client.find_one({"user_id": user_id, "is_active": True})
         if doc:
+            doc["_id"] = str(doc["_id"])
             return CalendarSession(**doc)
         return None
     except PyMongoError as e:

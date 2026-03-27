@@ -4,6 +4,7 @@ import { onMounted, reactive, computed, watch, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useAssistant } from '@/composables/useAssistant'
 import { useDrive } from '@/composables/useDrive'
+import { useOAuthPopup } from '@/composables/useOAuthPopup'
 import { useErrorToast } from '@/composables/useErrorToast'
 import Toast from 'primevue/toast'
 import Button from 'primevue/button'
@@ -27,11 +28,15 @@ const {
 } = useAssistant()
 
 const {
+  getCredentials,
   saveCredentials,
   getAuthorizationUrl,
   checkStatus,
   isConnected,
   isLoading,
+  savedClientId,
+  savedRedirectUri,
+  hasSecret,
   isSaveCredentialsError,
   saveCredentialsError,
   isGetAuthUrlError,
@@ -39,6 +44,8 @@ const {
   isCheckStatusError,
   checkStatusError,
 } = useDrive()
+
+const { openOAuthPopup } = useOAuthPopup()
 
 const credentials = reactive({
   clientId: '',
@@ -134,7 +141,9 @@ const connectGoogleDrive = async () => {
     const authData = await getAuthorizationUrl(config.profile_id)
 
     if (authData && authData.authorization_url) {
-      window.location.href = authData.authorization_url
+      openOAuthPopup(authData.authorization_url, async () => {
+        await checkConnectionStatus()
+      })
     } else {
       toast.add({
         severity: 'error',
@@ -174,13 +183,15 @@ const checkConnectionStatus = async () => {
   if (!assistantProfile.value?.id) return
 
   try {
+    const wasConnected = isConnected.value
     await checkStatus(assistantProfile.value.id)
-    const config = driveIntegration.config as GoogleDriveIntegrationConfig
-    const wasConnected = config.is_connected
-    config.is_connected = isConnected.value
-
-    if (wasConnected !== isConnected.value) {
-      await updateIntegration()
+    if (!wasConnected && isConnected.value) {
+      toast.add({
+        severity: 'success',
+        summary: '¡Conectado!',
+        detail: 'Google Drive conectado correctamente',
+        life: 4000,
+      })
     }
   } catch (error) {
     console.error('Error al verificar estado de conexión:', error)
@@ -188,7 +199,7 @@ const checkConnectionStatus = async () => {
 }
 
 onMounted(async () => {
-  await getAssistantProfile()
+  await Promise.all([getAssistantProfile(), getCredentials()])
 
   assistantProfile.value?.integrations?.forEach((integration) => {
     if (integration.name === 'google_drive') {
@@ -274,13 +285,17 @@ onMounted(async () => {
           </div>
 
           <div class="credentials-form">
+            <div v-if="savedClientId && !credentialsSaved" class="saved-credentials-info">
+              <i class="pi pi-check-circle"></i>
+              Credenciales configuradas — Client ID: <strong>{{ savedClientId }}</strong>
+            </div>
+
             <div class="field">
               <label class="field-label">Client ID <span class="required">*</span></label>
               <InputText
                 v-model="credentials.clientId"
-                placeholder="xxxxxxxx.apps.googleusercontent.com"
+                :placeholder="savedClientId || 'xxxxxxxx.apps.googleusercontent.com'"
                 class="field-input"
-                :class="{ 'p-invalid': !credentials.clientId && credentialsSaved === false }"
               />
             </div>
 
@@ -288,7 +303,7 @@ onMounted(async () => {
               <label class="field-label">Client Secret <span class="required">*</span></label>
               <Password
                 v-model="credentials.clientSecret"
-                placeholder="GOCSPX-..."
+                :placeholder="hasSecret ? '••••••••••••• (ya configurado)' : 'GOCSPX-...'"
                 class="field-input"
                 :feedback="false"
                 toggleMask
@@ -302,7 +317,7 @@ onMounted(async () => {
               </label>
               <InputText
                 v-model="credentials.redirectUri"
-                placeholder="http://localhost:8000/api/v1/drive/oauth/callback"
+                :placeholder="savedRedirectUri || 'http://localhost:8000/api/v1/drive/oauth/callback'"
                 class="field-input"
               />
             </div>
@@ -313,7 +328,7 @@ onMounted(async () => {
                 icon="pi pi-save"
                 severity="primary"
                 :loading="isLoading"
-                :disabled="!credentials.clientId || !credentials.clientSecret"
+                :disabled="(!credentials.clientId && !savedClientId) || (!credentials.clientSecret && !hasSecret)"
                 @click="handleSaveCredentials"
               />
               <span v-if="credentialsSaved" class="saved-badge">
@@ -580,6 +595,18 @@ onMounted(async () => {
   font-size: 0.85rem;
   color: var(--do-text-muted);
   margin: 0;
+}
+
+.saved-credentials-info {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 0.85rem;
+  color: var(--color-success);
+  background: rgba(34, 197, 94, 0.08);
+  border: 1px solid rgba(34, 197, 94, 0.25);
+  border-radius: 0.5rem;
+  padding: 0.6rem 0.75rem;
 }
 
 .credentials-form {

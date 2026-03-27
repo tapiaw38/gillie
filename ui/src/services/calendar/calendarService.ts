@@ -7,7 +7,14 @@ import type {
   CalendarStatusResponse,
 } from '@/types/calendar'
 
+export interface CalendarCredentialsResponse {
+  client_id?: string
+  redirect_uri?: string
+  has_secret?: boolean
+}
+
 export interface ICalendarService {
+  getCredentials(): Promise<CalendarCredentialsResponse>
   saveCredentials(clientId: string, clientSecret: string, redirectUri?: string): Promise<void>
   getAuthorizationUrl(profileId?: string): Promise<CalendarAuthorizationResponse>
   checkStatus(profileId?: string): Promise<CalendarStatusResponse>
@@ -31,8 +38,13 @@ export class CalendarService implements ICalendarService {
     this.api = api
   }
 
+  async getCredentials(): Promise<CalendarCredentialsResponse> {
+    const { data } = await this.api.get<CalendarCredentialsResponse>('/api/v1/calendar/credentials')
+    return data
+  }
+
   async saveCredentials(clientId: string, clientSecret: string, redirectUri?: string): Promise<void> {
-    await this.api.post('/calendar/credentials', {
+    await this.api.post('/api/v1/calendar/credentials', {
       client_id: clientId,
       client_secret: clientSecret,
       ...(redirectUri ? { redirect_uri: redirectUri } : {}),
@@ -42,7 +54,7 @@ export class CalendarService implements ICalendarService {
   async getAuthorizationUrl(profileId?: string): Promise<CalendarAuthorizationResponse> {
     const params = profileId ? { profile_id: profileId } : {}
     const { data } = await this.api.get<CalendarAuthorizationResponse>(
-      '/calendar/authorize',
+      '/api/v1/calendar/authorize',
       { params },
     )
     return data
@@ -50,7 +62,7 @@ export class CalendarService implements ICalendarService {
 
   async checkStatus(profileId?: string): Promise<CalendarStatusResponse> {
     const params = profileId ? { profile_id: profileId } : {}
-    const { data } = await this.api.get<CalendarStatusResponse>('/calendar/status', { params })
+    const { data } = await this.api.get<CalendarStatusResponse>('/api/v1/calendar/status', { params })
     return data
   }
 
@@ -59,7 +71,7 @@ export class CalendarService implements ICalendarService {
     profileId?: string,
   ): Promise<CalendarEventResponse> {
     const params = profileId ? { profile_id: profileId } : {}
-    const { data } = await this.api.post<CalendarEventResponse>('/calendar/events', event, {
+    const { data } = await this.api.post<CalendarEventResponse>('/api/v1/calendar/events', event, {
       params,
     })
     return data
@@ -76,7 +88,7 @@ export class CalendarService implements ICalendarService {
     if (startDate) params.start_date = startDate
     if (endDate) params.end_date = endDate
 
-    const { data } = await this.api.get<CalendarEventListResponse>('/calendar/events', {
+    const { data } = await this.api.get<CalendarEventListResponse>('/api/v1/calendar/events', {
       params,
     })
     return data
@@ -89,7 +101,7 @@ export class CalendarService implements ICalendarService {
   ): Promise<CalendarEventResponse> {
     const params = profileId ? { profile_id: profileId } : {}
     const { data } = await this.api.put<CalendarEventResponse>(
-      `/calendar/events/${eventId}`,
+      `/api/v1/calendar/events/${eventId}`,
       event,
       { params },
     )
@@ -98,6 +110,6 @@ export class CalendarService implements ICalendarService {
 
   async deleteEvent(eventId: string, profileId?: string): Promise<void> {
     const params = profileId ? { profile_id: profileId } : {}
-    await this.api.delete(`/calendar/events/${eventId}`, { params })
+    await this.api.delete(`/api/v1/calendar/events/${eventId}`, { params })
   }
 }

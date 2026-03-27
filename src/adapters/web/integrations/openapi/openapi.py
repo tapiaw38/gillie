@@ -93,6 +93,7 @@ class OpenAIIntegration:
         if self.langchain_service is not None:
             self.langchain_service.job_usecases = job_usecases
 
+
     @log_function_call
     async def ask(
         self,

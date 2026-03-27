@@ -7,6 +7,7 @@ from .upload_file_use_case import UploadFileUseCase
 from .create_folder_use_case import CreateFolderUseCase
 from .move_file_use_case import MoveFileUseCase
 from .set_credentials_use_case import SetCredentialsUseCase
+from .get_credentials_use_case import GetCredentialsUseCase
 
 __all__ = [
     "GetAuthorizationUrlUseCase",
@@ -18,4 +19,5 @@ __all__ = [
     "CreateFolderUseCase",
     "MoveFileUseCase",
     "SetCredentialsUseCase",
+    "GetCredentialsUseCase",
 ]

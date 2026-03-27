@@ -19,6 +19,7 @@ class GoogleCalendarIntegration:
     def __init__(self, repository: CalendarRepository, fallback_client: Optional[GoogleCalendarClient] = None):
         self.repository = repository
         self._fallback_client = fallback_client
+        self._pending_verifiers: Dict[str, str] = {}  # user_id -> code_verifier (PKCE)
 
     # ── Credentials & auth ────────────────────────────────────────────────────
 
@@ -39,10 +40,14 @@ class GoogleCalendarIntegration:
         )
 
     def get_authorization_url(self, user_id: str) -> str:
-        return self._get_client().get_authorization_url(state=user_id)
+        auth_url, code_verifier = self._get_client().get_authorization_url(state=user_id)
+        if code_verifier:
+            self._pending_verifiers[user_id] = code_verifier
+        return auth_url
 
     def handle_oauth_callback(self, user_id: str, code: str) -> CalendarSession:
-        tokens = self._get_client().exchange_code(code)
+        code_verifier = self._pending_verifiers.pop(user_id, None)
+        tokens = self._get_client().exchange_code(code, code_verifier=code_verifier)
         session = CalendarSession(
             user_id=user_id,
             access_token=tokens["access_token"],
