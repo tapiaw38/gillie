@@ -323,7 +323,9 @@ onMounted(async () => {
               </label>
               <InputText
                 v-model="credentials.redirectUri"
-                :placeholder="savedRedirectUri || 'http://localhost:8000/api/v1/calendar/oauth/callback'"
+                :placeholder="
+                  savedRedirectUri || 'http://localhost:8000/api/v1/calendar/oauth/callback'
+                "
                 class="field-input"
               />
             </div>
@@ -334,7 +336,10 @@ onMounted(async () => {
                 icon="pi pi-save"
                 severity="primary"
                 :loading="isLoading"
-                :disabled="(!credentials.clientId && !savedClientId) || (!credentials.clientSecret && !hasSecret)"
+                :disabled="
+                  (!credentials.clientId && !savedClientId) ||
+                  (!credentials.clientSecret && !hasSecret)
+                "
                 @click="handleSaveCredentials"
               />
               <span v-if="credentialsSaved" class="saved-badge">
@@ -399,12 +404,6 @@ onMounted(async () => {
                 icon="pi pi-refresh"
                 severity="secondary"
                 @click="checkConnectionStatus"
-              />
-              <Button
-                label="Ver Eventos"
-                icon="pi pi-calendar"
-                severity="info"
-                @click="$router.push('/calendar/events')"
               />
             </div>
           </div>
@@ -532,7 +531,7 @@ onMounted(async () => {
 
 /* Activation Toggle */
 .activation-toggle {
-  background: rgba(255,255,255,0.04);
+  background: rgba(255, 255, 255, 0.04);
   border-radius: 0.75rem;
   padding: 1rem;
   box-shadow: 0 3px 14px rgba(0, 0, 0, 0.06);
@@ -743,7 +742,7 @@ onMounted(async () => {
 }
 
 :deep(.info-card .p-card-header) {
-  background: rgba(255,255,255,0.04);
+  background: rgba(255, 255, 255, 0.04);
   padding: 1rem 1.25rem;
   border-bottom: 1px solid var(--vt-c-gray-200);
 }
@@ -780,7 +779,7 @@ onMounted(async () => {
   flex-direction: column;
   gap: 0.5rem;
   padding: 0.75rem;
-  background: rgba(255,255,255,0.04);
+  background: rgba(255, 255, 255, 0.04);
   border-radius: 0.6rem;
   border: 1px solid var(--vt-c-gray-200);
 }
