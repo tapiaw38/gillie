@@ -138,11 +138,29 @@ class GoogleCalendarIntegration:
         return dt, fallback_tz
 
     def _session_timezone(self, user_id: str) -> str:
-        """Return the stored timezone for the user's session, or 'UTC' as fallback."""
+        """Return the stored IANA timezone for the user's session.
+
+        If the stored value is 'UTC' (the default/unset value), it tries to
+        refresh it once from the Google Calendar Settings API and persists the
+        real timezone so future calls are fast.
+        """
         try:
             session = self.repository.find_active_session(user_id)
-            if session and session.time_zone:
+            if session and session.time_zone and session.time_zone != "UTC":
                 return session.time_zone
+
+            # Stored as default "UTC" — try to fetch the real timezone from Google
+            if session:
+                try:
+                    service = self._get_service(user_id)
+                    tz = service.settings().get(setting="timezone").execute().get("value", "UTC")
+                    if tz and tz != "UTC":
+                        session.time_zone = tz
+                        self.repository.upsert_session(session)
+                        logger.info(f"Refreshed timezone for user_id={user_id}: {tz}")
+                        return tz
+                except Exception as e:
+                    logger.warning(f"Could not refresh timezone for user_id={user_id}: {e}")
         except Exception:
             pass
         return "UTC"

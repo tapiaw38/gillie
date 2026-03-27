@@ -3458,4 +3458,126 @@ user_pref("devtools.debugger.force-local", true);
             coroutine=modify_pptx_tool,
         ))
 
+    # -------------------------------------------------------------------------
+    # Google Calendar tools — only registered when integration is active
+    # -------------------------------------------------------------------------
+    _calendar_active = any(
+        getattr(i, "name", None) == "google_calendar" and getattr(i, "activated", False)
+        for i in (getattr(profile, "integrations", None) or [])
+    )
+    if _calendar_active:
+        import httpx as _httpx
+
+        _api_key = next(
+            (k.value for k in (getattr(profile, "api_keys", None) or []) if k.is_active),
+            None,
+        )
+        _cal_base = "http://localhost:8000/api/v1/calendar"
+        _cal_headers = {"Authorization": f"Bearer {_api_key}", "Content-Type": "application/json"} if _api_key else {}
+
+        class CalendarListEventsArgs(BaseModel):
+            start_date: Optional[str] = Field(None, description="Start date filter ISO 8601, e.g. 2025-06-01T00:00:00")
+            end_date: Optional[str] = Field(None, description="End date filter ISO 8601, e.g. 2025-06-30T23:59:59")
+            limit: Optional[int] = Field(None, description="Max number of events to return")
+
+        class CalendarCreateEventArgs(BaseModel):
+            title: str = Field(..., description="Event title")
+            start_time: str = Field(..., description="Start datetime ISO 8601, e.g. 2025-06-10T10:00:00")
+            end_time: str = Field(..., description="End datetime ISO 8601, e.g. 2025-06-10T11:00:00")
+            description: Optional[str] = Field("", description="Event description")
+            location: Optional[str] = Field("", description="Event location")
+
+        class CalendarUpdateEventArgs(BaseModel):
+            event_id: str = Field(..., description="ID of the event to update")
+            title: Optional[str] = Field(None, description="New title")
+            start_time: Optional[str] = Field(None, description="New start datetime ISO 8601")
+            end_time: Optional[str] = Field(None, description="New end datetime ISO 8601")
+            description: Optional[str] = Field(None, description="New description")
+            location: Optional[str] = Field(None, description="New location")
+
+        class CalendarDeleteEventArgs(BaseModel):
+            event_id: str = Field(..., description="ID of the event to delete")
+
+        async def calendar_list_events_tool(
+            start_date: Optional[str] = None,
+            end_date: Optional[str] = None,
+            limit: Optional[int] = None,
+        ) -> Dict[str, Any]:
+            params = {}
+            if start_date:
+                params["start_date"] = start_date
+            if end_date:
+                params["end_date"] = end_date
+            if limit:
+                params["limit"] = limit
+            async with _httpx.AsyncClient(timeout=30) as client:
+                r = await client.get(f"{_cal_base}/events", headers=_cal_headers, params=params)
+                return r.json()
+
+        async def calendar_create_event_tool(
+            title: str,
+            start_time: str,
+            end_time: str,
+            description: Optional[str] = "",
+            location: Optional[str] = "",
+        ) -> Dict[str, Any]:
+            body = {"title": title, "start_time": start_time, "end_time": end_time,
+                    "description": description or "", "location": location or ""}
+            async with _httpx.AsyncClient(timeout=30) as client:
+                r = await client.post(f"{_cal_base}/events", headers=_cal_headers, json=body)
+                return r.json()
+
+        async def calendar_update_event_tool(
+            event_id: str,
+            title: Optional[str] = None,
+            start_time: Optional[str] = None,
+            end_time: Optional[str] = None,
+            description: Optional[str] = None,
+            location: Optional[str] = None,
+        ) -> Dict[str, Any]:
+            body = {k: v for k, v in {
+                "title": title, "start_time": start_time, "end_time": end_time,
+                "description": description, "location": location,
+            }.items() if v is not None}
+            async with _httpx.AsyncClient(timeout=30) as client:
+                r = await client.put(f"{_cal_base}/events/{event_id}", headers=_cal_headers, json=body)
+                return r.json()
+
+        async def calendar_delete_event_tool(event_id: str) -> Dict[str, Any]:
+            async with _httpx.AsyncClient(timeout=30) as client:
+                r = await client.delete(f"{_cal_base}/events/{event_id}", headers=_cal_headers)
+                if r.status_code == 204:
+                    return {"success": True, "message": "Event deleted"}
+                return r.json()
+
+        tools.append(StructuredTool(
+            name="calendar_list_events",
+            description="List the user's Google Calendar events. Optionally filter by start_date and end_date (ISO 8601). Use when the user asks what events, meetings or appointments they have.",
+            func=calendar_list_events_tool,
+            args_schema=CalendarListEventsArgs,
+            coroutine=calendar_list_events_tool,
+        ))
+        tools.append(StructuredTool(
+            name="calendar_create_event",
+            description="Create a new Google Calendar event. Requires title, start_time and end_time in ISO 8601 (e.g. 2025-06-10T10:00:00). Use when the user asks to create, add, schedule or book an event.",
+            func=calendar_create_event_tool,
+            args_schema=CalendarCreateEventArgs,
+            coroutine=calendar_create_event_tool,
+        ))
+        tools.append(StructuredTool(
+            name="calendar_update_event",
+            description="Update an existing Google Calendar event by its ID. Can change title, start_time, end_time, description or location.",
+            func=calendar_update_event_tool,
+            args_schema=CalendarUpdateEventArgs,
+            coroutine=calendar_update_event_tool,
+        ))
+        tools.append(StructuredTool(
+            name="calendar_delete_event",
+            description="Delete a Google Calendar event by its ID. Use when the user asks to delete, remove or cancel an event.",
+            func=calendar_delete_event_tool,
+            args_schema=CalendarDeleteEventArgs,
+            coroutine=calendar_delete_event_tool,
+        ))
+        logger.info("Google Calendar tools registered (integration active)")
+
     return tools
