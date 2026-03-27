@@ -4,7 +4,7 @@ from datetime import datetime
 
 
 class IntegrationInput(BaseModel):
-    id: Optional[str] = None  # when provided, update existing integration by id
+    id: Optional[str] = None
     name: str
     type: str
     activated: bool

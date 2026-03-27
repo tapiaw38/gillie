@@ -16,7 +16,6 @@ class UpdateUseCase:
         self.context_factory = context_factory()
 
     def execute(self, user_id: str, profile: ProfileInput):
-        # Validate
         if profile.assistant_name is not None and profile.assistant_name.strip() == "":
             raise NewApplicationError(ProfileUpdateValidationError)
 

@@ -25,7 +25,6 @@ class RunJobUseCase:
         if not job:
             raise NewApplicationError(JobGetNotFoundError)
 
-        # Mark job as running
         job.status = "running"
         job.updated_at = datetime.now(timezone.utc)
         context.repositories.job.update(job)
@@ -82,7 +81,6 @@ class RunJobUseCase:
         if not command:
             raise ValueError("system_command source requires 'command' param")
 
-        # Apply blacklist validation
         try:
             from src.core.platform.tools.system_monitor import _get_blacklist, _is_blacklisted
             blacklist = _get_blacklist(None)

@@ -163,7 +163,6 @@ class ProcessWhatsAppMessageUseCase:
 
                 all_messages = updated_conversation.messages
 
-                # Find the last user message and collect all assistant messages after it
                 last_user_idx = next(
                     (i for i in range(len(all_messages) - 1, -1, -1)
                      if all_messages[i].sender != SenderEnum.assistant),

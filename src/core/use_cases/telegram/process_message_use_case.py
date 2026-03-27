@@ -109,7 +109,6 @@ class ProcessTelegramMessageUseCase:
                     )
                     conversation_id = new_conv.data.id
 
-                # Send typing indicator to let the user know the bot is processing
                 tg_client.send_typing_action(chat_id)
 
                 from src.core.use_cases.conversation import AddMessageUseCase

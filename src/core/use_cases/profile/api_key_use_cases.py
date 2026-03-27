@@ -25,7 +25,6 @@ class AddApiKeyUseCase:
     async def execute(self, api_key: ApiKeyInput, user_id: str):
         try:
             generated_id = str(uuid4())
-            # Generate a simple unique token without JWT (no restrictions)
             api_key_value = f"sk-{str(uuid4()).replace('-', '')}"
 
             new_api_key = ApiKey(

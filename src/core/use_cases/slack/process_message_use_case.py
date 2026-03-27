@@ -19,7 +19,7 @@ class ProcessSlackMessageUseCase:
     """
 
     def __init__(self, context_factory: Factory):
-        self.context_factory = context_factory  # Store factory; called in execute, not here
+        self.context_factory = context_factory
 
     async def execute(self, payload: Dict[Any, Any], profile: Profile):
         """
@@ -125,7 +125,6 @@ class ProcessSlackMessageUseCase:
 
                 all_messages = updated_conversation.messages
 
-                # Locate the last user message and collect all assistant replies after it
                 last_user_idx = next(
                     (
                         i

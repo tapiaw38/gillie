@@ -50,7 +50,7 @@ class AuthenticateDeviceUseCase:
                     phone_number=phone_number.strip(),
                 )
 
-            else:  # default: qr
+            else:
                 repo = self.context_factory.repositories.whatsapp_device
 
                 async def on_qr_ready(qr_data_url: str) -> None:

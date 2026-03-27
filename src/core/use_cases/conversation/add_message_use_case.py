@@ -477,10 +477,8 @@ class AddMessageUseCase:
             Generated AI response text
         """
         try:
-            # Inject skill context even in fallback mode
             enhanced_context = self._inject_skill_context(message_context)
 
-            # Manual conversion of messages to string
             conversation_history = " - ".join([
                 f"{msg.sender}: {msg.content}"
                 for msg in conversation.messages
