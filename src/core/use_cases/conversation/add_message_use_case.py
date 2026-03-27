@@ -314,7 +314,7 @@ class AddMessageUseCase:
 
         try:
             # Inject skill context BEFORE any AI processing (highest priority)
-            enhanced_context = self._inject_skill_context(message_context)
+            enhanced_context = self._inject_skill_context(message_context, user_message.content)
 
             # Build chat history for function execution
             chat_history = self.context_factory.platform_managers.message_history.build_chat_history(
@@ -369,7 +369,7 @@ class AddMessageUseCase:
         user_message = self._create_user_message(content, SenderEnum.user)
         self._add_message_to_conversation(conversation, user_message)
 
-        enhanced_context = self._inject_skill_context(None)
+        enhanced_context = self._inject_skill_context(None, content)
         conversation_history = (
             self.context_factory.platform_managers.message_history
             .convert_messages_to_string(conversation.messages[-40:])
@@ -414,12 +414,15 @@ class AddMessageUseCase:
         self._add_message_to_conversation(conversation, assistant_message)
         self._save_messages(conversation_id, conversation.messages)
 
-    def _inject_skill_context(self, message_context: Optional[str]) -> str:
+    def _inject_skill_context(self, message_context: Optional[str], user_query: str = "") -> str:
         """
         Inject skill context (general.skill.md + faqs.skill.md) into message context.
+        When a user_query is provided, also searches memory for relevant snippets and
+        appends them so the LLM gets targeted knowledge for the current question.
 
         Args:
             message_context: Original message context
+            user_query: User's message text used to search memory for relevant snippets
 
         Returns:
             Enhanced context with skill knowledge prepended (or original if unavailable)
@@ -431,12 +434,22 @@ class AddMessageUseCase:
             return message_context
 
         try:
-            skill_context = self.context_factory.platform_managers.skill_manager.get_base_context()
+            skill_manager = self.context_factory.platform_managers.skill_manager
+            skill_context = skill_manager.get_base_context()
 
             if not skill_context:
                 return message_context
 
             enhanced_context = f"{skill_context}\n\n{message_context}" if message_context else skill_context
+
+            # Search for query-specific snippets and append them
+            if user_query:
+                search_results = skill_manager.search_memory(user_query)
+                no_results_msg = "No se encontraron resultados relevantes en la memoria"
+                if search_results and no_results_msg not in search_results:
+                    enhanced_context = f"{enhanced_context}\n\n=== CONTEXTO RELEVANTE PARA ESTA CONSULTA ===\n{search_results}"
+                    logger.info("Skill search results injected for query")
+
             logger.info("Skill context injected into message context")
             return enhanced_context
 
