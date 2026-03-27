@@ -186,6 +186,12 @@ const checkConnectionStatus = async () => {
     const wasConnected = isConnected.value
     await checkStatus(assistantProfile.value.id)
     if (!wasConnected && isConnected.value) {
+      // Auto-activate integration when OAuth connection is confirmed
+      driveIntegration.activated = true
+      const config = driveIntegration.config as GoogleDriveIntegrationConfig
+      config.profile_id = assistantProfile.value.id
+      config.is_connected = true
+      await addIntegration(driveIntegration)
       toast.add({
         severity: 'success',
         summary: '¡Conectado!',

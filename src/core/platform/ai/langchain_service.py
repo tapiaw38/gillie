@@ -115,8 +115,8 @@ class LangChainService:
             base_url=self.config.base_url if hasattr(self.config, 'base_url') and self.config.base_url else None,
             temperature=0.7,
             max_tokens=2000,
-            timeout=180.0,
-            max_retries=3,
+            timeout=300.0,
+            max_retries=2,
         )
 
 
@@ -556,7 +556,12 @@ class LangChainService:
             # Emit tool_call events for the NEXT round before invoking LLM
             # (round 0's tool_calls were already emitted before _handle_tool_calls)
             logger.info(f"Invoking LLM after round {round_num + 1}")
-            response = await llm_with_tools.ainvoke(messages)
+            try:
+                response = await llm_with_tools.ainvoke(messages)
+            except Exception as e:
+                logger.error(f"LLM invoke failed after tool execution (round {round_num + 1}): {e}")
+                from langchain_core.messages import AIMessage as _AIMsg
+                response = _AIMsg(content="Lo siento, ocurrió un error al procesar los resultados. Por favor, intenta de nuevo.")
             content = response.content or ""
             logger.info(f"Response after round {round_num + 1}: length={len(content)}, has_more_tool_calls={bool(getattr(response, 'tool_calls', None))}")
 
@@ -699,6 +704,41 @@ class LangChainService:
             system_prompt += CONTEXT_ROLE_ASSISTANT
 
         system_prompt += CONTEXT_RULES
+
+        # Inject available global workflows so the model knows which API
+        # endpoints to call directly instead of searching locally.
+        try:
+            from src.core.platform.functions.global_workflows import get_available_workflows
+            available_workflows = get_available_workflows(profile)
+            if available_workflows:
+                workflow_lines = []
+                for wf in available_workflows:
+                    name = wf.get("name", "")
+                    description = wf.get("description", "")
+                    steps = wf.get("steps", [])
+                    for step in steps:
+                        method = step.get("method", "GET")
+                        url = step.get("url", "")
+                        required = step.get("required_params", [])
+                        body_template = step.get("body_template", "")
+                        line = f"- **{name}**: {description}\n  → {method} {url}"
+                        if required:
+                            line += f" | params: {', '.join(required)}"
+                        if body_template:
+                            line += f" | body: {body_template}"
+                        workflow_lines.append(line)
+
+                system_prompt += (
+                    "\n\n## Integraciones disponibles\n"
+                    "Tienes acceso a las siguientes APIs. Úsalas directamente con `run_shell` "
+                    "(curl) cuando el usuario solicite información relacionada. "
+                    "NO busques archivos locales ni respondas que no tienes acceso.\n"
+                    "El header de autenticación ya está gestionado internamente; usa siempre "
+                    "la URL tal como aparece (http://localhost:8000/...).\n\n"
+                    + "\n".join(workflow_lines)
+                )
+        except Exception as e:
+            logger.warning(f"Could not inject global workflows into system prompt: {e}")
 
         if context and "PREGUNTAS FRECUENTES" in context:
             system_prompt += (

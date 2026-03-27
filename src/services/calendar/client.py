@@ -151,17 +151,27 @@ class GoogleCalendarClient:
         title: str,
         start_time: datetime,
         end_time: datetime,
-        time_zone: str = "UTC",
+        time_zone: Optional[str] = None,
         description: Optional[str] = None,
         location: Optional[str] = None,
         attendees: Optional[List[dict]] = None,
         reminders: Optional[List[dict]] = None,
     ) -> Dict[str, Any]:
-        """Build a Google Calendar event body dict."""
+        """Build a Google Calendar event body dict.
+
+        When time_zone is None the datetime strings already carry offset info
+        (tz-aware isoformat), so no timeZone field is added and Google Calendar
+        uses the embedded offset directly.
+        """
+        def _dt_field(dt: datetime, tz: Optional[str]) -> dict:
+            if tz:
+                return {"dateTime": dt.isoformat(), "timeZone": tz}
+            return {"dateTime": dt.isoformat()}
+
         body: Dict[str, Any] = {
             "summary": title,
-            "start": {"dateTime": start_time.isoformat(), "timeZone": time_zone},
-            "end": {"dateTime": end_time.isoformat(), "timeZone": time_zone},
+            "start": _dt_field(start_time, time_zone),
+            "end": _dt_field(end_time, time_zone),
         }
         if description:
             body["description"] = description

@@ -187,6 +187,12 @@ const checkConnectionStatus = async () => {
     const wasConnected = isConnected.value
     await checkStatus(assistantProfile.value.id)
     if (!wasConnected && isConnected.value) {
+      // Auto-activate integration when OAuth connection is confirmed
+      calendarIntegration.activated = true
+      const config = calendarIntegration.config as GoogleCalendarIntegrationConfig
+      config.profile_id = assistantProfile.value.id
+      config.is_connected = true
+      await addIntegration(calendarIntegration)
       toast.add({
         severity: 'success',
         summary: '¡Conectado!',

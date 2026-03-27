@@ -18,6 +18,7 @@ class CalendarSession(BaseModel):
     token_expiry: datetime
     scopes: List[str] = Field(default_factory=list)
     is_active: bool = True
+    time_zone: str = "UTC"
     created_at: Optional[datetime] = Field(default_factory=datetime.now)
     updated_at: Optional[datetime] = Field(default_factory=datetime.now)
 

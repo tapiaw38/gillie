@@ -47,7 +47,8 @@ class GoogleCalendarIntegration:
 
     def handle_oauth_callback(self, user_id: str, code: str) -> CalendarSession:
         code_verifier = self._pending_verifiers.pop(user_id, None)
-        tokens = self._get_client().exchange_code(code, code_verifier=code_verifier)
+        client = self._get_client()
+        tokens = client.exchange_code(code, code_verifier=code_verifier)
         session = CalendarSession(
             user_id=user_id,
             access_token=tokens["access_token"],
@@ -56,6 +57,20 @@ class GoogleCalendarIntegration:
             scopes=tokens["scopes"],
             is_active=True,
         )
+
+        # Read the user's primary calendar timezone from Google Calendar settings
+        try:
+            service = client.build_service(
+                access_token=session.access_token,
+                refresh_token=session.refresh_token,
+                expiry=session.token_expiry,
+            )
+            tz = service.settings().get(setting="timezone").execute().get("value", "UTC")
+            session.time_zone = tz
+            logger.info(f"Calendar timezone for user_id={user_id}: {tz}")
+        except Exception as e:
+            logger.warning(f"Could not read calendar timezone for user_id={user_id}: {e}")
+
         self.repository.upsert_session(session)
         logger.info(f"OAuth session stored for user_id={user_id}")
         return session
@@ -112,6 +127,26 @@ class GoogleCalendarIntegration:
         events = client.list_events(service, time_min=time_min, time_max=time_max, limit=limit)
         return [self._google_event_to_dict(e, user_id) for e in events]
 
+    def _resolve_datetime_and_tz(
+        self, dt_str: str, fallback_tz: str
+    ):
+        """Parse a datetime string. If naive, return (dt, fallback_tz). If tz-aware, return (dt, None)
+        so that the ISO string (which already includes the offset) is used directly by Google."""
+        dt = datetime.fromisoformat(dt_str)
+        if dt.tzinfo is not None:
+            return dt, None  # isoformat() will include the offset — no timeZone field needed
+        return dt, fallback_tz
+
+    def _session_timezone(self, user_id: str) -> str:
+        """Return the stored timezone for the user's session, or 'UTC' as fallback."""
+        try:
+            session = self.repository.find_active_session(user_id)
+            if session and session.time_zone:
+                return session.time_zone
+        except Exception:
+            pass
+        return "UTC"
+
     def create_event(
         self,
         user_id: str,
@@ -122,16 +157,19 @@ class GoogleCalendarIntegration:
         location: Optional[str] = None,
         attendees: Optional[List[Dict]] = None,
         reminders: Optional[List[Dict]] = None,
-        time_zone: str = "UTC",
+        time_zone: Optional[str] = None,
         **kwargs,
     ) -> Dict[str, Any]:
         service = self._get_service(user_id)
         client = self._get_client()
+        effective_tz = time_zone or self._session_timezone(user_id)
+        start_dt, start_tz = self._resolve_datetime_and_tz(start_time, effective_tz)
+        end_dt, end_tz = self._resolve_datetime_and_tz(end_time, effective_tz)
         body = GoogleCalendarClient.build_event_body(
             title=title,
-            start_time=datetime.fromisoformat(start_time),
-            end_time=datetime.fromisoformat(end_time),
-            time_zone=time_zone,
+            start_time=start_dt,
+            end_time=end_dt,
+            time_zone=start_tz,
             description=description,
             location=location,
             attendees=attendees,
@@ -160,15 +198,16 @@ class GoogleCalendarIntegration:
         current_end = current.get("end", {})
         time_zone = current_start.get("timeZone", "UTC")
 
+        effective_tz = time_zone or self._session_timezone(user_id)
+        raw_start = start_time or (current_start.get("dateTime") or current_start.get("date", "")).replace("Z", "+00:00")
+        raw_end = end_time or (current_end.get("dateTime") or current_end.get("date", "")).replace("Z", "+00:00")
+        start_dt, start_tz = self._resolve_datetime_and_tz(raw_start, effective_tz)
+        end_dt, _ = self._resolve_datetime_and_tz(raw_end, effective_tz)
         body = GoogleCalendarClient.build_event_body(
             title=title or current.get("summary", ""),
-            start_time=datetime.fromisoformat(start_time) if start_time else datetime.fromisoformat(
-                (current_start.get("dateTime") or current_start.get("date", "")).replace("Z", "+00:00")
-            ),
-            end_time=datetime.fromisoformat(end_time) if end_time else datetime.fromisoformat(
-                (current_end.get("dateTime") or current_end.get("date", "")).replace("Z", "+00:00")
-            ),
-            time_zone=time_zone,
+            start_time=start_dt,
+            end_time=end_dt,
+            time_zone=start_tz,
             description=description if description is not None else current.get("description"),
             location=location if location is not None else current.get("location"),
         )
