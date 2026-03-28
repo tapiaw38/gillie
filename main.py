@@ -34,9 +34,12 @@ app = FastAPI(
 
 register_exception_handlers(app)
 
+_raw_origins = os.getenv("ALLOWED_ORIGINS", "*")
+_allow_origins = [o.strip() for o in _raw_origins.split(",")] if _raw_origins != "*" else ["*"]
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=_allow_origins,
     allow_origin_regex=r"(file://.*|null|app://.*|http://localhost(:\d+)?|https://localhost(:\d+)?)",
     allow_credentials=False,
     allow_methods=["*"],
@@ -224,7 +227,7 @@ neonize_integration = NeonizeIntegration(sessions_dir="./data/whatsapp", stt_int
 routes_manager = RoutesManager(app, usecases, config_service, neonize_integration=neonize_integration, scheduler=scheduler)
 routes_manager.include_routes()
 
-app.add_middleware(SingleUserMiddleware, user_id=user_id)
+app.add_middleware(SingleUserMiddleware, user_id=user_id, profile_client=profiles_client)
 
 
 # ─── Startup: start scheduler ─────────────────────────────────────────────────
