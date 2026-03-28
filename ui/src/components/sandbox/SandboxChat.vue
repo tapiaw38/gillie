@@ -7,6 +7,7 @@ import Dialog from 'primevue/dialog'
 import Textarea from 'primevue/textarea'
 import { useToast } from 'primevue/usetoast'
 import Toast from 'primevue/toast'
+import { useI18n } from 'vue-i18n'
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -59,9 +60,11 @@ const emit = defineEmits<Emits>()
 // ── State ─────────────────────────────────────────────────────────────────────
 
 const toast = useToast()
+const { t } = useI18n()
 const messages = ref<ChatMessage[]>([])
 const inputText = ref('')
 const isStreaming = ref(false)
+const streamAbortController = ref<AbortController | null>(null)
 const messagesEl = ref<HTMLElement | null>(null)
 const textareaEl = ref<HTMLTextAreaElement | null>(null)
 
@@ -392,6 +395,7 @@ const sendMessage = async () => {
 
   await scrollToBottom()
   isStreaming.value = true
+  streamAbortController.value = new AbortController()
   emit('messageSent')
 
   const assistantMsg = messages.value.find((m) => m.id === assistantId)!
@@ -411,6 +415,7 @@ const sendMessage = async () => {
         method: 'POST',
         headers,
         body: JSON.stringify({ content }),
+        signal: streamAbortController.value.signal,
       },
     )
 
@@ -465,19 +470,28 @@ const sendMessage = async () => {
       }
     }
   } catch (err: unknown) {
-    const errMsg = err instanceof Error ? err.message : 'Error desconocido'
-    toast.add({
-      severity: 'error',
-      summary: 'Error de conexión',
-      detail: errMsg,
-      life: 5000,
-    })
-    assistantMsg.content = `Error: ${errMsg}`
+    if (err instanceof Error && err.name === 'AbortError') {
+      if (!assistantMsg.content) assistantMsg.content = `[${t('sandbox.stopStreaming')}]`
+    } else {
+      const errMsg = err instanceof Error ? err.message : t('common.unknownError')
+      toast.add({
+        severity: 'error',
+        summary: t('sandbox.errorStream'),
+        detail: errMsg,
+        life: 5000,
+      })
+      assistantMsg.content = `Error: ${errMsg}`
+    }
   } finally {
     assistantMsg.isStreaming = false
     isStreaming.value = false
+    streamAbortController.value = null
     await scrollToBottom()
   }
+}
+
+const stopStreaming = () => {
+  streamAbortController.value?.abort()
 }
 
 const processStreamEvent = async (msg: ChatMessage, payload: unknown) => {
@@ -489,7 +503,7 @@ const processStreamEvent = async (msg: ChatMessage, payload: unknown) => {
     }
     if (payload.startsWith('[ERROR]')) {
       const errText = payload.slice(7).trim()
-      toast.add({ severity: 'error', summary: 'Error del stream', detail: errText, life: 5000 })
+      toast.add({ severity: 'error', summary: t('sandbox.errorStream'), detail: errText, life: 5000 })
       msg.content += `\n\n*Error: ${errText}*`
       return
     }
@@ -544,8 +558,8 @@ const processStreamEvent = async (msg: ChatMessage, payload: unknown) => {
     case 'compaction': {
       toast.add({
         severity: 'info',
-        summary: 'Contexto compactado',
-        detail: 'La conversación fue compactada para ahorrar tokens.',
+        summary: t('sandbox.contextCompacted'),
+        detail: t('sandbox.contextCompactedDesc'),
         life: 4000,
       })
       break
@@ -578,8 +592,8 @@ const handleApproval = async (approved: boolean) => {
   } catch {
     toast.add({
       severity: 'error',
-      summary: 'Error',
-      detail: 'No se pudo enviar la respuesta de aprobación',
+      summary: t('common.error'),
+      detail: t('sandbox.errorApproval'),
       life: 4000,
     })
   } finally {
@@ -840,10 +854,8 @@ watch(
     <!-- Empty state: no conversation selected -->
     <div v-if="!conversationId" class="chat-empty-state">
       <i class="pi pi-comments chat-empty-icon" />
-      <h3 class="chat-empty-title">Selecciona o crea una conversación</h3>
-      <p class="chat-empty-subtitle">
-        Elige una conversación del panel izquierdo o crea una nueva para comenzar.
-      </p>
+      <h3 class="chat-empty-title">{{ t('sandbox.selectOrCreate') }}</h3>
+      <p class="chat-empty-subtitle">{{ t('sandbox.selectOrCreateDesc') }}</p>
     </div>
 
     <!-- Chat UI -->
@@ -862,7 +874,7 @@ watch(
         <!-- Empty conversation -->
         <div v-if="messages.length === 0 && !isStreaming" class="chat-placeholder">
           <i class="pi pi-sparkles chat-placeholder-icon" />
-          <p class="chat-placeholder-text">Escribe un mensaje para comenzar la conversación</p>
+          <p class="chat-placeholder-text">{{ t('sandbox.sendPlaceholder') }}</p>
           <p class="chat-placeholder-hint">
             Use <code>/new</code>, <code>/clear</code>, <code>/workspace /path</code>,
             <code>/model</code> &mdash; or <code>@file</code>, <code>@dir/</code>,
@@ -919,7 +931,7 @@ watch(
               <div v-if="msg.shellOutput.length > 0" class="shell-block">
                 <button class="shell-toggle" @click="toggleShell(msg.id)">
                   <i class="pi pi-terminal shell-toggle-icon" />
-                  <span>Terminal output ({{ msg.shellOutput.length }} líneas)</span>
+                  <span>{{ t('sandbox.shellOutput') }} ({{ msg.shellOutput.length }})</span>
                   <i
                     :class="[
                       'pi',
@@ -947,7 +959,7 @@ watch(
                 <span class="thinking-dot" />
                 <span class="thinking-dot" />
                 <span class="thinking-dot" />
-                <span class="thinking-label">pensando...</span>
+                <span class="thinking-label">{{ t('sandbox.thinking') }}</span>
               </div>
 
               <!-- Content: markdown for assistant messages -->
@@ -1005,13 +1017,21 @@ watch(
             @input="handleInput"
           />
           <Button
+            v-if="isStreaming"
+            icon="pi pi-stop-circle"
+            severity="danger"
+            class="chat-stop-btn"
+            @click="stopStreaming"
+            :aria-label="t('sandbox.stopStreaming')"
+          />
+          <Button
+            v-else
             icon="pi pi-send"
             :disabled="!canSend"
-            :loading="isStreaming && isWaitingFirstToken"
             severity="info"
             class="chat-send-btn"
             @click="sendMessage"
-            aria-label="Enviar mensaje"
+            :aria-label="t('common.save')"
           />
         </div>
         <p class="chat-input-hint">
@@ -1028,7 +1048,7 @@ watch(
       :closable="false"
       :draggable="false"
       :modal="true"
-      header="Aprobación requerida"
+      :header="t('sandbox.approvalTitle')"
       class="approval-dialog"
       style="width: min(680px, 95vw)"
     >
@@ -1036,15 +1056,15 @@ watch(
         <div class="approval-warning">
           <i class="pi pi-exclamation-triangle approval-warning-icon" />
           <div>
-            <p class="approval-warning-title">El asistente solicita ejecutar una acción</p>
+            <p class="approval-warning-title">{{ t('sandbox.approvalTitle') }}</p>
             <p class="approval-warning-tool">
-              Herramienta: <strong>{{ pendingApproval?.tool_name }}</strong>
+              {{ t('sandbox.approvalTool') }}: <strong>{{ pendingApproval?.tool_name }}</strong>
             </p>
           </div>
         </div>
 
         <div v-if="pendingApproval?.diff" class="diff-viewer">
-          <p class="diff-label">Cambios propuestos:</p>
+          <p class="diff-label">{{ t('sandbox.approvalTitle') }}:</p>
           <div class="diff-content">
             <div
               v-for="(line, i) in parseDiffLines(pendingApproval.diff)"
@@ -1057,10 +1077,10 @@ watch(
         </div>
 
         <div class="approval-feedback">
-          <label class="approval-feedback-label">Comentario (opcional):</label>
+          <label class="approval-feedback-label">{{ t('sandbox.approvalFeedbackPlaceholder') }}</label>
           <Textarea
             v-model="approvalFeedback"
-            placeholder="Añade un comentario para el asistente..."
+            :placeholder="t('sandbox.approvalFeedbackPlaceholder')"
             :rows="2"
             auto-resize
             class="approval-feedback-input"
@@ -1071,7 +1091,7 @@ watch(
       <template #footer>
         <div class="approval-footer">
           <Button
-            label="Rechazar"
+            :label="t('sandbox.approvalReject')"
             icon="pi pi-times"
             severity="danger"
             outlined
@@ -1079,7 +1099,7 @@ watch(
             @click="handleApproval(false)"
           />
           <Button
-            label="Aprobar"
+            :label="t('sandbox.approvalApprove')"
             icon="pi pi-check"
             severity="success"
             :loading="approvalLoading"
@@ -1732,7 +1752,8 @@ watch(
   outline: none;
 }
 
-.chat-send-btn {
+.chat-send-btn,
+.chat-stop-btn {
   flex-shrink: 0;
   width: 2.5rem;
   height: 2.5rem;

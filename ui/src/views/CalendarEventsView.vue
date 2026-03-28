@@ -1,6 +1,7 @@
 <script setup lang="ts">
-import { ref, onMounted } from 'vue'
+import { ref, computed, onMounted } from 'vue'
 import { useToast } from 'primevue/usetoast'
+import { useI18n } from 'vue-i18n'
 import DataView from 'primevue/dataview'
 import Button from 'primevue/button'
 import Tag from 'primevue/tag'
@@ -17,6 +18,7 @@ import { useAssistant } from '@/composables/useAssistant'
 import type { CalendarEvent } from '@/types/calendar'
 
 const toast = useToast()
+const { t } = useI18n()
 const { assistantProfile, getAssistantProfile } = useAssistant()
 const {
   events,
@@ -35,12 +37,12 @@ const filteredEvents = ref<CalendarEvent[]>([])
 const selectedStatus = ref<string | null>(null)
 const searchQuery = ref('')
 
-const statusOptions = [
-  { label: 'Todos', value: null },
-  { label: 'Programado', value: 'scheduled' },
-  { label: 'Completado', value: 'completed' },
-  { label: 'Cancelado', value: 'cancelled' },
-]
+const statusOptions = computed(() => [
+  { label: t('calendarEvents.status.all'), value: null },
+  { label: t('calendarEvents.status.scheduled'), value: 'scheduled' },
+  { label: t('calendarEvents.status.completed'), value: 'completed' },
+  { label: t('calendarEvents.status.cancelled'), value: 'cancelled' },
+])
 
 const editDialogVisible = ref(false)
 const selectedEvent = ref<CalendarEvent | null>(null)
@@ -70,9 +72,8 @@ async function fetchEvents() {
     console.error('Error fetching events:', err)
     toast.add({
       severity: 'error',
-      summary: 'Error al cargar eventos',
-      detail:
-        listEventsError.value || 'Error al cargar los eventos. Por favor, intenta nuevamente.',
+      summary: t('calendarEvents.errorLoad'),
+      detail: listEventsError.value || t('calendarEvents.errorLoadDesc'),
       life: 5000,
     })
   }
@@ -130,8 +131,8 @@ async function saveEvent() {
 
     toast.add({
       severity: 'success',
-      summary: 'Evento actualizado',
-      detail: 'El evento se actualizó correctamente',
+      summary: t('calendarEvents.eventUpdated'),
+      detail: t('calendarEvents.eventUpdatedDesc'),
       life: 3000,
     })
 
@@ -141,9 +142,8 @@ async function saveEvent() {
     console.error('Error updating event:', err)
     toast.add({
       severity: 'error',
-      summary: 'Error al actualizar',
-      detail:
-        updateEventError.value || 'No se pudo actualizar el evento. Por favor, intenta nuevamente.',
+      summary: t('calendarEvents.errorUpdate'),
+      detail: updateEventError.value || t('calendarEvents.errorUpdateDesc'),
       life: 5000,
     })
   } finally {
@@ -166,8 +166,8 @@ async function performDelete() {
 
     toast.add({
       severity: 'success',
-      summary: 'Evento eliminado',
-      detail: 'El evento se eliminó correctamente',
+      summary: t('calendarEvents.eventDeleted'),
+      detail: t('calendarEvents.eventDeletedDesc'),
       life: 3000,
     })
 
@@ -177,9 +177,8 @@ async function performDelete() {
     console.error('Error deleting event:', err)
     toast.add({
       severity: 'error',
-      summary: 'Error al eliminar',
-      detail:
-        deleteEventError.value || 'No se pudo eliminar el evento. Por favor, intenta nuevamente.',
+      summary: t('calendarEvents.errorDelete'),
+      detail: deleteEventError.value || t('calendarEvents.errorDeleteDesc'),
       life: 5000,
     })
   } finally {
@@ -189,9 +188,9 @@ async function performDelete() {
 
 function getStatusLabel(status: string): string {
   const labels: Record<string, string> = {
-    scheduled: 'Programado',
-    completed: 'Completado',
-    cancelled: 'Cancelado',
+    scheduled: t('calendarEvents.status.scheduled'),
+    completed: t('calendarEvents.status.completed'),
+    cancelled: t('calendarEvents.status.cancelled'),
   }
   return labels[status] || status
 }
@@ -226,9 +225,9 @@ onMounted(() => {
     <div class="header">
       <div class="header-content">
         <div>
-          <h1 class="title">Mis Eventos de Calendario</h1>
+          <h1 class="title">{{ t('calendarEvents.title') }}</h1>
           <p class="subtitle">
-            Eventos creados por el asistente de IA y sincronizados con Google Calendar
+            {{ t('calendarEvents.subtitle') }}
           </p>
         </div>
       </div>
@@ -236,7 +235,7 @@ onMounted(() => {
 
     <div v-if="isLoading" class="loading-state">
       <ProgressSpinner />
-      <p>Cargando eventos...</p>
+      <p>{{ t('calendarEvents.loading') }}</p>
     </div>
 
     <div v-else-if="isListEventsError" class="error-state">
@@ -248,21 +247,21 @@ onMounted(() => {
     <div v-else-if="filteredEvents && filteredEvents.length > 0" class="events-container">
       <div class="filters">
         <div class="filter-group">
-          <label>Estado:</label>
+          <label>{{ t('calendarEvents.filter.status') }}:</label>
           <Dropdown
             v-model="selectedStatus"
             :options="statusOptions"
             optionLabel="label"
             optionValue="value"
-            placeholder="Todos los estados"
+            :placeholder="t('calendarEvents.filter.allStatuses')"
             @change="filterEvents"
           />
         </div>
         <div class="filter-group">
-          <label>Buscar:</label>
+          <label>{{ t('calendarEvents.filter.search') }}:</label>
           <InputText
             v-model="searchQuery"
-            placeholder="Buscar por título o descripción..."
+            :placeholder="t('calendarEvents.filter.searchPlaceholder')"
             @input="filterEvents"
           />
         </div>
@@ -284,13 +283,13 @@ onMounted(() => {
                   icon="pi pi-pencil"
                   class="p-button-text p-button-rounded"
                   @click="openEditDialog(event)"
-                  v-tooltip.top="'Editar evento'"
+                  v-tooltip.top="t('calendarEvents.editEvent')"
                 />
                 <Button
                   icon="pi pi-trash"
                   class="p-button-text p-button-rounded p-button-danger"
                   @click="confirmDelete(event)"
-                  v-tooltip.top="'Eliminar evento'"
+                  v-tooltip.top="t('common.delete')"
                 />
               </div>
             </div>
@@ -316,12 +315,12 @@ onMounted(() => {
 
               <div v-if="event.attendees?.length > 0" class="detail-row">
                 <i class="pi pi-users"></i>
-                <span>{{ event.attendees.length }} asistente(s)</span>
+                <span>{{ event.attendees.length }} {{ t('calendarEvents.attendees') }}</span>
               </div>
 
               <div v-if="event.google_id" class="detail-row">
                 <i class="pi pi-google"></i>
-                <span class="google-sync">Sincronizado con Google Calendar</span>
+                <span class="google-sync">{{ t('calendarEvents.syncedGoogle') }}</span>
               </div>
             </div>
           </div>
@@ -334,39 +333,38 @@ onMounted(() => {
       class="empty-state"
     >
       <i class="pi pi-calendar"></i>
-      <h2>No hay eventos</h2>
+      <h2>{{ t('calendarEvents.noEvents') }}</h2>
       <p>
-        Los eventos creados por el asistente de IA aparecerán aquí. Conversa con el asistente para
-        crear eventos en tu calendario.
+        {{ t('calendarEvents.noEventsDesc') }}
       </p>
     </div>
 
     <Dialog
       v-model:visible="editDialogVisible"
-      :header="'Editar Evento'"
+      :header="t('calendarEvents.editEvent')"
       :modal="true"
       :closable="true"
       :style="{ width: '50vw' }"
     >
       <div v-if="selectedEvent" class="edit-form">
         <div class="field">
-          <label for="title">Título *</label>
+          <label for="title">{{ t('calendarEvents.fields.title') }} *</label>
           <InputText id="title" v-model="editForm.title" class="w-full" />
         </div>
 
         <div class="field">
-          <label for="description">Descripción</label>
+          <label for="description">{{ t('calendarEvents.fields.description') }}</label>
           <Textarea id="description" v-model="editForm.description" rows="3" class="w-full" />
         </div>
 
         <div class="field">
-          <label for="location">Ubicación</label>
+          <label for="location">{{ t('calendarEvents.fields.location') }}</label>
           <InputText id="location" v-model="editForm.location" class="w-full" />
         </div>
 
         <div class="field-group">
           <div class="field">
-            <label for="startTime">Fecha y hora de inicio *</label>
+            <label for="startTime">{{ t('calendarEvents.fields.startTime') }} *</label>
             <Calendar
               id="startTime"
               v-model="editForm.start_time"
@@ -378,7 +376,7 @@ onMounted(() => {
           </div>
 
           <div class="field">
-            <label for="endTime">Fecha y hora de fin *</label>
+            <label for="endTime">{{ t('calendarEvents.fields.endTime') }} *</label>
             <Calendar
               id="endTime"
               v-model="editForm.end_time"
@@ -393,18 +391,18 @@ onMounted(() => {
 
       <template #footer>
         <Button
-          label="Cancelar"
+          :label="t('common.cancel')"
           icon="pi pi-times"
           class="p-button-text"
           @click="editDialogVisible = false"
         />
-        <Button label="Guardar" icon="pi pi-check" :loading="saving" @click="saveEvent" />
+        <Button :label="t('common.save')" icon="pi pi-check" :loading="saving" @click="saveEvent" />
       </template>
     </Dialog>
 
     <Dialog
       v-model:visible="deleteDialogVisible"
-      header="Confirmar Eliminación"
+      :header="t('calendarEvents.confirmDelete')"
       :modal="true"
       :closable="true"
       :style="{ width: '30vw' }"
@@ -412,24 +410,23 @@ onMounted(() => {
       <div class="delete-confirmation">
         <i class="pi pi-exclamation-triangle" style="font-size: 3rem; color: var(--red-500)"></i>
         <p>
-          ¿Estás seguro de que deseas eliminar el evento
-          <strong>{{ eventToDelete?.title }}</strong
-          >?
+          {{ t('calendarEvents.confirmDeleteMsg') }}
+          <strong>{{ eventToDelete?.title }}</strong>?
         </p>
         <p class="warning-text">
-          Esta acción no se puede deshacer y el evento también se eliminará de Google Calendar.
+          {{ t('calendarEvents.deleteWarning') }}
         </p>
       </div>
 
       <template #footer>
         <Button
-          label="Cancelar"
+          :label="t('common.cancel')"
           icon="pi pi-times"
           class="p-button-text"
           @click="deleteDialogVisible = false"
         />
         <Button
-          label="Eliminar"
+          :label="t('common.delete')"
           icon="pi pi-trash"
           class="p-button-danger"
           :loading="deleting"

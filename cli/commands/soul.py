@@ -47,6 +47,7 @@ def show():
     table.add_row("Assistant Name", p.assistant_name)
     table.add_row("Business Name", p.business_name or "[dim]not set[/dim]")
     table.add_row("Functions", p.functions or "[dim]not set[/dim]")
+    table.add_row("Response Language", p.response_language or "en")
 
     console.print()
     console.print(table)
@@ -82,6 +83,12 @@ def edit():
         default=p.functions,
     ).execute()
 
+    response_language = inquirer.select(
+        message="Response language",
+        choices=["en", "es"],
+        default=p.response_language or "en",
+    ).execute()
+
     regen = inquirer.confirm(
         message=f"Regenerate User ID? (current: {config.user_id})",
         default=False,
@@ -90,6 +97,7 @@ def edit():
     config.profile.assistant_name = assistant_name or p.assistant_name
     config.profile.business_name = business_name
     config.profile.functions = functions
+    config.profile.response_language = response_language
 
     if regen:
         new_id = str(uuid.uuid4())

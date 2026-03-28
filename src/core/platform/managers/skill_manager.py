@@ -186,14 +186,14 @@ class SkillManager:
     def get_base_context(self) -> str:
         """
         Loads memory.md, resolves `ver X.skill.md` references, and wraps the
-        result in the === CONOCIMIENTO DEL ASISTENTE === block for the LLM.
+        result in the === ASSISTANT KNOWLEDGE === block for the LLM.
         """
         resolved = self.get_resolved_memory()
         if not resolved.strip():
             return ""
 
         return (
-            "=== CONOCIMIENTO DEL ASISTENTE ===\n\n"
+            "=== ASSISTANT KNOWLEDGE ===\n\n"
             + resolved.strip()
             + "\n\n=================================="
         )

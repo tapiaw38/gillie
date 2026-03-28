@@ -8,6 +8,7 @@ import { VueQueryPlugin } from '@tanstack/vue-query'
 
 import App from './App.vue'
 import router from './router'
+import { i18n } from './i18n'
 
 // PrimeVue
 import PrimeVue from 'primevue/config'
@@ -31,6 +32,7 @@ const app = createApp(App)
 app.use(createPinia())
 app.use(VueQueryPlugin)
 app.use(router)
+app.use(i18n)
 app.use(PrimeVue, {
   theme: {
     preset: Aura,

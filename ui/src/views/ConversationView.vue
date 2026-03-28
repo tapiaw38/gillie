@@ -12,6 +12,9 @@ import { useErrorToast } from '@/composables/useErrorToast'
 import { onMounted } from 'vue'
 import LoadingSpinner from '@/components/core/LoadingSpinner/LoadingSpinner.vue'
 import type { AssistantConversation } from '@/types/conversation'
+import { useI18n } from 'vue-i18n'
+
+const { t } = useI18n()
 
 const {
   conversations,
@@ -27,7 +30,7 @@ const { dateFormat } = useDateFormat()
 const errorWatchers = [
   {
     flag: isGetUserConversationError,
-    summary: 'Error al cargar conversaciones',
+    summary: t('conversations.errorLoadDesc'),
     detail: getUserConversationError,
   },
 ]
@@ -42,8 +45,8 @@ watch(isGetUserConversationSuccess, (value) => {
   if (value) {
     toast.add({
       severity: 'success',
-      summary: 'Conversaciones cargadas',
-      detail: 'Las conversaciones se han cargado correctamente.',
+      summary: t('conversations.loaded'),
+      detail: t('conversations.loadedDesc'),
       life: 3000,
     })
   }
@@ -60,8 +63,8 @@ const reloadMessagesHandler = async () => {
     }, 2000)
     toast.add({
       severity: 'success',
-      summary: 'Conversaciones recargadas',
-      detail: 'Las conversaciones se han recargado correctamente.',
+      summary: t('conversations.reloaded'),
+      detail: t('conversations.reloadedDesc'),
       life: 3000,
     })
   } catch (error) {
@@ -93,8 +96,8 @@ const conversationSelectedHandler = computed(() => {
             <i class="pi pi-comments"></i>
           </div>
           <div class="title-section">
-            <h1 class="page-title">Conversaciones</h1>
-            <p class="page-subtitle">Gestiona y revisa todas las conversaciones con tus clientes</p>
+            <h1 class="page-title">{{ t('conversations.title') }}</h1>
+            <p class="page-subtitle">{{ t('conversations.subtitle') }}</p>
           </div>
         </div>
         <div class="header-actions">
@@ -102,7 +105,7 @@ const conversationSelectedHandler = computed(() => {
             ref="reloadMessages"
             class="refresh-button"
             @click="reloadMessagesHandler"
-            title="Recargar conversaciones"
+            :title="t('conversations.reload')"
           >
             <i class="pi pi-refresh"></i>
           </button>
@@ -114,29 +117,27 @@ const conversationSelectedHandler = computed(() => {
     <div class="content-grid">
       <!-- Conversations List -->
       <div class="conversations-panel">
-        <Card class="conversations-card">
-          <template #header>
-            <div class="card-header">
-              <div class="header-icon conversations-icon">
-                <i class="pi pi-list"></i>
-              </div>
-              <div class="header-text">
-                <h3>Lista de Conversaciones</h3>
-                <p>{{ conversations?.length || 0 }} conversación(es) encontrada(s)</p>
-              </div>
+        <div class="panel">
+          <div class="panel-header">
+            <div class="header-icon conversations-icon">
+              <i class="pi pi-list"></i>
             </div>
-          </template>
-          <template #content>
+            <div class="header-text">
+              <h3>{{ t('conversations.list') }}</h3>
+              <p>{{ conversations?.length || 0 }} {{ t('conversations.found') }}</p>
+            </div>
+          </div>
+          <div class="panel-body">
             <!-- Loading State -->
             <div v-if="isGetUserConversationPending" class="loading-state">
               <LoadingSpinner />
-              <p>Cargando conversaciones...</p>
+              <p>{{ t('conversations.loading') }}</p>
             </div>
 
             <!-- Error State -->
             <div v-else-if="isGetUserConversationError" class="error-state">
               <i class="pi pi-exclamation-triangle"></i>
-              <p>Error al cargar conversaciones</p>
+              <p>{{ t('conversations.errorLoad') }}</p>
               <small>{{ getUserConversationError }}</small>
             </div>
 
@@ -150,22 +151,22 @@ const conversationSelectedHandler = computed(() => {
                 class="modern-table"
                 :class="{ 'selected-row': conversationSelected }"
               >
-                <Column field="title" header="Título" class="title-column">
+                <Column field="title" :header="t('conversations.title_col')" class="title-column">
                   <template #body="slotProps">
                     <div class="conversation-title">
                       <i class="pi pi-comment conversation-icon"></i>
-                      <span>{{ slotProps.data.title || 'Sin título' }}</span>
+                      <span>{{ slotProps.data.title || t('conversations.untitled') }}</span>
                     </div>
                   </template>
                 </Column>
-                <Column field="created_at" header="Fecha" class="date-column">
+                <Column field="created_at" :header="t('conversations.date_col')" class="date-column">
                   <template #body="slotProps">
                     <div class="date-info">
                       <span class="date-text">{{ dateFormat(slotProps.data.created_at) }}</span>
                     </div>
                   </template>
                 </Column>
-                <Column field="messages" header="Mensajes" class="messages-column">
+                <Column field="messages" :header="t('conversations.messages_col')" class="messages-column">
                   <template #body="slotProps">
                     <div class="message-count">
                       <i class="pi pi-envelope"></i>
@@ -173,10 +174,10 @@ const conversationSelectedHandler = computed(() => {
                     </div>
                   </template>
                 </Column>
-                <Column field="actions" header="Acciones" class="actions-column">
+                <Column field="actions" :header="t('conversations.actions_col')" class="actions-column">
                   <template #body="slotProps">
                     <Button
-                      label="Ver"
+                      :label="t('common.view')"
                       icon="pi pi-eye"
                       class="view-button"
                       size="small"
@@ -186,42 +187,40 @@ const conversationSelectedHandler = computed(() => {
                 </Column>
               </DataTable>
             </div>
-          </template>
-        </Card>
+          </div>
+        </div>
       </div>
 
       <!-- Messages Panel -->
       <div class="messages-panel">
-        <Card class="messages-card">
-          <template #header>
-            <div class="card-header">
-              <div class="header-icon messages-icon">
-                <i class="pi pi-message"></i>
-              </div>
-              <div class="header-text">
-                <h3>
-                  {{
-                    conversationSelected ? 'Historial de Mensajes' : 'Selecciona una Conversación'
-                  }}
-                </h3>
-                <p v-if="conversationSelected">
-                  {{ conversationSelected.messages?.length || 0 }} mensaje(s)
-                </p>
-                <p v-else>Haz clic en "Ver" para mostrar los mensajes</p>
-              </div>
+        <div class="panel">
+          <div class="panel-header">
+            <div class="header-icon messages-icon">
+              <i class="pi pi-message"></i>
             </div>
-          </template>
-          <template #content>
+            <div class="header-text">
+              <h3>
+                {{
+                  conversationSelected ? t('conversations.messageHistory') : t('conversations.selectConversation')
+                }}
+              </h3>
+              <p v-if="conversationSelected">
+                {{ conversationSelected.messages?.length || 0 }} {{ t('conversations.messages') }}
+              </p>
+              <p v-else>{{ t('conversations.clickToView') }}</p>
+            </div>
+          </div>
+          <div class="panel-body">
             <!-- Empty State -->
             <div v-if="!conversationSelected" class="empty-state">
               <i class="pi pi-comments"></i>
-              <h4>No hay conversación seleccionada</h4>
-              <p>Selecciona una conversación de la lista para ver sus mensajes</p>
+              <h4>{{ t('conversations.noConversationSelected') }}</h4>
+              <p>{{ t('conversations.noConversationDesc') }}</p>
             </div>
 
             <!-- Messages List -->
             <div v-else class="messages-content">
-              <ScrollPanel class="messages-scroll">
+              <div class="messages-scroll">
                 <div class="messages-list">
                   <div
                     v-for="message in conversationSelected?.messages"
@@ -238,7 +237,7 @@ const conversationSelectedHandler = computed(() => {
                     <div class="message-bubble">
                       <div class="message-header">
                         <span class="sender-name">
-                          {{ message.sender === 'user' ? 'Usuario' : 'Asistente' }}
+                          {{ message.sender === 'user' ? t('conversations.user') : t('conversations.assistant') }}
                         </span>
                         <span class="message-time">
                           {{ dateFormat(message.created_at) }}
@@ -250,10 +249,10 @@ const conversationSelectedHandler = computed(() => {
                     </div>
                   </div>
                 </div>
-              </ScrollPanel>
+              </div>
             </div>
-          </template>
-        </Card>
+          </div>
+        </div>
       </div>
     </div>
 
@@ -280,30 +279,29 @@ const conversationSelectedHandler = computed(() => {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  background: rgba(255,255,255,0.04);
-  padding: 2rem;
+  background: rgba(255, 255, 255, 0.04);
+  padding: 1rem 1.25rem;
   border-radius: 1rem;
-  box-shadow: 0 4px 20px var(--shadow-light);
   border: 1px solid var(--do-border-light);
 }
 
 .header-content {
   display: flex;
   align-items: center;
-  gap: 1.5rem;
+  gap: 1rem;
 }
 
 .icon-wrapper {
-  width: 4rem;
-  height: 4rem;
-  border-radius: 1rem;
+  width: 3.2rem;
+  height: 3.2rem;
+  border-radius: 0.875rem;
   background: var(--gradient-primary);
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 2rem;
-  color: white;
-  box-shadow: var(--shadow-primary);
+  font-size: 1.5rem;
+  color: #fff;
+  flex-shrink: 0;
 }
 
 .title-section {
@@ -311,18 +309,14 @@ const conversationSelectedHandler = computed(() => {
 }
 
 .page-title {
-  font-size: 1.6rem;
+  font-size: 1.5rem;
   font-weight: 700;
   color: var(--do-text);
-  margin: 0 0 0.5rem 0;
-  background: linear-gradient(135deg, var(--do-text) 0%, var(--do-text-secondary) 100%);
-  -webkit-background-clip: text;
-  -webkit-text-fill-color: transparent;
-  background-clip: text;
+  margin: 0 0 0.25rem 0;
 }
 
 .page-subtitle {
-  font-size: 1.125rem;
+  font-size: 0.9rem;
   color: var(--do-text-muted);
   margin: 0;
   font-weight: 400;
@@ -334,24 +328,23 @@ const conversationSelectedHandler = computed(() => {
 }
 
 .refresh-button {
-  width: 3rem;
-  height: 3rem;
+  width: 2.75rem;
+  height: 2.75rem;
   border-radius: 0.75rem;
   border: none;
   background: var(--gradient-success);
-  color: white;
+  color: #fff;
   display: flex;
   align-items: center;
   justify-content: center;
   cursor: pointer;
-  transition: all 0.3s ease;
-  font-size: 1.25rem;
-  box-shadow: var(--shadow-success);
+  transition: transform 0.2s ease, opacity 0.2s ease;
+  font-size: 1.1rem;
 }
 
 .refresh-button:hover {
   transform: translateY(-2px);
-  box-shadow: 0 8px 30px var(--shadow-medium);
+  opacity: 0.9;
 }
 
 .spinner-effect {
@@ -367,49 +360,41 @@ const conversationSelectedHandler = computed(() => {
 /* Content Grid */
 .content-grid {
   display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 2rem;
+  grid-template-columns: 45% 1fr;
+  gap: 1.5rem;
 }
 
-/* Card Styles */
-.conversations-card,
-.messages-card {
-  border-radius: 1rem;
-  overflow: hidden;
-  box-shadow: 0 10px 40px var(--shadow-light);
+/* Panel */
+.panel {
   border: 1px solid var(--do-border-light);
-  transition: all 0.3s ease;
-  height: fit-content;
+  border-radius: 0.75rem;
+  background: rgba(255, 255, 255, 0.03);
+  overflow: hidden;
 }
 
-.conversations-card:hover,
-.messages-card:hover {
-  box-shadow: 0 20px 60px var(--shadow-medium);
-  transform: translateY(-2px);
-}
-
-:deep(.conversations-card .p-card-header),
-:deep(.messages-card .p-card-header) {
-  background: rgba(255,255,255,0.04);
-  padding: 1.5rem 2rem;
+.panel-header {
+  display: flex;
+  align-items: center;
+  gap: 0.875rem;
+  padding: 1rem 1.25rem;
+  background: rgba(255, 255, 255, 0.04);
   border-bottom: 1px solid var(--do-border-light);
 }
 
-.card-header {
-  display: flex;
-  align-items: center;
-  gap: 1rem;
+.panel-body {
+  padding: 1.25rem;
 }
 
 .header-icon {
-  width: 3rem;
-  height: 3rem;
+  width: 3.2rem;
+  height: 3.2rem;
   border-radius: 0.75rem;
   display: flex;
   align-items: center;
   justify-content: center;
   font-size: 1.25rem;
-  color: white;
+  color: #fff;
+  flex-shrink: 0;
 }
 
 .conversations-icon {
@@ -421,21 +406,16 @@ const conversationSelectedHandler = computed(() => {
 }
 
 .header-text h3 {
-  margin: 0 0 0.25rem 0;
-  font-size: 1.25rem;
+  margin: 0 0 0.2rem 0;
+  font-size: 1.1rem;
   font-weight: 600;
-  color: var(--vt-c-gray-700);
+  color: var(--do-text);
 }
 
 .header-text p {
   margin: 0;
-  font-size: 0.875rem;
+  font-size: 0.8rem;
   color: var(--do-text-muted);
-}
-
-:deep(.conversations-card .p-card-content),
-:deep(.messages-card .p-card-content) {
-  padding: 2rem;
 }
 
 /* States */
@@ -448,17 +428,17 @@ const conversationSelectedHandler = computed(() => {
   justify-content: center;
   text-align: center;
   padding: 3rem 2rem;
-  gap: 1rem;
+  gap: 0.875rem;
 }
 
 .loading-state i,
-.error-state i,
 .empty-state i {
-  font-size: 3rem;
-  color: var(--vt-c-gray-400);
+  font-size: 3.5rem;
+  color: var(--do-text-muted);
 }
 
 .error-state i {
+  font-size: 3.5rem;
   color: var(--color-danger);
 }
 
@@ -467,12 +447,12 @@ const conversationSelectedHandler = computed(() => {
 .empty-state p {
   margin: 0;
   color: var(--do-text-muted);
-  font-weight: 500;
+  font-weight: 400;
 }
 
 .empty-state h4 {
   margin: 0;
-  color: var(--vt-c-gray-700);
+  color: var(--do-text);
   font-weight: 600;
 }
 
@@ -493,34 +473,42 @@ const conversationSelectedHandler = computed(() => {
 }
 
 :deep(.modern-table .p-datatable-header) {
-  background: var(--vt-c-gray-50);
+  background: var(--do-bg);
   border-bottom: 1px solid var(--do-border-light);
+  color: var(--do-text);
 }
 
 :deep(.modern-table .p-datatable-thead > tr > th) {
-  background: var(--vt-c-gray-100);
-  color: var(--vt-c-gray-700);
+  background: rgba(255, 255, 255, 0.05);
+  color: var(--do-text);
   font-weight: 600;
-  padding: 1rem;
+  padding: 0.875rem 1rem;
   border-bottom: 2px solid var(--do-border-light);
 }
 
 :deep(.modern-table .p-datatable-tbody > tr) {
-  transition: all 0.3s ease;
+  background: transparent;
+  transition: background 0.2s ease;
 }
 
 :deep(.modern-table .p-datatable-tbody > tr:hover) {
-  background: rgba(59,130,246,0.06);
+  background: rgba(59, 130, 246, 0.07) !important;
 }
 
 :deep(.modern-table .p-datatable-tbody > tr > td) {
-  padding: 1rem;
-  border-bottom: 1px solid var(--vt-c-gray-100);
+  padding: 0.875rem 1rem;
+  border-bottom: 1px solid var(--do-border-light);
+  color: var(--do-text);
+  background: transparent;
+}
+
+:deep(.modern-table .p-datatable-tbody > tr:last-child > td) {
+  border-bottom: none;
 }
 
 :deep(.p-paginator) {
-  background: var(--do-bg-white) !important;
-  border-color: var(--vt-c-gray-200) !important;
+  background: var(--do-bg) !important;
+  border-color: var(--do-border-light) !important;
   color: var(--do-text) !important;
 }
 
@@ -531,18 +519,20 @@ const conversationSelectedHandler = computed(() => {
 :deep(.p-paginator .p-paginator-last) {
   color: var(--do-text) !important;
   background: transparent !important;
-  border-color: var(--vt-c-gray-200) !important;
+  border-color: var(--do-border-light) !important;
 }
 
 :deep(.p-paginator .p-paginator-pages .p-paginator-page.p-highlight) {
   background: var(--color-primary) !important;
-  color: white !important;
+  color: #fff !important;
+  border-color: var(--color-primary) !important;
 }
 
 .conversation-title {
   display: flex;
   align-items: center;
   gap: 0.5rem;
+  color: var(--do-text);
 }
 
 .conversation-icon {
@@ -563,7 +553,7 @@ const conversationSelectedHandler = computed(() => {
   display: flex;
   align-items: center;
   gap: 0.5rem;
-  color: var(--vt-c-gray-700);
+  color: var(--do-text);
 }
 
 .message-count i {
@@ -574,56 +564,61 @@ const conversationSelectedHandler = computed(() => {
   background: var(--gradient-success);
   border: none;
   border-radius: 0.5rem;
-  padding: 0.5rem 1rem;
+  padding: 0.4rem 0.875rem;
   font-weight: 500;
-  transition: all 0.3s ease;
+  transition: transform 0.2s ease, opacity 0.2s ease;
 }
 
 :deep(.view-button:hover) {
   transform: translateY(-1px);
-  box-shadow: var(--shadow-success);
+  opacity: 0.9;
 }
 
 /* Messages Content */
 .messages-content {
-  height: 600px;
+  height: 70vh;
   display: flex;
   flex-direction: column;
 }
 
-:deep(.messages-scroll) {
-  height: 100%;
+.messages-scroll {
   flex: 1;
+  overflow-y: auto;
+  max-height: 65vh;
+  scrollbar-width: thin;
+  scrollbar-color: var(--do-border-light) transparent;
 }
 
-:deep(.messages-scroll .p-scrollpanel-wrapper) {
-  border-right: none;
-}
-
-:deep(.messages-scroll .p-scrollpanel-bar-y) {
-  background: var(--do-border-light);
-  border-radius: 4px;
+.messages-scroll::-webkit-scrollbar {
   width: 6px;
 }
 
+.messages-scroll::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.messages-scroll::-webkit-scrollbar-thumb {
+  background: var(--do-border-light);
+  border-radius: 4px;
+}
+
 .messages-list {
-  padding: 1rem;
-  background: rgba(255,255,255,0.03);
-  border-radius: 0.75rem;
-  min-height: 100%;
+  padding: 0.5rem;
+  display: flex;
+  flex-direction: column;
+  gap: 1.25rem;
 }
 
 .message-item {
   display: flex;
-  gap: 1rem;
-  margin-bottom: 1.5rem;
-  animation: fadeIn 0.3s ease-out;
+  gap: 0.875rem;
+  animation: fadeIn 0.25s ease-out;
 }
 
 @keyframes fadeIn {
   from {
     opacity: 0;
-    transform: translateY(10px);
+    transform: translateY(8px);
   }
   to {
     opacity: 1;
@@ -636,14 +631,14 @@ const conversationSelectedHandler = computed(() => {
 }
 
 .message-avatar {
-  width: 2.5rem;
-  height: 2.5rem;
+  width: 2.25rem;
+  height: 2.25rem;
   border-radius: 50%;
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 1rem;
-  color: white;
+  font-size: 0.9rem;
+  color: #fff;
   flex-shrink: 0;
 }
 
@@ -656,75 +651,64 @@ const conversationSelectedHandler = computed(() => {
 }
 
 .message-bubble {
-  max-width: 70%;
-  background: rgba(255,255,255,0.06);
-  border-radius: 1rem;
-  padding: 1rem;
-  box-shadow: 0 4px 20px var(--shadow-light);
+  max-width: 72%;
+  border-radius: 0.875rem;
+  padding: 0.875rem 1rem;
   border: 1px solid var(--do-border-light);
-  position: relative;
+  background: rgba(255, 255, 255, 0.05);
 }
 
 .user-message .message-bubble {
-  background: linear-gradient(135deg, var(--vt-c-blue-lighter) 0%, var(--vt-c-blue-light) 100%);
-  border-color: var(--color-info);
+  background: rgba(59, 130, 246, 0.12);
+  border-color: rgba(59, 130, 246, 0.25);
 }
 
-.user-message .message-bubble::after {
-  content: '';
-  position: absolute;
-  top: 1rem;
-  right: -8px;
-  width: 0;
-  height: 0;
-  border-left: 8px solid var(--vt-c-blue-light);
-  border-top: 8px solid transparent;
-  border-bottom: 8px solid transparent;
-}
-
-.assistant-message .message-bubble::after {
-  content: '';
-  position: absolute;
-  top: 1rem;
-  left: -8px;
-  width: 0;
-  height: 0;
-  border-right: 8px solid rgba(255,255,255,0.06);
-  border-top: 8px solid transparent;
-  border-bottom: 8px solid transparent;
+.assistant-message .message-bubble {
+  background: rgba(255, 255, 255, 0.05);
+  border-color: var(--do-border-light);
 }
 
 .message-header {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  margin-bottom: 0.5rem;
+  margin-bottom: 0.4rem;
+  gap: 0.5rem;
 }
 
 .sender-name {
   font-weight: 600;
-  font-size: 0.875rem;
-  color: var(--vt-c-gray-700);
+  font-size: 0.8rem;
+  color: var(--do-text);
 }
 
 .user-message .sender-name {
-  color: var(--color-info-dark);
+  color: var(--color-info);
 }
 
 .message-time {
-  font-size: 0.75rem;
+  font-size: 0.7rem;
   color: var(--do-text-muted);
+  white-space: nowrap;
 }
 
 .message-content {
-  color: var(--vt-c-gray-700);
+  color: var(--do-text);
   line-height: 1.6;
   word-break: break-word;
   white-space: pre-line;
   overflow-wrap: anywhere;
+  font-size: 0.9rem;
 }
 
 /* Responsive Design */
+@media (max-width: 900px) {
+  .content-grid {
+    grid-template-columns: 1fr;
+    gap: 1.25rem;
+  }
+}
+
 @media (max-width: 768px) {
   .conversation-container {
     padding: 1rem;
@@ -732,45 +716,25 @@ const conversationSelectedHandler = computed(() => {
 
   .page-header {
     flex-direction: column;
-    gap: 1rem;
+    gap: 0.875rem;
     text-align: center;
-    padding: 1.5rem;
   }
 
   .header-content {
     flex-direction: column;
-    gap: 1rem;
+    gap: 0.75rem;
   }
 
   .page-title {
-    font-size: 2rem;
-  }
-
-  .page-subtitle {
-    font-size: 1rem;
-  }
-
-  .content-grid {
-    grid-template-columns: 1fr;
-    gap: 1.5rem;
-  }
-
-  .card-header {
-    padding: 1rem 1.5rem;
-  }
-
-  :deep(.conversations-card .p-card-content),
-  :deep(.messages-card .p-card-content) {
-    padding: 1.5rem;
-  }
-
-  :deep(.conversations-card .p-card-header),
-  :deep(.messages-card .p-card-header) {
-    padding: 1rem 1.5rem;
+    font-size: 1.3rem;
   }
 
   .messages-content {
-    height: 400px;
+    height: 50vh;
+  }
+
+  .messages-scroll {
+    max-height: 45vh;
   }
 
   .message-bubble {
@@ -779,8 +743,8 @@ const conversationSelectedHandler = computed(() => {
 
   :deep(.modern-table .p-datatable-tbody > tr > td),
   :deep(.modern-table .p-datatable-thead > tr > th) {
-    padding: 0.75rem 0.5rem;
-    font-size: 0.875rem;
+    padding: 0.625rem 0.5rem;
+    font-size: 0.85rem;
   }
 }
 
@@ -790,13 +754,13 @@ const conversationSelectedHandler = computed(() => {
   }
 
   .icon-wrapper {
-    width: 3rem;
-    height: 3rem;
-    font-size: 1.5rem;
+    width: 2.75rem;
+    height: 2.75rem;
+    font-size: 1.25rem;
   }
 
   .page-title {
-    font-size: 1.75rem;
+    font-size: 1.15rem;
   }
 
   .header-icon {
@@ -811,24 +775,18 @@ const conversationSelectedHandler = computed(() => {
     font-size: 1rem;
   }
 
-  :deep(.conversations-card .p-card-content),
-  :deep(.messages-card .p-card-content) {
-    padding: 1rem;
-  }
-
-  :deep(.conversations-card .p-card-header),
-  :deep(.messages-card .p-card-header) {
+  .panel-body {
     padding: 1rem;
   }
 
   .message-item {
-    gap: 0.75rem;
+    gap: 0.625rem;
   }
 
   .message-avatar {
     width: 2rem;
     height: 2rem;
-    font-size: 0.875rem;
+    font-size: 0.8rem;
   }
 
   .message-bubble {

@@ -92,6 +92,11 @@ def init(
     assistant_name = _prompt_text("Assistant name", required=True)
     business_name = _prompt_text("Business name (optional)", default="")
     functions = _prompt_text("Functions / tools description (optional)", default="")
+    response_language = _prompt_select(
+        "Assistant response language",
+        choices=["en", "es"],
+        default="en",
+    )
 
     console.print()
     console.print("[bold]Database (MongoDB)[/bold]")
@@ -227,6 +232,7 @@ def init(
             assistant_name=assistant_name,
             business_name=business_name,
             functions=functions,
+            response_language=response_language,
         ),
         server=ServerConfig(host=server_host, port=server_port),
         services=ServicesConfig(
@@ -281,6 +287,7 @@ def _print_summary(config: AssistantConfig) -> None:
     if _storage and _storage.backend == "local":
         _storage_display += f" → {_storage.local_path}"
     table.add_row("Storage", _storage_display)
+    table.add_row("Response language", config.profile.response_language or "en")
     table.add_row("TTS", "✓ enabled" if config.services.tts.enabled else "✗ disabled")
     table.add_row("STT", "✓ enabled" if config.services.stt.enabled else "✗ disabled")
     table.add_row("WhatsApp", "✓ enabled" if config.services.whatsapp.enabled else "✗ disabled")

@@ -9,6 +9,7 @@ export interface AssistantProfileUpdateParams {
   tts_enabled?: boolean
   tool_prompts?: string
   disabled_tools?: string[]
+  response_language?: string
 }
 
 export interface AssistantProfile {
@@ -20,6 +21,7 @@ export interface AssistantProfile {
   updated_at: string
   is_active: boolean
   tts_enabled: boolean
+  response_language?: string
   iteration_limit: number
   api_keys: ApiKey[]
   files?: AssistantFile[]

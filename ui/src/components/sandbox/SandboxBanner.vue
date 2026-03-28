@@ -3,6 +3,9 @@ import { ref, onMounted } from 'vue'
 import Message from 'primevue/message'
 import InlineMessage from 'primevue/inlinemessage'
 import Button from 'primevue/button'
+import { useI18n } from 'vue-i18n'
+
+const { t } = useI18n()
 
 const STORAGE_KEY = 'sandbox-banner-closed'
 const isBannerVisible = ref(true)
@@ -26,24 +29,20 @@ const closeBanner = () => {
       <div class="flex align-items-center gap-3">
         <i class="pi pi-exclamation-triangle text-3xl"></i>
         <div class="flex-1">
-          <h3 class="m-0 mb-2 text-xl font-bold">Entorno de Pruebas Sandbox</h3>
-          <p class="m-0 mb-2">
-            Estás en <strong>modo sandbox</strong>. Este es un entorno de pruebas seguro donde
-            puedes experimentar con tu asistente de IA sin consumir iteraciones de API ni afectar
-            los datos de producción.
-          </p>
+          <h3 class="m-0 mb-2 text-xl font-bold">{{ t('sandboxBanner.title') }}</h3>
+          <p class="m-0 mb-2">{{ t('sandboxBanner.description') }}</p>
           <div class="flex flex-wrap gap-2 mt-2">
             <InlineMessage severity="success" class="p-1">
               <i class="pi pi-check-circle mr-1"></i>
-              Pruebas
+              {{ t('sandboxBanner.tests') }}
             </InlineMessage>
             <InlineMessage severity="info" class="p-1">
               <i class="pi pi-shield mr-1"></i>
-              Entorno Aislado
+              {{ t('sandboxBanner.isolatedEnv') }}
             </InlineMessage>
             <InlineMessage severity="warn" class="p-1">
               <i class="pi pi-exclamation-circle mr-1"></i>
-              Solo Datos de Prueba
+              {{ t('sandboxBanner.testDataOnly') }}
             </InlineMessage>
           </div>
         </div>
@@ -51,7 +50,7 @@ const closeBanner = () => {
           icon="pi pi-times"
           @click="closeBanner"
           class="p-button-text p-button-rounded close-button"
-          v-tooltip.left="'Cerrar banner'"
+          v-tooltip.left="t('sandboxBanner.closeBanner')"
         />
       </div>
     </Message>

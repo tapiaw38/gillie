@@ -3,12 +3,15 @@ import type { IntegrationParams, SystemCommandsIntegrationConfig } from '@/types
 import { onMounted, reactive, computed, ref } from 'vue'
 import { useAssistant } from '@/composables/useAssistant'
 import { useErrorToast } from '@/composables/useErrorToast'
+import { useI18n } from 'vue-i18n'
 import Toast from 'primevue/toast'
 import InputText from 'primevue/inputtext'
 import Button from 'primevue/button'
 import Card from 'primevue/card'
 import InputSwitch from 'primevue/inputswitch'
 import Tag from 'primevue/tag'
+
+const { t } = useI18n()
 
 const {
   addIntegration,
@@ -21,8 +24,8 @@ const {
 } = useAssistant()
 
 const errorWatchers = [
-  { flag: isAddIntegrationError, summary: 'Error al guardar configuración', detail: addIntegrationError },
-  { flag: isGetAssistantProfileError, summary: 'Error al cargar perfil', detail: getAssistantProfileError },
+  { flag: isAddIntegrationError, summary: t('systemCommands.errorSaveConfig'), detail: addIntegrationError },
+  { flag: isGetAssistantProfileError, summary: t('systemCommands.errorLoadProfile'), detail: getAssistantProfileError },
 ]
 
 const { toast } = useErrorToast(errorWatchers)
@@ -70,7 +73,7 @@ const addPattern = async () => {
   if (!cfg.blacklist.includes(pattern)) {
     cfg.blacklist = [...cfg.blacklist, pattern]
     await saveIntegration()
-    toast.add({ severity: 'success', summary: 'Patrón agregado', life: 2000 })
+    toast.add({ severity: 'success', summary: t('systemCommands.patternAdded'), life: 2000 })
   }
   newPattern.value = ''
 }
@@ -79,7 +82,7 @@ const removePattern = async (pattern: string) => {
   const cfg = integration.config as unknown as SystemCommandsIntegrationConfig
   cfg.blacklist = cfg.blacklist.filter((p) => p !== pattern)
   await saveIntegration()
-  toast.add({ severity: 'info', summary: 'Patrón eliminado', life: 2000 })
+  toast.add({ severity: 'info', summary: t('systemCommands.patternDeleted'), life: 2000 })
 }
 
 onMounted(async () => {
@@ -98,88 +101,80 @@ onMounted(async () => {
 
 <template>
   <div class="integration-container">
-    <!-- Header -->
-    <div class="header-section">
-      <div class="integration-header">
+
+    <!-- Unified header row -->
+    <div class="page-header">
+      <div class="header-left">
         <div class="icon-wrapper cmd-icon">
           <i class="pi pi-server"></i>
         </div>
-        <div class="header-content">
-          <h1 class="integration-title">Comandos del Sistema</h1>
-          <p class="integration-subtitle">
-            Permite al asistente ejecutar comandos en el servidor Linux con confirmación del usuario y lista negra configurable
-          </p>
+        <div class="header-text">
+          <h1 class="page-title">{{ t('systemCommands.title') }}</h1>
+          <p class="page-subtitle">{{ t('systemCommands.subtitle') }}</p>
         </div>
       </div>
-
-      <div class="activation-toggle">
-        <div class="toggle-content">
-          <div class="toggle-info">
-            <span class="toggle-label">Estado de la integración</span>
-            <span class="toggle-status" :class="{ active: integration.activated }">
-              {{ integration.activated ? 'Activa' : 'Inactiva' }}
-            </span>
-          </div>
-          <InputSwitch v-model="integration.activated" class="modern-switch" @change="toggleActivated" />
-        </div>
+      <div class="header-toggle">
+        <span class="toggle-status" :class="{ active: integration.activated }">
+          {{ integration.activated ? t('systemCommands.active') : t('systemCommands.inactive') }}
+        </span>
+        <InputSwitch v-model="integration.activated" @change="toggleActivated" />
       </div>
     </div>
 
-    <!-- Confirmation Toggle Card -->
-    <Card class="config-card" :class="{ 'card-disabled': !integration.activated }">
-      <template #header>
-        <div class="card-header">
-          <i class="pi pi-shield card-header-icon"></i>
-          <span>Verificación por código</span>
+    <!-- Confirmation Toggle Panel -->
+    <div class="panel" :class="{ 'panel-disabled': !integration.activated }">
+      <div class="panel-header">
+        <i class="pi pi-shield panel-icon"></i>
+        <div>
+          <p class="panel-title">{{ t('systemCommands.confirmationPanel') }}</p>
+          <p class="panel-subtitle">{{ t('systemCommands.confirmationPanelDesc') }}</p>
         </div>
-      </template>
-      <template #content>
-        <div class="confirmation-toggle-row">
-          <div class="confirmation-info">
-            <span class="confirmation-label">Requerir confirmación antes de ejecutar</span>
-            <span class="confirmation-desc">
+      </div>
+      <div class="panel-body">
+        <div class="toggle-row">
+          <div class="toggle-row-info">
+            <span class="toggle-row-label">{{ t('systemCommands.requireConfirmation') }}</span>
+            <span class="toggle-row-desc">
               <template v-if="(integration.config as unknown as SystemCommandsIntegrationConfig).require_confirmation">
-                El asistente propone el comando y el usuario debe responder con un código de 6 caracteres para ejecutarlo.
+                {{ t('systemCommands.confirmationDesc') }}
               </template>
               <template v-else>
-                El asistente ejecuta los comandos directamente sin pedir confirmación.
+                {{ t('systemCommands.noConfirmationDesc') }}
               </template>
             </span>
           </div>
           <InputSwitch
             v-model="(integration.config as unknown as SystemCommandsIntegrationConfig).require_confirmation"
             :disabled="!integration.activated"
-            class="modern-switch"
             @change="saveIntegration"
           />
         </div>
-      </template>
-    </Card>
+      </div>
+    </div>
 
-    <!-- Dynamic Blacklist Card -->
-    <Card class="config-card" :class="{ 'card-disabled': !integration.activated }">
-      <template #header>
-        <div class="card-header">
-          <i class="pi pi-list card-header-icon"></i>
-          <span>Lista negra personalizada</span>
+    <!-- Dynamic Blacklist Panel -->
+    <div class="panel" :class="{ 'panel-disabled': !integration.activated }">
+      <div class="panel-header">
+        <i class="pi pi-list panel-icon"></i>
+        <div>
+          <p class="panel-title">{{ t('systemCommands.customBlacklist') }}</p>
+          <p class="panel-subtitle">{{ t('systemCommands.customBlacklistDesc') }}</p>
         </div>
-      </template>
-      <template #content>
-        <p class="section-hint">
-          Patrones que el asistente no podrá proponer. Si el comando contiene alguno de estos textos será rechazado.
-        </p>
+      </div>
+      <div class="panel-body">
+        <p class="section-hint">{{ t('systemCommands.blacklistHint') }}</p>
 
         <div class="add-row">
           <InputText
             v-model="newPattern"
-            placeholder="ej: apt remove, pip uninstall, curl | sh"
+            :placeholder="t('systemCommands.patternPlaceholder')"
             :disabled="!integration.activated"
             class="add-input"
             @keyup.enter="addPattern"
           />
           <Button
             icon="pi pi-plus"
-            label="Agregar"
+            :label="t('systemCommands.addPattern')"
             severity="primary"
             :disabled="!integration.activated || !newPattern.trim()"
             @click="addPattern"
@@ -200,22 +195,21 @@ onMounted(async () => {
             />
           </div>
         </div>
-        <p v-else class="empty-hint">No hay patrones personalizados. Se usará solo la lista negra base.</p>
-      </template>
-    </Card>
+        <p v-else class="empty-hint">{{ t('systemCommands.noPatterns') }}</p>
+      </div>
+    </div>
 
-    <!-- Hardcoded Blacklist Card -->
-    <Card class="status-card">
-      <template #header>
-        <div class="card-header">
-          <i class="pi pi-lock card-header-icon"></i>
-          <span>Lista negra base (siempre bloqueada)</span>
+    <!-- Hardcoded Blacklist Panel -->
+    <div class="panel">
+      <div class="panel-header">
+        <i class="pi pi-lock panel-icon"></i>
+        <div>
+          <p class="panel-title">{{ t('systemCommands.baseBlacklist') }}</p>
+          <p class="panel-subtitle">{{ t('systemCommands.baseBlacklistDesc') }}</p>
         </div>
-      </template>
-      <template #content>
-        <p class="section-hint">
-          Estos comandos están bloqueados de forma permanente y no pueden ser desbloqueados.
-        </p>
+      </div>
+      <div class="panel-body">
+        <p class="section-hint">{{ t('systemCommands.baseBlacklistHint') }}</p>
         <div class="hardcoded-list">
           <Tag
             v-for="entry in HARDCODED_BLACKLIST"
@@ -226,164 +220,192 @@ onMounted(async () => {
             <code>{{ entry }}</code>
           </Tag>
         </div>
-      </template>
-    </Card>
+      </div>
+    </div>
 
     <Toast position="top-right" />
   </div>
 </template>
 
 <style scoped>
+/* ── Layout ─────────────────────────────────────────────── */
 .integration-container {
-  max-width: 1200px;
+  max-width: 860px;
   margin: 0 auto;
-  padding: 1rem 1.25rem;
-  min-height: 100vh;
+  padding: 1.25rem;
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
   background: var(--do-bg);
   box-sizing: border-box;
 }
 
-.header-section { margin-bottom: 1.25rem; }
+/* ── Page header ─────────────────────────────────────────── */
+.page-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 1rem 1.25rem;
+  border: 1px solid var(--do-border-light);
+  border-radius: 0.75rem;
+  background: rgba(255, 255, 255, 0.03);
+}
 
-.integration-header {
+.header-left {
   display: flex;
   align-items: center;
   gap: 1rem;
-  margin-bottom: 1rem;
+  min-width: 0;
 }
 
 .icon-wrapper {
-  width: 3.2rem;
-  height: 3.2rem;
+  flex-shrink: 0;
+  width: 3rem;
+  height: 3rem;
   border-radius: 0.75rem;
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 1.6rem;
-  color: white;
-  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.08);
-  flex-shrink: 0;
+  font-size: 1.4rem;
+  color: #fff;
 }
 
-.cmd-icon { background: linear-gradient(135deg, #0f172a 0%, #334155 100%); }
+.cmd-icon {
+  background: linear-gradient(135deg, #0f172a 0%, #334155 100%);
+}
 
-.header-content { flex: 1; }
+.header-text {
+  min-width: 0;
+}
 
-.integration-title {
-  font-size: 1.6rem;
+.page-title {
+  font-size: 1.35rem;
   font-weight: 700;
-  margin: 0 0 0.25rem 0;
   color: var(--do-text);
+  margin: 0 0 0.2rem;
+  line-height: 1.2;
 }
 
-.integration-subtitle {
-  font-size: 0.95rem;
+.page-subtitle {
+  font-size: 0.875rem;
   color: var(--do-text-muted);
   margin: 0;
 }
 
-.activation-toggle {
-  background: rgba(255,255,255,0.04);
-  border-radius: 0.75rem;
-  padding: 1rem;
-  box-shadow: none;
-  border: 1px solid rgba(255,255,255,0.08);
-}
-
-.toggle-content {
+.header-toggle {
   display: flex;
   align-items: center;
-  justify-content: space-between;
+  gap: 0.75rem;
+  flex-shrink: 0;
 }
-
-.toggle-info { display: flex; flex-direction: column; gap: 0.25rem; }
-
-.toggle-label { font-size: 0.95rem; font-weight: 600; color: var(--do-text); }
 
 .toggle-status {
-  font-size: 0.85rem;
-  font-weight: 500;
+  font-size: 0.8rem;
+  font-weight: 600;
   color: var(--color-danger);
-  transition: color 0.3s ease;
+  transition: color 0.25s;
+  white-space: nowrap;
 }
 
-.toggle-status.active { color: var(--color-success); }
+.toggle-status.active {
+  color: var(--color-success);
+}
 
-:deep(.modern-switch) { transform: scale(1.1); }
-
-.config-card, .status-card {
+/* ── Panel ───────────────────────────────────────────────── */
+.panel {
+  border: 1px solid var(--do-border-light);
   border-radius: 0.75rem;
   overflow: hidden;
-  box-shadow: none;
-  border: 1px solid rgba(255,255,255,0.08);
-  margin-bottom: 1.25rem;
+  background: var(--do-bg);
 }
 
-.card-disabled {
-  opacity: 0.6;
+.panel-disabled {
+  opacity: 0.55;
   filter: grayscale(0.4);
+  pointer-events: none;
 }
 
-.card-header {
+.panel-header {
   display: flex;
   align-items: center;
-  gap: 0.5rem;
-  padding: 0.9rem 1.25rem;
-  background: rgba(255,255,255,0.03);
-  border-bottom: 1px solid rgba(255,255,255,0.08);
-  font-size: 1rem;
+  gap: 0.875rem;
+  padding: 0.875rem 1.25rem;
+  border-bottom: 1px solid var(--do-border-light);
+  background: rgba(255, 255, 255, 0.025);
+}
+
+.panel-icon {
+  font-size: 1.1rem;
+  color: var(--color-primary);
+  flex-shrink: 0;
+}
+
+.panel-title {
+  font-size: 0.95rem;
   font-weight: 600;
   color: var(--do-text);
+  margin: 0 0 0.15rem;
 }
 
-.card-header-icon { color: var(--color-primary); font-size: 1.1rem; }
-
-:deep(.config-card .p-card-content),
-:deep(.status-card .p-card-content) { padding: 1rem; }
-
-:deep(.config-card .p-card-header),
-:deep(.status-card .p-card-header) { padding: 0; }
-
-.section-hint {
-  font-size: 0.85rem;
+.panel-subtitle {
+  font-size: 0.8rem;
   color: var(--do-text-muted);
-  font-style: italic;
-  margin: 0 0 0.75rem;
+  margin: 0;
 }
 
-.confirmation-toggle-row {
+.panel-body {
+  padding: 1.25rem;
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+/* ── Confirmation toggle row ─────────────────────────────── */
+.toggle-row {
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 1rem;
 }
 
-.confirmation-info {
+.toggle-row-info {
   display: flex;
   flex-direction: column;
   gap: 0.25rem;
 }
 
-.confirmation-label {
+.toggle-row-label {
   font-size: 0.95rem;
   font-weight: 600;
   color: var(--do-text);
 }
 
-.confirmation-desc {
+.toggle-row-desc {
   font-size: 0.85rem;
   color: var(--do-text-muted);
   font-style: italic;
 }
 
+/* ── Section hint ────────────────────────────────────────── */
+.section-hint {
+  font-size: 0.85rem;
+  color: var(--do-text-muted);
+  font-style: italic;
+  margin: 0;
+}
+
+/* ── Add pattern row ─────────────────────────────────────── */
 .add-row {
   display: flex;
   gap: 0.5rem;
-  margin-bottom: 1rem;
 }
 
-.add-input { flex: 1; }
+.add-input {
+  flex: 1;
+}
 
+/* ── Pattern list ────────────────────────────────────────── */
 .pattern-list {
   display: flex;
   flex-direction: column;
@@ -395,25 +417,27 @@ onMounted(async () => {
   align-items: center;
   justify-content: space-between;
   padding: 0.5rem 0.75rem;
-  background: rgba(255,255,255,0.04);
+  background: rgba(255, 255, 255, 0.025);
   border-radius: 0.5rem;
-  border: 1px solid rgba(255,255,255,0.08);
+  border: 1px solid var(--do-border-light);
 }
 
 .pattern-text {
   font-family: 'SF Mono', 'Monaco', 'Consolas', monospace;
   font-size: 0.85rem;
-  color: #dc2626;
+  color: var(--color-danger);
 }
 
 .empty-hint {
   font-size: 0.85rem;
-  color: var(--do-text-secondary);
+  color: var(--do-text-muted);
   font-style: italic;
   text-align: center;
   padding: 0.75rem 0;
+  margin: 0;
 }
 
+/* ── Hardcoded list ──────────────────────────────────────── */
 .hardcoded-list {
   display: flex;
   flex-wrap: wrap;
@@ -428,22 +452,30 @@ onMounted(async () => {
   font-family: 'SF Mono', 'Monaco', 'Consolas', monospace;
 }
 
-@media (max-width: 768px) {
-  .integration-container { padding: 0.75rem; }
-  .integration-header { flex-direction: column; text-align: center; gap: 0.75rem; }
-  .toggle-content { flex-direction: column; gap: 0.75rem; text-align: center; }
-  .add-row { flex-direction: column; }
-}
-
-@media (min-width: 992px) {
+/* ── Responsive ──────────────────────────────────────────── */
+@media (max-width: 600px) {
   .integration-container {
-    display: grid;
-    grid-template-columns: 1fr 380px;
-    gap: 1rem;
-    align-items: start;
+    padding: 0.75rem;
   }
-  .header-section { grid-column: 1 / -1; }
-  .config-card { grid-column: 1 / 2; }
-  .status-card { grid-column: 2 / 3; position: sticky; top: 5.2rem; }
+
+  .page-header {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 0.875rem;
+  }
+
+  .header-toggle {
+    align-self: flex-end;
+  }
+
+  .add-row {
+    flex-direction: column;
+  }
+
+  .toggle-row {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 0.75rem;
+  }
 }
 </style>

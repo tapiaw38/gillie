@@ -3,6 +3,7 @@ import type { IntegrationParams, WhatsappIntegrationConfig } from '@/types/assis
 import { onMounted, reactive, computed, watch } from 'vue'
 import { useAssistant } from '@/composables/useAssistant'
 import { useErrorToast } from '@/composables/useErrorToast'
+import { useI18n } from 'vue-i18n'
 import Toast from 'primevue/toast'
 import InputText from 'primevue/inputtext'
 import Button from 'primevue/button'
@@ -20,15 +21,17 @@ const {
   getAssistantProfileError,
 } = useAssistant()
 
+const { t } = useI18n()
+
 const errorWatchers = [
   {
     flag: isAddIntegrationError,
-    summary: 'Error al guardar configuración',
+    summary: t('systemCommands.errorSaveConfig'),
     detail: addIntegrationError,
   },
   {
     flag: isGetAssistantProfileError,
-    summary: 'Error al cargar perfil',
+    summary: t('systemCommands.errorLoadProfile'),
     detail: getAssistantProfileError,
   },
 ]
@@ -55,12 +58,12 @@ const validationErrors = reactive({
 const saveConfig = async () => {
   const config = whatsappIntegration.config as WhatsappIntegrationConfig
 
-  validationErrors.accessToken = !config.accessToken ? 'El token de acceso es obligatorio.' : ''
+  validationErrors.accessToken = !config.accessToken ? t('integrations.whatsapp.accessTokenRequired') : ''
   validationErrors.phoneNumberId = !config.phoneNumberId
-    ? 'El ID de número de teléfono es obligatorio.'
+    ? t('integrations.whatsapp.phoneNumberIdRequired')
     : ''
   validationErrors.businessAccountId = !config.businessAccountId
-    ? 'El ID de cuenta de WhatsApp Business es obligatorio.'
+    ? t('integrations.whatsapp.businessAccountIdRequired')
     : ''
 
   if (
@@ -70,8 +73,8 @@ const saveConfig = async () => {
   ) {
     toast.add({
       severity: 'warn',
-      summary: 'Campos requeridos',
-      detail: 'Por favor completa todos los campos obligatorios',
+      summary: t('common.requiredFields'),
+      detail: t('common.completeRequired'),
       life: 3000,
     })
     return
@@ -125,522 +128,509 @@ onMounted(async () => {
 
 <template>
   <div class="integration-container">
-    <!-- Header Section -->
-    <div class="header-section">
-      <div class="integration-header">
+
+    <!-- Page header row -->
+    <div class="page-header">
+      <div class="header-left">
         <div class="icon-wrapper whatsapp-icon">
           <i class="pi pi-whatsapp"></i>
         </div>
-        <div class="header-content">
-          <h1 class="integration-title">Integración WhatsApp</h1>
-          <p class="integration-subtitle">Conecta tu asistente con WhatsApp Business API</p>
+        <div class="header-text">
+          <h1 class="page-title">{{ t('integrations.whatsapp.title') }}</h1>
+          <p class="page-subtitle">{{ t('integrations.whatsapp.subtitle') }}</p>
+        </div>
+      </div>
+      <div class="header-toggle">
+        <span class="toggle-status" :class="{ active: whatsappIntegration.activated }">
+          {{ whatsappIntegration.activated ? t('integrations.active') : t('integrations.inactive') }}
+        </span>
+        <InputSwitch v-model="whatsappIntegration.activated" />
+      </div>
+    </div>
+
+    <!-- Panel 1 — API Credentials -->
+    <div class="panel" :class="{ 'panel-disabled': !whatsappIntegration.activated }">
+      <div class="panel-header">
+        <span class="step-badge">1</span>
+        <div>
+          <p class="panel-title">{{ t('integrations.whatsapp.credentialsTitle') }}</p>
+          <p class="panel-subtitle">{{ t('integrations.whatsapp.credentialsSubtitle') }}</p>
         </div>
       </div>
 
-      <div class="activation-toggle">
-        <div class="toggle-content">
-          <div class="toggle-info">
-            <span class="toggle-label">Estado de la integración</span>
-            <span class="toggle-status" :class="{ active: whatsappIntegration.activated }">
-              {{ whatsappIntegration.activated ? 'Activa' : 'Inactiva' }}
-            </span>
-          </div>
-          <InputSwitch v-model="whatsappIntegration.activated" class="modern-switch" />
+      <form class="panel-body" @submit.prevent="saveConfig">
+        <div class="field-group">
+          <label for="accessToken" class="field-label">
+            <i class="pi pi-key field-icon"></i>
+            {{ t('integrations.whatsapp.accessToken') }}
+          </label>
+          <InputText
+            id="accessToken"
+            v-model="(whatsappIntegration.config as WhatsappIntegrationConfig).accessToken"
+            placeholder="EAAGZ..."
+            :disabled="!whatsappIntegration.activated"
+            :invalid="!!validationErrors.accessToken"
+            type="password"
+            class="w-full"
+          />
+          <Message v-if="validationErrors.accessToken" severity="error" class="field-error">
+            {{ validationErrors.accessToken }}
+          </Message>
+          <small class="field-help">{{ t('integrations.whatsapp.accessTokenHelp') }}</small>
+        </div>
+
+        <div class="field-group">
+          <label for="phoneNumberId" class="field-label">
+            <i class="pi pi-phone field-icon"></i>
+            {{ t('integrations.whatsapp.phoneNumberId') }}
+          </label>
+          <InputText
+            id="phoneNumberId"
+            v-model="(whatsappIntegration.config as WhatsappIntegrationConfig).phoneNumberId"
+            placeholder="123456789012345"
+            :disabled="!whatsappIntegration.activated"
+            :invalid="!!validationErrors.phoneNumberId"
+            class="w-full"
+          />
+          <Message v-if="validationErrors.phoneNumberId" severity="error" class="field-error">
+            {{ validationErrors.phoneNumberId }}
+          </Message>
+          <small class="field-help">{{ t('integrations.whatsapp.phoneNumberIdHelp') }}</small>
+        </div>
+
+        <div class="field-group">
+          <label for="businessAccountId" class="field-label">
+            <i class="pi pi-building field-icon"></i>
+            ID de Cuenta Business
+          </label>
+          <InputText
+            id="businessAccountId"
+            v-model="(whatsappIntegration.config as WhatsappIntegrationConfig).businessAccountId"
+            placeholder="987654321098765"
+            :disabled="!whatsappIntegration.activated"
+            :invalid="!!validationErrors.businessAccountId"
+            class="w-full"
+          />
+          <Message v-if="validationErrors.businessAccountId" severity="error" class="field-error">
+            {{ validationErrors.businessAccountId }}
+          </Message>
+          <small class="field-help">ID de tu cuenta de WhatsApp Business</small>
+        </div>
+
+        <div class="panel-footer">
+          <div></div>
+          <Button
+            type="submit"
+            label="Guardar Configuración"
+            icon="pi pi-save"
+            severity="primary"
+            :disabled="!whatsappIntegration.activated"
+          />
+        </div>
+      </form>
+    </div>
+
+    <!-- Panel 2 — Current status -->
+    <div class="panel">
+      <div class="panel-header">
+        <span class="step-badge">2</span>
+        <div>
+          <p class="panel-title">Estado Actual</p>
+          <p class="panel-subtitle">Valores guardados de la integración</p>
+        </div>
+      </div>
+
+      <div class="panel-body status-body">
+        <div class="status-row">
+          <span class="status-label">
+            <i class="pi pi-key"></i>
+            Token de Acceso
+          </span>
+          <code class="status-value">
+            {{
+              (searchWhatsappIntegration?.config as unknown as WhatsappIntegrationConfig)?.accessToken
+                ? '&bull;&bull;&bull;&bull;&bull;&bull;&bull;&bull;&bull;&bull;&bull;'
+                : 'No configurado'
+            }}
+          </code>
+        </div>
+
+        <div class="status-row">
+          <span class="status-label">
+            <i class="pi pi-phone"></i>
+            ID de Número
+          </span>
+          <code class="status-value">
+            {{
+              (searchWhatsappIntegration?.config as unknown as WhatsappIntegrationConfig)?.phoneNumberId
+                || 'No configurado'
+            }}
+          </code>
+        </div>
+
+        <div class="status-row">
+          <span class="status-label">
+            <i class="pi pi-building"></i>
+            ID de Cuenta Business
+          </span>
+          <code class="status-value">
+            {{
+              (searchWhatsappIntegration?.config as unknown as WhatsappIntegrationConfig)?.businessAccountId
+                || 'No configurado'
+            }}
+          </code>
         </div>
       </div>
     </div>
 
-    <!-- Configuration Card -->
-    <Card class="config-card" :class="{ 'card-disabled': !whatsappIntegration.activated }">
-      <template #content>
-        <form class="config-form" @submit.prevent="saveConfig">
-          <div class="form-grid">
-            <div class="field-group">
-              <label for="accessToken" class="field-label">
-                <i class="pi pi-key field-icon"></i>
-                Token de Acceso
-              </label>
-              <div class="input-wrapper">
-                <InputText
-                  id="accessToken"
-                  v-model="(whatsappIntegration.config as WhatsappIntegrationConfig).accessToken"
-                  placeholder="EAAGZ..."
-                  :disabled="!whatsappIntegration.activated"
-                  :invalid="!!validationErrors.accessToken"
-                  required
-                />
-              </div>
-              <Message v-if="validationErrors.accessToken" severity="error" class="field-error">
-                {{ validationErrors.accessToken }}
-              </Message>
-              <small class="field-help">Token temporal o permanente de la API de WhatsApp</small>
-            </div>
-
-            <div class="field-group">
-              <label for="phoneNumberId" class="field-label">
-                <i class="pi pi-phone field-icon"></i>
-                ID de Número de Teléfono
-              </label>
-              <div class="input-wrapper">
-                <InputText
-                  id="phoneNumberId"
-                  v-model="(whatsappIntegration.config as WhatsappIntegrationConfig).phoneNumberId"
-                  placeholder="123456789012345"
-                  :disabled="!whatsappIntegration.activated"
-                  :invalid="!!validationErrors.phoneNumberId"
-                  required
-                />
-              </div>
-              <Message v-if="validationErrors.phoneNumberId" severity="error" class="field-error">
-                {{ validationErrors.phoneNumberId }}
-              </Message>
-              <small class="field-help">Número vinculado a la API de WhatsApp</small>
-            </div>
-
-            <div class="field-group">
-              <label for="businessAccountId" class="field-label">
-                <i class="pi pi-building field-icon"></i>
-                ID de Cuenta Business
-              </label>
-              <div class="input-wrapper">
-                <InputText
-                  id="businessAccountId"
-                  v-model="
-                    (whatsappIntegration.config as WhatsappIntegrationConfig).businessAccountId
-                  "
-                  placeholder="987654321098765"
-                  :disabled="!whatsappIntegration.activated"
-                  :invalid="!!validationErrors.businessAccountId"
-                  required
-                />
-              </div>
-              <Message
-                v-if="validationErrors.businessAccountId"
-                severity="error"
-                class="field-error"
-              >
-                {{ validationErrors.businessAccountId }}
-              </Message>
-              <small class="field-help">ID de tu cuenta de WhatsApp Business</small>
-            </div>
-          </div>
-
-          <div class="form-actions">
-            <Button
-              type="submit"
-              label="Guardar Configuración"
-              icon="pi pi-save"
-              severity="primary"
-              :disabled="!whatsappIntegration.activated"
-            />
-          </div>
-        </form>
-      </template>
-    </Card>
-
-    <!-- Current Configuration Card -->
-    <Card class="status-card">
-      <template #header>
-        <div class="status-header">
-          <i class="pi pi-cog status-icon"></i>
-          <span class="status-title">Configuración Actual</span>
+    <!-- Panel 3 — Setup guide -->
+    <div class="panel">
+      <div class="panel-header">
+        <span class="step-badge">3</span>
+        <div>
+          <p class="panel-title">Guía de Configuración</p>
+          <p class="panel-subtitle">Pasos para conectar WhatsApp Business API</p>
         </div>
-      </template>
-      <template #content>
-        <div class="status-grid">
-          <div class="status-item">
-            <div class="status-label">
-              <i class="pi pi-key"></i>
-              Token de Acceso
-            </div>
-            <div class="status-value">
-              {{
-                searchWhatsappIntegration
-                  ? (searchWhatsappIntegration.config as unknown as WhatsappIntegrationConfig)
-                      .accessToken || 'No configurado'
-                  : 'No configurado'
-              }}
-            </div>
-          </div>
+      </div>
 
-          <div class="status-item">
-            <div class="status-label">
-              <i class="pi pi-phone"></i>
-              ID de Número
-            </div>
-            <div class="status-value">
-              {{
-                searchWhatsappIntegration
-                  ? (searchWhatsappIntegration.config as unknown as WhatsappIntegrationConfig)
-                      .phoneNumberId || 'No configurado'
-                  : 'No configurado'
-              }}
-            </div>
-          </div>
+      <ol class="steps-list">
+        <li class="step-item">
+          <span class="step-num">1</span>
+          <span>Ve a <strong>developers.facebook.com</strong> y crea una app</span>
+        </li>
+        <li class="step-item">
+          <span class="step-num">2</span>
+          <span>Agrega el producto <strong>"WhatsApp"</strong> a tu app</span>
+        </li>
+        <li class="step-item">
+          <span class="step-num">3</span>
+          <span>Copia el <strong>Access Token</strong> del panel de API</span>
+        </li>
+        <li class="step-item">
+          <span class="step-num">4</span>
+          <span>Copia el <strong>Phone Number ID</strong> y el <strong>Business Account ID</strong></span>
+        </li>
+        <li class="step-item">
+          <span class="step-num">5</span>
+          <span>Activa la integración y guarda los datos</span>
+        </li>
+        <li class="step-item">
+          <span class="step-num">6</span>
+          <span>Configura el webhook con URL: <code>/api/whatsapp/webhook</code></span>
+        </li>
+      </ol>
+    </div>
 
-          <div class="status-item">
-            <div class="status-label">
-              <i class="pi pi-building"></i>
-              ID de Cuenta Business
-            </div>
-            <div class="status-value">
-              {{
-                searchWhatsappIntegration
-                  ? (searchWhatsappIntegration.config as unknown as WhatsappIntegrationConfig)
-                      .businessAccountId || 'No configurado'
-                  : 'No configurado'
-              }}
-            </div>
-          </div>
-        </div>
-      </template>
-    </Card>
-
-    <!-- Toast for Notifications -->
     <Toast position="top-right" />
   </div>
 </template>
 
 <style scoped>
+/* ── Layout ─────────────────────────────────────────────── */
 .integration-container {
-  max-width: 1200px;
+  max-width: 860px;
   margin: 0 auto;
-  padding: 1rem 1.25rem;
-  min-height: 100vh;
+  padding: 1.25rem;
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
   background: var(--do-bg);
   box-sizing: border-box;
 }
 
-/* Header Section (más compacto) */
-.header-section {
-  margin-bottom: 1.25rem;
+/* ── Page header ─────────────────────────────────────────── */
+.page-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 1rem 1.25rem;
+  border: 1px solid var(--do-border-light);
+  border-radius: 0.75rem;
+  background: rgba(255, 255, 255, 0.03);
 }
 
-.integration-header {
+.header-left {
   display: flex;
   align-items: center;
   gap: 1rem;
-  margin-bottom: 1rem;
+  min-width: 0;
 }
 
 .icon-wrapper {
-  width: 3.2rem;
-  height: 3.2rem;
+  flex-shrink: 0;
+  width: 3rem;
+  height: 3rem;
   border-radius: 0.75rem;
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 1.6rem;
-  color: white;
-  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.08);
+  font-size: 1.4rem;
+  color: #fff;
 }
 
 .whatsapp-icon {
   background: linear-gradient(135deg, #25d366 0%, #128c7e 100%);
 }
 
-.header-content {
-  flex: 1;
+.header-text {
+  min-width: 0;
 }
 
-.integration-title {
-  font-size: 1.6rem;
+.page-title {
+  font-size: 1.35rem;
   font-weight: 700;
-  margin: 0 0 0.25rem 0;
   color: var(--do-text);
+  margin: 0 0 0.2rem;
+  line-height: 1.2;
 }
 
-.integration-subtitle {
-  font-size: 0.95rem;
+.page-subtitle {
+  font-size: 0.875rem;
   color: var(--do-text-muted);
   margin: 0;
-  font-weight: 400;
 }
 
-/* Activation Toggle */
-.activation-toggle {
-  background: rgba(255,255,255,0.04);
-  border-radius: 0.75rem;
-  padding: 1rem;
-  box-shadow: 0 3px 14px rgba(0, 0, 0, 0.06);
-  border: 1px solid var(--vt-c-gray-200);
-}
-
-.toggle-content {
+.header-toggle {
   display: flex;
   align-items: center;
-  justify-content: space-between;
-}
-
-.toggle-info {
-  display: flex;
-  flex-direction: column;
-  gap: 0.25rem;
-}
-
-.toggle-label {
-  font-size: 0.95rem;
-  font-weight: 600;
-  color: var(--do-text);
+  gap: 0.75rem;
+  flex-shrink: 0;
 }
 
 .toggle-status {
-  font-size: 0.85rem;
-  font-weight: 500;
+  font-size: 0.8rem;
+  font-weight: 600;
   color: var(--color-danger);
-  transition: color 0.3s ease;
+  transition: color 0.25s;
+  white-space: nowrap;
 }
 
 .toggle-status.active {
   color: var(--color-success);
 }
 
-:deep(.modern-switch) {
-  transform: scale(1.1);
-}
-
-/* Configuration Card (compacto) */
-.config-card {
-  margin-bottom: 1.25rem;
+/* ── Panel ───────────────────────────────────────────────── */
+.panel {
+  border: 1px solid var(--do-border-light);
   border-radius: 0.75rem;
   overflow: hidden;
-  box-shadow: 0 8px 30px rgba(0, 0, 0, 0.08);
-  border: 1px solid var(--vt-c-gray-200);
-  transition: all 0.2s ease;
+  background: var(--do-bg);
 }
 
-.config-card:hover {
-  box-shadow: 0 14px 40px rgba(0, 0, 0, 0.12);
-  transform: translateY(-2px);
-}
-
-.card-disabled {
-  opacity: 0.6;
-  filter: grayscale(0.5);
+.panel-disabled {
+  opacity: 0.55;
+  filter: grayscale(0.4);
   pointer-events: none;
 }
 
-:deep(.config-card .p-card-content) {
-  padding: 1rem;
+.panel-header {
+  display: flex;
+  align-items: center;
+  gap: 0.875rem;
+  padding: 0.875rem 1.25rem;
+  border-bottom: 1px solid var(--do-border-light);
+  background: rgba(255, 255, 255, 0.025);
 }
 
-.config-form {
-  width: 100%;
+.step-badge {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.75rem;
+  height: 1.75rem;
+  border-radius: 50%;
+  background: var(--gradient-primary, var(--color-primary));
+  color: #fff;
+  font-size: 0.8rem;
+  font-weight: 700;
+  flex-shrink: 0;
 }
 
-.form-grid {
-  display: grid;
+.panel-title {
+  font-size: 0.95rem;
+  font-weight: 600;
+  color: var(--do-text);
+  margin: 0 0 0.15rem;
+}
+
+.panel-subtitle {
+  font-size: 0.8rem;
+  color: var(--do-text-muted);
+  margin: 0;
+}
+
+.panel-body {
+  padding: 1.25rem;
+  display: flex;
+  flex-direction: column;
   gap: 1rem;
-  margin-bottom: 1rem;
 }
 
+.panel-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  padding-top: 1rem;
+  border-top: 1px solid var(--do-border-light);
+  margin-top: 0.25rem;
+}
+
+/* ── Form fields ─────────────────────────────────────────── */
 .field-group {
   display: flex;
   flex-direction: column;
-  gap: 0.5rem;
+  gap: 0.4rem;
 }
 
 .field-label {
   display: flex;
   align-items: center;
-  gap: 0.5rem;
-  font-size: 0.95rem;
+  gap: 0.4rem;
+  font-size: 0.875rem;
   font-weight: 600;
   color: var(--do-text);
 }
 
 .field-icon {
   color: var(--color-primary);
-  font-size: 1rem;
-}
-
-.input-wrapper {
-  position: relative;
-}
-
-/* Input Styles - using PrimeVue classes */
-
-.field-error {
-  margin-top: 0.35rem;
+  font-size: 0.875rem;
 }
 
 .field-help {
+  font-size: 0.8rem;
   color: var(--do-text-muted);
-  font-size: 0.85rem;
   font-style: italic;
 }
 
-.form-actions {
-  display: flex;
-  justify-content: flex-end;
-  padding-top: 0.75rem;
-  border-top: 1px solid var(--vt-c-gray-200);
+.field-error {
+  margin-top: 0.25rem;
 }
 
-/* Button Styles - using PrimeVue classes */
-
-/* Status Card (compacto) */
-.status-card {
-  border-radius: 0.75rem;
-  overflow: hidden;
-  box-shadow: 0 8px 30px rgba(0, 0, 0, 0.08);
-  border: 1px solid var(--vt-c-gray-200);
+.w-full {
+  width: 100%;
 }
 
-:deep(.status-card .p-card-header) {
-  background: rgba(255,255,255,0.04);
-  padding: 1rem 1.25rem;
-  border-bottom: 1px solid var(--vt-c-gray-200);
+/* ── Status panel ────────────────────────────────────────── */
+.status-body {
+  gap: 0.5rem;
 }
 
-.status-header {
+.status-row {
   display: flex;
   align-items: center;
-  gap: 0.5rem;
-}
-
-.status-icon {
-  color: var(--color-primary);
-  font-size: 1.125rem;
-}
-
-.status-title {
-  font-size: 1.05rem;
-  font-weight: 600;
-  color: var(--do-text);
-}
-
-:deep(.status-card .p-card-content) {
-  padding: 1rem;
-}
-
-.status-grid {
-  display: grid;
+  justify-content: space-between;
   gap: 1rem;
-}
-
-.status-item {
-  display: flex;
-  flex-direction: column;
-  gap: 0.5rem;
-  padding: 0.75rem;
-  background: rgba(255,255,255,0.04);
-  border-radius: 0.6rem;
-  border: 1px solid var(--vt-c-gray-200);
+  padding: 0.625rem 0.75rem;
+  border: 1px solid var(--do-border-light);
+  border-radius: 0.5rem;
+  background: rgba(255, 255, 255, 0.025);
+  flex-wrap: wrap;
 }
 
 .status-label {
   display: flex;
   align-items: center;
-  gap: 0.5rem;
-  font-size: 0.85rem;
+  gap: 0.4rem;
+  font-size: 0.8rem;
   font-weight: 600;
   color: var(--do-text-muted);
+  white-space: nowrap;
 }
 
 .status-label i {
   color: var(--color-primary);
+  font-size: 0.8rem;
 }
 
 .status-value {
   font-family: 'SF Mono', 'Monaco', 'Consolas', monospace;
-  font-size: 0.85rem;
+  font-size: 0.8rem;
   color: var(--do-text);
-  background: rgba(255,255,255,0.04);
-  padding: 0.6rem;
-  border-radius: 0.4rem;
-  border: 1px solid var(--vt-c-gray-200);
+  background: rgba(255, 255, 255, 0.04);
+  padding: 0.2rem 0.5rem;
+  border-radius: 0.3rem;
   word-break: break-all;
-  overflow-wrap: break-word;
+  max-width: 60%;
+  text-align: right;
 }
 
-/* Responsive Design */
-@media (max-width: 768px) {
+/* ── Steps guide ─────────────────────────────────────────── */
+.steps-list {
+  list-style: none;
+  margin: 0;
+  padding: 1rem 1.25rem 1.25rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+}
+
+.step-item {
+  display: flex;
+  align-items: baseline;
+  gap: 0.75rem;
+  font-size: 0.875rem;
+  color: var(--do-text-muted);
+}
+
+.step-num {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.4rem;
+  height: 1.4rem;
+  border-radius: 50%;
+  border: 1px solid var(--do-border-light);
+  font-size: 0.7rem;
+  font-weight: 700;
+  color: var(--do-text-muted);
+  flex-shrink: 0;
+}
+
+.step-item code {
+  background: rgba(255, 255, 255, 0.07);
+  padding: 0.1rem 0.35rem;
+  border-radius: 0.3rem;
+  font-family: 'SF Mono', 'Monaco', 'Consolas', monospace;
+  font-size: 0.78rem;
+  color: var(--do-text);
+}
+
+/* ── Responsive ──────────────────────────────────────────── */
+@media (max-width: 600px) {
   .integration-container {
     padding: 0.75rem;
   }
 
-  .integration-header {
+  .page-header {
     flex-direction: column;
-    text-align: center;
-    gap: 0.75rem;
+    align-items: flex-start;
+    gap: 0.875rem;
   }
 
-  .integration-title {
-    font-size: 1.4rem;
+  .header-toggle {
+    align-self: flex-end;
   }
 
-  .integration-subtitle {
-    font-size: 0.95rem;
+  .panel-footer {
+    flex-direction: column-reverse;
+    align-items: stretch;
   }
 
-  .toggle-content {
-    flex-direction: column;
-    gap: 0.75rem;
-    text-align: center;
-  }
-
-  :deep(.config-card .p-card-content),
-  :deep(.status-card .p-card-content) {
-    padding: 1rem;
-  }
-
-  :deep(.status-card .p-card-header) {
-    padding: 0.75rem 1rem;
-  }
-
-  .form-actions {
-    justify-content: stretch;
-  }
-
-  :deep(.save-button) {
+  .panel-footer :deep(button) {
     width: 100%;
   }
-}
 
-@media (max-width: 480px) {
-  .integration-container {
-    padding: 0.5rem;
+  .status-row {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 0.35rem;
   }
 
-  .icon-wrapper {
-    width: 3rem;
-    height: 3rem;
-    font-size: 1.5rem;
-  }
-
-  .integration-title {
-    font-size: 1.25rem;
-  }
-
-  .activation-toggle,
-  :deep(.config-card .p-card-content),
-  :deep(.status-card .p-card-content) {
-    padding: 0.75rem;
-  }
-
-  :deep(.status-card .p-card-header) {
-    padding: 0.75rem;
-  }
-}
-
-@media (min-width: 992px) {
-  .integration-container {
-    display: grid;
-    grid-template-columns: 1fr 380px;
-    gap: 1rem;
-    align-items: start;
-  }
-
-  .config-card {
-    grid-column: 1 / 2;
-  }
-
-  .status-card {
-    grid-column: 2 / 3;
-    position: sticky;
-    top: 5.2rem;
-    align-self: start;
+  .status-value {
+    max-width: 100%;
+    text-align: left;
   }
 }
 </style>

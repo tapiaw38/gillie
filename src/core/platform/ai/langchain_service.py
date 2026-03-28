@@ -651,12 +651,17 @@ class LangChainService:
         Returns:
             System prompt string
         """
-        from src.adapters.web.integrations.openapi.context import CONTEXT_INFORMATION
+        from src.adapters.web.integrations.openapi.context import (
+            CONTEXT_INFORMATION,
+            get_language_instruction,
+        )
 
+        language = getattr(profile, "response_language", None) or "en"
         system_prompt = CONTEXT_INFORMATION.format(
-            assistant_name=profile.assistant_name or "Asistente",
+            assistant_name=profile.assistant_name or "Assistant",
             functions=profile.functions or "",
             product_context=context or "",
+            language_instruction=get_language_instruction(language),
         )
 
         try:
@@ -681,38 +686,38 @@ class LangChainService:
                         workflow_lines.append(line)
 
                 system_prompt += (
-                    "\n\n## Integraciones disponibles\n"
-                    "Tienes acceso a las siguientes APIs. Úsalas directamente con `run_shell` "
-                    "(curl) cuando el usuario solicite información relacionada. "
-                    "NO busques archivos locales ni respondas que no tienes acceso.\n"
-                    "El header de autenticación ya está gestionado internamente; usa siempre "
-                    "la URL tal como aparece (http://localhost:8000/...).\n\n"
+                    "\n\n## Available Integrations\n"
+                    "You have access to the following APIs. Use them directly with `run_shell` "
+                    "(curl) when the user requests related information. "
+                    "Do NOT look for local files or answer that you have no access.\n"
+                    "The authentication header is managed internally; always use "
+                    "the URL as shown (http://localhost:8000/...).\n\n"
                     + "\n".join(workflow_lines)
                 )
         except Exception as e:
             logger.warning(f"Could not inject global workflows into system prompt: {e}")
 
-        if context and "PREGUNTAS FRECUENTES" in context:
+        if context and "FREQUENTLY ASKED QUESTIONS" in context or context and "PREGUNTAS FRECUENTES" in context:
             system_prompt += (
-                "\n\nINSTRUCCIÓN CRÍTICA - PRIORIDAD ABSOLUTA:\n"
-                "Las PREGUNTAS FRECUENTES (FAQs) están incluidas en el contexto anterior.\n"
-                "DEBES seguir este proceso ESTRICTAMENTE:\n"
-                "1. PRIMERO: Lee cuidadosamente todas las FAQs en el contexto\n"
-                "2. Si la pregunta del usuario coincide con alguna FAQ (aunque sea parcialmente), USA LA RESPUESTA DE LA FAQ DIRECTAMENTE\n"
-                "3. NO uses herramientas de búsqueda (search_faqs, search_documents) si ya tienes la respuesta en las FAQs del contexto\n"
-                "4. SOLO si NO encuentras la respuesta en las FAQs del contexto, entonces puedes usar herramientas de búsqueda\n"
-                "5. Las respuestas de las FAQs son oficiales y pre-aprobadas, tienen prioridad sobre cualquier otra información\n"
+                "\n\nCRITICAL INSTRUCTION - ABSOLUTE PRIORITY:\n"
+                "The FREQUENTLY ASKED QUESTIONS (FAQs) are included in the context above.\n"
+                "You MUST follow this process STRICTLY:\n"
+                "1. FIRST: Read all FAQs in the context carefully\n"
+                "2. If the user's question matches any FAQ (even partially), USE THE FAQ ANSWER DIRECTLY\n"
+                "3. Do NOT use search tools (search_faqs, search_documents) if you already have the answer in the FAQs\n"
+                "4. ONLY if you do NOT find the answer in the FAQs, then you may use search tools\n"
+                "5. FAQ answers are official and pre-approved, they take priority over any other information\n"
             )
 
         if client_workspace and os.path.isdir(client_workspace):
             try:
                 workspace_map = self._build_workspace_map(client_workspace)
                 system_prompt += (
-                    "\n\n## Mapa del workspace\n"
-                    "El siguiente es el árbol de archivos del directorio de trabajo actual.\n"
-                    "Usá esta información para ubicar archivos directamente sin necesidad de "
-                    "explorar con repo_map o find_files. Los símbolos entre paréntesis son "
-                    "las clases/funciones principales de cada archivo.\n\n"
+                    "\n\n## Workspace Map\n"
+                    "The following is the file tree of the current working directory.\n"
+                    "Use this information to locate files directly without needing to "
+                    "explore with repo_map or find_files. Symbols in parentheses are "
+                    "the main classes/functions of each file.\n\n"
                     + workspace_map
                 )
             except Exception as e:

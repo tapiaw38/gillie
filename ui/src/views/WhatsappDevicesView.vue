@@ -15,9 +15,11 @@ import Tag from 'primevue/tag'
 import Toast from 'primevue/toast'
 import ProgressSpinner from 'primevue/progressspinner'
 import Message from 'primevue/message'
+import { useI18n } from 'vue-i18n'
 
 const whatsapp = useWhatsApp()
 const toast = useToast()
+const { t } = useI18n()
 
 // Country codes
 interface Country {
@@ -74,8 +76,8 @@ const loadDevices = async () => {
   } catch (error) {
     toast.add({
       severity: 'error',
-      summary: 'Error',
-      detail: 'No se pudieron cargar los dispositivos',
+      summary: t('common.error'),
+      detail: t('integrations.whatsappDevices.errorLoadDevices'),
       life: 3000,
     })
     console.error('Error loading devices:', error)
@@ -88,8 +90,8 @@ const createDevice = async () => {
   if (!localPhone.value || !newDevice.value.device_name) {
     toast.add({
       severity: 'warn',
-      summary: 'Campos requeridos',
-      detail: 'Por favor completa todos los campos',
+      summary: t('common.requiredFields'),
+      detail: t('common.completeRequired'),
       life: 3000,
     })
     return
@@ -101,8 +103,8 @@ const createDevice = async () => {
     const device = await whatsapp.createDevice({ ...newDevice.value, phone_number })
     toast.add({
       severity: 'success',
-      summary: 'Dispositivo creado',
-      detail: `Dispositivo ${device.device_name} creado exitosamente`,
+      summary: t('integrations.whatsappDevices.deviceCreated'),
+      detail: `${device.device_name} ${t('integrations.whatsappDevices.deviceCreatedDesc')}`,
       life: 3000,
     })
     showCreateDialog.value = false
@@ -113,8 +115,8 @@ const createDevice = async () => {
   } catch (error) {
     toast.add({
       severity: 'error',
-      summary: 'Error',
-      detail: 'No se pudo crear el dispositivo',
+      summary: t('common.error'),
+      detail: t('integrations.whatsappDevices.errorCreateDevice'),
       life: 3000,
     })
     console.error('Error creating device:', error)
@@ -159,8 +161,8 @@ const connectDevice = async (device: WhatsAppDevice) => {
 
         toast.add({
           severity: 'success',
-          summary: 'Dispositivo autenticado',
-          detail: `${device.device_name} vinculado exitosamente`,
+          summary: t('integrations.whatsappDevices.deviceAuthenticated'),
+          detail: `${device.device_name} ${t('integrations.whatsappDevices.deviceAuthenticatedDesc')}`,
           life: 4000,
         })
         selectedDevice.value = undefined
@@ -168,8 +170,8 @@ const connectDevice = async (device: WhatsAppDevice) => {
       } else if (msg.type === 'error') {
         toast.add({
           severity: 'error',
-          summary: 'Error de autenticación',
-          detail: msg.message || 'Error desconocido',
+          summary: t('integrations.whatsappDevices.errorAuthTitle'),
+          detail: msg.message || t('common.unknownError'),
           life: 4000,
         })
       }
@@ -178,16 +180,16 @@ const connectDevice = async (device: WhatsAppDevice) => {
     ws.onerror = () => {
       toast.add({
         severity: 'error',
-        summary: 'Error de conexión',
-        detail: 'No se pudo conectar al stream QR',
+        summary: t('integrations.whatsappDevices.errorConnTitle'),
+        detail: t('integrations.whatsappDevices.errorConnStream'),
         life: 3000,
       })
     }
   } catch (error) {
     toast.add({
       severity: 'error',
-      summary: 'Error',
-      detail: 'No se pudo iniciar la autenticación',
+      summary: t('common.error'),
+      detail: t('integrations.whatsappDevices.errorConnect'),
       life: 3000,
     })
     console.error('Error connecting device:', error)
@@ -202,16 +204,16 @@ const disconnectDevice = async (device: WhatsAppDevice) => {
     await whatsapp.disconnectDevice(device.id)
     toast.add({
       severity: 'success',
-      summary: 'Dispositivo desconectado',
-      detail: `${device.device_name} desconectado exitosamente`,
+      summary: t('integrations.whatsappDevices.deviceDisconnected'),
+      detail: `${device.device_name} ${t('integrations.whatsappDevices.deviceDisconnectedDesc')}`,
       life: 3000,
     })
     await loadDevices()
   } catch (error) {
     toast.add({
       severity: 'error',
-      summary: 'Error',
-      detail: 'No se pudo desconectar el dispositivo',
+      summary: t('common.error'),
+      detail: t('integrations.whatsappDevices.errorDisconnect'),
       life: 3000,
     })
     console.error('Error disconnecting device:', error)
@@ -221,7 +223,7 @@ const disconnectDevice = async (device: WhatsAppDevice) => {
 }
 
 const deleteDevice = async (device: WhatsAppDevice) => {
-  if (!confirm(`¿Estás seguro de eliminar el dispositivo ${device.device_name}?`)) {
+  if (!confirm(`${t('integrations.whatsappDevices.confirmDelete')} ${device.device_name}?`)) {
     return
   }
 
@@ -230,16 +232,16 @@ const deleteDevice = async (device: WhatsAppDevice) => {
     await whatsapp.deleteDevice(device.id)
     toast.add({
       severity: 'success',
-      summary: 'Dispositivo eliminado',
-      detail: `${device.device_name} eliminado exitosamente`,
+      summary: t('integrations.whatsappDevices.deviceDeleted'),
+      detail: `${device.device_name} ${t('integrations.whatsappDevices.deviceDeletedDesc')}`,
       life: 3000,
     })
     await loadDevices()
   } catch (error) {
     toast.add({
       severity: 'error',
-      summary: 'Error',
-      detail: 'No se pudo eliminar el dispositivo',
+      summary: t('common.error'),
+      detail: t('integrations.whatsappDevices.errorDelete'),
       life: 3000,
     })
     console.error('Error deleting device:', error)
@@ -260,10 +262,10 @@ const getStatusSeverity = (status: string) => {
 
 const getStatusLabel = (status: string) => {
   const labelMap: Record<string, string> = {
-    authenticated: 'Autenticado',
-    connected: 'Conectado',
-    connecting: 'Conectando',
-    disconnected: 'Desconectado',
+    authenticated: t('integrations.whatsappDevices.statusAuthenticated'),
+    connected: t('integrations.whatsappDevices.statusConnected'),
+    connecting: t('integrations.whatsappDevices.statusConnecting'),
+    disconnected: t('integrations.whatsappDevices.statusDisconnected'),
   }
   return labelMap[status] || status
 }
@@ -292,124 +294,134 @@ onMounted(() => {
 </script>
 
 <template>
-  <div class="whatsapp-devices-view">
+  <div class="devices-view">
     <Toast />
 
-    <div class="header-section">
-      <div class="header-content">
-        <h1 class="title">
+    <!-- Page header -->
+    <div class="page-header">
+      <div class="header-left">
+        <div class="icon-wrapper whatsapp-icon">
           <i class="pi pi-whatsapp"></i>
-          Dispositivos WhatsApp
-        </h1>
-        <p class="subtitle">Gestiona tus dispositivos WhatsApp conectados al asistente IA</p>
+        </div>
+        <div class="header-text">
+          <h1 class="page-title">{{ t('integrations.whatsappDevices.title') }}</h1>
+          <p class="page-subtitle">{{ t('integrations.whatsappDevices.subtitle') }}</p>
+        </div>
       </div>
       <Button
-        label="Agregar Dispositivo"
+        :label="t('integrations.whatsappDevices.addDevice')"
         icon="pi pi-plus"
-        @click="openCreateDialog"
+        severity="primary"
         :disabled="loading"
+        @click="openCreateDialog"
       />
     </div>
 
-    <Card class="devices-card">
-      <template #content>
-        <Message v-if="!hasDevices && !loading" severity="info" :closable="false">
-          No tienes dispositivos WhatsApp configurados. Haz clic en "Agregar Dispositivo" para
-          comenzar.
-        </Message>
+    <!-- Devices panel -->
+    <div class="panel">
+      <!-- Loading state -->
+      <div v-if="loading && !hasDevices" class="loading-state">
+        <ProgressSpinner style="width: 2.5rem; height: 2.5rem;" />
+        <p class="loading-text">{{ t('integrations.whatsappDevices.loadingDevices') }}</p>
+      </div>
 
-        <div v-if="loading && !hasDevices" class="loading-container">
-          <ProgressSpinner />
-        </div>
+      <!-- Empty state -->
+      <div v-else-if="!hasDevices && !loading" class="empty-state">
+        <i class="pi pi-mobile empty-icon"></i>
+        <p class="empty-title">{{ t('integrations.whatsappDevices.noDevices') }}</p>
+        <p class="empty-subtitle">{{ t('integrations.whatsappDevices.noDevicesDesc') }}</p>
+      </div>
 
-        <DataTable
-          v-if="hasDevices"
-          :value="devices"
-          :loading="loading"
-          stripedRows
-          responsiveLayout="scroll"
-          :paginator="devices.length > 10"
-          :rows="10"
-        >
-          <Column field="device_name" header="Nombre del Dispositivo" :sortable="true">
-            <template #body="{ data }">
-              <div class="device-name">
-                <i class="pi pi-mobile"></i>
-                <span>{{ data.device_name }}</span>
-              </div>
-            </template>
-          </Column>
+      <!-- DataTable -->
+      <DataTable
+        v-if="hasDevices"
+        :value="devices"
+        :loading="loading"
+        stripedRows
+        responsiveLayout="scroll"
+        :paginator="devices.length > 10"
+        :rows="10"
+        class="devices-table"
+      >
+        <Column field="device_name" :header="t('integrations.whatsappDevices.deviceName')" :sortable="true">
+          <template #body="{ data }">
+            <div class="device-name">
+              <i class="pi pi-mobile"></i>
+              <span>{{ data.device_name }}</span>
+            </div>
+          </template>
+        </Column>
 
-          <Column field="phone_number" header="Teléfono" :sortable="true">
-            <template #body="{ data }">
-              <span class="phone-number">{{ data.phone_number }}</span>
-            </template>
-          </Column>
+        <Column field="phone_number" :header="t('integrations.whatsappDevices.phone')" :sortable="true">
+          <template #body="{ data }">
+            <span class="phone-number">{{ data.phone_number }}</span>
+          </template>
+        </Column>
 
-          <Column field="status" header="Estado" :sortable="true">
-            <template #body="{ data }">
-              <Tag
-                :severity="getStatusSeverity(data.status)"
-                :value="getStatusLabel(data.status)"
+        <Column field="status" :header="t('integrations.whatsappDevices.status')" :sortable="true">
+          <template #body="{ data }">
+            <Tag
+              :severity="getStatusSeverity(data.status)"
+              :value="getStatusLabel(data.status)"
+            />
+          </template>
+        </Column>
+
+        <Column field="last_connected_at" :header="t('integrations.whatsappDevices.lastConnection')" :sortable="true">
+          <template #body="{ data }">
+            <span v-if="data.last_connected_at" class="date">
+              {{ new Date(data.last_connected_at).toLocaleString() }}
+            </span>
+            <span v-else class="text-muted">{{ t('common.never') }}</span>
+          </template>
+        </Column>
+
+        <Column :header="t('integrations.whatsappDevices.actions')" :exportable="false">
+          <template #body="{ data }">
+            <div class="action-buttons">
+              <Button
+                v-if="data.status === 'disconnected'"
+                icon="pi pi-qrcode"
+                :label="t('integrations.whatsappDevices.connect')"
+                severity="success"
+                size="small"
+                :disabled="loading"
+                @click="connectDevice(data)"
               />
-            </template>
-          </Column>
-
-          <Column field="last_connected_at" header="Última Conexión" :sortable="true">
-            <template #body="{ data }">
-              <span v-if="data.last_connected_at" class="date">
-                {{ new Date(data.last_connected_at).toLocaleString('es-ES') }}
-              </span>
-              <span v-else class="text-muted">Nunca</span>
-            </template>
-          </Column>
-
-          <Column header="Acciones" :exportable="false">
-            <template #body="{ data }">
-              <div class="action-buttons">
-                <Button
-                  v-if="data.status === 'disconnected'"
-                  icon="pi pi-qrcode"
-                  label="Conectar"
-                  severity="success"
-                  size="small"
-                  @click="connectDevice(data)"
-                  :disabled="loading"
-                />
-                <Button
-                  v-else-if="data.status === 'authenticated' || data.status === 'connected'"
-                  icon="pi pi-power-off"
-                  label="Desconectar"
-                  severity="warning"
-                  size="small"
-                  @click="disconnectDevice(data)"
-                  :disabled="loading"
-                />
-                <Button
-                  icon="pi pi-trash"
-                  severity="danger"
-                  size="small"
-                  text
-                  @click="deleteDevice(data)"
-                  :disabled="loading"
-                />
-              </div>
-            </template>
-          </Column>
-        </DataTable>
-      </template>
-    </Card>
+              <Button
+                v-else-if="data.status === 'authenticated' || data.status === 'connected'"
+                icon="pi pi-power-off"
+                :label="t('integrations.whatsappDevices.disconnect')"
+                severity="warning"
+                size="small"
+                :disabled="loading"
+                @click="disconnectDevice(data)"
+              />
+              <Button
+                icon="pi pi-trash"
+                severity="danger"
+                size="small"
+                text
+                :disabled="loading"
+                @click="deleteDevice(data)"
+              />
+            </div>
+          </template>
+        </Column>
+      </DataTable>
+    </div>
 
     <!-- Create Device Dialog -->
     <Dialog
       v-model:visible="showCreateDialog"
-      header="Agregar Nuevo Dispositivo"
+      :header="t('integrations.whatsappDevices.createDevice')"
       :modal="true"
       :style="{ width: '500px' }"
+      class="create-dialog"
     >
       <div class="form-container">
         <div class="field">
-          <label for="phone">Número de Teléfono</label>
+          <label for="phone">{{ t('integrations.whatsappDevices.phoneNumber') }}</label>
           <div class="phone-input-group">
             <Dropdown
               v-model="selectedCountry"
@@ -433,31 +445,31 @@ onMounted(() => {
               class="phone-number-input"
             />
           </div>
-          <small class="text-muted">Ingresa el número sin el código de país</small>
+          <small class="field-hint">{{ t('integrations.whatsappDevices.enterWithoutCode') }}</small>
         </div>
 
         <div class="field">
-          <label for="name">Nombre del Dispositivo</label>
+          <label for="name">{{ t('integrations.whatsappDevices.deviceNameLabel') }}</label>
           <InputText
             id="name"
             v-model="newDevice.device_name"
-            placeholder="Mi Teléfono"
+            :placeholder="t('integrations.whatsappDevices.deviceNamePlaceholder')"
             class="w-full"
             :disabled="loading"
           />
-          <small class="text-muted">Un nombre descriptivo para identificar tu dispositivo</small>
+          <small class="field-hint">{{ t('integrations.whatsappDevices.deviceNameHint') }}</small>
         </div>
       </div>
 
       <template #footer>
         <Button
-          label="Cancelar"
+          :label="t('common.cancel')"
           icon="pi pi-times"
           text
-          @click="showCreateDialog = false"
           :disabled="loading"
+          @click="showCreateDialog = false"
         />
-        <Button label="Crear" icon="pi pi-check" @click="createDevice" :loading="loading" />
+        <Button :label="t('integrations.whatsappDevices.create')" icon="pi pi-check" :loading="loading" @click="createDevice" />
       </template>
     </Dialog>
 
@@ -468,29 +480,41 @@ onMounted(() => {
       :modal="true"
       :style="{ width: '500px' }"
       :closable="true"
+      class="qr-dialog"
       @hide="closeQRDialog"
     >
       <div class="qr-container">
-        <Message v-if="qrCode" severity="info" :closable="false" class="qr-instructions">
-          <ol>
+        <!-- QR instructions -->
+        <div v-if="qrCode" class="qr-instructions">
+          <ol class="instructions-list">
             <li>Abre WhatsApp en tu teléfono</li>
-            <li>Ve a Configuración > Dispositivos vinculados</li>
+            <li>Ve a Configuración &gt; Dispositivos vinculados</li>
             <li>Toca en "Vincular un dispositivo"</li>
             <li>Escanea este código QR</li>
           </ol>
-        </Message>
-
-        <div v-if="qrCode" class="qr-code-wrapper">
-          <img :src="qrCode" alt="QR Code" class="qr-code" />
         </div>
-        <div v-else class="loading-container qr-loading">
-          <ProgressSpinner />
+
+        <!-- QR image -->
+        <div v-if="qrCode" class="qr-code-wrapper">
+          <img
+            :src="qrCode"
+            alt="QR Code"
+            class="qr-code"
+            style="background: white; padding: 0.75rem; border-radius: 0.5rem; display: block;"
+          />
+        </div>
+
+        <!-- Loading state -->
+        <div v-else class="qr-loading">
+          <ProgressSpinner style="width: 2.5rem; height: 2.5rem;" />
           <p class="qr-loading-text">Conectando con WhatsApp…</p>
         </div>
 
-        <Message v-if="qrCode" severity="warn" :closable="false" class="qr-warning">
-          Este código QR expira en 60 segundos. Si expira, cierra esta ventana y vuelve a conectar.
-        </Message>
+        <!-- Warning -->
+        <div v-if="qrCode" class="qr-warning">
+          <i class="pi pi-exclamation-triangle warning-icon"></i>
+          <span>Este código QR expira en 60 segundos. Si expira, cierra esta ventana y vuelve a conectar.</span>
+        </div>
       </div>
 
       <template #footer>
@@ -501,78 +525,200 @@ onMounted(() => {
 </template>
 
 <style scoped>
-.whatsapp-devices-view {
-  padding: 2rem;
-  max-width: 1400px;
+/* ── Layout ─────────────────────────────────────────────── */
+.devices-view {
+  max-width: 1200px;
   margin: 0 auto;
-}
-
-.header-section {
+  padding: 1.25rem;
   display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin-bottom: 2rem;
-  flex-wrap: wrap;
+  flex-direction: column;
   gap: 1rem;
+  background: var(--do-bg);
+  box-sizing: border-box;
 }
 
-.header-content {
-  .title {
-    font-size: 2rem;
-    font-weight: 700;
-    color: var(--vt-c-gray-700);
-    margin: 0 0 0.5rem 0;
-    display: flex;
-    align-items: center;
-    gap: 0.75rem;
-
-    i {
-      color: #25d366;
-      font-size: 2rem;
-    }
-  }
-
-  .subtitle {
-    color: var(--vt-c-gray-700);
-    margin: 0;
-    font-size: 1rem;
-  }
-}
-
-.devices-card {
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
-}
-
-.loading-container {
+/* ── Page header ─────────────────────────────────────────── */
+.page-header {
   display: flex;
-  justify-content: center;
   align-items: center;
-  padding: 3rem;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 1rem 1.25rem;
+  border: 1px solid var(--do-border-light);
+  border-radius: 0.75rem;
+  background: rgba(255, 255, 255, 0.03);
+  flex-wrap: wrap;
 }
 
+.header-left {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  min-width: 0;
+}
+
+.icon-wrapper {
+  flex-shrink: 0;
+  width: 3rem;
+  height: 3rem;
+  border-radius: 0.75rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 1.4rem;
+  color: #fff;
+}
+
+.whatsapp-icon {
+  background: linear-gradient(135deg, #25d366 0%, #128c7e 100%);
+}
+
+.header-text {
+  min-width: 0;
+}
+
+.page-title {
+  font-size: 1.35rem;
+  font-weight: 700;
+  color: var(--do-text);
+  margin: 0 0 0.2rem;
+  line-height: 1.2;
+}
+
+.page-subtitle {
+  font-size: 0.875rem;
+  color: var(--do-text-muted);
+  margin: 0;
+}
+
+/* ── Panel ───────────────────────────────────────────────── */
+.panel {
+  border: 1px solid var(--do-border-light);
+  border-radius: 0.75rem;
+  overflow: hidden;
+  background: var(--do-bg);
+}
+
+/* ── States ──────────────────────────────────────────────── */
+.loading-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 1rem;
+  padding: 4rem 2rem;
+}
+
+.loading-text {
+  font-size: 0.875rem;
+  color: var(--do-text-muted);
+  margin: 0;
+}
+
+.empty-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  padding: 4rem 2rem;
+  text-align: center;
+}
+
+.empty-icon {
+  font-size: 2.5rem;
+  color: var(--do-text-muted);
+  opacity: 0.4;
+  margin-bottom: 0.5rem;
+}
+
+.empty-title {
+  font-size: 1rem;
+  font-weight: 600;
+  color: var(--do-text);
+  margin: 0;
+}
+
+.empty-subtitle {
+  font-size: 0.875rem;
+  color: var(--do-text-muted);
+  margin: 0;
+  max-width: 36ch;
+}
+
+/* ── DataTable overrides ─────────────────────────────────── */
+.devices-table :deep(.p-datatable) {
+  background: var(--do-bg);
+  color: var(--do-text);
+  border: none;
+}
+
+.devices-table :deep(.p-datatable-thead > tr > th) {
+  background: rgba(255, 255, 255, 0.03);
+  color: var(--do-text-muted);
+  border-color: var(--do-border-light);
+  font-size: 0.8rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  padding: 0.75rem 1rem;
+}
+
+.devices-table :deep(.p-datatable-tbody > tr) {
+  background: var(--do-bg);
+  color: var(--do-text);
+  transition: background 0.15s;
+}
+
+.devices-table :deep(.p-datatable-tbody > tr:hover) {
+  background: rgba(255, 255, 255, 0.04);
+}
+
+.devices-table :deep(.p-datatable-tbody > tr.p-row-odd) {
+  background: rgba(255, 255, 255, 0.02);
+}
+
+.devices-table :deep(.p-datatable-tbody > tr > td) {
+  border-color: var(--do-border-light);
+  padding: 0.75rem 1rem;
+}
+
+.devices-table :deep(.p-paginator) {
+  background: rgba(255, 255, 255, 0.025);
+  border-top: 1px solid var(--do-border-light);
+  color: var(--do-text-muted);
+}
+
+/* ── Table cell helpers ──────────────────────────────────── */
 .device-name {
   display: flex;
   align-items: center;
   gap: 0.5rem;
+  font-weight: 500;
+  color: var(--do-text);
+}
 
-  i {
-    color: var(--primary-color);
-  }
+.device-name i {
+  color: var(--color-primary);
+  font-size: 0.9rem;
 }
 
 .phone-number {
-  font-family: 'Courier New', monospace;
+  font-family: 'SF Mono', 'Monaco', 'Consolas', monospace;
+  font-size: 0.875rem;
   font-weight: 600;
+  color: var(--do-text);
 }
 
 .date {
   font-size: 0.875rem;
-  color: var(--text-color-secondary);
+  color: var(--do-text-muted);
 }
 
 .text-muted {
-  color: var(--text-color-secondary);
+  color: var(--do-text-muted);
   font-style: italic;
+  font-size: 0.875rem;
 }
 
 .action-buttons {
@@ -581,121 +727,185 @@ onMounted(() => {
   align-items: center;
 }
 
+/* ── Dialog overrides ────────────────────────────────────── */
+:deep(.create-dialog.p-dialog),
+:deep(.qr-dialog.p-dialog) {
+  background: var(--do-bg);
+  border: 1px solid var(--do-border-light);
+  border-radius: 0.875rem;
+  overflow: hidden;
+}
+
+:deep(.create-dialog .p-dialog-header),
+:deep(.qr-dialog .p-dialog-header) {
+  background: rgba(255, 255, 255, 0.025);
+  border-bottom: 1px solid var(--do-border-light);
+  color: var(--do-text);
+  padding: 1rem 1.25rem;
+}
+
+:deep(.create-dialog .p-dialog-content),
+:deep(.qr-dialog .p-dialog-content) {
+  background: var(--do-bg);
+  color: var(--do-text);
+  padding: 1.25rem;
+}
+
+:deep(.create-dialog .p-dialog-footer),
+:deep(.qr-dialog .p-dialog-footer) {
+  background: rgba(255, 255, 255, 0.025);
+  border-top: 1px solid var(--do-border-light);
+  padding: 0.875rem 1.25rem;
+}
+
+/* ── Create device form ──────────────────────────────────── */
 .form-container {
   display: flex;
   flex-direction: column;
-  gap: 1.5rem;
-  padding: 1rem 0;
+  gap: 1.25rem;
+}
 
-  .field {
-    display: flex;
-    flex-direction: column;
-    gap: 0.5rem;
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+}
 
-    label {
-      font-weight: 600;
-      color: var(--text-color);
-    }
+.field label {
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: var(--do-text);
+}
 
-    small {
-      font-size: 0.875rem;
-      color: var(--text-color-secondary);
-    }
-  }
+.field-hint {
+  font-size: 0.8rem;
+  color: var(--do-text-muted);
+  font-style: italic;
+}
+
+.w-full {
+  width: 100%;
 }
 
 .phone-input-group {
   display: flex;
   gap: 0;
-
-  .country-dropdown {
-    flex-shrink: 0;
-    border-top-right-radius: 0;
-    border-bottom-right-radius: 0;
-
-    :deep(.p-dropdown) {
-      border-top-right-radius: 0;
-      border-bottom-right-radius: 0;
-    }
-  }
-
-  .phone-number-input {
-    flex: 1;
-    border-top-left-radius: 0;
-    border-bottom-left-radius: 0;
-    border-left: 0;
-  }
 }
 
+.country-dropdown {
+  flex-shrink: 0;
+  border-top-right-radius: 0;
+  border-bottom-right-radius: 0;
+}
+
+.country-dropdown :deep(.p-dropdown) {
+  border-top-right-radius: 0;
+  border-bottom-right-radius: 0;
+}
+
+.phone-number-input {
+  flex: 1;
+  border-top-left-radius: 0;
+  border-bottom-left-radius: 0;
+  border-left: 0;
+}
+
+/* ── QR dialog content ───────────────────────────────────── */
 .qr-container {
   display: flex;
   flex-direction: column;
-  gap: 1.5rem;
-  padding: 1rem 0;
+  gap: 1.25rem;
 }
 
 .qr-instructions {
-  ol {
-    margin: 0;
-    padding-left: 1.5rem;
-
-    li {
-      margin: 0.5rem 0;
-    }
-  }
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid var(--do-border-light);
+  border-radius: 0.5rem;
+  padding: 0.875rem 1rem;
 }
 
-.qr-loading {
-  flex-direction: column;
-  gap: 1rem;
-}
-
-.qr-loading-text {
+.instructions-list {
   margin: 0;
-  color: var(--text-color-secondary);
+  padding-left: 1.25rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+}
+
+.instructions-list li {
   font-size: 0.875rem;
+  color: var(--do-text-muted);
 }
 
 .qr-code-wrapper {
   display: flex;
   justify-content: center;
-  padding: 1rem;
-  background: #ffffff;
-  border-radius: 8px;
-  border: 2px solid var(--vt-c-gray-200);
+  padding: 0;
+  background: var(--do-bg);
+  border-radius: 0.5rem;
 }
 
 .qr-code {
-  max-width: 100%;
+  max-width: 280px;
   height: auto;
-  display: block;
+}
+
+.qr-loading {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 1rem;
+  padding: 2.5rem 1rem;
+}
+
+.qr-loading-text {
+  margin: 0;
+  font-size: 0.875rem;
+  color: var(--do-text-muted);
 }
 
 .qr-warning {
-  font-size: 0.875rem;
+  display: flex;
+  align-items: flex-start;
+  gap: 0.5rem;
+  background: rgba(255, 193, 7, 0.08);
+  border: 1px solid rgba(255, 193, 7, 0.25);
+  border-radius: 0.5rem;
+  padding: 0.75rem 0.875rem;
+  font-size: 0.8rem;
+  color: var(--do-text-muted);
 }
 
+.warning-icon {
+  color: var(--color-warning);
+  font-size: 0.9rem;
+  flex-shrink: 0;
+  margin-top: 0.05rem;
+}
+
+/* ── Responsive ──────────────────────────────────────────── */
 @media (max-width: 768px) {
-  .whatsapp-devices-view {
-    padding: 1rem;
+  .devices-view {
+    padding: 0.75rem;
   }
 
-  .header-section {
+  .page-header {
     flex-direction: column;
-    align-items: stretch;
+    align-items: flex-start;
+  }
 
-    button {
-      width: 100%;
-    }
+  .page-header :deep(button) {
+    width: 100%;
   }
 
   .action-buttons {
     flex-direction: column;
     width: 100%;
+  }
 
-    button {
-      width: 100%;
-    }
+  .action-buttons :deep(button) {
+    width: 100%;
   }
 }
 </style>

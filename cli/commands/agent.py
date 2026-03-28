@@ -34,6 +34,7 @@ try:
     from prompt_toolkit.completion import Completer, Completion
     from prompt_toolkit.history import InMemoryHistory
     from prompt_toolkit.styles import Style as PTStyle
+    from prompt_toolkit.layout.processors import Processor, Transformation
     _PT_AVAILABLE = True
 except ImportError:
     _PT_AVAILABLE = False
@@ -1367,6 +1368,29 @@ def agent(
     # Build prompt_toolkit session with @ file completer
     _pt_session = None
     if _PT_AVAILABLE:
+        _KNOWN_SLASH_CMDS = {
+            "/new", "/list", "/ls", "/clear", "/compact",
+            "/plan", "/mode", "/model", "/provider",
+            "/attach", "/files", "/id", "/exit", "/quit", "/q",
+        }
+
+        class _SlashHighlighter(Processor):
+            """Color the input line when it matches (or partially matches) a slash command."""
+
+            def apply_transformation(self, ti):
+                text = "".join(t for _, t in ti.fragments)
+                stripped = text.strip()
+                if any(
+                    stripped == cmd or stripped.startswith(cmd + " ")
+                    for cmd in _KNOWN_SLASH_CMDS
+                ):
+                    return Transformation([("class:slash-cmd", text)])
+                if stripped.startswith("/") and any(
+                    cmd.startswith(stripped) for cmd in _KNOWN_SLASH_CMDS
+                ):
+                    return Transformation([("class:slash-cmd-partial", text)])
+                return Transformation(ti.fragments)
+
         class _AtCompleter(Completer):
             """Tab-complete @path references from the workspace."""
             _SLASH_CMDS = [
@@ -1426,7 +1450,12 @@ def agent(
             history=InMemoryHistory(),
             completer=_AtCompleter(),
             complete_while_typing=False,   # only on Tab
-            style=PTStyle.from_dict({"prompt": "bold ansicyan"}),
+            input_processors=[_SlashHighlighter()],
+            style=PTStyle.from_dict({
+                "prompt":            "bold ansicyan",
+                "slash-cmd":         "bold ansicyan",
+                "slash-cmd-partial": "ansicyan",
+            }),
         )
 
     def _read_input() -> str:
@@ -1489,7 +1518,7 @@ def agent(
             for c in convs:
                 cid = c.get("id") or c.get("_id", "")
                 marker = " [cyan]◀ current[/cyan]" if cid == current_id else ""
-                table.add_row(cid, (c.get("title") or "no title") + marker, str(len(c.get("messages", []))))
+                table.add_row(cid, (c.get("title") or "no title") + marker, str(len(c.get("messages") or [])))
             console.print()
             console.print(table)
             console.print()

@@ -18,6 +18,12 @@ class TTSIntegration:
             "rate": 150,
             "volume": 0.8,
             "voice_id": None,
+            "language": "en",
+        }
+
+        self._gtts_lang_map = {
+            "en": "en",
+            "es": "es",
         }
 
     async def text_to_speech_file(
@@ -60,10 +66,11 @@ class TTSIntegration:
         try:
             from gtts import gTTS
 
-            processed_text = self._preprocess_text_for_natural_speech(text)
+            processed_text = self._preprocess_text_for_natural_speech(text, language=settings.get("language", "en"))
 
-            tts_gtts = gTTS(text=processed_text, lang="es", slow=False)
-            logger.info("TTS (gTTS): usando lang='es'")
+            lang_code = self._gtts_lang_map.get(settings.get("language", "en"), "en")
+            tts_gtts = gTTS(text=processed_text, lang=lang_code, slow=False)
+            logger.info("TTS (gTTS): using lang='%s'", lang_code)
 
             temp_mp3_path = output_path.replace(".wav", ".mp3")
             tts_gtts.save(temp_mp3_path)
@@ -156,7 +163,7 @@ class TTSIntegration:
     async def validate_text_length(self, text: str, max_length: int = 5000) -> bool:
         return len(text.strip()) > 0 and len(text) <= max_length
 
-    def _preprocess_text_for_natural_speech(self, text: str) -> str:
+    def _preprocess_text_for_natural_speech(self, text: str, language: str = "en") -> str:
         """Pre-process text to make it sound more natural when spoken."""
         try:
             import re
@@ -166,34 +173,44 @@ class TTSIntegration:
             processed_text = re.sub(r"([.!?])\s+", r"\1... ", processed_text)
             processed_text = re.sub(r"([,;:])\s+", r"\1.. ", processed_text)
 
-            abbreviations = {
-                "Dr.": "Doctor", "Dra.": "Doctora",
-                "Sr.": "Señor", "Sra.": "Señora", "Srta.": "Señorita",
-                "etc.": "etcétera", "p.ej.": "por ejemplo", "vs.": "versus",
-                "ej.": "ejemplo", "pág.": "página", "págs.": "páginas",
-                "cap.": "capítulo", "art.": "artículo", "núm.": "número",
-                "tel.": "teléfono", "dir.": "dirección",
-                "admin.": "administración", "info.": "información",
-                "config.": "configuración", "app.": "aplicación",
-                "API": "A P I", "URL": "U R L", "HTTP": "H T T P",
-                "JSON": "J S O N", "XML": "X M L", "PDF": "P D F",
-                "TTS": "T T S", "AI": "A I", "IA": "I A",
-            }
+            if language == "es":
+                abbreviations = {
+                    "Dr.": "Doctor", "Dra.": "Doctora",
+                    "Sr.": "Señor", "Sra.": "Señora", "Srta.": "Señorita",
+                    "etc.": "etcétera", "p.ej.": "por ejemplo", "vs.": "versus",
+                    "ej.": "ejemplo", "pág.": "página", "págs.": "páginas",
+                    "cap.": "capítulo", "art.": "artículo", "núm.": "número",
+                    "tel.": "teléfono", "dir.": "dirección",
+                    "admin.": "administración", "info.": "información",
+                    "config.": "configuración", "app.": "aplicación",
+                    "API": "A P I", "URL": "U R L", "HTTP": "H T T P",
+                    "JSON": "J S O N", "XML": "X M L", "PDF": "P D F",
+                    "TTS": "T T S", "AI": "A I", "IA": "I A",
+                }
+            else:
+                abbreviations = {
+                    "Dr.": "Doctor", "Mrs.": "Missus", "Mr.": "Mister", "Ms.": "Miss",
+                    "etc.": "etcetera", "e.g.": "for example", "i.e.": "that is",
+                    "vs.": "versus", "approx.": "approximately",
+                    "API": "A P I", "URL": "U R L", "HTTP": "H T T P",
+                    "JSON": "J S O N", "XML": "X M L", "PDF": "P D F",
+                    "TTS": "T T S", "STT": "S T T", "AI": "A I",
+                }
             for abbrev, expansion in abbreviations.items():
                 processed_text = processed_text.replace(abbrev, expansion)
 
-            number_words = {
-                "0": "cero", "1": "uno", "2": "dos", "3": "tres",
-                "4": "cuatro", "5": "cinco", "6": "seis", "7": "siete",
-                "8": "ocho", "9": "nueve", "10": "diez", "11": "once",
-                "12": "doce", "13": "trece", "14": "catorce", "15": "quince",
-                "16": "dieciséis", "17": "diecisiete", "18": "dieciocho",
-                "19": "diecinueve", "20": "veinte",
-            }
-            for num, word in number_words.items():
-                processed_text = re.sub(rf"\b{num}\b", word, processed_text)
-
-            processed_text = re.sub(r"(\d+)%", r"\1 por ciento", processed_text)
+            if language == "es":
+                number_words = {
+                    "0": "cero", "1": "uno", "2": "dos", "3": "tres",
+                    "4": "cuatro", "5": "cinco", "6": "seis", "7": "siete",
+                    "8": "ocho", "9": "nueve", "10": "diez", "11": "once",
+                    "12": "doce", "13": "trece", "14": "catorce", "15": "quince",
+                }
+                for num, word in number_words.items():
+                    processed_text = re.sub(rf"\b{num}\b", word, processed_text)
+                processed_text = re.sub(r"(\d+)%", r"\1 por ciento", processed_text)
+            else:
+                processed_text = re.sub(r"(\d+)%", r"\1 percent", processed_text)
 
             processed_text = re.sub(r"\*\*(.*?)\*\*", r".. \1 ..", processed_text)
             processed_text = re.sub(r"\*(.*?)\*", r". \1 .", processed_text)
