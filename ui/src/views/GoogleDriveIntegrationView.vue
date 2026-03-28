@@ -251,136 +251,146 @@ onMounted(async () => {
 
 <template>
   <div class="integration-container">
-    <!-- Header Section -->
-    <div class="header-section">
-      <div class="integration-header">
+
+    <!-- Unified header row -->
+    <div class="page-header">
+      <div class="header-left">
         <div class="icon-wrapper drive-icon">
           <i class="pi pi-folder-open"></i>
         </div>
-        <div class="header-content">
-          <h1 class="integration-title">Integración Google Drive</h1>
-          <p class="integration-subtitle">Conecta tu asistente con Google Drive</p>
+        <div class="header-text">
+          <h1 class="page-title">Google Drive</h1>
+          <p class="page-subtitle">Conecta tu asistente con Google Drive para leer y gestionar documentos</p>
+        </div>
+      </div>
+      <div class="header-toggle">
+        <span class="toggle-status" :class="{ active: driveIntegration.activated }">
+          {{ driveIntegration.activated ? 'Activa' : 'Inactiva' }}
+        </span>
+        <InputSwitch v-model="driveIntegration.activated" />
+      </div>
+    </div>
+
+    <!-- Step 1 — OAuth credentials -->
+    <div class="panel">
+      <div class="panel-header">
+        <span class="step-badge">1</span>
+        <div>
+          <p class="panel-title">Credenciales OAuth</p>
+          <p class="panel-subtitle">Proyecto de Google Cloud Console con la API de Drive habilitada</p>
         </div>
       </div>
 
-      <div class="activation-toggle">
-        <div class="toggle-content">
-          <div class="toggle-info">
-            <span class="toggle-label">Estado de la integración</span>
-            <span class="toggle-status" :class="{ active: driveIntegration.activated }">
-              {{ driveIntegration.activated ? 'Activa' : 'Inactiva' }}
-            </span>
-          </div>
-          <InputSwitch v-model="driveIntegration.activated" class="modern-switch" />
+      <div class="panel-body">
+        <div v-if="savedClientId && !credentialsSaved" class="credentials-saved-notice">
+          <i class="pi pi-check-circle"></i>
+          Credenciales guardadas — Client ID: <strong>{{ savedClientId }}</strong>
+        </div>
+
+        <div class="field-group">
+          <label class="field-label">
+            Client ID
+            <span class="required">*</span>
+          </label>
+          <InputText
+            v-model="credentials.clientId"
+            :placeholder="savedClientId || 'xxxxxxxx.apps.googleusercontent.com'"
+            class="w-full"
+          />
+        </div>
+
+        <div class="field-group">
+          <label class="field-label">
+            Client Secret
+            <span class="required">*</span>
+          </label>
+          <Password
+            v-model="credentials.clientSecret"
+            :placeholder="hasSecret ? '••••••••••••• (ya configurado)' : 'GOCSPX-...'"
+            class="w-full"
+            :feedback="false"
+            toggleMask
+          />
+        </div>
+
+        <div class="field-group">
+          <label class="field-label">
+            Redirect URI
+            <span class="optional">opcional</span>
+          </label>
+          <InputText
+            v-model="credentials.redirectUri"
+            :placeholder="savedRedirectUri || 'http://localhost:8000/api/v1/drive/oauth/callback'"
+            class="w-full"
+          />
+        </div>
+
+        <div class="panel-footer">
+          <span v-if="credentialsSaved" class="saved-badge">
+            <i class="pi pi-check-circle"></i> Guardado
+          </span>
+          <span v-else class="spacer"></span>
+          <Button
+            label="Guardar Credenciales"
+            icon="pi pi-save"
+            severity="primary"
+            :loading="isLoading"
+            :disabled="(!credentials.clientId && !savedClientId) || (!credentials.clientSecret && !hasSecret)"
+            @click="handleSaveCredentials"
+          />
         </div>
       </div>
     </div>
 
-    <!-- Credentials Card -->
-    <Card class="config-card credentials-card">
-      <template #content>
-        <div class="credentials-section">
-          <div class="credentials-header">
-            <i class="pi pi-key credentials-icon"></i>
-            <div>
-              <h3 class="credentials-title">Credenciales OAuth</h3>
-              <p class="credentials-subtitle">
-                Ingresa las credenciales de tu proyecto en Google Cloud Console
-              </p>
-            </div>
+    <!-- Step 2 — Connect account -->
+    <div class="panel" :class="{ 'panel-disabled': !driveIntegration.activated }">
+      <div class="panel-header">
+        <span class="step-badge">2</span>
+        <div>
+          <p class="panel-title">Conectar cuenta de Google</p>
+          <p class="panel-subtitle">Autoriza el acceso mediante OAuth 2.0</p>
+        </div>
+      </div>
+
+      <div class="panel-body">
+        <!-- Connected state -->
+        <div v-if="isConnected" class="connection-state connected">
+          <div class="connection-state-icon">
+            <i class="pi pi-check-circle"></i>
           </div>
-
-          <div class="credentials-form">
-            <div v-if="savedClientId && !credentialsSaved" class="saved-credentials-info">
-              <i class="pi pi-check-circle"></i>
-              Credenciales configuradas — Client ID: <strong>{{ savedClientId }}</strong>
-            </div>
-
-            <div class="field">
-              <label class="field-label">Client ID <span class="required">*</span></label>
-              <InputText
-                v-model="credentials.clientId"
-                :placeholder="savedClientId || 'xxxxxxxx.apps.googleusercontent.com'"
-                class="field-input"
-              />
-            </div>
-
-            <div class="field">
-              <label class="field-label">Client Secret <span class="required">*</span></label>
-              <Password
-                v-model="credentials.clientSecret"
-                :placeholder="hasSecret ? '••••••••••••• (ya configurado)' : 'GOCSPX-...'"
-                class="field-input"
-                :feedback="false"
-                toggleMask
-              />
-            </div>
-
-            <div class="field">
-              <label class="field-label">
-                Redirect URI
-                <span class="field-hint">(opcional)</span>
-              </label>
-              <InputText
-                v-model="credentials.redirectUri"
-                :placeholder="savedRedirectUri || 'http://localhost:8000/api/v1/drive/oauth/callback'"
-                class="field-input"
-              />
-            </div>
-
-            <div class="credentials-actions">
-              <Button
-                label="Guardar Credenciales"
-                icon="pi pi-save"
-                severity="primary"
-                :loading="isLoading"
-                :disabled="(!credentials.clientId && !savedClientId) || (!credentials.clientSecret && !hasSecret)"
-                @click="handleSaveCredentials"
-              />
-              <span v-if="credentialsSaved" class="saved-badge">
-                <i class="pi pi-check-circle"></i> Guardado
-              </span>
-            </div>
+          <div class="connection-state-text">
+            <p class="connection-state-title">Conectado a Google Drive</p>
+            <p class="connection-state-subtitle">
+              Tu cuenta está vinculada. Podés acceder y gestionar documentos desde el asistente.
+            </p>
           </div>
         </div>
-      </template>
-    </Card>
 
-    <!-- Connection Card -->
-    <Card class="config-card" :class="{ 'card-disabled': !driveIntegration.activated }">
-      <template #content>
-        <div class="connection-section">
-          <div class="connection-status">
-            <div class="status-indicator">
-              <i
-                class="pi"
-                :class="isConnected ? 'pi-check-circle' : 'pi-times-circle'"
-                :style="{
-                  color: isConnected ? 'var(--color-success)' : 'var(--color-danger)',
-                }"
-              ></i>
-              <span class="status-text">
-                {{ isConnected ? 'Conectado a Google Drive' : 'No conectado' }}
-              </span>
-            </div>
+        <!-- Disconnected state -->
+        <div v-else class="connection-state disconnected">
+          <div class="connection-state-icon">
+            <i class="pi pi-times-circle"></i>
+          </div>
+          <div class="connection-state-text">
+            <p class="connection-state-title">No conectado</p>
+            <p class="connection-state-subtitle">
+              Autorizá el acceso a tu cuenta de Google Drive para comenzar a usar la integración.
+            </p>
+          </div>
+        </div>
 
-            <div v-if="!isConnected" class="connection-info">
-              <Message severity="info" :closable="false">
-                <p>
-                  Para utilizar esta integración, necesitas autorizar el acceso a tu cuenta de
-                  Google Drive. Haz clic en el botón "Conectar con Google" para comenzar.
-                </p>
-              </Message>
-            </div>
-
-            <div v-else class="connection-info">
-              <Message severity="success" :closable="false">
-                <p>
-                  Tu cuenta de Google Drive está conectada correctamente. Ahora puedes acceder y
-                  gestionar documentos desde el asistente.
-                </p>
-              </Message>
-            </div>
+        <div class="panel-footer">
+          <div class="connection-meta">
+            <span class="meta-dot" :class="{ 'meta-dot-ok': isConnected }"></span>
+            <span class="meta-label">
+              {{
+                isConnected
+                  ? 'Conectado'
+                  : searchDriveIntegration
+                    ? 'Configurado pero no conectado'
+                    : 'Sin conexión'
+              }}
+            </span>
           </div>
 
           <div class="connection-actions">
@@ -389,13 +399,12 @@ onMounted(async () => {
               label="Conectar con Google"
               icon="pi pi-google"
               severity="primary"
-              size="large"
               :disabled="!driveIntegration.activated"
               @click="connectGoogleDrive"
             />
-            <div v-else class="connected-actions">
+            <template v-else>
               <Button
-                label="Verificar Conexión"
+                label="Verificar"
                 icon="pi pi-refresh"
                 severity="secondary"
                 @click="checkConnectionStatus"
@@ -406,516 +415,444 @@ onMounted(async () => {
                 severity="info"
                 @click="$router.push('/drive/files')"
               />
-            </div>
+            </template>
           </div>
         </div>
-      </template>
-    </Card>
+      </div>
+    </div>
 
-    <!-- Information Card -->
-    <Card class="info-card">
-      <template #header>
-        <div class="info-header">
-          <i class="pi pi-info-circle info-icon"></i>
-          <span class="info-title">Información</span>
+    <!-- Step 3 — Capabilities -->
+    <div class="panel">
+      <div class="panel-header">
+        <span class="step-badge">3</span>
+        <div>
+          <p class="panel-title">Capacidades disponibles</p>
+          <p class="panel-subtitle">Lo que podés hacer una vez conectado</p>
         </div>
-      </template>
-      <template #content>
-        <div class="info-grid">
-          <div class="info-item">
-            <div class="info-label">
-              <i class="pi pi-shield"></i>
-              Permisos requeridos
-            </div>
-            <div class="info-value">Lectura y escritura en Google Drive</div>
-          </div>
+      </div>
 
-          <div class="info-item">
-            <div class="info-label">
-              <i class="pi pi-file"></i>
-              Formatos soportados
-            </div>
-            <div class="info-value">Docs, Sheets, PDFs, imágenes y más</div>
-          </div>
-
-          <div class="info-item">
-            <div class="info-label">
-              <i class="pi pi-check"></i>
-              Estado de conexión
-            </div>
-            <div class="info-value">
-              {{
-                isConnected
-                  ? 'Conectado'
-                  : searchDriveIntegration
-                    ? 'Configurado pero no conectado'
-                    : 'No configurado'
-              }}
-            </div>
-          </div>
+      <div class="capabilities-grid">
+        <div class="capability-item">
+          <i class="pi pi-file-pdf capability-icon"></i>
+          <span>Leer documentos desde el chat</span>
         </div>
-
-        <div class="capabilities-section">
-          <h3 class="capabilities-title">Capacidades</h3>
-          <ul class="capabilities-list">
-            <li><i class="pi pi-check"></i> Leer documentos de Google Drive desde el chat</li>
-            <li><i class="pi pi-check"></i> Buscar archivos por nombre o contenido</li>
-            <li><i class="pi pi-check"></i> Indexar documentos para búsqueda semántica</li>
-            <li><i class="pi pi-check"></i> Listar archivos y carpetas</li>
-            <li><i class="pi pi-check"></i> Sincronizar Drive con el índice de búsqueda</li>
-            <li><i class="pi pi-check"></i> Acceso seguro mediante OAuth 2.0</li>
-          </ul>
+        <div class="capability-item">
+          <i class="pi pi-search capability-icon"></i>
+          <span>Buscar archivos por nombre o contenido</span>
         </div>
-      </template>
-    </Card>
+        <div class="capability-item">
+          <i class="pi pi-database capability-icon"></i>
+          <span>Indexar documentos para búsqueda semántica</span>
+        </div>
+        <div class="capability-item">
+          <i class="pi pi-folder capability-icon"></i>
+          <span>Listar archivos y carpetas</span>
+        </div>
+        <div class="capability-item">
+          <i class="pi pi-sync capability-icon"></i>
+          <span>Sincronizar Drive con el índice de búsqueda</span>
+        </div>
+        <div class="capability-item">
+          <i class="pi pi-shield capability-icon"></i>
+          <span>Acceso seguro mediante OAuth 2.0</span>
+        </div>
+      </div>
 
-    <!-- Toast for Notifications -->
+      <div class="formats-row">
+        <span class="formats-label">Formatos soportados:</span>
+        <span class="format-tag">Docs</span>
+        <span class="format-tag">Sheets</span>
+        <span class="format-tag">PDF</span>
+        <span class="format-tag">Imágenes</span>
+        <span class="format-tag">y más</span>
+      </div>
+    </div>
+
     <Toast position="top-right" />
   </div>
 </template>
 
 <style scoped>
+/* ── Layout ─────────────────────────────────────────────── */
 .integration-container {
-  max-width: 1200px;
+  max-width: 860px;
   margin: 0 auto;
-  padding: 1rem 1.25rem;
-  min-height: 100vh;
+  padding: 1.25rem;
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
   background: var(--do-bg);
   box-sizing: border-box;
 }
 
-/* Header Section */
-.header-section {
-  margin-bottom: 1.25rem;
+/* ── Page header ─────────────────────────────────────────── */
+.page-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 1rem 1.25rem;
+  border: 1px solid var(--do-border-light);
+  border-radius: 0.75rem;
+  background: rgba(255, 255, 255, 0.03);
 }
 
-.integration-header {
+.header-left {
   display: flex;
   align-items: center;
   gap: 1rem;
-  margin-bottom: 1rem;
+  min-width: 0;
 }
 
 .icon-wrapper {
-  width: 3.2rem;
-  height: 3.2rem;
+  flex-shrink: 0;
+  width: 3rem;
+  height: 3rem;
   border-radius: 0.75rem;
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 1.6rem;
-  color: white;
-  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.08);
+  font-size: 1.4rem;
+  color: #fff;
 }
 
 .drive-icon {
   background: linear-gradient(135deg, #1a73e8 0%, #0d47a1 100%);
 }
 
-.header-content {
-  flex: 1;
+.header-text {
+  min-width: 0;
 }
 
-.integration-title {
-  font-size: 1.6rem;
+.page-title {
+  font-size: 1.35rem;
   font-weight: 700;
-  margin: 0 0 0.25rem 0;
   color: var(--do-text);
+  margin: 0 0 0.2rem;
+  line-height: 1.2;
 }
 
-.integration-subtitle {
-  font-size: 0.95rem;
+.page-subtitle {
+  font-size: 0.875rem;
   color: var(--do-text-muted);
   margin: 0;
-  font-weight: 400;
 }
 
-/* Activation Toggle */
-.activation-toggle {
-  background: rgba(255,255,255,0.04);
-  border-radius: 0.75rem;
-  padding: 1rem;
-  box-shadow: 0 3px 14px rgba(0, 0, 0, 0.06);
-  border: 1px solid var(--vt-c-gray-200);
-}
-
-.toggle-content {
+.header-toggle {
   display: flex;
   align-items: center;
-  justify-content: space-between;
-}
-
-.toggle-info {
-  display: flex;
-  flex-direction: column;
-  gap: 0.25rem;
-}
-
-.toggle-label {
-  font-size: 0.95rem;
-  font-weight: 600;
-  color: var(--do-text);
+  gap: 0.75rem;
+  flex-shrink: 0;
 }
 
 .toggle-status {
-  font-size: 0.85rem;
-  font-weight: 500;
+  font-size: 0.8rem;
+  font-weight: 600;
   color: var(--color-danger);
-  transition: color 0.3s ease;
+  transition: color 0.25s;
+  white-space: nowrap;
 }
 
 .toggle-status.active {
   color: var(--color-success);
 }
 
-:deep(.modern-switch) {
-  transform: scale(1.1);
+/* ── Panel ───────────────────────────────────────────────── */
+.panel {
+  border: 1px solid var(--do-border-light);
+  border-radius: 0.75rem;
+  overflow: hidden;
+  background: var(--do-bg);
 }
 
-/* Credentials Card */
-.credentials-section {
-  display: flex;
-  flex-direction: column;
-  gap: 1.25rem;
+.panel-disabled {
+  opacity: 0.55;
+  filter: grayscale(0.4);
+  pointer-events: none;
 }
 
-.credentials-header {
+.panel-header {
   display: flex;
   align-items: center;
-  gap: 0.75rem;
+  gap: 0.875rem;
+  padding: 0.875rem 1.25rem;
+  border-bottom: 1px solid var(--do-border-light);
+  background: rgba(255, 255, 255, 0.025);
 }
 
-.credentials-icon {
-  font-size: 1.4rem;
-  color: var(--color-primary);
+.step-badge {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.75rem;
+  height: 1.75rem;
+  border-radius: 50%;
+  background: var(--gradient-primary, var(--color-primary));
+  color: #fff;
+  font-size: 0.8rem;
+  font-weight: 700;
+  flex-shrink: 0;
 }
 
-.credentials-title {
-  font-size: 1rem;
+.panel-title {
+  font-size: 0.95rem;
   font-weight: 600;
   color: var(--do-text);
-  margin: 0 0 0.2rem;
+  margin: 0 0 0.15rem;
 }
 
-.credentials-subtitle {
-  font-size: 0.85rem;
+.panel-subtitle {
+  font-size: 0.8rem;
   color: var(--do-text-muted);
   margin: 0;
 }
 
-.saved-credentials-info {
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
-  font-size: 0.85rem;
-  color: var(--color-success);
-  background: rgba(34, 197, 94, 0.08);
-  border: 1px solid rgba(34, 197, 94, 0.25);
-  border-radius: 0.5rem;
-  padding: 0.6rem 0.75rem;
-}
-
-.credentials-form {
+.panel-body {
+  padding: 1.25rem;
   display: flex;
   flex-direction: column;
   gap: 1rem;
 }
 
-.field {
+.panel-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  padding-top: 1rem;
+  border-top: 1px solid var(--do-border-light);
+  margin-top: 0.25rem;
+}
+
+/* ── Form fields ─────────────────────────────────────────── */
+.field-group {
   display: flex;
   flex-direction: column;
   gap: 0.4rem;
 }
 
 .field-label {
-  font-size: 0.85rem;
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  font-size: 0.875rem;
   font-weight: 600;
-  color: var(--do-text-secondary);
-}
-
-.field-hint {
-  font-weight: 400;
-  color: var(--do-text-muted);
+  color: var(--do-text);
 }
 
 .required {
   color: var(--color-danger);
 }
 
-.field-input {
+.optional {
+  font-size: 0.75rem;
+  font-weight: 400;
+  color: var(--do-text-muted);
+  margin-left: 0.25rem;
+}
+
+.w-full {
   width: 100%;
 }
 
-:deep(.field-input.p-password) {
+:deep(.w-full.p-password) {
   width: 100%;
 }
 
-:deep(.field-input.p-password .p-inputtext) {
+:deep(.w-full.p-password .p-inputtext) {
   width: 100%;
 }
 
-.credentials-actions {
+/* ── Credentials saved notice ────────────────────────────── */
+.credentials-saved-notice {
   display: flex;
   align-items: center;
-  gap: 1rem;
-  padding-top: 0.25rem;
+  gap: 0.5rem;
+  font-size: 0.825rem;
+  color: var(--color-success);
+  background: rgba(34, 197, 94, 0.07);
+  border: 1px solid rgba(34, 197, 94, 0.2);
+  border-radius: 0.75rem;
+  padding: 0.6rem 0.875rem;
 }
 
 .saved-badge {
   display: flex;
   align-items: center;
   gap: 0.35rem;
-  font-size: 0.85rem;
+  font-size: 0.825rem;
   font-weight: 500;
   color: var(--color-success);
 }
 
-/* Connection Card */
-.config-card {
-  margin-bottom: 1.25rem;
-  border-radius: 0.75rem;
-  overflow: hidden;
-  box-shadow: 0 8px 30px rgba(0, 0, 0, 0.08);
-  border: 1px solid var(--vt-c-gray-200);
-  transition: all 0.2s ease;
+.spacer {
+  flex: 1;
 }
 
-.config-card:hover {
-  box-shadow: 0 14px 40px rgba(0, 0, 0, 0.12);
-  transform: translateY(-2px);
-}
-
-.card-disabled {
-  opacity: 0.6;
-  filter: grayscale(0.5);
-  pointer-events: none;
-}
-
-:deep(.config-card .p-card-content) {
-  padding: 1.5rem;
-}
-
-.connection-section {
+/* ── Connection state ────────────────────────────────────── */
+.connection-state {
   display: flex;
-  flex-direction: column;
-  gap: 1.5rem;
-}
-
-.connection-status {
-  display: flex;
-  flex-direction: column;
+  align-items: flex-start;
   gap: 1rem;
+  padding: 1rem;
+  border-radius: 0.75rem;
+  border: 1px solid var(--do-border-light);
 }
 
-.status-indicator {
+.connection-state.connected {
+  background: rgba(34, 197, 94, 0.05);
+  border-color: rgba(34, 197, 94, 0.2);
+}
+
+.connection-state.disconnected {
+  background: rgba(255, 255, 255, 0.03);
+}
+
+.connection-state-icon {
+  font-size: 1.5rem;
+  flex-shrink: 0;
+  line-height: 1;
+}
+
+.connected .connection-state-icon {
+  color: var(--color-success);
+}
+
+.disconnected .connection-state-icon {
+  color: var(--do-text-muted);
+}
+
+.connection-state-title {
+  font-size: 0.95rem;
+  font-weight: 600;
+  color: var(--do-text);
+  margin: 0 0 0.25rem;
+}
+
+.connection-state-subtitle {
+  font-size: 0.825rem;
+  color: var(--do-text-muted);
+  margin: 0;
+  line-height: 1.45;
+}
+
+/* ── Connection footer ───────────────────────────────────── */
+.connection-meta {
   display: flex;
   align-items: center;
-  gap: 0.75rem;
-  font-size: 1.1rem;
-  font-weight: 600;
+  gap: 0.5rem;
 }
 
-.status-indicator i {
-  font-size: 1.5rem;
+.meta-dot {
+  width: 0.5rem;
+  height: 0.5rem;
+  border-radius: 50%;
+  background: var(--color-danger);
+  transition: background 0.25s;
 }
 
-.connection-info {
-  margin-top: 0.5rem;
+.meta-dot.meta-dot-ok {
+  background: var(--color-success);
+}
+
+.meta-label {
+  font-size: 0.8rem;
+  color: var(--do-text-muted);
 }
 
 .connection-actions {
   display: flex;
-  justify-content: center;
-  gap: 1rem;
+  gap: 0.75rem;
 }
 
-.connected-actions {
-  display: flex;
-  gap: 1rem;
-}
-
-/* Information Card */
-.info-card {
-  border-radius: 0.75rem;
-  overflow: hidden;
-  box-shadow: 0 8px 30px rgba(0, 0, 0, 0.08);
-  border: 1px solid var(--vt-c-gray-200);
-}
-
-:deep(.info-card .p-card-header) {
-  background: rgba(255,255,255,0.04);
-  padding: 1rem 1.25rem;
-  border-bottom: 1px solid var(--vt-c-gray-200);
-}
-
-.info-header {
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
-}
-
-.info-icon {
-  color: var(--color-primary);
-  font-size: 1.125rem;
-}
-
-.info-title {
-  font-size: 1.05rem;
-  font-weight: 600;
-  color: var(--do-text);
-}
-
-:deep(.info-card .p-card-content) {
-  padding: 1rem;
-}
-
-.info-grid {
+/* ── Capabilities grid ───────────────────────────────────── */
+.capabilities-grid {
   display: grid;
-  gap: 1rem;
-  margin-bottom: 1.5rem;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.625rem;
+  padding: 1.25rem 1.25rem 0;
 }
 
-.info-item {
-  display: flex;
-  flex-direction: column;
-  gap: 0.5rem;
-  padding: 0.75rem;
-  background: rgba(255,255,255,0.04);
-  border-radius: 0.6rem;
-  border: 1px solid var(--vt-c-gray-200);
-}
-
-.info-label {
+.capability-item {
   display: flex;
   align-items: center;
-  gap: 0.5rem;
-  font-size: 0.85rem;
-  font-weight: 600;
+  gap: 0.625rem;
+  font-size: 0.825rem;
   color: var(--do-text-muted);
+  padding: 0.6rem 0.75rem;
+  border: 1px solid var(--do-border-light);
+  border-radius: 0.75rem;
+  background: rgba(255, 255, 255, 0.025);
 }
 
-.info-label i {
-  color: var(--color-primary);
-}
-
-.info-value {
-  font-size: 0.95rem;
-  color: var(--do-text);
-  padding-left: 1.5rem;
-}
-
-.capabilities-section {
-  margin-top: 1rem;
-  padding-top: 1rem;
-  border-top: 1px solid var(--vt-c-gray-200);
-}
-
-.capabilities-title {
-  font-size: 1rem;
-  font-weight: 600;
-  color: var(--do-text);
-  margin-bottom: 0.75rem;
-}
-
-.capabilities-list {
-  list-style: none;
-  padding: 0;
-  margin: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 0.5rem;
-}
-
-.capabilities-list li {
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
-  font-size: 0.9rem;
-  color: var(--do-text-muted);
-}
-
-.capabilities-list li i {
+.capability-icon {
   color: var(--color-success);
-  font-size: 0.75rem;
+  font-size: 0.875rem;
+  flex-shrink: 0;
 }
 
-/* Responsive Design */
-@media (max-width: 768px) {
+/* ── Formats row ─────────────────────────────────────────── */
+.formats-row {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  padding: 1rem 1.25rem 1.25rem;
+}
+
+.formats-label {
+  font-size: 0.8rem;
+  color: var(--do-text-muted);
+  font-weight: 600;
+  margin-right: 0.25rem;
+}
+
+.format-tag {
+  font-size: 0.75rem;
+  font-weight: 500;
+  color: var(--do-text-muted);
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid var(--do-border-light);
+  border-radius: 0.4rem;
+  padding: 0.2rem 0.55rem;
+}
+
+/* ── Responsive ──────────────────────────────────────────── */
+@media (max-width: 600px) {
   .integration-container {
     padding: 0.75rem;
   }
 
-  .integration-header {
+  .page-header {
     flex-direction: column;
-    text-align: center;
-    gap: 0.75rem;
+    align-items: flex-start;
+    gap: 0.875rem;
   }
 
-  .integration-title {
-    font-size: 1.4rem;
+  .header-toggle {
+    align-self: flex-end;
   }
 
-  .integration-subtitle {
-    font-size: 0.95rem;
+  .capabilities-grid {
+    grid-template-columns: 1fr;
   }
 
-  .toggle-content {
-    flex-direction: column;
-    gap: 0.75rem;
-    text-align: center;
+  .panel-footer {
+    flex-direction: column-reverse;
+    align-items: stretch;
   }
 
-  .connection-actions,
-  .connected-actions {
+  .connection-actions {
     flex-direction: column;
     width: 100%;
   }
 
-  .connection-actions :deep(button),
-  .connected-actions :deep(button) {
+  .connection-actions :deep(button) {
     width: 100%;
   }
-}
 
-@media (max-width: 480px) {
-  .integration-container {
-    padding: 0.5rem;
-  }
-
-  .icon-wrapper {
-    width: 3rem;
-    height: 3rem;
-    font-size: 1.5rem;
-  }
-
-  .integration-title {
-    font-size: 1.25rem;
-  }
-}
-
-@media (min-width: 992px) {
-  .integration-container {
-    display: grid;
-    grid-template-columns: 1fr 380px;
-    gap: 1rem;
-    align-items: start;
-  }
-
-  .header-section {
-    grid-column: 1 / 3;
-  }
-
-  .credentials-card,
-  .config-card {
-    grid-column: 1 / 2;
-  }
-
-  .info-card {
-    grid-column: 2 / 3;
-    grid-row: 2 / 4;
-    position: sticky;
-    top: 5.2rem;
-    align-self: start;
+  .panel-footer :deep(button) {
+    width: 100%;
   }
 }
 </style>
