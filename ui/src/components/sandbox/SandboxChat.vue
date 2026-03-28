@@ -62,6 +62,7 @@ const toast = useToast()
 const messages = ref<ChatMessage[]>([])
 const inputText = ref('')
 const isStreaming = ref(false)
+const streamAbortController = ref<AbortController | null>(null)
 const messagesEl = ref<HTMLElement | null>(null)
 const textareaEl = ref<HTMLTextAreaElement | null>(null)
 
@@ -392,6 +393,7 @@ const sendMessage = async () => {
 
   await scrollToBottom()
   isStreaming.value = true
+  streamAbortController.value = new AbortController()
   emit('messageSent')
 
   const assistantMsg = messages.value.find((m) => m.id === assistantId)!
@@ -411,6 +413,7 @@ const sendMessage = async () => {
         method: 'POST',
         headers,
         body: JSON.stringify({ content }),
+        signal: streamAbortController.value.signal,
       },
     )
 
@@ -465,19 +468,28 @@ const sendMessage = async () => {
       }
     }
   } catch (err: unknown) {
-    const errMsg = err instanceof Error ? err.message : 'Error desconocido'
-    toast.add({
-      severity: 'error',
-      summary: 'Error de conexión',
-      detail: errMsg,
-      life: 5000,
-    })
-    assistantMsg.content = `Error: ${errMsg}`
+    if (err instanceof Error && err.name === 'AbortError') {
+      if (!assistantMsg.content) assistantMsg.content = '[Detenido]'
+    } else {
+      const errMsg = err instanceof Error ? err.message : 'Error desconocido'
+      toast.add({
+        severity: 'error',
+        summary: 'Error de conexión',
+        detail: errMsg,
+        life: 5000,
+      })
+      assistantMsg.content = `Error: ${errMsg}`
+    }
   } finally {
     assistantMsg.isStreaming = false
     isStreaming.value = false
+    streamAbortController.value = null
     await scrollToBottom()
   }
+}
+
+const stopStreaming = () => {
+  streamAbortController.value?.abort()
 }
 
 const processStreamEvent = async (msg: ChatMessage, payload: unknown) => {
@@ -1005,9 +1017,17 @@ watch(
             @input="handleInput"
           />
           <Button
+            v-if="isStreaming"
+            icon="pi pi-stop-circle"
+            severity="danger"
+            class="chat-stop-btn"
+            @click="stopStreaming"
+            aria-label="Detener respuesta"
+          />
+          <Button
+            v-else
             icon="pi pi-send"
             :disabled="!canSend"
-            :loading="isStreaming && isWaitingFirstToken"
             severity="info"
             class="chat-send-btn"
             @click="sendMessage"
@@ -1732,7 +1752,8 @@ watch(
   outline: none;
 }
 
-.chat-send-btn {
+.chat-send-btn,
+.chat-stop-btn {
   flex-shrink: 0;
   width: 2.5rem;
   height: 2.5rem;
