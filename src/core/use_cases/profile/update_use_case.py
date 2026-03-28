@@ -27,6 +27,7 @@ class UpdateUseCase:
                 tts_enabled=profile.tts_enabled,
                 tool_prompts=profile.tool_prompts,
                 disabled_tools=profile.disabled_tools,
+                response_language=profile.response_language,
                 updated_at=datetime.now(timezone.utc),
             )
 
