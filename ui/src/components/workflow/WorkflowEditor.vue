@@ -226,7 +226,7 @@ const loadWorkflowFromJson = (workflow: WorkflowFunction) => {
   nodes.value = newNodes
   edges.value = newEdges
 
-  setTimeout(() => fitView({ padding: 0.2 }), 100)
+  setTimeout(() => fitView({ padding: 0.5 }), 100)
 }
 
 const exportToJson = (): WorkflowFunction => {
@@ -324,7 +324,7 @@ watch(
             :nodes="nodes"
             :edges="edges"
             :node-types="nodeTypes"
-            :default-zoom="1"
+            :default-zoom="0.5"
             :min-zoom="0.2"
             :max-zoom="4"
             :nodes-draggable="true"
@@ -394,8 +394,8 @@ watch(
   align-items: center;
   justify-content: space-between;
   padding: 1.5rem 2rem;
-  background: linear-gradient(135deg, #f8fafc 0%, #e2e8f0 100%);
-  border-bottom: 1px solid #e2e8f0;
+  background: rgba(255, 255, 255, 0.04);
+  border-bottom: 1px solid var(--do-border-light);
 }
 
 .header-left {
@@ -413,7 +413,7 @@ watch(
   margin: 0;
   font-size: 1.25rem;
   font-weight: 600;
-  color: #1e293b;
+  color: var(--do-text);
 }
 
 .header-actions {
@@ -423,16 +423,16 @@ watch(
 
 .vue-flow-wrapper {
   height: 600px;
-  background: #f8fafc;
+  background: var(--do-bg);
   border-radius: 0.5rem;
 }
 
 .info-panel {
-  background: white;
+  background: rgba(255, 255, 255, 0.06);
   padding: 0.75rem 1rem;
   border-radius: 0.5rem;
-  box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
-  border: 1px solid #e2e8f0;
+  box-shadow: 0 4px 6px rgba(0, 0, 0, 0.2);
+  border: 1px solid var(--do-border-light);
 }
 
 .panel-content {
@@ -464,6 +464,6 @@ watch(
 }
 
 :deep(.vue-flow__edge-textbg) {
-  fill: white;
+  fill: var(--do-bg);
 }
 </style>

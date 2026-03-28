@@ -44,8 +44,8 @@ const getMethodColor = (method?: string) => {
 
 <style scoped>
 .http-request-node {
-  background: white;
-  border: 2px solid #e2e8f0;
+  background: var(--do-bg);
+  border: 2px solid var(--do-border-light);
   border-radius: 0.75rem;
   min-width: 200px;
   box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
@@ -80,7 +80,7 @@ const getMethodColor = (method?: string) => {
 
 .node-title {
   font-weight: 600;
-  color: #1e293b;
+  color: var(--do-text);
   margin-bottom: 0.5rem;
 }
 

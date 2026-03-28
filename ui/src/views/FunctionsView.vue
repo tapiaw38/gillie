@@ -21,9 +21,12 @@ const isSaving = ref(false)
 const jsonError = ref('')
 const editorMode = ref<'json' | 'visual'>('json')
 const currentWorkflow = ref<WorkflowFunction | null>(null)
-const readonlyViewMode = ref<'visual' | 'json'>('visual')
 const showGuideModal = ref(false)
 const selectedWorkflowIndex = ref(0)
+
+// Readonly mode toggles — no auto-switch on mount
+const showJsonPanel = ref(false)
+const showWorkflowVisual = ref(false)
 
 const sampleJson = [
   {
@@ -44,7 +47,19 @@ const sampleJson = [
   },
 ]
 
-// Get all workflows from JSON
+// All parsed functions regardless of type
+const allFunctions = computed(() => {
+  try {
+    const parsed = JSON.parse(jsonContent.value)
+    if (Array.isArray(parsed)) return parsed
+    if (parsed.functions && Array.isArray(parsed.functions)) return parsed.functions
+    return []
+  } catch {
+    return []
+  }
+})
+
+// Only workflow-type functions for visual editor
 const availableWorkflows = computed(() => {
   try {
     const parsed = JSON.parse(jsonContent.value)
@@ -59,22 +74,13 @@ const availableWorkflows = computed(() => {
   }
 })
 
-// Check if JSON contains a workflow
-const hasWorkflow = (): boolean => {
-  const workflow = parseJsonToWorkflow()
-  return workflow !== null
-}
+const hasWorkflow = (): boolean => availableWorkflows.value.length > 0
 
 onMounted(async () => {
   await getAssistantProfile()
 
   if (assistantProfile.value?.functions && assistantProfile.value.functions.trim() !== '') {
     jsonContent.value = assistantProfile.value.functions
-    // Auto-detect workflow and set visual mode
-    if (hasWorkflow()) {
-      currentWorkflow.value = parseJsonToWorkflow()
-      readonlyViewMode.value = 'visual'
-    }
   } else {
     jsonContent.value = JSON.stringify(sampleJson, null, 2)
   }
@@ -183,6 +189,7 @@ const saveFunctions = async () => {
     })
 
     isEditing.value = false
+    editorMode.value = 'json'
   } catch (error) {
     const errorMessage = error instanceof Error ? error.message : 'Error desconocido al guardar'
     toast.add({
@@ -197,11 +204,17 @@ const saveFunctions = async () => {
 }
 
 const toggleEdit = () => {
-  isEditing.value = !isEditing.value
-  if (!isEditing.value) {
-    jsonContent.value = JSON.stringify(sampleJson, null, 2)
+  if (isEditing.value) {
+    // Cancelling — restore from profile or sample
+    if (assistantProfile.value?.functions && assistantProfile.value.functions.trim() !== '') {
+      jsonContent.value = assistantProfile.value.functions
+    } else {
+      jsonContent.value = JSON.stringify(sampleJson, null, 2)
+    }
     jsonError.value = ''
+    editorMode.value = 'json'
   }
+  isEditing.value = !isEditing.value
 }
 
 const clearJson = () => {
@@ -234,7 +247,6 @@ const parseJsonToWorkflow = (): WorkflowFunction | null => {
     return null
   }
 
-  // Ensure selected index is within bounds
   if (selectedWorkflowIndex.value >= workflows.length) {
     selectedWorkflowIndex.value = 0
   }
@@ -242,7 +254,7 @@ const parseJsonToWorkflow = (): WorkflowFunction | null => {
   return workflows[selectedWorkflowIndex.value]
 }
 
-// Toggle between JSON and Visual editor
+// Toggle between JSON and Visual editor (editing mode)
 const toggleEditorMode = () => {
   if (editorMode.value === 'json') {
     currentWorkflow.value = parseJsonToWorkflow()
@@ -262,11 +274,28 @@ const toggleEditorMode = () => {
   }
 }
 
+// Toggle workflow visual in readonly mode
+const toggleWorkflowVisual = () => {
+  if (showWorkflowVisual.value) {
+    showWorkflowVisual.value = false
+  } else {
+    currentWorkflow.value = parseJsonToWorkflow()
+    if (currentWorkflow.value) {
+      showWorkflowVisual.value = true
+    } else {
+      toast.add({
+        severity: 'warn',
+        summary: 'Sin Workflow',
+        detail: 'No se detectó un workflow válido en el JSON',
+        life: 3000,
+      })
+    }
+  }
+}
+
 // Handle workflow save from visual editor
 const handleWorkflowSave = async (workflow: WorkflowFunction) => {
   jsonContent.value = JSON.stringify([workflow], null, 2)
-
-  // Save to backend
   await saveFunctions()
 }
 
@@ -282,28 +311,19 @@ const handleWorkflowUpdate = (workflow: WorkflowFunction) => {
   })
 }
 
-// Toggle between visual and JSON in readonly mode
-const toggleReadonlyView = () => {
-  if (readonlyViewMode.value === 'visual') {
-    readonlyViewMode.value = 'json'
-  } else {
-    currentWorkflow.value = parseJsonToWorkflow()
-    if (currentWorkflow.value) {
-      readonlyViewMode.value = 'visual'
-    } else {
-      toast.add({
-        severity: 'warn',
-        summary: 'Sin Workflow',
-        detail: 'No se detectó un workflow válido en el JSON',
-        life: 3000,
-      })
-    }
-  }
-}
-
 // Handle workflow selection change
 const handleWorkflowChange = () => {
   currentWorkflow.value = parseJsonToWorkflow()
+}
+
+// Returns icon class based on function type
+const getFunctionIcon = (type: string): string => {
+  switch (type) {
+    case 'workflow': return 'pi pi-sitemap'
+    case 'http': return 'pi pi-globe'
+    case 'function': return 'pi pi-cog'
+    default: return 'pi pi-code'
+  }
 }
 </script>
 
@@ -324,7 +344,7 @@ const handleWorkflowChange = () => {
           </div>
         </div>
         <div class="header-actions">
-          <!-- Guide Button -->
+          <!-- Guide Button (always visible) -->
           <Button
             label="Guía Rápida"
             icon="pi pi-book"
@@ -333,81 +353,160 @@ const handleWorkflowChange = () => {
             @click="showGuideModal = true"
           />
 
-          <!-- Workflow Selector (only if multiple workflows exist) -->
-          <Dropdown
-            v-if="availableWorkflows.length > 1"
-            v-model="selectedWorkflowIndex"
-            :options="
-              availableWorkflows.map((w: WorkflowFunction, idx: number) => ({
-                label: w.name,
-                value: idx,
-              }))
-            "
-            option-label="label"
-            option-value="value"
-            placeholder="Selecciona Workflow"
-            class="workflow-selector"
-            @change="handleWorkflowChange"
-          />
+          <!-- Readonly mode actions -->
+          <template v-if="!isEditing">
+            <Button
+              v-if="hasWorkflow()"
+              :label="showWorkflowVisual ? 'Ocultar Workflow' : 'Ver Workflow'"
+              :icon="showWorkflowVisual ? 'pi pi-eye-slash' : 'pi pi-sitemap'"
+              class="view-toggle-button"
+              severity="secondary"
+              @click="toggleWorkflowVisual"
+            />
+            <Button
+              label="Editar"
+              icon="pi pi-pencil"
+              class="edit-button"
+              @click="toggleEdit"
+            />
+          </template>
 
-          <!-- Toggle view in readonly mode (only if workflow exists) -->
-          <Button
-            v-if="!isEditing && hasWorkflow()"
-            :label="readonlyViewMode === 'visual' ? 'Ver JSON' : 'Ver Workflow'"
-            :icon="readonlyViewMode === 'visual' ? 'pi pi-code' : 'pi pi-sitemap'"
-            class="view-toggle-button"
-            severity="secondary"
-            @click="toggleReadonlyView"
-          />
-
-          <!-- Toggle editor mode (only in editing mode) -->
-          <Button
-            v-if="isEditing"
-            :label="editorMode === 'json' ? 'Editor Visual' : 'Editor JSON'"
-            :icon="editorMode === 'json' ? 'pi pi-sitemap' : 'pi pi-code'"
-            class="mode-toggle-button"
-            severity="info"
-            @click="toggleEditorMode"
-          />
-
-          <!-- Edit/Cancel buttons -->
-          <Button
-            v-if="!isEditing && editorMode === 'json'"
-            label="Editar"
-            icon="pi pi-pencil"
-            class="edit-button"
-            @click="toggleEdit"
-          />
-          <Button
-            v-else-if="editorMode === 'json'"
-            label="Cancelar"
-            icon="pi pi-times"
-            severity="secondary"
-            class="cancel-button"
-            @click="toggleEdit"
-          />
+          <!-- Editing mode actions -->
+          <template v-else>
+            <!-- Workflow selector (multiple workflows in JSON) -->
+            <Dropdown
+              v-if="availableWorkflows.length > 1"
+              v-model="selectedWorkflowIndex"
+              :options="
+                availableWorkflows.map((w: WorkflowFunction, idx: number) => ({
+                  label: w.name,
+                  value: idx,
+                }))
+              "
+              option-label="label"
+              option-value="value"
+              placeholder="Selecciona Workflow"
+              class="workflow-selector"
+              @change="handleWorkflowChange"
+            />
+            <Button
+              v-if="hasWorkflow()"
+              :label="editorMode === 'json' ? 'Editor Visual' : 'Editor JSON'"
+              :icon="editorMode === 'json' ? 'pi pi-sitemap' : 'pi pi-code'"
+              class="mode-toggle-button"
+              severity="info"
+              @click="toggleEditorMode"
+            />
+            <Button
+              label="Cancelar"
+              icon="pi pi-times"
+              severity="secondary"
+              class="cancel-button"
+              @click="toggleEdit"
+            />
+          </template>
         </div>
       </div>
     </div>
 
-    <!-- Visual Workflow Editor (Editing Mode) -->
+    <!-- Functions Summary Panel (readonly, has functions) -->
+    <div
+      v-if="!isEditing && allFunctions.length > 0"
+      class="functions-summary"
+    >
+      <div class="summary-header">
+        <span class="summary-title">
+          <i class="pi pi-list"></i>
+          Funciones configuradas
+          <span class="summary-count">{{ allFunctions.length }}</span>
+        </span>
+        <Button
+          :label="showJsonPanel ? 'Ocultar JSON' : 'Ver JSON'"
+          :icon="showJsonPanel ? 'pi pi-eye-slash' : 'pi pi-code'"
+          size="small"
+          class="json-toggle-button"
+          severity="secondary"
+          @click="showJsonPanel = !showJsonPanel"
+        />
+      </div>
+      <div class="functions-grid">
+        <div
+          v-for="fn in allFunctions"
+          :key="fn.name"
+          class="function-card"
+        >
+          <div class="function-card-header">
+            <div class="function-name-row">
+              <i :class="getFunctionIcon(fn.type)" class="function-icon"></i>
+              <span class="function-name">{{ fn.name }}</span>
+            </div>
+            <span
+              class="function-type-badge"
+              :class="{
+                'type-workflow': fn.type === 'workflow',
+                'type-http': fn.type === 'http',
+                'type-default': fn.type !== 'workflow' && fn.type !== 'http',
+              }"
+            >{{ fn.type }}</span>
+          </div>
+          <p class="function-desc">{{ fn.description || 'Sin descripción' }}</p>
+          <div v-if="fn.steps && fn.steps.length" class="function-meta">
+            <i class="pi pi-share-alt"></i>
+            <span>{{ fn.steps.length }} paso{{ fn.steps.length !== 1 ? 's' : '' }}</span>
+          </div>
+          <div v-else-if="fn.keywords && fn.keywords.length" class="function-meta">
+            <i class="pi pi-tag"></i>
+            <span>{{ fn.keywords.slice(0, 3).join(', ') }}</span>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Empty State (readonly, no functions) -->
+    <Card
+      v-else-if="!isEditing && allFunctions.length === 0"
+      class="empty-state-card"
+    >
+      <template #content>
+        <div class="empty-state">
+          <div class="empty-icon">
+            <i class="pi pi-code"></i>
+          </div>
+          <h3 class="empty-title">Sin funciones configuradas</h3>
+          <p class="empty-desc">
+            Aún no has definido ninguna función para tu asistente. Crea tu primera función para extender sus capacidades.
+          </p>
+          <Button
+            label="Crear primera función"
+            icon="pi pi-plus"
+            class="edit-button"
+            @click="toggleEdit"
+          />
+        </div>
+      </template>
+    </Card>
+
+    <!-- Visual Workflow Viewer (readonly, toggled) -->
     <WorkflowEditor
-      v-if="isEditing && editorMode === 'visual'"
+      v-if="!isEditing && showWorkflowVisual && currentWorkflow"
+      :workflow="currentWorkflow"
+      :readonly="true"
+    />
+
+    <!-- Visual Workflow Editor (editing, visual mode) -->
+    <WorkflowEditor
+      v-else-if="isEditing && editorMode === 'visual'"
       :workflow="currentWorkflow!"
       :readonly="false"
       @save="handleWorkflowSave"
       @update="handleWorkflowUpdate"
     />
 
-    <!-- Visual Workflow Viewer (Readonly Mode) -->
-    <WorkflowEditor
-      v-else-if="!isEditing && readonlyViewMode === 'visual' && currentWorkflow"
-      :workflow="currentWorkflow"
-      :readonly="true"
-    />
-
-    <!-- Main Editor Card (JSON Mode) -->
-    <Card v-else-if="isEditing || readonlyViewMode === 'json'" class="editor-card">
+    <!-- JSON Editor Card (editing, json mode) or JSON Panel (readonly toggle) -->
+    <Card
+      v-if="(isEditing && editorMode === 'json') || (!isEditing && showJsonPanel && !showWorkflowVisual)"
+      class="editor-card"
+    >
       <template #content>
         <!-- Toolbar (only visible when editing) -->
         <div v-if="isEditing" class="editor-toolbar">
@@ -474,7 +573,6 @@ const handleWorkflowChange = () => {
               @input="validateJson(jsonContent)"
             />
 
-            <!-- Error Message -->
             <div v-if="jsonError" class="error-message">
               <i class="pi pi-exclamation-triangle"></i>
               <span>{{ jsonError }}</span>
@@ -521,7 +619,7 @@ const handleWorkflowChange = () => {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  background: rgba(255,255,255,0.04);
+  background: rgba(255, 255, 255, 0.04);
   padding: 2rem;
   border-radius: 1rem;
   box-shadow: 0 4px 20px var(--shadow-light);
@@ -545,6 +643,7 @@ const handleWorkflowChange = () => {
   font-size: 2rem;
   color: white;
   box-shadow: var(--shadow-primary);
+  flex-shrink: 0;
 }
 
 .title-section {
@@ -571,9 +670,201 @@ const handleWorkflowChange = () => {
 
 .header-actions {
   display: flex;
+  align-items: center;
+  gap: 1rem;
+  flex-wrap: wrap;
+}
+
+/* Functions Summary Panel */
+.functions-summary {
+  margin-bottom: 1.5rem;
+}
+
+.summary-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 1rem;
+}
+
+.summary-title {
+  font-size: 1rem;
+  font-weight: 600;
+  color: var(--do-text-secondary);
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.summary-count {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.5rem;
+  height: 1.5rem;
+  border-radius: 50%;
+  background: var(--gradient-primary);
+  color: white;
+  font-size: 0.75rem;
+  font-weight: 700;
+}
+
+.functions-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
   gap: 1rem;
 }
 
+.function-card {
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid var(--do-border-light);
+  border-radius: 0.75rem;
+  padding: 1rem 1.25rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  transition: border-color 0.2s, box-shadow 0.2s;
+}
+
+.function-card:hover {
+  border-color: var(--color-primary);
+  box-shadow: 0 4px 20px var(--shadow-primary);
+}
+
+.function-card-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+}
+
+.function-name-row {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  min-width: 0;
+}
+
+.function-icon {
+  color: var(--color-primary);
+  font-size: 0.9rem;
+  flex-shrink: 0;
+}
+
+.function-name {
+  font-weight: 600;
+  font-size: 0.95rem;
+  color: var(--do-text);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.function-type-badge {
+  font-size: 0.7rem;
+  font-weight: 600;
+  padding: 0.2rem 0.6rem;
+  border-radius: 1rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  flex-shrink: 0;
+}
+
+.type-workflow {
+  background: var(--gradient-primary);
+  color: white;
+}
+
+.type-http {
+  background: var(--gradient-info);
+  color: white;
+}
+
+.type-default {
+  background: rgba(255, 255, 255, 0.1);
+  color: var(--do-text-muted);
+}
+
+.function-desc {
+  font-size: 0.85rem;
+  color: var(--do-text-muted);
+  line-height: 1.4;
+  margin: 0;
+}
+
+.function-meta {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  font-size: 0.78rem;
+  color: var(--do-text-muted);
+  margin-top: 0.25rem;
+}
+
+.function-meta i {
+  font-size: 0.75rem;
+  color: var(--color-primary);
+}
+
+/* JSON toggle button */
+:deep(.json-toggle-button) {
+  border-radius: 0.5rem;
+  font-weight: 500;
+  transition: all 0.2s ease;
+}
+
+/* Empty State */
+.empty-state-card {
+  margin-bottom: 2rem;
+  border-radius: 1rem;
+  overflow: hidden;
+  border: 1px solid var(--do-border-light);
+  background: rgba(255, 255, 255, 0.02);
+}
+
+:deep(.empty-state-card .p-card-content) {
+  padding: 0;
+}
+
+.empty-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  padding: 4rem 2rem;
+  gap: 1rem;
+}
+
+.empty-icon {
+  width: 5rem;
+  height: 5rem;
+  border-radius: 1.25rem;
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid var(--do-border-light);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 2rem;
+  color: var(--do-text-muted);
+  margin-bottom: 0.5rem;
+}
+
+.empty-title {
+  font-size: 1.25rem;
+  font-weight: 600;
+  color: var(--do-text);
+  margin: 0;
+}
+
+.empty-desc {
+  font-size: 0.9rem;
+  color: var(--do-text-muted);
+  max-width: 420px;
+  line-height: 1.6;
+  margin: 0 0 0.5rem 0;
+}
+
+/* Button styles */
 :deep(.edit-button) {
   background: var(--gradient-success);
   border: none;
@@ -646,7 +937,7 @@ const handleWorkflowChange = () => {
   min-width: 250px;
   border-radius: 0.75rem;
   border: 2px solid var(--do-border-light);
-  background: rgba(255,255,255,0.04);
+  background: rgba(255, 255, 255, 0.04);
   transition: all 0.3s ease;
 }
 
@@ -842,7 +1133,7 @@ const handleWorkflowChange = () => {
 }
 
 :deep(.json-editor.editor-readonly) {
-  background: rgba(255,255,255,0.03);
+  background: rgba(255, 255, 255, 0.03);
   color: var(--do-text-muted);
   cursor: not-allowed;
 }
@@ -921,6 +1212,7 @@ const handleWorkflowChange = () => {
   .header-actions {
     flex-direction: column;
     width: 100%;
+    justify-content: stretch;
   }
 
   :deep(.workflow-selector) {
@@ -928,11 +1220,15 @@ const handleWorkflowChange = () => {
   }
 
   .page-title {
-    font-size: 2rem;
+    font-size: 1.4rem;
   }
 
   .page-subtitle {
     font-size: 1rem;
+  }
+
+  .functions-grid {
+    grid-template-columns: 1fr;
   }
 
   .editor-toolbar {
@@ -966,7 +1262,6 @@ const handleWorkflowChange = () => {
     padding: 1rem;
     min-height: 400px;
   }
-
 }
 
 @media (max-width: 480px) {
@@ -981,7 +1276,7 @@ const handleWorkflowChange = () => {
   }
 
   .page-title {
-    font-size: 1.75rem;
+    font-size: 1.25rem;
   }
 
   .functions-header {
@@ -1003,14 +1298,16 @@ const handleWorkflowChange = () => {
   .editor-card,
   :deep(.edit-button),
   :deep(.save-button),
-  :deep(.toolbar-button) {
+  :deep(.toolbar-button),
+  .function-card {
     transition: none;
   }
 
   .editor-card:hover,
   :deep(.edit-button:hover),
   :deep(.save-button:hover),
-  :deep(.toolbar-button:hover) {
+  :deep(.toolbar-button:hover),
+  .function-card:hover {
     transform: none;
   }
 
