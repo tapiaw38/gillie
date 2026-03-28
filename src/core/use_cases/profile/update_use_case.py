@@ -19,16 +19,11 @@ class UpdateUseCase:
         if profile.assistant_name is not None and profile.assistant_name.strip() == "":
             raise NewApplicationError(ProfileUpdateValidationError)
 
-        if profile.business_name is not None and profile.business_name.strip() == "":
-            raise NewApplicationError(ProfileUpdateValidationError)
-
         try:
             updated_profile = Profile(
                 assistant_name=profile.assistant_name,
                 business_name=profile.business_name,
                 functions=profile.functions,
-                business_context=profile.business_context,
-                role=profile.role,
                 tts_enabled=profile.tts_enabled,
                 tool_prompts=profile.tool_prompts,
                 disabled_tools=profile.disabled_tools,

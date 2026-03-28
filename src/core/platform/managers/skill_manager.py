@@ -34,6 +34,10 @@ _MEMORY_ROOT_TEMPLATE = """\
 
 Árbol de conocimiento del asistente. Cada sección puede referenciar skills específicas.
 
+## Reglas y comportamiento
+
+ver rules.skill.md
+
 ## Preguntas Frecuentes
 
 ver faqs.skill.md
@@ -51,12 +55,44 @@ ver facts.skill.md
 ver solutions.skill.md
 """
 
+_RULES_SKILL_TEMPLATE = """\
+# Reglas del Asistente
+
+## Formato y lenguaje
+- Responde siempre en español, de forma clara y concisa.
+- Usa texto plano en las respuestas; no uses Markdown innecesario.
+- Las URLs deben ir limpias, sin paréntesis, comillas ni corchetes antes o después.
+
+## Archivos Office (Word, Excel, PowerPoint) — REGLA CRÍTICA
+NUNCA escribas sintaxis Markdown dentro de documentos .docx, .xlsx o .pptx.
+Estos formatos NO interpretan Markdown — `![alt](url)`, `**texto**`, `*texto*`, `# Título`, etc.
+se insertan como texto literal y rompen el documento.
+- Para imágenes: usa `insert_image_docx`, `insert_image_excel` o `insert_image_pptx`.
+- Para contenido: usa `write_docx`, `modify_docx` y herramientas equivalentes.
+- NUNCA escribas una URL de imagen como texto en el documento; eso inserta un enlace roto, no una imagen.
+
+## Automatización de browser — REGLA CRÍTICA
+Ante CUALQUIER tarea que involucre un navegador (abrir URL, hacer clic, llenar formularios,
+enviar mensajes, hacer scraping, etc.) DEBES llamar a `browser_connect` como PRIMER tool, siempre.
+- NUNCA uses `run_shell` ni ningún otro tool para abrir Chrome/Chromium/Firefox.
+- NUNCA ejecutes `google-chrome`, `xdg-open` ni ningún comando de navegador por shell.
+- `browser_connect` relanza Chrome con depuración remota usando el perfil real, preservando sesiones.
+- Flujo: `browser_connect` → `browser_switch_tab` → `browser_navigate` / `browser_evaluate` / `browser_click` / `browser_type`.
+- Nunca le pidas al usuario que haga algo manualmente en el navegador.
+
+## Comportamiento general
+- Actúa como asistente personal: empático, directo y eficiente.
+- Prefiere usar herramientas disponibles antes de pedir información al usuario.
+- Ante tareas de archivos, workspace o shell: actúa directamente sin pedir confirmación innecesaria.
+"""
+
 
 class SkillManager:
     def __init__(self, memory_dir: Path = MEMORY_DIR):
         self.memory_dir = memory_dir
         self.memory_dir.mkdir(parents=True, exist_ok=True)
         self._ensure_memory_root()
+        self._ensure_rules_skill()
 
     # ─── Generic skill operations ──────────────────────────────────────────────
 
@@ -113,6 +149,13 @@ class SkillManager:
         if not path.exists():
             path.write_text("# Soluciones Registradas\n", encoding="utf-8")
             logger.info("Created default solutions.skill.md at %s", path)
+
+    def _ensure_rules_skill(self) -> None:
+        """Create rules.skill.md with default system rules if it does not exist yet."""
+        path = self._skill_path("rules")
+        if not path.exists():
+            path.write_text(_RULES_SKILL_TEMPLATE, encoding="utf-8")
+            logger.info("Created default rules.skill.md at %s", path)
 
     def _resolve_references(self, content: str) -> str:
         """
@@ -174,7 +217,6 @@ class SkillManager:
         if not raw.strip():
             raw = "# Conocimiento General\n"
 
-        # Check for a similar existing note before writing
         existing_id = self._find_similar_note(content, raw)
         if existing_id:
             logger.info("Skipped duplicate note — similar note %s already exists", existing_id)
@@ -346,7 +388,6 @@ class SkillManager:
             if not found_indices:
                 continue
 
-            # Merge overlapping windows
             merged_ranges: list[tuple[int, int]] = []
             start = max(0, found_indices[0] - window)
             end = min(len(lines) - 1, found_indices[0] + window)
@@ -441,7 +482,6 @@ class SkillManager:
             return False
 
         updated = re.sub(pattern, "", raw, flags=re.DOTALL)
-        # Clean up consecutive separators
         updated = re.sub(r"\n---\n\n---", "\n---", updated)
         updated = updated.strip() + "\n"
         self.save_skill("faqs", updated)
@@ -461,24 +501,19 @@ class SkillManager:
             return []
 
         results = []
-        # Split on id comments
         parts = re.split(r"<!--\s*id:\s*([a-f0-9]+)\s*-->", raw)
-        # parts[0] is header, then alternating: id, block_content
         i = 1
         while i < len(parts) - 1:
             faq_id = parts[i].strip()
             block = parts[i + 1]
             i += 2
 
-            # Extract category (## heading)
             cat_match = re.search(r"^##\s+(.+)$", block, re.MULTILINE)
             category = cat_match.group(1).strip() if cat_match else "General"
 
-            # Extract question
             q_match = re.search(r"\*\*P:\*\*\s*(.+)", block)
             question = q_match.group(1).strip() if q_match else ""
 
-            # Extract answer (may be multi-line until --- or next heading)
             a_match = re.search(r"\*\*R:\*\*\s*([\s\S]+?)(?=\n---|\Z)", block)
             answer = a_match.group(1).strip() if a_match else ""
 

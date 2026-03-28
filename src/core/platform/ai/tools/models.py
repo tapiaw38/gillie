@@ -106,6 +106,25 @@ _DEFAULT_TOOL_PROMPTS: Dict[str, str] = {
         "Downloads from storage if not already in workspace. Saves working copy locally. "
         "Use re_upload=True if the user wants to save back to their storage."
     ),
+    "insert_image_docx": (
+        "Insert an image into an existing Word (.docx) document. "
+        "Image source can be a local file path, a URL, or a base64 data URI. "
+        "Use position='end' to append at the end, 'start' for the beginning, "
+        "or a text string to insert after the paragraph containing that text. "
+        "Optionally set width_cm and add a caption. Use re_upload=True to save back to storage."
+    ),
+    "insert_image_excel": (
+        "Insert an image into an existing Excel (.xlsx) file at a specific cell. "
+        "Image source can be a local file path, a URL, or a base64 data URI. "
+        "Specify the sheet name and anchor cell (e.g. 'B2'). "
+        "Optionally set width_cm and height_cm. Use re_upload=True to save back to storage."
+    ),
+    "insert_image_pptx": (
+        "Insert an image into a specific slide of an existing PowerPoint (.pptx) file. "
+        "Image source can be a local file path, a URL, or a base64 data URI. "
+        "Specify the slide number (1-based), position in cm (left_cm, top_cm), and optional size. "
+        "Use re_upload=True to save back to storage."
+    ),
     "describe_image": (
         "Describe the visual content of an image using its URL. "
         "Use after search_images returns image URLs and the user wants to know what an image shows."
@@ -480,6 +499,45 @@ class ModifyPptxArgs(BaseModel):
     add_slides: Optional[List[dict]] = Field(default=None, description=(
         "List of new slides to append. Each slide: {title, body (list[str]), notes (optional str)}"
     ))
+    save_as: Optional[str] = Field(default=None, description="Output filename. Defaults to same name as input.")
+    re_upload: bool = Field(default=False, description="If True, re-upload the modified file to storage after saving")
+
+
+class InsertImageDocxArgs(BaseModel):
+    """Arguments for inserting an image into a Word document"""
+    file_name: str = Field(description="Name of the .docx file in profile files or workspace (e.g. 'report.docx')")
+    image_source: str = Field(description="Image source: local file path, URL, or base64 data URI (data:image/...;base64,...)")
+    position: str = Field(default="end", description=(
+        "Where to insert the image: 'end' (append at end), 'start' (prepend at beginning), "
+        "or a text string to insert the image AFTER the first paragraph containing that text."
+    ))
+    width_cm: Optional[float] = Field(default=None, description="Image width in centimetres. Height scales proportionally. Omit to use original size.")
+    caption: Optional[str] = Field(default=None, description="Optional caption text to add below the image.")
+    save_as: Optional[str] = Field(default=None, description="Output filename. Defaults to same name as input.")
+    re_upload: bool = Field(default=False, description="If True, re-upload the modified file to storage after saving")
+
+
+class InsertImageExcelArgs(BaseModel):
+    """Arguments for inserting an image into an Excel file"""
+    file_name: str = Field(description="Name of the .xlsx file in profile files or workspace (e.g. 'data.xlsx')")
+    image_source: str = Field(description="Image source: local file path, URL, or base64 data URI")
+    sheet: str = Field(description="Sheet name where the image will be inserted")
+    cell: str = Field(default="A1", description="Cell anchor for the top-left corner of the image (e.g. 'B2', 'D5')")
+    width_cm: Optional[float] = Field(default=None, description="Image width in centimetres. Omit to use original size.")
+    height_cm: Optional[float] = Field(default=None, description="Image height in centimetres. Omit to scale proportionally with width.")
+    save_as: Optional[str] = Field(default=None, description="Output filename. Defaults to same name as input.")
+    re_upload: bool = Field(default=False, description="If True, re-upload the modified file to storage after saving")
+
+
+class InsertImagePptxArgs(BaseModel):
+    """Arguments for inserting an image into a PowerPoint slide"""
+    file_name: str = Field(description="Name of the .pptx file in profile files or workspace (e.g. 'slides.pptx')")
+    image_source: str = Field(description="Image source: local file path, URL, or base64 data URI")
+    slide_number: int = Field(description="1-based slide index where the image will be inserted")
+    left_cm: float = Field(default=2.0, description="Distance from the left edge of the slide in centimetres")
+    top_cm: float = Field(default=4.0, description="Distance from the top edge of the slide in centimetres")
+    width_cm: Optional[float] = Field(default=None, description="Image width in centimetres. Omit to use original size.")
+    height_cm: Optional[float] = Field(default=None, description="Image height in centimetres. Omit to scale proportionally.")
     save_as: Optional[str] = Field(default=None, description="Output filename. Defaults to same name as input.")
     re_upload: bool = Field(default=False, description="If True, re-upload the modified file to storage after saving")
 
@@ -1615,6 +1673,315 @@ def create_langchain_tools(openai_integration, profile, skill_manager=None, stor
             return await asyncio.get_event_loop().run_in_executor(None, _modify)
         except Exception as e:
             return {"error": str(e)}
+
+    # ── Image insertion tools ─────────────────────────────────────────────────
+
+    def _fetch_image_to_tempfile(image_source: str) -> "tuple[str, bool]":
+        """Resolve image_source (path / URL / base64) to a temp file path.
+
+        Returns (path, is_temp) where is_temp=True means the caller must delete it.
+        """
+        import tempfile, os, base64 as _b64
+        from pathlib import Path as _P
+
+        if image_source.startswith("data:"):
+            # base64 data URI  →  data:image/png;base64,<data>
+            header, data = image_source.split(",", 1)
+            ext = header.split(";")[0].split("/")[-1]
+            tmp = tempfile.NamedTemporaryFile(suffix=f".{ext}", delete=False)
+            tmp.write(_b64.b64decode(data))
+            tmp.close()
+            return tmp.name, True
+
+        if image_source.startswith("http://") or image_source.startswith("https://"):
+            import requests as _req
+            resp = _req.get(image_source, timeout=30)
+            resp.raise_for_status()
+            content_type = resp.headers.get("Content-Type", "image/png").split(";")[0]
+            ext = content_type.split("/")[-1]
+            tmp = tempfile.NamedTemporaryFile(suffix=f".{ext}", delete=False)
+            tmp.write(resp.content)
+            tmp.close()
+            return tmp.name, True
+
+        # Local path — resolve against workspace or absolute
+        local = _find_local_file(image_source, client_workspace)
+        if local:
+            return str(local), False
+        if _P(image_source).exists():
+            return image_source, False
+        raise FileNotFoundError(f"Image not found: {image_source}")
+
+    async def insert_image_docx_tool(
+        file_name: str,
+        image_source: str,
+        position: str = "end",
+        width_cm: float = None,
+        caption: str = None,
+        save_as: str = None,
+        re_upload: bool = False,
+    ) -> Dict[str, Any]:
+        """Insert an image into an existing Word (.docx) document."""
+        import asyncio, io, os
+        from pathlib import Path as _Path
+
+        def _execute():
+            try:
+                from docx import Document
+                from docx.shared import Cm
+            except ImportError:
+                return {"error": "python-docx not installed. Run: pip install python-docx"}
+
+            output_name = save_as or file_name
+            ws_path = _resolve_output_path(output_name, client_workspace)
+
+            local_input = _find_local_file(file_name, client_workspace)
+            if local_input:
+                if not save_as:
+                    ws_path = local_input.parent / _Path(output_name).name
+                doc = Document(str(local_input))
+            else:
+                profile_file = _find_file_by_name(profile.files, file_name)
+                if not profile_file:
+                    return {"error": f"File '{file_name}' not found in profile files or workspace."}
+                import requests as _req
+                resp = _req.get(profile_file.url, timeout=30)
+                resp.raise_for_status()
+                doc = Document(io.BytesIO(resp.content))
+
+            img_path, is_temp = _fetch_image_to_tempfile(image_source)
+            try:
+                width = Cm(width_cm) if width_cm else None
+
+                if position == "end":
+                    doc.add_picture(img_path, width=width)
+                    if caption:
+                        doc.add_paragraph(caption)
+                elif position == "start":
+                    # Insert before first paragraph
+                    from docx.oxml.ns import qn
+                    from docx.oxml import OxmlElement
+                    import copy
+                    # Use a temp doc to get the picture XML
+                    tmp_doc = Document()
+                    tmp_doc.add_picture(img_path, width=width)
+                    pic_para = tmp_doc.paragraphs[-1]._element
+                    doc.paragraphs[0]._element.addprevious(copy.deepcopy(pic_para))
+                    if caption:
+                        cap_para = OxmlElement("w:p")
+                        cap_run = OxmlElement("w:r")
+                        cap_text = OxmlElement("w:t")
+                        cap_text.text = caption
+                        cap_run.append(cap_text)
+                        cap_para.append(cap_run)
+                        pic_para.addnext(cap_para)
+                else:
+                    # Insert after first paragraph whose text contains `position`
+                    inserted = False
+                    import copy
+                    from docx import Document as _Doc
+                    tmp_doc = _Doc()
+                    tmp_doc.add_picture(img_path, width=width)
+                    pic_element = copy.deepcopy(tmp_doc.paragraphs[-1]._element)
+                    for para in doc.paragraphs:
+                        if position in para.text:
+                            para._element.addnext(pic_element)
+                            if caption:
+                                from docx.oxml import OxmlElement as _OE
+                                cap_para = _OE("w:p")
+                                cap_run = _OE("w:r")
+                                cap_text = _OE("w:t")
+                                cap_text.text = caption
+                                cap_run.append(cap_text)
+                                cap_para.append(cap_run)
+                                pic_element.addnext(cap_para)
+                            inserted = True
+                            break
+                    if not inserted:
+                        return {"error": f"No paragraph found containing text: '{position}'"}
+
+                ws_path.parent.mkdir(parents=True, exist_ok=True)
+                doc.save(str(ws_path))
+                return {"saved_to": str(ws_path), "image_inserted": True, "position": position}
+            finally:
+                if is_temp:
+                    os.unlink(img_path)
+
+        result = await asyncio.get_event_loop().run_in_executor(None, _execute)
+
+        if re_upload and "error" not in result:
+            saved_path = _Path(result["saved_to"])
+            if saved_path.exists():
+                import aiohttp
+                try:
+                    with open(saved_path, "rb") as fh:
+                        data = aiohttp.FormData()
+                        data.add_field("files", fh, filename=saved_path.name,
+                                       content_type="application/vnd.openxmlformats-officedocument.wordprocessingml.document")
+                        async with aiohttp.ClientSession() as session:
+                            async with session.post("http://localhost:8000/profile/files/upload", data=data) as resp:
+                                result["re_uploaded"] = resp.status == 200
+                except Exception as e:
+                    result["re_upload_error"] = str(e)
+        return result
+
+    async def insert_image_excel_tool(
+        file_name: str,
+        image_source: str,
+        sheet: str,
+        cell: str = "A1",
+        width_cm: float = None,
+        height_cm: float = None,
+        save_as: str = None,
+        re_upload: bool = False,
+    ) -> Dict[str, Any]:
+        """Insert an image into an Excel (.xlsx) file at a specific cell."""
+        import asyncio, io, os
+        from pathlib import Path as _Path
+
+        def _execute():
+            try:
+                import openpyxl
+                from openpyxl.drawing.image import Image as XLImage
+            except ImportError:
+                return {"error": "openpyxl not installed. Run: pip install openpyxl"}
+
+            output_name = save_as or file_name
+            ws_path = _resolve_output_path(output_name, client_workspace)
+
+            local_input = _find_local_file(file_name, client_workspace)
+            if local_input:
+                if not save_as:
+                    ws_path = local_input.parent / _Path(output_name).name
+                wb = openpyxl.load_workbook(str(local_input))
+            else:
+                profile_file = _find_file_by_name(profile.files, file_name)
+                if not profile_file:
+                    return {"error": f"File '{file_name}' not found in profile files or workspace."}
+                import requests as _req
+                resp = _req.get(profile_file.url, timeout=30)
+                resp.raise_for_status()
+                wb = openpyxl.load_workbook(io.BytesIO(resp.content))
+
+            if sheet not in wb.sheetnames:
+                return {"error": f"Sheet '{sheet}' not found. Available: {wb.sheetnames}"}
+
+            img_path, is_temp = _fetch_image_to_tempfile(image_source)
+            try:
+                img = XLImage(img_path)
+                if width_cm:
+                    img.width = int(width_cm * 37.795)   # cm → pixels at 96dpi
+                if height_cm:
+                    img.height = int(height_cm * 37.795)
+                elif width_cm and not height_cm:
+                    # scale height proportionally
+                    from PIL import Image as PILImage
+                    with PILImage.open(img_path) as pil_img:
+                        orig_w, orig_h = pil_img.size
+                    if orig_w:
+                        img.height = int(img.width * orig_h / orig_w)
+
+                wb[sheet].add_image(img, cell)
+                ws_path.parent.mkdir(parents=True, exist_ok=True)
+                wb.save(str(ws_path))
+                return {"saved_to": str(ws_path), "image_inserted": True, "sheet": sheet, "cell": cell}
+            finally:
+                if is_temp:
+                    os.unlink(img_path)
+
+        result = await asyncio.get_event_loop().run_in_executor(None, _execute)
+
+        if re_upload and "error" not in result:
+            saved_path = _Path(result["saved_to"])
+            if saved_path.exists():
+                import aiohttp
+                try:
+                    with open(saved_path, "rb") as fh:
+                        data = aiohttp.FormData()
+                        data.add_field("files", fh, filename=saved_path.name,
+                                       content_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+                        async with aiohttp.ClientSession() as session:
+                            async with session.post("http://localhost:8000/profile/files/upload", data=data) as resp:
+                                result["re_uploaded"] = resp.status == 200
+                except Exception as e:
+                    result["re_upload_error"] = str(e)
+        return result
+
+    async def insert_image_pptx_tool(
+        file_name: str,
+        image_source: str,
+        slide_number: int,
+        left_cm: float = 2.0,
+        top_cm: float = 4.0,
+        width_cm: float = None,
+        height_cm: float = None,
+        save_as: str = None,
+        re_upload: bool = False,
+    ) -> Dict[str, Any]:
+        """Insert an image into a specific slide of a PowerPoint (.pptx) file."""
+        import asyncio, io, os
+        from pathlib import Path as _Path
+
+        def _execute():
+            try:
+                from pptx import Presentation as _Prs
+                from pptx.util import Cm
+            except ImportError:
+                return {"error": "python-pptx not installed. Run: pip install python-pptx"}
+
+            output_name = save_as or file_name
+            ws_path = _resolve_output_path(output_name, client_workspace)
+
+            local_input = _find_local_file(file_name, client_workspace)
+            if local_input:
+                if not save_as:
+                    ws_path = local_input.parent / _Path(output_name).name
+                prs = _Prs(str(local_input))
+            else:
+                profile_file = _find_file_by_name(profile.files, file_name)
+                if not profile_file:
+                    return {"error": f"File '{file_name}' not found in profile files or workspace."}
+                import requests as _req
+                resp = _req.get(profile_file.url, timeout=30)
+                resp.raise_for_status()
+                prs = _Prs(io.BytesIO(resp.content))
+
+            total = len(prs.slides)
+            if slide_number < 1 or slide_number > total:
+                return {"error": f"slide_number {slide_number} out of range. Presentation has {total} slides."}
+
+            slide = prs.slides[slide_number - 1]
+            img_path, is_temp = _fetch_image_to_tempfile(image_source)
+            try:
+                left = Cm(left_cm)
+                top = Cm(top_cm)
+                width = Cm(width_cm) if width_cm else None
+                height = Cm(height_cm) if height_cm else None
+                slide.shapes.add_picture(img_path, left, top, width=width, height=height)
+                ws_path.parent.mkdir(parents=True, exist_ok=True)
+                prs.save(str(ws_path))
+                return {"saved_to": str(ws_path), "image_inserted": True, "slide": slide_number}
+            finally:
+                if is_temp:
+                    os.unlink(img_path)
+
+        result = await asyncio.get_event_loop().run_in_executor(None, _execute)
+
+        if re_upload and "error" not in result:
+            saved_path = _Path(result["saved_to"])
+            if saved_path.exists():
+                import aiohttp
+                try:
+                    with open(saved_path, "rb") as fh:
+                        data = aiohttp.FormData()
+                        data.add_field("files", fh, filename=saved_path.name,
+                                       content_type="application/vnd.openxmlformats-officedocument.presentationml.presentation")
+                        async with aiohttp.ClientSession() as session:
+                            async with session.post("http://localhost:8000/profile/files/upload", data=data) as resp:
+                                result["re_uploaded"] = resp.status == 200
+                except Exception as e:
+                    result["re_upload_error"] = str(e)
+        return result
 
     # ─────────────────────────────────────────────────────────────────────────
 
@@ -3185,6 +3552,8 @@ user_pref("devtools.debugger.force-local", true);
         _tool("write_docx",             prompts["write_docx"],             write_docx_tool,      WriteDocxArgs),
         _tool("modify_excel",           prompts["modify_excel"],           modify_excel_tool,    ModifyExcelArgs),
         _tool("modify_docx",            prompts["modify_docx"],            modify_docx_tool,     ModifyDocxArgs),
+        _tool("insert_image_docx",      prompts.get("insert_image_docx",  _DEFAULT_TOOL_PROMPTS["insert_image_docx"]),  insert_image_docx_tool,  InsertImageDocxArgs),
+        _tool("insert_image_excel",     prompts.get("insert_image_excel", _DEFAULT_TOOL_PROMPTS["insert_image_excel"]), insert_image_excel_tool, InsertImageExcelArgs),
         _tool("describe_image",         prompts["describe_image"],         describe_image_tool,  DescribeImageArgs),
         _tool("send_file",              prompts.get("send_file",          _DEFAULT_TOOL_PROMPTS["send_file"]),          send_file_tool,          SendFileArgs),
         _tool("send_screenshot",        prompts.get("send_screenshot",    _DEFAULT_TOOL_PROMPTS["send_screenshot"]),    send_screenshot_tool,    SendScreenshotArgs),
@@ -3456,6 +3825,14 @@ user_pref("devtools.debugger.force-local", true);
             func=modify_pptx_tool,
             args_schema=ModifyPptxArgs,
             coroutine=modify_pptx_tool,
+        ))
+    if "insert_image_pptx" not in disabled:
+        tools.append(StructuredTool(
+            name="insert_image_pptx",
+            description=prompts.get("insert_image_pptx", _DEFAULT_TOOL_PROMPTS["insert_image_pptx"]),
+            func=insert_image_pptx_tool,
+            args_schema=InsertImagePptxArgs,
+            coroutine=insert_image_pptx_tool,
         ))
 
     # -------------------------------------------------------------------------

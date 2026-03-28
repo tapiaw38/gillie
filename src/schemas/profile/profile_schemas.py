@@ -13,8 +13,6 @@ class ProfileInput(BaseModel):
     functions: Optional[str] = None
     tool_prompts: Optional[str] = None
     disabled_tools: Optional[List[str]] = None
-    business_context: Optional[str] = None
-    role: Optional[str] = None
     tts_enabled: Optional[bool] = None
 
 
@@ -26,12 +24,10 @@ class ProfileOutputData(BaseModel):
     id: str
     user_id: str
     assistant_name: str
-    business_name: str
-    functions: str
+    business_name: Optional[str] = None
+    functions: Optional[str] = None
     tool_prompts: Optional[str] = None
     disabled_tools: Optional[List[str]] = None
-    business_context: str
-    role: Optional[str]
     is_active: bool
     tts_enabled: Optional[bool] = False
     created_at: Optional[datetime]
@@ -55,10 +51,8 @@ class ProfileOutput(BaseModel):
                 functions=profile.functions,
                 tool_prompts=profile.tool_prompts,
                 disabled_tools=profile.disabled_tools,
-                business_context=profile.business_context,
                 is_active=profile.is_active,
                 tts_enabled=profile.tts_enabled or False,
-                role=profile.role,
                 created_at=profile.created_at,
                 updated_at=profile.updated_at,
                 api_keys=(

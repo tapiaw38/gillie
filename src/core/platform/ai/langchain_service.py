@@ -108,7 +108,6 @@ class LangChainService:
         self.store_service = None
         self.job_usecases = None
 
-        # Initialize LangChain ChatOpenAI
         self.llm = ChatOpenAI(
             model=self.config.model,
             api_key=self.config.api_key,
@@ -120,18 +119,14 @@ class LangChainService:
         )
 
 
-        # Initialize memory manager
         self.memory_manager = ConversationMemoryManager(max_messages=20)
 
-        # Concurrency control
         self.semaphore = asyncio.Semaphore(max_concurrent_requests)
 
-        # Circuit breaker
         self._consecutive_failures = 0
         self._max_failures = 3
         self._circuit_open_until = None
 
-        # LangSmith configuration
         self.enable_langsmith = enable_langsmith
         if enable_langsmith:
             self._setup_langsmith()
@@ -259,7 +254,6 @@ class LangChainService:
                     llm_with_tools = self.llm
                     logger.debug("No tools enabled")
 
-                # Generate response
                 logger.info(f"Generating response for user {profile.user_id}")
                 response = await llm_with_tools.ainvoke(messages)
 
@@ -321,8 +315,6 @@ class LangChainService:
                 thread_id = self.memory_manager.create_thread_id(conversation_id, profile.user_id)
                 messages = self.memory_manager.optimize_message_history(messages, system_prompt=None)
 
-                # Build a shell_output_callback that writes to the queue when provided.
-                # The callback is async so it can be awaited inside run_shell_tool.
                 shell_output_callback = None
                 if shell_output_queue is not None:
                     async def _shell_line_callback(line: str) -> None:
@@ -330,9 +322,6 @@ class LangChainService:
 
                     shell_output_callback = _shell_line_callback
 
-                # Build an approval_callback that pauses the tool, sends an
-                # approval_request event through the SSE queue, and waits for
-                # the user's decision via POST /conversation/tool/approve.
                 approval_callback = None
                 if shell_output_queue is not None:
                     async def _approval_callback(
@@ -381,7 +370,6 @@ class LangChainService:
                     )
                     llm_with_tools = self.llm.bind_tools(tools)
 
-                # Stream response — detect tool calls mid-stream
                 accumulated_chunks = []
                 has_tool_calls = False
                 full_content = ""
@@ -395,10 +383,6 @@ class LangChainService:
                         full_content += chunk.content
 
                 if has_tool_calls:
-                    # Reconstruct full AIMessage from chunks and handle tools.
-                    # When shell_output_queue is provided, run _handle_tool_calls as
-                    # a background task and concurrently drain shell output lines from
-                    # the queue so the caller receives them in real time.
                     combined = accumulated_chunks[0]
                     for c in accumulated_chunks[1:]:
                         try:
@@ -406,7 +390,6 @@ class LangChainService:
                         except Exception:
                             pass
 
-                    # Notify the client which tools are about to run
                     for tc in getattr(combined, "tool_calls", []):
                         yield {
                             "type": "tool_call",
@@ -416,8 +399,6 @@ class LangChainService:
                         }
 
                     if shell_output_queue is not None:
-                        # Sentinel value placed in the queue after the task completes
-                        # so the drain loop knows when to stop.
                         _DONE_SENTINEL = object()
 
                         async def _run_tool_calls_and_signal():
@@ -431,10 +412,6 @@ class LangChainService:
 
                         tool_task = asyncio.create_task(_run_tool_calls_and_signal())
 
-                        # Drain queue until sentinel arrives, yielding SSE events.
-                        # Items may be:
-                        #   str  → shell stdout line  → wrap as shell_output event
-                        #   dict → already a typed event (e.g. approval_request) → pass through
                         while True:
                             item = await shell_output_queue.get()
                             if item is _DONE_SENTINEL:
@@ -452,7 +429,6 @@ class LangChainService:
                     yield response_text
                     full_content = response_text
 
-                # Save checkpoint
                 from langchain_core.messages import AIMessage as LCAIMessage
                 ai_msg = LCAIMessage(content=full_content)
                 self.memory_manager.save_checkpoint(
@@ -553,8 +529,6 @@ class LangChainService:
 
                 messages.append(ToolMessage(content=tool_result_str, tool_call_id=tool_id))
 
-            # Emit tool_call events for the NEXT round before invoking LLM
-            # (round 0's tool_calls were already emitted before _handle_tool_calls)
             logger.info(f"Invoking LLM after round {round_num + 1}")
             try:
                 response = await llm_with_tools.ainvoke(messages)
@@ -568,7 +542,6 @@ class LangChainService:
             if content and not getattr(response, "tool_calls", None):
                 break
 
-            # Emit tool_call events for the next round via the queue
             if event_queue is not None:
                 for tc in getattr(response, "tool_calls", []):
                     await event_queue.put({
@@ -678,35 +651,14 @@ class LangChainService:
         Returns:
             System prompt string
         """
-        from src.adapters.web.integrations.openapi.context import (
-            CONTEXT_INFORMATION,
-            CONTEXT_ROLE_ASSISTANT,
-            CONTEXT_ROLE_SELLER,
-            CONTEXT_ROLE_TUTOR,
-            CONTEXT_RULES,
-        )
+        from src.adapters.web.integrations.openapi.context import CONTEXT_INFORMATION
 
         system_prompt = CONTEXT_INFORMATION.format(
-            assistant_name=profile.assistant_name,
-            business_name=profile.business_name,
-            business_context=profile.business_context,
-            functions=profile.functions,
+            assistant_name=profile.assistant_name or "Asistente",
+            functions=profile.functions or "",
             product_context=context or "",
-            question="",  # Will be added as separate message
-            previous_messages="",  # Handled by message history
         )
 
-        if profile.role == "seller":
-            system_prompt += CONTEXT_ROLE_SELLER
-        elif profile.role == "tutor":
-            system_prompt += CONTEXT_ROLE_TUTOR
-        elif profile.role == "assistant":
-            system_prompt += CONTEXT_ROLE_ASSISTANT
-
-        system_prompt += CONTEXT_RULES
-
-        # Inject available global workflows so the model knows which API
-        # endpoints to call directly instead of searching locally.
         try:
             from src.core.platform.functions.global_workflows import get_available_workflows
             available_workflows = get_available_workflows(profile)
