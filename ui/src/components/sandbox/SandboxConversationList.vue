@@ -6,6 +6,9 @@ import ProgressSpinner from 'primevue/progressspinner'
 import Message from 'primevue/message'
 import { useDateFormat } from '@/composables/useDateFormat'
 import type { SandboxConversation } from '@/types/sandbox'
+import { useI18n } from 'vue-i18n'
+
+const { t } = useI18n()
 
 interface Props {
   conversations: SandboxConversation[]
@@ -46,7 +49,7 @@ const isCurrentConversation = (conversationId: string) => {
 }
 
 const getConversationTitle = (conversation: SandboxConversation) => {
-  return conversation.title || 'Conversación Sin Título'
+  return conversation.title || t('sandbox.untitledConversation')
 }
 
 const getMessageCount = (conversation: SandboxConversation) => {
@@ -58,7 +61,7 @@ const getMessageCount = (conversation: SandboxConversation) => {
   <div class="sandbox-conversation-list">
     <div class="list-header mb-3">
       <Button
-        label="Nueva"
+        :label="t('sandbox.new')"
         icon="pi pi-plus"
         @click="handleCreate"
         class="p-button-sm"
@@ -72,14 +75,14 @@ const getMessageCount = (conversation: SandboxConversation) => {
 
     <div v-if="isLoading && conversations.length === 0" class="loading-state">
       <ProgressSpinner style="width: 50px; height: 50px" strokeWidth="4" />
-      <p class="text-sm text-color-secondary">Cargando conversaciones...</p>
+      <p class="text-sm text-color-secondary">{{ t('sandbox.loadingConversations') }}</p>
     </div>
 
     <div v-else-if="conversations.length === 0" class="empty-state">
       <i class="pi pi-inbox text-4xl text-color-secondary mb-2"></i>
-      <p class="text-sm text-color-secondary">No hay conversaciones aún</p>
+      <p class="text-sm text-color-secondary">{{ t('sandbox.noConversations') }}</p>
       <Button
-        label="Nueva conversación"
+        :label="t('sandbox.newConversation')"
         icon="pi pi-plus"
         @click="handleCreate"
         class="p-button-sm"
@@ -107,14 +110,14 @@ const getMessageCount = (conversation: SandboxConversation) => {
                 icon="pi pi-trash"
                 @click="handleDelete(conversation.id, $event)"
                 class="p-button-rounded p-button-text p-button-sm p-button-danger"
-                v-tooltip.left="'Eliminar conversación'"
+                v-tooltip.left="t('sandbox.deleteConversation')"
               />
             </div>
 
             <div class="conversation-meta mt-2">
               <div class="flex align-items-center gap-2">
                 <Badge :value="getMessageCount(conversation)" severity="info" />
-                <span class="text-xs text-color-secondary">mensajes</span>
+                <span class="text-xs text-color-secondary">{{ t('sandbox.messages') }}</span>
               </div>
               <span class="text-xs text-color-secondary">
                 {{ dateFormat(conversation.updated_at) }}

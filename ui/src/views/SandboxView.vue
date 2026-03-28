@@ -10,9 +10,11 @@ import SandboxChat from '@/components/sandbox/SandboxChat.vue'
 import { useSandboxAssistant } from '@/composables/useSandboxAssistant'
 import { useApiKey } from '@/composables/useApiKey'
 import { ApplicationError, getErrorMessage } from '@/types/error'
+import { useI18n } from 'vue-i18n'
 
 const confirm = useConfirm()
 const toast = useToast()
+const { t } = useI18n()
 const { getApiKey } = useApiKey()
 
 const {
@@ -33,7 +35,7 @@ const isMobileMenuOpen = ref(false)
 const apiKey = computed(() => getApiKey())
 
 const assistantName = computed(() => {
-  return currentConversation.value?.title ?? 'Chat con el asistente'
+  return currentConversation.value?.title ?? t('sandbox.defaultAssistantName')
 })
 
 onMounted(async () => {
@@ -50,17 +52,17 @@ const handleCreateConversation = async () => {
     await createNewSandboxConversation()
     toast.add({
       severity: 'success',
-      summary: 'Nueva conversación',
-      detail: 'Conversación creada correctamente',
+      summary: t('sandbox.newCreated'),
+      detail: t('sandbox.newCreatedDesc'),
       life: 3000,
     })
     isMobileMenuOpen.value = false
   } catch (err) {
     const errorMessage =
-      err instanceof ApplicationError ? getErrorMessage(err) : 'Error al crear la conversación'
+      err instanceof ApplicationError ? getErrorMessage(err) : t('sandbox.errorCreate')
     toast.add({
       severity: 'error',
-      summary: 'Error',
+      summary: t('common.error'),
       detail: errorMessage,
       life: 3000,
     })
@@ -69,30 +71,30 @@ const handleCreateConversation = async () => {
 
 const handleDeleteConversation = (conversationId: string) => {
   confirm.require({
-    message: '¿Deseas eliminar esta conversación? Esta acción no se puede deshacer.',
-    header: 'Eliminar conversación',
+    message: t('sandbox.confirmDelete'),
+    header: t('sandbox.confirmDeleteTitle'),
     icon: 'pi pi-exclamation-triangle',
     rejectClass: 'p-button-secondary p-button-outlined',
-    rejectLabel: 'Cancelar',
-    acceptLabel: 'Eliminar',
+    rejectLabel: t('common.cancel'),
+    acceptLabel: t('common.delete'),
     acceptClass: 'p-button-danger',
     accept: async () => {
       try {
         await deleteConversation(conversationId)
         toast.add({
           severity: 'success',
-          summary: 'Eliminada',
-          detail: 'Conversación eliminada',
+          summary: t('sandbox.deleted'),
+          detail: t('sandbox.deletedDesc'),
           life: 3000,
         })
       } catch (err) {
         const errorMessage =
           err instanceof ApplicationError
             ? getErrorMessage(err)
-            : 'Error al eliminar la conversación'
+            : t('sandbox.errorDelete')
         toast.add({
           severity: 'error',
-          summary: 'Error',
+          summary: t('common.error'),
           detail: errorMessage,
           life: 3000,
         })
@@ -118,7 +120,7 @@ const toggleMobileMenu = () => {
         @click="toggleMobileMenu"
         severity="info"
         text
-        aria-label="Menú de conversaciones"
+        :aria-label="t('sandbox.conversationMenu')"
       />
       <span class="mobile-topbar-title">{{ assistantName }}</span>
       <Button
@@ -126,7 +128,7 @@ const toggleMobileMenu = () => {
         @click="handleCreateConversation"
         severity="info"
         text
-        aria-label="Nueva conversación"
+        :aria-label="t('sandbox.newConversation')"
       />
     </div>
 
@@ -135,7 +137,7 @@ const toggleMobileMenu = () => {
       <aside :class="['chat-sidebar', { 'chat-sidebar--open': isMobileMenuOpen }]">
         <!-- Sidebar header -->
         <div class="sidebar-header">
-          <h2 class="sidebar-title">Conversaciones</h2>
+          <h2 class="sidebar-title">{{ t('sandbox.conversations') }}</h2>
         </div>
 
         <!-- Conversation list -->
@@ -165,7 +167,7 @@ const toggleMobileMenu = () => {
               <h3 class="chat-header-title">{{ assistantName }}</h3>
               <p v-if="currentConversationId" class="chat-header-subtitle">
                 <span class="status-dot status-dot--online" />
-                En línea
+                {{ t('sandbox.online') }}
               </p>
             </div>
           </div>

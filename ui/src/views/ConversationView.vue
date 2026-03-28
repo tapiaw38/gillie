@@ -12,6 +12,9 @@ import { useErrorToast } from '@/composables/useErrorToast'
 import { onMounted } from 'vue'
 import LoadingSpinner from '@/components/core/LoadingSpinner/LoadingSpinner.vue'
 import type { AssistantConversation } from '@/types/conversation'
+import { useI18n } from 'vue-i18n'
+
+const { t } = useI18n()
 
 const {
   conversations,
@@ -27,7 +30,7 @@ const { dateFormat } = useDateFormat()
 const errorWatchers = [
   {
     flag: isGetUserConversationError,
-    summary: 'Error al cargar conversaciones',
+    summary: t('conversations.errorLoadDesc'),
     detail: getUserConversationError,
   },
 ]
@@ -42,8 +45,8 @@ watch(isGetUserConversationSuccess, (value) => {
   if (value) {
     toast.add({
       severity: 'success',
-      summary: 'Conversaciones cargadas',
-      detail: 'Las conversaciones se han cargado correctamente.',
+      summary: t('conversations.loaded'),
+      detail: t('conversations.loadedDesc'),
       life: 3000,
     })
   }
@@ -60,8 +63,8 @@ const reloadMessagesHandler = async () => {
     }, 2000)
     toast.add({
       severity: 'success',
-      summary: 'Conversaciones recargadas',
-      detail: 'Las conversaciones se han recargado correctamente.',
+      summary: t('conversations.reloaded'),
+      detail: t('conversations.reloadedDesc'),
       life: 3000,
     })
   } catch (error) {
@@ -93,8 +96,8 @@ const conversationSelectedHandler = computed(() => {
             <i class="pi pi-comments"></i>
           </div>
           <div class="title-section">
-            <h1 class="page-title">Conversaciones</h1>
-            <p class="page-subtitle">Historial de conversaciones del asistente</p>
+            <h1 class="page-title">{{ t('conversations.title') }}</h1>
+            <p class="page-subtitle">{{ t('conversations.subtitle') }}</p>
           </div>
         </div>
         <div class="header-actions">
@@ -102,7 +105,7 @@ const conversationSelectedHandler = computed(() => {
             ref="reloadMessages"
             class="refresh-button"
             @click="reloadMessagesHandler"
-            title="Recargar conversaciones"
+            :title="t('conversations.reload')"
           >
             <i class="pi pi-refresh"></i>
           </button>
@@ -120,21 +123,21 @@ const conversationSelectedHandler = computed(() => {
               <i class="pi pi-list"></i>
             </div>
             <div class="header-text">
-              <h3>Lista de Conversaciones</h3>
-              <p>{{ conversations?.length || 0 }} conversación(es) encontrada(s)</p>
+              <h3>{{ t('conversations.list') }}</h3>
+              <p>{{ conversations?.length || 0 }} {{ t('conversations.found') }}</p>
             </div>
           </div>
           <div class="panel-body">
             <!-- Loading State -->
             <div v-if="isGetUserConversationPending" class="loading-state">
               <LoadingSpinner />
-              <p>Cargando conversaciones...</p>
+              <p>{{ t('conversations.loading') }}</p>
             </div>
 
             <!-- Error State -->
             <div v-else-if="isGetUserConversationError" class="error-state">
               <i class="pi pi-exclamation-triangle"></i>
-              <p>Error al cargar conversaciones</p>
+              <p>{{ t('conversations.errorLoad') }}</p>
               <small>{{ getUserConversationError }}</small>
             </div>
 
@@ -148,22 +151,22 @@ const conversationSelectedHandler = computed(() => {
                 class="modern-table"
                 :class="{ 'selected-row': conversationSelected }"
               >
-                <Column field="title" header="Título" class="title-column">
+                <Column field="title" :header="t('conversations.title_col')" class="title-column">
                   <template #body="slotProps">
                     <div class="conversation-title">
                       <i class="pi pi-comment conversation-icon"></i>
-                      <span>{{ slotProps.data.title || 'Sin título' }}</span>
+                      <span>{{ slotProps.data.title || t('conversations.untitled') }}</span>
                     </div>
                   </template>
                 </Column>
-                <Column field="created_at" header="Fecha" class="date-column">
+                <Column field="created_at" :header="t('conversations.date_col')" class="date-column">
                   <template #body="slotProps">
                     <div class="date-info">
                       <span class="date-text">{{ dateFormat(slotProps.data.created_at) }}</span>
                     </div>
                   </template>
                 </Column>
-                <Column field="messages" header="Mensajes" class="messages-column">
+                <Column field="messages" :header="t('conversations.messages_col')" class="messages-column">
                   <template #body="slotProps">
                     <div class="message-count">
                       <i class="pi pi-envelope"></i>
@@ -171,10 +174,10 @@ const conversationSelectedHandler = computed(() => {
                     </div>
                   </template>
                 </Column>
-                <Column field="actions" header="Acciones" class="actions-column">
+                <Column field="actions" :header="t('conversations.actions_col')" class="actions-column">
                   <template #body="slotProps">
                     <Button
-                      label="Ver"
+                      :label="t('common.view')"
                       icon="pi pi-eye"
                       class="view-button"
                       size="small"
@@ -198,21 +201,21 @@ const conversationSelectedHandler = computed(() => {
             <div class="header-text">
               <h3>
                 {{
-                  conversationSelected ? 'Historial de Mensajes' : 'Selecciona una Conversación'
+                  conversationSelected ? t('conversations.messageHistory') : t('conversations.selectConversation')
                 }}
               </h3>
               <p v-if="conversationSelected">
-                {{ conversationSelected.messages?.length || 0 }} mensaje(s)
+                {{ conversationSelected.messages?.length || 0 }} {{ t('conversations.messages') }}
               </p>
-              <p v-else>Haz clic en "Ver" para mostrar los mensajes</p>
+              <p v-else>{{ t('conversations.clickToView') }}</p>
             </div>
           </div>
           <div class="panel-body">
             <!-- Empty State -->
             <div v-if="!conversationSelected" class="empty-state">
               <i class="pi pi-comments"></i>
-              <h4>No hay conversación seleccionada</h4>
-              <p>Selecciona una conversación de la lista para ver sus mensajes</p>
+              <h4>{{ t('conversations.noConversationSelected') }}</h4>
+              <p>{{ t('conversations.noConversationDesc') }}</p>
             </div>
 
             <!-- Messages List -->
@@ -234,7 +237,7 @@ const conversationSelectedHandler = computed(() => {
                     <div class="message-bubble">
                       <div class="message-header">
                         <span class="sender-name">
-                          {{ message.sender === 'user' ? 'Usuario' : 'Asistente' }}
+                          {{ message.sender === 'user' ? t('conversations.user') : t('conversations.assistant') }}
                         </span>
                         <span class="message-time">
                           {{ dateFormat(message.created_at) }}

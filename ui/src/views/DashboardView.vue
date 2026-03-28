@@ -12,6 +12,9 @@ import { useToogle } from '@/composables/useToogle'
 import { useAssistant } from '@/composables/useAssistant'
 import { useConversation } from '@/composables/useConversation'
 import { useErrorToast } from '@/composables/useErrorToast'
+import { useI18n } from 'vue-i18n'
+
+const { t } = useI18n()
 
 const { toogleValue: isVisible } = useToogle(false)
 
@@ -53,33 +56,33 @@ const toggleTts = async (value: boolean) => {
     await updateAssistantProfile({ tts_enabled: value })
     toast.add({
       severity: 'success',
-      summary: value ? 'Audio activado' : 'Audio desactivado',
+      summary: value ? t('dashboard.audioEnabled') : t('dashboard.audioDisabled'),
       life: 2000,
     })
   } catch {
-    toast.add({ severity: 'error', summary: 'Error al cambiar audio', life: 3000 })
+    toast.add({ severity: 'error', summary: t('dashboard.errorAudio'), life: 3000 })
   }
 }
 
 const errorWatchers = [
   {
     flag: isAddAssistantProfileError,
-    summary: 'Error al agregar asistente',
+    summary: t('dashboard.errorAddAssistant'),
     detail: addAssistantProfileError,
   },
   {
     flag: isUpdateAssistantProfileError,
-    summary: 'Error al actualizar asistente',
+    summary: t('dashboard.errorUpdateAssistant'),
     detail: updateAssistantProfileError,
   },
   {
     flag: isGetAssistantProfileError,
-    summary: 'Error al obtener perfil de asistente',
+    summary: t('dashboard.errorGetProfile'),
     detail: getAssistantProfileError,
   },
   {
     flag: isGetUserConversationError,
-    summary: 'Error al obtener conversaciones',
+    summary: t('dashboard.errorGetConversations'),
     detail: getUserConversationError,
   },
 ]
@@ -97,7 +100,7 @@ onMounted(async () => {
   }
 })
 
-const modalTitle = ref('Agregar Asistente')
+const modalTitle = computed(() => t('dashboard.modalTitle'))
 const changeVisible = (value: boolean) => {
   isVisible.value = value
 }
@@ -113,8 +116,8 @@ const addAssistant = async () => {
     await getAssistantProfile()
     toast.add({
       severity: 'success',
-      summary: 'Asistente agregado',
-      detail: 'El asistente se creó correctamente',
+      summary: t('dashboard.assistantAdded'),
+      detail: t('dashboard.assistantAddedDesc'),
       life: 3000,
     })
   }
@@ -138,7 +141,7 @@ const saveEditName = async () => {
   await updateAssistantProfile({ assistant_name: trimmed })
   if (isUpdateAssistantProfileSuccess.value) {
     await getAssistantProfile()
-    toast.add({ severity: 'success', summary: 'Nombre actualizado', life: 2000 })
+    toast.add({ severity: 'success', summary: t('dashboard.nameUpdated'), life: 2000 })
   }
   isEditingName.value = false
 }
@@ -153,112 +156,112 @@ const totalMessagesInConversation = computed(() => {
   }, 0)
 })
 
-const integrations = [
+const integrations = computed(() => [
   {
-    name: 'Storage',
-    description: 'Integración con almacenamiento de archivos en la nube',
+    name: t('dashboard.integrations.storage.name'),
+    description: t('dashboard.integrations.storage.description'),
     icon: 'pi pi-file',
     tone: 'primary',
     to: 'store-integration',
     enabled: true,
   },
   {
-    name: 'WhatsApp (Meta API)',
-    description: 'Integración WhatsApp con Meta Business API oficial',
+    name: t('dashboard.integrations.whatsapp.name'),
+    description: t('dashboard.integrations.whatsapp.description'),
     icon: 'pi pi-whatsapp',
     tone: 'success',
     to: 'whatsapp-integration',
     enabled: true,
   },
   {
-    name: 'WhatsApp Devices',
-    description: 'Gestión de dispositivos WhatsApp con respuestas automáticas de IA',
+    name: t('dashboard.integrations.whatsappDevices.name'),
+    description: t('dashboard.integrations.whatsappDevices.description'),
     icon: 'pi pi-whatsapp',
     tone: 'success',
     to: 'whatsapp-devices',
     enabled: true,
   },
   {
-    name: 'Google Calendar',
-    description: 'Integración Google Calendar, gestiona eventos y sincronización',
+    name: t('dashboard.integrations.googleCalendar.name'),
+    description: t('dashboard.integrations.googleCalendar.description'),
     icon: 'pi pi-calendar',
     tone: 'warning',
     to: 'google-calendar-integration',
     enabled: true,
   },
   {
-    name: 'Google Drive',
-    description: 'Integración Google Drive, accede a documentos y archivos desde el asistente',
+    name: t('dashboard.integrations.googleDrive.name'),
+    description: t('dashboard.integrations.googleDrive.description'),
     icon: 'pi pi-folder-open',
     tone: 'info',
     to: 'google-drive-integration',
     enabled: true,
   },
   {
-    name: 'Base de Datos SQL',
-    description: 'Conecta el asistente a una tabla de PostgreSQL para consultar datos en tiempo real',
+    name: t('dashboard.integrations.sqlDatabase.name'),
+    description: t('dashboard.integrations.sqlDatabase.description'),
     icon: 'pi pi-database',
     tone: 'info',
     to: 'sqldatabase-integration',
     enabled: true,
   },
   {
-    name: 'Slack',
-    description: 'Conecta el asistente a tu workspace de Slack para responder mensajes automáticamente',
+    name: t('dashboard.integrations.slack.name'),
+    description: t('dashboard.integrations.slack.description'),
     icon: 'pi pi-slack',
     tone: 'primary',
     to: 'slack-integration',
     enabled: true,
   },
   {
-    name: 'Telegram',
-    description: 'Conecta el asistente a tu bot de Telegram para responder mensajes automáticamente',
+    name: t('dashboard.integrations.telegram.name'),
+    description: t('dashboard.integrations.telegram.description'),
     icon: 'pi pi-send',
     tone: 'info',
     to: 'telegram-integration',
     enabled: true,
   },
   {
-    name: 'Comandos del Sistema',
-    description: 'Permite al asistente ejecutar comandos en el servidor Linux con confirmación y lista negra',
+    name: t('dashboard.integrations.systemCommands.name'),
+    description: t('dashboard.integrations.systemCommands.description'),
     icon: 'pi pi-server',
     tone: 'danger',
     to: 'system-commands',
     enabled: true,
   },
   {
-    name: 'Cron Jobs',
-    description: 'Gestiona tareas programadas: envía datos por WhatsApp, Telegram o Slack con frecuencia configurable',
+    name: t('dashboard.integrations.cronJobs.name'),
+    description: t('dashboard.integrations.cronJobs.description'),
     icon: 'pi pi-clock',
     tone: 'warning',
     to: 'cron-jobs',
     enabled: true,
   },
   {
-    name: 'Prompts de Tools',
-    description: 'Personaliza las instrucciones de cada tool del asistente (cuándo y cómo usarlas)',
+    name: t('dashboard.integrations.toolPrompts.name'),
+    description: t('dashboard.integrations.toolPrompts.description'),
     icon: 'pi pi-sliders-h',
     tone: 'primary',
     to: 'tool-prompts',
     enabled: true,
   },
   {
-    name: 'Funciones',
-    description: 'Editor de funciones personalizadas para el asistente',
+    name: t('dashboard.integrations.functions.name'),
+    description: t('dashboard.integrations.functions.description'),
     icon: 'pi pi-code',
     tone: 'primary',
     to: 'functions',
     enabled: true,
   },
   {
-    name: 'API Keys',
-    description: 'Gestiona las API keys para acceder al asistente desde aplicaciones externas',
+    name: t('dashboard.integrations.apiKeys.name'),
+    description: t('dashboard.integrations.apiKeys.description'),
     icon: 'pi pi-key',
     tone: 'warning',
     to: 'my-account',
     enabled: true,
   },
-]
+])
 </script>
 
 <template>
@@ -270,8 +273,8 @@ const integrations = [
           <i class="pi pi-th-large"></i>
         </div>
         <div class="title-section">
-          <h1 class="dashboard-title">Dashboard</h1>
-          <p class="dashboard-subtitle">Gestiona tu asistente y revisa el rendimiento</p>
+          <h1 class="dashboard-title">{{ t('dashboard.title') }}</h1>
+          <p class="dashboard-subtitle">{{ t('dashboard.subtitle') }}</p>
         </div>
       </div>
     </div>
@@ -286,7 +289,7 @@ const integrations = [
             <template #content>
               <div class="loading-state">
                 <LoadingSpinner />
-                <p>Cargando perfil del asistente...</p>
+                <p>{{ t('dashboard.loadingProfile') }}</p>
               </div>
             </template>
           </Card>
@@ -298,10 +301,10 @@ const integrations = [
             <template #content>
               <div class="empty-state">
                 <i class="pi pi-robot"></i>
-                <h3>No hay asistente configurado</h3>
-                <p>Crea tu primer asistente para comenzar</p>
+                <h3>{{ t('dashboard.noAssistant') }}</h3>
+                <p>{{ t('dashboard.noAssistantDesc') }}</p>
                 <Button
-                  label="Crear Asistente"
+                  :label="t('dashboard.createAssistant')"
                   icon="pi pi-plus"
                   class="create-button"
                   @click="isVisible = true"
@@ -334,11 +337,11 @@ const integrations = [
                       class="pi pi-spin pi-spinner name-edit-spinner"
                     />
                   </div>
-                  <h3 v-else class="name-clickable" @click="startEditName" title="Click para editar">
+                  <h3 v-else class="name-clickable" @click="startEditName" :title="t('dashboard.clickToEdit')">
                     {{ assistantProfile?.assistant_name }}
                     <i class="pi pi-pencil name-pencil-icon" />
                   </h3>
-                  <p>Asistente Virtual</p>
+                  <p>{{ t('dashboard.virtualAssistant') }}</p>
                 </div>
               </div>
             </div>
@@ -348,7 +351,7 @@ const integrations = [
               <div class="tts-row">
                 <div class="tts-info">
                   <i class="pi pi-volume-up tts-icon"></i>
-                  <span class="tts-label">Respuestas en Audio</span>
+                  <span class="tts-label">{{ t('dashboard.audioResponses') }}</span>
                 </div>
                 <ToggleSwitch :modelValue="ttsEnabled" @update:modelValue="toggleTts" />
               </div>
@@ -363,8 +366,8 @@ const integrations = [
             <div class="quick-access-header">
               <div class="quick-access-icon"><i class="pi pi-comments"></i></div>
               <div>
-                <h3>Chat</h3>
-                <p>Chatea con tu asistente desde la interfaz web</p>
+                <h3>{{ t('dashboard.chat') }}</h3>
+                <p>{{ t('dashboard.chatDesc') }}</p>
               </div>
             </div>
           </template>
@@ -374,14 +377,14 @@ const integrations = [
                 <i class="pi pi-comment"></i>
                 <div>
                   <span class="qa-btn-label">Chat UI</span>
-                  <span class="qa-btn-desc">Conversación con IA en tiempo real</span>
+                  <span class="qa-btn-desc">{{ t('dashboard.chatUIDesc') }}</span>
                 </div>
               </RouterLink>
               <RouterLink class="qa-btn qa-btn--secondary" :to="{ name: 'conversation' }">
                 <i class="pi pi-list"></i>
                 <div>
-                  <span class="qa-btn-label">Conversaciones</span>
-                  <span class="qa-btn-desc">Historial de todas las conversaciones</span>
+                  <span class="qa-btn-label">{{ t('dashboard.conversations') }}</span>
+                  <span class="qa-btn-desc">{{ t('dashboard.conversationsDesc') }}</span>
                 </div>
               </RouterLink>
             </div>
@@ -391,8 +394,8 @@ const integrations = [
         <!-- Integrations (moved up) -->
         <div class="integrations-section">
           <div class="section-header">
-            <h2>Integraciones Disponibles</h2>
-            <p>Conecta tu asistente con diferentes plataformas</p>
+            <h2>{{ t('dashboard.availableIntegrations') }}</h2>
+            <p>{{ t('dashboard.integrationsDesc') }}</p>
           </div>
 
           <div class="integrations-grid">
@@ -419,8 +422,8 @@ const integrations = [
                 </div>
 
                 <div class="integration-actions">
-                  <span v-if="integration.enabled" class="integration-action-label">Configurar</span>
-                  <span v-else class="integration-action-label">Próximamente</span>
+                  <span v-if="integration.enabled" class="integration-action-label">{{ t('common.configure') }}</span>
+                  <span v-else class="integration-action-label">{{ t('common.comingSoon') }}</span>
                 </div>
 
                 <div class="integration-legend">{{ integration.description }}</div>
@@ -438,8 +441,8 @@ const integrations = [
               <i class="pi pi-chart-bar"></i>
             </div>
             <div class="stats-info">
-              <h3>Estadísticas</h3>
-              <p>Resumen de actividad</p>
+              <h3>{{ t('dashboard.stats') }}</h3>
+              <p>{{ t('dashboard.statsDesc') }}</p>
             </div>
           </div>
         </template>
@@ -447,21 +450,21 @@ const integrations = [
           <div class="stats-grid">
             <div class="stat-item">
               <div class="stat-value">{{ conversations?.length || 0 }}</div>
-              <div class="stat-label">Conversaciones</div>
+              <div class="stat-label">{{ t('dashboard.conversations') }}</div>
               <div class="stat-icon">
                 <i class="pi pi-comments"></i>
               </div>
             </div>
             <div class="stat-item">
               <div class="stat-value">{{ totalMessagesInConversation || 0 }}</div>
-              <div class="stat-label">Mensajes</div>
+              <div class="stat-label">{{ t('common.messages') }}</div>
               <div class="stat-icon">
                 <i class="pi pi-envelope"></i>
               </div>
             </div>
             <div class="stat-item">
               <div class="stat-value">{{ assistantProfile?.iteration_limit || 0 }}</div>
-              <div class="stat-label">Iteraciones Restantes</div>
+              <div class="stat-label">{{ t('dashboard.remainingIterations') }}</div>
               <div class="stat-icon">
                 <i class="pi pi-clock"></i>
               </div>
@@ -470,7 +473,7 @@ const integrations = [
           <div class="stats-actions">
             <RouterLink class="view-conversations-button" :to="{ name: 'conversation' }">
               <i class="pi pi-eye"></i>
-              Ver Conversaciones
+              {{ t('dashboard.viewConversations') }}
             </RouterLink>
           </div>
         </template>
@@ -481,11 +484,11 @@ const integrations = [
     <DefaultModal :isVisible="isVisible" :title="modalTitle" @update:visible="changeVisible">
       <form @submit.prevent="addAssistant" class="modal-form">
         <div class="form-field">
-          <label for="assistant_name">Nombre del Asistente</label>
+          <label for="assistant_name">{{ t('dashboard.assistantName') }}</label>
           <InputText
             id="assistant_name"
             v-model="assistantProfileParams.assistant_name"
-            placeholder="Ingresa el nombre del asistente"
+            :placeholder="t('dashboard.assistantNamePlaceholder')"
             required
           />
         </div>
@@ -493,11 +496,11 @@ const integrations = [
         <div class="modal-actions">
           <Button
             type="button"
-            label="Cancelar"
+            :label="t('common.cancel')"
             severity="secondary"
             @click="() => changeVisible(false)"
           />
-          <Button type="submit" label="Crear Asistente" :loading="isAddAssistantProfilePending" />
+          <Button type="submit" :label="t('dashboard.createAssistant')" :loading="isAddAssistantProfilePending" />
         </div>
       </form>
     </DefaultModal>

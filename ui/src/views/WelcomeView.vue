@@ -1,7 +1,9 @@
 <script setup lang="ts">
 import { useRouter } from 'vue-router'
+import { useI18n } from 'vue-i18n'
 
 const router = useRouter()
+const { t } = useI18n()
 
 function enter() {
   router.push('/app/dashboard')
@@ -13,8 +15,8 @@ function enter() {
     <div class="welcome-content">
       <h1 class="welcome-title">Gillie <span class="accent">AI</span></h1>
       <img src="/assets/abyssal-fish.png" alt="Gillie" class="welcome-fish" />
-      <p class="welcome-subtitle">Tu asistente inteligente para automatizar tareas, procesar documentos y conectar tus servicios.</p>
-      <button class="welcome-btn" @click="enter">Comenzar</button>
+      <p class="welcome-subtitle">{{ t('welcome.subtitle') }}</p>
+      <button class="welcome-btn" @click="enter">{{ t('welcome.start') }}</button>
     </div>
   </div>
 </template>

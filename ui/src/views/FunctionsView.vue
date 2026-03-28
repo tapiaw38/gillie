@@ -6,12 +6,14 @@ import Textarea from 'primevue/textarea'
 import Toast from 'primevue/toast'
 import Dropdown from 'primevue/dropdown'
 import { useToast } from 'primevue/usetoast'
+import { useI18n } from 'vue-i18n'
 import { useAssistant } from '@/composables/useAssistant'
 import WorkflowEditor from '@/components/workflow/WorkflowEditor.vue'
 import WorkflowGuideModal from '@/components/workflow/WorkflowGuideModal.vue'
 import type { WorkflowFunction } from '@/types/workflow.types'
 
 const toast = useToast()
+const { t } = useI18n()
 
 const { getAssistantProfile, updateAssistantProfile, assistantProfile } = useAssistant()
 
@@ -91,28 +93,27 @@ const validateJson = (jsonString: string): boolean => {
     if (Array.isArray(parsed)) {
       for (const func of parsed) {
         if (!func.name || !func.description || !func.type) {
-          jsonError.value = 'Cada función debe tener: name, description y type'
+          jsonError.value = t('functions.eachFunctionRequired')
           return false
         }
       }
     } else if (parsed.functions && Array.isArray(parsed.functions)) {
       for (const func of parsed.functions) {
         if (!func.name || !func.description || !func.type) {
-          jsonError.value = 'Cada función debe tener: name, description y type'
+          jsonError.value = t('functions.eachFunctionRequired')
           return false
         }
       }
     } else {
-      jsonError.value =
-        'El JSON debe ser un array de funciones o tener un campo "functions" con array'
+      jsonError.value = t('functions.jsonMustBeArray')
       return false
     }
 
     jsonError.value = ''
     return true
   } catch (error) {
-    jsonError.value = `Error de sintaxis JSON: ${
-      error instanceof Error ? error.message : 'Error desconocido'
+    jsonError.value = `${t('functions.jsonSyntaxError')}: ${
+      error instanceof Error ? error.message : t('common.unknownError')
     }`
     return false
   }
@@ -125,15 +126,15 @@ const formatJson = () => {
       jsonContent.value = JSON.stringify(parsed, null, 2)
       toast.add({
         severity: 'success',
-        summary: 'JSON formateado',
-        detail: 'El JSON se ha formateado correctamente',
+        summary: t('functions.jsonFormatted'),
+        detail: t('functions.jsonFormattedDesc'),
         life: 3000,
       })
     } catch {
       toast.add({
         severity: 'error',
-        summary: 'Error al formatear',
-        detail: 'No se pudo formatear el JSON',
+        summary: t('functions.errorFormat'),
+        detail: t('functions.errorFormatDesc'),
         life: 3000,
       })
     }
@@ -144,7 +145,7 @@ const saveFunctions = async () => {
   if (!validateJson(jsonContent.value)) {
     toast.add({
       severity: 'error',
-      summary: 'Error de validación',
+      summary: t('functions.validationError'),
       detail: jsonError.value,
       life: 5000,
     })
@@ -163,14 +164,12 @@ const saveFunctions = async () => {
     } else if (parsedJson.functions && Array.isArray(parsedJson.functions)) {
       functionsArray = parsedJson.functions
     } else {
-      throw new Error(
-        'El JSON debe ser un array de funciones o tener un campo "functions" con array',
-      )
+      throw new Error(t('functions.jsonMustBeArray'))
     }
 
     for (const func of functionsArray) {
       if (!func.name || !func.description || !func.type) {
-        throw new Error('Cada función debe tener: name, description y type')
+        throw new Error(t('functions.eachFunctionRequired'))
       }
     }
 
@@ -181,18 +180,18 @@ const saveFunctions = async () => {
 
     toast.add({
       severity: 'success',
-      summary: 'Funciones guardadas',
-      detail: 'Las funciones se han guardado correctamente',
+      summary: t('functions.functionsSaved'),
+      detail: t('functions.functionsSavedDesc'),
       life: 3000,
     })
 
     isEditing.value = false
     editorMode.value = 'json'
   } catch (error) {
-    const errorMessage = error instanceof Error ? error.message : 'Error desconocido al guardar'
+    const errorMessage = error instanceof Error ? error.message : t('common.unknownError')
     toast.add({
       severity: 'error',
-      summary: 'Error al guardar',
+      summary: t('functions.errorSave'),
       detail: errorMessage,
       life: 5000,
     })
@@ -220,8 +219,8 @@ const clearJson = () => {
   jsonError.value = ''
   toast.add({
     severity: 'info',
-    summary: 'JSON limpiado',
-    detail: 'El editor se ha limpiado',
+    summary: t('functions.jsonCleared'),
+    detail: t('functions.jsonClearedDesc'),
     life: 3000,
   })
 }
@@ -231,8 +230,8 @@ const restoreSample = () => {
   jsonError.value = ''
   toast.add({
     severity: 'info',
-    summary: 'JSON restaurado',
-    detail: 'Se ha restaurado el JSON de ejemplo',
+    summary: t('functions.jsonRestored'),
+    detail: t('functions.jsonRestoredDesc'),
     life: 3000,
   })
 }
@@ -261,9 +260,8 @@ const toggleEditorMode = () => {
     } else {
       toast.add({
         severity: 'warn',
-        summary: 'Workflow Inválido',
-        detail:
-          'Por favor, asegúrate de que tu JSON contenga un workflow válido antes de cambiar al modo visual',
+        summary: t('functions.invalidWorkflow'),
+        detail: t('functions.invalidWorkflowDesc'),
         life: 5000,
       })
     }
@@ -283,8 +281,8 @@ const toggleWorkflowVisual = () => {
     } else {
       toast.add({
         severity: 'warn',
-        summary: 'Sin Workflow',
-        detail: 'No se detectó un workflow válido en el JSON',
+        summary: t('functions.noWorkflow'),
+        detail: t('functions.noWorkflowDesc'),
         life: 3000,
       })
     }
@@ -302,9 +300,8 @@ const handleWorkflowUpdate = (workflow: WorkflowFunction) => {
   jsonContent.value = JSON.stringify([workflow], null, 2)
   toast.add({
     severity: 'success',
-    summary: 'Workflow Exportado',
-    detail:
-      'El workflow visual se ha convertido a JSON. Usa "Guardar Funciones" para persistir los cambios.',
+    summary: t('functions.workflowExported'),
+    detail: t('functions.workflowExportedDesc'),
     life: 3000,
   })
 }
@@ -345,15 +342,15 @@ const openWorkflowForCard = (fn: Record<string, unknown>) => {
             <i class="pi pi-code"></i>
           </div>
           <div class="title-section">
-            <h1 class="page-title">Editor de Funciones</h1>
+            <h1 class="page-title">{{ t('functions.title') }}</h1>
             <p class="page-subtitle">
-              Define funciones personalizadas para tu asistente en formato JSON
+              {{ t('functions.subtitle') }}
             </p>
           </div>
         </div>
         <div class="header-actions">
           <Button
-            v-tooltip.bottom="'Abrir guía de referencia'"
+            v-tooltip.bottom="t('functions.openGuide')"
             icon="pi pi-book"
             size="small"
             severity="help"
@@ -366,7 +363,7 @@ const openWorkflowForCard = (fn: Record<string, unknown>) => {
           <template v-if="!isEditing">
             <Button
               v-if="hasWorkflow()"
-              v-tooltip.bottom="showWorkflowVisual ? 'Ocultar workflow' : 'Ver workflow'"
+              v-tooltip.bottom="showWorkflowVisual ? t('functions.hideWorkflow') : t('functions.viewWorkflow')"
               :icon="showWorkflowVisual ? 'pi pi-eye-slash' : 'pi pi-sitemap'"
               size="small"
               severity="secondary"
@@ -376,7 +373,7 @@ const openWorkflowForCard = (fn: Record<string, unknown>) => {
               @click="toggleWorkflowVisual"
             />
             <Button
-              v-tooltip.bottom="'Editar funciones'"
+              v-tooltip.bottom="t('functions.editFunctions')"
               icon="pi pi-pencil"
               size="small"
               rounded
@@ -392,17 +389,17 @@ const openWorkflowForCard = (fn: Record<string, unknown>) => {
     <div v-if="isEditing" class="editing-banner">
       <div class="banner-left">
         <span class="banner-dot"></span>
-        <span class="banner-label">Modo edición</span>
+        <span class="banner-label">{{ t('functions.editMode') }}</span>
         <div class="banner-tools">
           <Button
-            v-tooltip.bottom="'Formatear JSON'"
+            v-tooltip.bottom="t('functions.formatJson')"
             icon="pi pi-refresh"
             size="small"
             text
             @click="formatJson"
           />
           <Button
-            v-tooltip.bottom="'Limpiar editor'"
+            v-tooltip.bottom="t('functions.clearEditor')"
             icon="pi pi-trash"
             size="small"
             text
@@ -410,7 +407,7 @@ const openWorkflowForCard = (fn: Record<string, unknown>) => {
             @click="clearJson"
           />
           <Button
-            v-tooltip.bottom="'Restaurar ejemplo'"
+            v-tooltip.bottom="t('functions.restoreSample')"
             icon="pi pi-undo"
             size="small"
             text
@@ -427,7 +424,7 @@ const openWorkflowForCard = (fn: Record<string, unknown>) => {
             "
             option-label="label"
             option-value="value"
-            placeholder="Selecciona Workflow"
+            :placeholder="t('functions.selectWorkflow')"
             class="workflow-selector"
             @change="handleWorkflowChange"
           />
@@ -436,21 +433,21 @@ const openWorkflowForCard = (fn: Record<string, unknown>) => {
       <div class="banner-right">
         <Button
           v-if="hasWorkflow()"
-          :label="editorMode === 'json' ? 'Editor Visual' : 'Editor JSON'"
+          :label="editorMode === 'json' ? t('functions.switchToVisual') : t('functions.switchToJson')"
           :icon="editorMode === 'json' ? 'pi pi-sitemap' : 'pi pi-code'"
           size="small"
           severity="info"
           @click="toggleEditorMode"
         />
         <Button
-          label="Cancelar"
+          :label="t('functions.cancelEdit')"
           icon="pi pi-times"
           size="small"
           severity="secondary"
           @click="toggleEdit"
         />
         <Button
-          label="Guardar"
+          :label="t('functions.saveFunctions')"
           icon="pi pi-save"
           size="small"
           :loading="isSaving"
@@ -472,7 +469,7 @@ const openWorkflowForCard = (fn: Record<string, unknown>) => {
           <span class="summary-count">{{ allFunctions.length }}</span>
         </span>
         <Button
-          v-tooltip.bottom="'Editar funciones'"
+          v-tooltip.bottom="t('functions.editFunctions')"
           icon="pi pi-pencil"
           size="small"
           text
@@ -505,7 +502,7 @@ const openWorkflowForCard = (fn: Record<string, unknown>) => {
               }"
             >{{ fn.type }}</span>
           </div>
-          <p class="function-desc">{{ fn.description || 'Sin descripción' }}</p>
+          <p class="function-desc">{{ fn.description || t('common.description') }}</p>
           <div class="function-footer">
             <div v-if="fn.input_params && fn.input_params.length" class="function-meta">
               <i class="pi pi-sliders-h"></i>
@@ -521,7 +518,7 @@ const openWorkflowForCard = (fn: Record<string, unknown>) => {
             </div>
             <Button
               v-if="fn.type === 'workflow'"
-              label="Ver workflow"
+              :label="t('functions.viewWorkflow')"
               icon="pi pi-sitemap"
               size="small"
               text
@@ -552,19 +549,19 @@ const openWorkflowForCard = (fn: Record<string, unknown>) => {
             </div>
           </div>
           <div class="empty-text">
-            <h3 class="empty-title">Sin funciones configuradas</h3>
+            <h3 class="empty-title">{{ t('functions.noWorkflow') }}</h3>
             <p class="empty-desc">
-              Aún no has definido ninguna función para tu asistente. Crea tu primera función para extender sus capacidades con workflows, llamadas HTTP o lógica personalizada.
+              {{ t('functions.noWorkflowDesc') }}
             </p>
             <div class="empty-actions">
               <Button
-                label="Crear primera función"
+                :label="t('functions.editFunctions')"
                 icon="pi pi-plus"
                 class="edit-button"
                 @click="toggleEdit"
               />
               <Button
-                label="Ver guía"
+                :label="t('functions.openGuide')"
                 icon="pi pi-book"
                 severity="secondary"
                 text
@@ -616,7 +613,7 @@ const openWorkflowForCard = (fn: Record<string, unknown>) => {
               :class="{
                 'editor-error': jsonError,
               }"
-              placeholder="Ingresa tu configuración JSON aquí..."
+              :placeholder="t('functions.subtitle')"
               @input="validateJson(jsonContent)"
             />
 

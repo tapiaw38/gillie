@@ -2,6 +2,7 @@
 import { ref, onMounted } from 'vue'
 import { useAssistant } from '@/composables/useAssistant'
 import { useToast } from 'primevue/usetoast'
+import { useI18n } from 'vue-i18n'
 import type { ToolPromptsConfig } from '@/types/assistant'
 import Card from 'primevue/card'
 import Button from 'primevue/button'
@@ -12,166 +13,37 @@ import AccordionTab from 'primevue/accordiontab'
 import InputSwitch from 'primevue/inputswitch'
 
 const { getAssistantProfile, updateAssistantProfile, assistantProfile } = useAssistant()
+const { t } = useI18n()
 const toast = useToast()
 const isSaving = ref(false)
 
-const TOOL_META: { key: keyof ToolPromptsConfig; label: string; icon: string; hint: string }[] = [
-  {
-    key: 'search_documents',
-    label: 'Buscar en documentos',
-    icon: 'pi pi-search',
-    hint: 'Cuándo el LLM debe buscar en PDFs/Excel subidos al asistente.',
-  },
-  {
-    key: 'query_database',
-    label: 'Consultar base de datos',
-    icon: 'pi pi-database',
-    hint: 'Cuándo el LLM debe consultar la tabla PostgreSQL configurada. Solo aplica si la integración SQL está activa.',
-  },
-  {
-    key: 'search_images',
-    label: 'Buscar imágenes',
-    icon: 'pi pi-image',
-    hint: 'Cuándo buscar imágenes dentro de archivos subidos.',
-  },
-  {
-    key: 'analyze_pdf',
-    label: 'Analizar PDF',
-    icon: 'pi pi-file-pdf',
-    hint: 'Cuándo analizar la estructura de un PDF.',
-  },
-  {
-    key: 'extract_text_from_pdf',
-    label: 'Extraer texto de PDF',
-    icon: 'pi pi-file',
-    hint: 'Cuándo extraer texto e imágenes de un PDF.',
-  },
-  {
-    key: 'analyze_excel',
-    label: 'Analizar Excel',
-    icon: 'pi pi-table',
-    hint: 'Cuándo analizar datos de un archivo Excel.',
-  },
-  {
-    key: 'describe_image',
-    label: 'Describir imagen',
-    icon: 'pi pi-eye',
-    hint: 'Cuándo describir el contenido de una imagen en base64.',
-  },
-  {
-    key: 'save_memory',
-    label: 'Guardar memoria',
-    icon: 'pi pi-bookmark',
-    hint: 'Cuándo guardar un dato relevante del usuario en la memoria del asistente.',
-  },
-  {
-    key: 'search_memory',
-    label: 'Buscar en memoria',
-    icon: 'pi pi-history',
-    hint: 'Cuándo buscar datos previos guardados en memoria.',
-  },
-  {
-    key: 'system_propose',
-    label: 'Proponer comando del servidor',
-    icon: 'pi pi-server',
-    hint: 'Cuándo proponer un comando de shell en el servidor Linux para que el usuario confirme.',
-  },
-  {
-    key: 'system_confirm',
-    label: 'Confirmar comando del servidor',
-    icon: 'pi pi-check-circle',
-    hint: 'Cuándo ejecutar un comando ya propuesto usando el código de confirmación del usuario.',
-  },
-  {
-    key: 'cron_create',
-    label: 'Crear cron job',
-    icon: 'pi pi-clock',
-    hint: 'Cuándo crear una tarea programada que combina una fuente (comando, HTTP, texto) con un destino (WhatsApp, Telegram, Slack).',
-  },
-  {
-    key: 'cron_list',
-    label: 'Listar cron jobs',
-    icon: 'pi pi-list',
-    hint: 'Cuándo mostrar las tareas programadas del usuario.',
-  },
-  {
-    key: 'cron_delete',
-    label: 'Eliminar cron job',
-    icon: 'pi pi-trash',
-    hint: 'Cuándo eliminar una tarea programada por su ID.',
-  },
-  {
-    key: 'cron_run',
-    label: 'Ejecutar cron job ahora',
-    icon: 'pi pi-play',
-    hint: 'Cuándo ejecutar una tarea programada de inmediato sin esperar el próximo horario.',
-  },
-  {
-    key: 'read_file',
-    label: 'Leer archivo',
-    icon: 'pi pi-file',
-    hint: 'Lee el contenido de archivos de texto con soporte de rangos de líneas.',
-  },
-  {
-    key: 'write_file',
-    label: 'Escribir archivo',
-    icon: 'pi pi-file-edit',
-    hint: 'Crea o sobreescribe archivos. Crea directorios intermedios automáticamente.',
-  },
-  {
-    key: 'edit_file',
-    label: 'Editar archivo',
-    icon: 'pi pi-pencil',
-    hint: 'Reemplaza fragmentos exactos de código en archivos. Usa matching inteligente (exact → normalizado → fuzzy).',
-  },
-  {
-    key: 'list_directory',
-    label: 'Listar directorio',
-    icon: 'pi pi-folder-open',
-    hint: 'Lista archivos y directorios con tamaños. Ideal para explorar la estructura del proyecto.',
-  },
-  {
-    key: 'find_files',
-    label: 'Buscar archivos',
-    icon: 'pi pi-search',
-    hint: 'Busca archivos por patrón glob (ej: **/*.py, src/**/*.ts) de forma recursiva.',
-  },
-  {
-    key: 'run_shell',
-    label: 'Ejecutar comandos',
-    icon: 'pi pi-terminal',
-    hint: 'Ejecuta comandos shell: correr tests, instalar paquetes, ver logs. Incluye protección contra comandos destructivos.',
-  },
-  {
-    key: 'grep_files',
-    label: 'Buscar en archivos',
-    icon: 'pi pi-filter',
-    hint: 'Busca texto o regex dentro del contenido de archivos. Soporta filtros por extensión y búsqueda case-insensitive.',
-  },
-  {
-    key: 'git_status',
-    label: 'Git: Estado',
-    icon: 'pi pi-code',
-    hint: 'Muestra el estado actual del repositorio git y las estadísticas de cambios pendientes.',
-  },
-  {
-    key: 'git_diff',
-    label: 'Git: Diferencias',
-    icon: 'pi pi-code',
-    hint: 'Muestra el diff de un archivo específico o de todo el repositorio. Soporta cambios staged y unstaged.',
-  },
-  {
-    key: 'git_log',
-    label: 'Git: Historial',
-    icon: 'pi pi-history',
-    hint: 'Muestra el historial de commits recientes, opcionalmente filtrado por archivo.',
-  },
-  {
-    key: 'git_commit',
-    label: 'Git: Commit',
-    icon: 'pi pi-check-circle',
-    hint: 'Hace commit de cambios con un mensaje. Solo se usa cuando el usuario lo pide explícitamente.',
-  },
+const TOOL_META: { key: keyof ToolPromptsConfig; icon: string }[] = [
+  { key: 'search_documents', icon: 'pi pi-search' },
+  { key: 'query_database', icon: 'pi pi-database' },
+  { key: 'search_images', icon: 'pi pi-image' },
+  { key: 'analyze_pdf', icon: 'pi pi-file-pdf' },
+  { key: 'extract_text_from_pdf', icon: 'pi pi-file' },
+  { key: 'analyze_excel', icon: 'pi pi-table' },
+  { key: 'describe_image', icon: 'pi pi-eye' },
+  { key: 'save_memory', icon: 'pi pi-bookmark' },
+  { key: 'search_memory', icon: 'pi pi-history' },
+  { key: 'system_propose', icon: 'pi pi-server' },
+  { key: 'system_confirm', icon: 'pi pi-check-circle' },
+  { key: 'cron_create', icon: 'pi pi-clock' },
+  { key: 'cron_list', icon: 'pi pi-list' },
+  { key: 'cron_delete', icon: 'pi pi-trash' },
+  { key: 'cron_run', icon: 'pi pi-play' },
+  { key: 'read_file', icon: 'pi pi-file' },
+  { key: 'write_file', icon: 'pi pi-file-edit' },
+  { key: 'edit_file', icon: 'pi pi-pencil' },
+  { key: 'list_directory', icon: 'pi pi-folder-open' },
+  { key: 'find_files', icon: 'pi pi-search' },
+  { key: 'run_shell', icon: 'pi pi-terminal' },
+  { key: 'grep_files', icon: 'pi pi-filter' },
+  { key: 'git_status', icon: 'pi pi-code' },
+  { key: 'git_diff', icon: 'pi pi-code' },
+  { key: 'git_log', icon: 'pi pi-history' },
+  { key: 'git_commit', icon: 'pi pi-check-circle' },
 ]
 
 const prompts = ref<ToolPromptsConfig>({})
@@ -201,9 +73,9 @@ const save = async () => {
       tool_prompts: JSON.stringify(toSave),
       disabled_tools: disabledTools,
     })
-    toast.add({ severity: 'success', summary: 'Guardado', detail: 'Configuración actualizada', life: 3000 })
+    toast.add({ severity: 'success', summary: t('toolPrompts.saved'), detail: t('toolPrompts.savedDesc'), life: 3000 })
   } catch {
-    toast.add({ severity: 'error', summary: 'Error', detail: 'No se pudo guardar', life: 3000 })
+    toast.add({ severity: 'error', summary: t('toolPrompts.error'), detail: t('toolPrompts.errorDesc'), life: 3000 })
   } finally {
     isSaving.value = false
   }
@@ -233,9 +105,9 @@ onMounted(async () => {
     <div class="page-header">
       <div class="header-icon"><i class="pi pi-sliders-h"></i></div>
       <div>
-        <h1 class="page-title">Prompts de Tools</h1>
+        <h1 class="page-title">{{ t('toolPrompts.title') }}</h1>
         <p class="page-subtitle">
-          Activá/desactivá herramientas y personalizá las instrucciones que le indican al LLM cuándo usar cada una.
+          {{ t('toolPrompts.subtitle') }}
         </p>
       </div>
     </div>
@@ -245,9 +117,9 @@ onMounted(async () => {
         <template #header>
           <div class="tab-header">
             <i :class="tool.icon" class="tab-icon" :style="{ opacity: enabled[tool.key] ? 1 : 0.4 }"></i>
-            <span class="tab-label" :style="{ opacity: enabled[tool.key] ? 1 : 0.5 }">{{ tool.label }}</span>
-            <span v-if="!enabled[tool.key]" class="tab-badge tab-badge--disabled">Desactivada</span>
-            <span v-else-if="prompts[tool.key]" class="tab-badge">Personalizado</span>
+            <span class="tab-label" :style="{ opacity: enabled[tool.key] ? 1 : 0.5 }">{{ t(`toolPrompts.tools.${tool.key}.label`) }}</span>
+            <span v-if="!enabled[tool.key]" class="tab-badge tab-badge--disabled">{{ t('toolPrompts.disabled') }}</span>
+            <span v-else-if="prompts[tool.key]" class="tab-badge">{{ t('toolPrompts.custom') }}</span>
             <InputSwitch
               v-model="enabled[tool.key]"
               class="tool-toggle"
@@ -257,10 +129,10 @@ onMounted(async () => {
         </template>
 
         <div class="tool-field">
-          <p class="tool-hint">{{ tool.hint }}</p>
+          <p class="tool-hint">{{ t(`toolPrompts.tools.${tool.key}.hint`) }}</p>
           <Textarea
             v-model="prompts[tool.key]"
-            :placeholder="`Dejar vacío para usar el prompt por defecto de '${tool.key}'`"
+            :placeholder="`${t('toolPrompts.defaultPlaceholder')} '${tool.key}'`"
             :disabled="!enabled[tool.key]"
             rows="4"
             class="w-full"
@@ -268,7 +140,7 @@ onMounted(async () => {
           />
           <div class="field-actions">
             <Button
-              label="Restaurar por defecto"
+              :label="t('toolPrompts.restoreDefault')"
               icon="pi pi-refresh"
               severity="secondary"
               size="small"
@@ -283,7 +155,7 @@ onMounted(async () => {
 
     <div class="save-bar">
       <Button
-        label="Guardar cambios"
+        :label="t('toolPrompts.saveChanges')"
         icon="pi pi-save"
         severity="primary"
         :loading="isSaving"

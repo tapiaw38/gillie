@@ -3,12 +3,15 @@ import type { IntegrationParams, SystemCommandsIntegrationConfig } from '@/types
 import { onMounted, reactive, computed, ref } from 'vue'
 import { useAssistant } from '@/composables/useAssistant'
 import { useErrorToast } from '@/composables/useErrorToast'
+import { useI18n } from 'vue-i18n'
 import Toast from 'primevue/toast'
 import InputText from 'primevue/inputtext'
 import Button from 'primevue/button'
 import Card from 'primevue/card'
 import InputSwitch from 'primevue/inputswitch'
 import Tag from 'primevue/tag'
+
+const { t } = useI18n()
 
 const {
   addIntegration,
@@ -21,8 +24,8 @@ const {
 } = useAssistant()
 
 const errorWatchers = [
-  { flag: isAddIntegrationError, summary: 'Error al guardar configuración', detail: addIntegrationError },
-  { flag: isGetAssistantProfileError, summary: 'Error al cargar perfil', detail: getAssistantProfileError },
+  { flag: isAddIntegrationError, summary: t('systemCommands.errorSaveConfig'), detail: addIntegrationError },
+  { flag: isGetAssistantProfileError, summary: t('systemCommands.errorLoadProfile'), detail: getAssistantProfileError },
 ]
 
 const { toast } = useErrorToast(errorWatchers)
@@ -70,7 +73,7 @@ const addPattern = async () => {
   if (!cfg.blacklist.includes(pattern)) {
     cfg.blacklist = [...cfg.blacklist, pattern]
     await saveIntegration()
-    toast.add({ severity: 'success', summary: 'Patrón agregado', life: 2000 })
+    toast.add({ severity: 'success', summary: t('systemCommands.patternAdded'), life: 2000 })
   }
   newPattern.value = ''
 }
@@ -79,7 +82,7 @@ const removePattern = async (pattern: string) => {
   const cfg = integration.config as unknown as SystemCommandsIntegrationConfig
   cfg.blacklist = cfg.blacklist.filter((p) => p !== pattern)
   await saveIntegration()
-  toast.add({ severity: 'info', summary: 'Patrón eliminado', life: 2000 })
+  toast.add({ severity: 'info', summary: t('systemCommands.patternDeleted'), life: 2000 })
 }
 
 onMounted(async () => {
@@ -106,15 +109,13 @@ onMounted(async () => {
           <i class="pi pi-server"></i>
         </div>
         <div class="header-text">
-          <h1 class="page-title">Comandos del Sistema</h1>
-          <p class="page-subtitle">
-            Permite al asistente ejecutar comandos en el servidor Linux con confirmación del usuario y lista negra configurable
-          </p>
+          <h1 class="page-title">{{ t('systemCommands.title') }}</h1>
+          <p class="page-subtitle">{{ t('systemCommands.subtitle') }}</p>
         </div>
       </div>
       <div class="header-toggle">
         <span class="toggle-status" :class="{ active: integration.activated }">
-          {{ integration.activated ? 'Activa' : 'Inactiva' }}
+          {{ integration.activated ? t('systemCommands.active') : t('systemCommands.inactive') }}
         </span>
         <InputSwitch v-model="integration.activated" @change="toggleActivated" />
       </div>
@@ -125,20 +126,20 @@ onMounted(async () => {
       <div class="panel-header">
         <i class="pi pi-shield panel-icon"></i>
         <div>
-          <p class="panel-title">Verificación por código</p>
-          <p class="panel-subtitle">Control de ejecución de comandos</p>
+          <p class="panel-title">{{ t('systemCommands.confirmationPanel') }}</p>
+          <p class="panel-subtitle">{{ t('systemCommands.confirmationPanelDesc') }}</p>
         </div>
       </div>
       <div class="panel-body">
         <div class="toggle-row">
           <div class="toggle-row-info">
-            <span class="toggle-row-label">Requerir confirmación antes de ejecutar</span>
+            <span class="toggle-row-label">{{ t('systemCommands.requireConfirmation') }}</span>
             <span class="toggle-row-desc">
               <template v-if="(integration.config as unknown as SystemCommandsIntegrationConfig).require_confirmation">
-                El asistente propone el comando y el usuario debe responder con un código de 6 caracteres para ejecutarlo.
+                {{ t('systemCommands.confirmationDesc') }}
               </template>
               <template v-else>
-                El asistente ejecuta los comandos directamente sin pedir confirmación.
+                {{ t('systemCommands.noConfirmationDesc') }}
               </template>
             </span>
           </div>
@@ -156,26 +157,24 @@ onMounted(async () => {
       <div class="panel-header">
         <i class="pi pi-list panel-icon"></i>
         <div>
-          <p class="panel-title">Lista negra personalizada</p>
-          <p class="panel-subtitle">Patrones de comandos que el asistente no podrá proponer</p>
+          <p class="panel-title">{{ t('systemCommands.customBlacklist') }}</p>
+          <p class="panel-subtitle">{{ t('systemCommands.customBlacklistDesc') }}</p>
         </div>
       </div>
       <div class="panel-body">
-        <p class="section-hint">
-          Si el comando contiene alguno de estos textos será rechazado automáticamente.
-        </p>
+        <p class="section-hint">{{ t('systemCommands.blacklistHint') }}</p>
 
         <div class="add-row">
           <InputText
             v-model="newPattern"
-            placeholder="ej: apt remove, pip uninstall, curl | sh"
+            :placeholder="t('systemCommands.patternPlaceholder')"
             :disabled="!integration.activated"
             class="add-input"
             @keyup.enter="addPattern"
           />
           <Button
             icon="pi pi-plus"
-            label="Agregar"
+            :label="t('systemCommands.addPattern')"
             severity="primary"
             :disabled="!integration.activated || !newPattern.trim()"
             @click="addPattern"
@@ -196,7 +195,7 @@ onMounted(async () => {
             />
           </div>
         </div>
-        <p v-else class="empty-hint">No hay patrones personalizados. Se usará solo la lista negra base.</p>
+        <p v-else class="empty-hint">{{ t('systemCommands.noPatterns') }}</p>
       </div>
     </div>
 
@@ -205,14 +204,12 @@ onMounted(async () => {
       <div class="panel-header">
         <i class="pi pi-lock panel-icon"></i>
         <div>
-          <p class="panel-title">Lista negra base (siempre bloqueada)</p>
-          <p class="panel-subtitle">Comandos bloqueados de forma permanente, no configurables</p>
+          <p class="panel-title">{{ t('systemCommands.baseBlacklist') }}</p>
+          <p class="panel-subtitle">{{ t('systemCommands.baseBlacklistDesc') }}</p>
         </div>
       </div>
       <div class="panel-body">
-        <p class="section-hint">
-          Estos comandos están bloqueados de forma permanente y no pueden ser desbloqueados.
-        </p>
+        <p class="section-hint">{{ t('systemCommands.baseBlacklistHint') }}</p>
         <div class="hardcoded-list">
           <Tag
             v-for="entry in HARDCODED_BLACKLIST"

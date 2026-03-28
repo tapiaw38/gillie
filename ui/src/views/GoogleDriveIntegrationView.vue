@@ -6,6 +6,7 @@ import { useAssistant } from '@/composables/useAssistant'
 import { useDrive } from '@/composables/useDrive'
 import { useOAuthPopup } from '@/composables/useOAuthPopup'
 import { useErrorToast } from '@/composables/useErrorToast'
+import { useI18n } from 'vue-i18n'
 import Toast from 'primevue/toast'
 import Button from 'primevue/button'
 import Card from 'primevue/card'
@@ -14,6 +15,7 @@ import InputSwitch from 'primevue/inputswitch'
 import InputText from 'primevue/inputtext'
 import Password from 'primevue/password'
 
+const { t } = useI18n()
 const route = useRoute()
 const router = useRouter()
 
@@ -58,8 +60,8 @@ const handleSaveCredentials = async () => {
   if (!credentials.clientId || !credentials.clientSecret) {
     toast.add({
       severity: 'warn',
-      summary: 'Campos requeridos',
-      detail: 'Client ID y Client Secret son obligatorios',
+      summary: t('integrations.googleDrive.clientIdRequired'),
+      detail: t('integrations.googleDrive.clientIdRequired'),
       life: 3000,
     })
     return
@@ -73,8 +75,8 @@ const handleSaveCredentials = async () => {
     credentialsSaved.value = true
     toast.add({
       severity: 'success',
-      summary: 'Credenciales guardadas',
-      detail: 'Las credenciales de Google OAuth se guardaron correctamente',
+      summary: t('integrations.googleDrive.saved'),
+      detail: t('integrations.googleDrive.credentialsSavedMsg'),
       life: 3000,
     })
   } catch {
@@ -85,27 +87,27 @@ const handleSaveCredentials = async () => {
 const errorWatchers = [
   {
     flag: isSaveCredentialsError,
-    summary: 'Error al guardar credenciales',
+    summary: t('integrations.googleDrive.errorSaveCredentials'),
     detail: saveCredentialsError,
   },
   {
     flag: isAddIntegrationError,
-    summary: 'Error al guardar configuración',
+    summary: t('integrations.googleDrive.errorSaveConfig'),
     detail: addIntegrationError,
   },
   {
     flag: isGetAssistantProfileError,
-    summary: 'Error al cargar perfil',
+    summary: t('integrations.googleDrive.errorLoadProfile'),
     detail: getAssistantProfileError,
   },
   {
     flag: isGetAuthUrlError,
-    summary: 'Error al obtener URL de autorización',
+    summary: t('integrations.googleDrive.errorGetAuthUrl'),
     detail: getAuthUrlError,
   },
   {
     flag: isCheckStatusError,
-    summary: 'Error al verificar estado',
+    summary: t('integrations.googleDrive.errorCheckStatus'),
     detail: checkStatusError,
   },
 ]
@@ -127,8 +129,8 @@ const connectGoogleDrive = async () => {
     if (!assistantProfile.value?.id) {
       toast.add({
         severity: 'error',
-        summary: 'Error',
-        detail: 'No se pudo obtener el ID del perfil',
+        summary: t('common.error'),
+        detail: t('integrations.googleDrive.errorGetProfileId'),
         life: 3000,
       })
       return
@@ -147,8 +149,8 @@ const connectGoogleDrive = async () => {
     } else {
       toast.add({
         severity: 'error',
-        summary: 'Error',
-        detail: 'No se pudo obtener la URL de autorización',
+        summary: t('common.error'),
+        detail: t('integrations.googleDrive.errorGetAuthUrlMsg'),
         life: 3000,
       })
     }
@@ -194,8 +196,8 @@ const checkConnectionStatus = async () => {
       await addIntegration(driveIntegration)
       toast.add({
         severity: 'success',
-        summary: '¡Conectado!',
-        detail: 'Google Drive conectado correctamente',
+        summary: t('integrations.googleDrive.connectedSuccess'),
+        detail: t('integrations.googleDrive.connectedSuccessDesc'),
         life: 4000,
       })
     }
@@ -223,24 +225,24 @@ onMounted(async () => {
   if (route.query.success === 'true') {
     toast.add({
       severity: 'success',
-      summary: '¡Conexión exitosa!',
-      detail: 'Tu cuenta de Google Drive ha sido conectada correctamente',
+      summary: t('integrations.googleDrive.connectedSuccess'),
+      detail: t('integrations.googleDrive.connectedSuccessDesc'),
       life: 5000,
     })
     await checkConnectionStatus()
     router.replace({ query: {} })
   } else if (route.query.error) {
     const errorMessages: Record<string, string> = {
-      invalid_request: 'Solicitud inválida. Por favor, intenta nuevamente.',
-      auth_failed: 'Falló la autorización con Google. Por favor, intenta nuevamente.',
+      invalid_request: t('integrations.googleDrive.invalidRequest'),
+      auth_failed: t('integrations.googleDrive.authFailed'),
     }
     const errorDetail =
       errorMessages[route.query.error as string] ||
-      'Ocurrió un error al conectar con Google Drive'
+      t('integrations.googleDrive.connectionErrorDefault')
 
     toast.add({
       severity: 'error',
-      summary: 'Error de conexión',
+      summary: t('integrations.googleDrive.connectionError'),
       detail: errorDetail,
       life: 5000,
     })
@@ -260,12 +262,12 @@ onMounted(async () => {
         </div>
         <div class="header-text">
           <h1 class="page-title">Google Drive</h1>
-          <p class="page-subtitle">Conecta tu asistente con Google Drive para leer y gestionar documentos</p>
+          <p class="page-subtitle">{{ t('integrations.googleDrive.subtitle') }}</p>
         </div>
       </div>
       <div class="header-toggle">
         <span class="toggle-status" :class="{ active: driveIntegration.activated }">
-          {{ driveIntegration.activated ? 'Activa' : 'Inactiva' }}
+          {{ driveIntegration.activated ? t('integrations.active') : t('integrations.inactive') }}
         </span>
         <InputSwitch v-model="driveIntegration.activated" />
       </div>
@@ -276,15 +278,15 @@ onMounted(async () => {
       <div class="panel-header">
         <span class="step-badge">1</span>
         <div>
-          <p class="panel-title">Credenciales OAuth</p>
-          <p class="panel-subtitle">Proyecto de Google Cloud Console con la API de Drive habilitada</p>
+          <p class="panel-title">{{ t('integrations.googleDrive.oauthCredentials') }}</p>
+          <p class="panel-subtitle">{{ t('integrations.googleDrive.oauthSubtitle') }}</p>
         </div>
       </div>
 
       <div class="panel-body">
         <div v-if="savedClientId && !credentialsSaved" class="credentials-saved-notice">
           <i class="pi pi-check-circle"></i>
-          Credenciales guardadas — Client ID: <strong>{{ savedClientId }}</strong>
+          {{ t('integrations.googleDrive.credentialsSaved') }} <strong>{{ savedClientId }}</strong>
         </div>
 
         <div class="field-group">
@@ -316,7 +318,7 @@ onMounted(async () => {
         <div class="field-group">
           <label class="field-label">
             Redirect URI
-            <span class="optional">opcional</span>
+            <span class="optional">{{ t('integrations.telegram.optional') }}</span>
           </label>
           <InputText
             v-model="credentials.redirectUri"
@@ -327,11 +329,11 @@ onMounted(async () => {
 
         <div class="panel-footer">
           <span v-if="credentialsSaved" class="saved-badge">
-            <i class="pi pi-check-circle"></i> Guardado
+            <i class="pi pi-check-circle"></i> {{ t('integrations.googleDrive.saved') }}
           </span>
           <span v-else class="spacer"></span>
           <Button
-            label="Guardar Credenciales"
+            :label="t('integrations.googleDrive.saveCredentials')"
             icon="pi pi-save"
             severity="primary"
             :loading="isLoading"
@@ -347,8 +349,8 @@ onMounted(async () => {
       <div class="panel-header">
         <span class="step-badge">2</span>
         <div>
-          <p class="panel-title">Conectar cuenta de Google</p>
-          <p class="panel-subtitle">Autoriza el acceso mediante OAuth 2.0</p>
+          <p class="panel-title">{{ t('integrations.googleDrive.connectAccount') }}</p>
+          <p class="panel-subtitle">{{ t('integrations.googleDrive.connectAccountSubtitle') }}</p>
         </div>
       </div>
 
@@ -359,9 +361,9 @@ onMounted(async () => {
             <i class="pi pi-check-circle"></i>
           </div>
           <div class="connection-state-text">
-            <p class="connection-state-title">Conectado a Google Drive</p>
+            <p class="connection-state-title">{{ t('integrations.googleDrive.connected') }}</p>
             <p class="connection-state-subtitle">
-              Tu cuenta está vinculada. Podés acceder y gestionar documentos desde el asistente.
+              {{ t('integrations.googleDrive.connectedDesc') }}
             </p>
           </div>
         </div>
@@ -372,9 +374,9 @@ onMounted(async () => {
             <i class="pi pi-times-circle"></i>
           </div>
           <div class="connection-state-text">
-            <p class="connection-state-title">No conectado</p>
+            <p class="connection-state-title">{{ t('integrations.googleDrive.notConnected') }}</p>
             <p class="connection-state-subtitle">
-              Autorizá el acceso a tu cuenta de Google Drive para comenzar a usar la integración.
+              {{ t('integrations.googleDrive.notConnectedDesc') }}
             </p>
           </div>
         </div>
@@ -385,10 +387,10 @@ onMounted(async () => {
             <span class="meta-label">
               {{
                 isConnected
-                  ? 'Conectado'
+                  ? t('integrations.googleDrive.statusConnected')
                   : searchDriveIntegration
-                    ? 'Configurado pero no conectado'
-                    : 'Sin conexión'
+                    ? t('integrations.googleDrive.statusConfigured')
+                    : t('integrations.googleDrive.statusNoConnection')
               }}
             </span>
           </div>
@@ -396,7 +398,7 @@ onMounted(async () => {
           <div class="connection-actions">
             <Button
               v-if="!isConnected"
-              label="Conectar con Google"
+              :label="t('integrations.googleDrive.connectGoogle')"
               icon="pi pi-google"
               severity="primary"
               :disabled="!driveIntegration.activated"
@@ -404,13 +406,13 @@ onMounted(async () => {
             />
             <template v-else>
               <Button
-                label="Verificar"
+                :label="t('integrations.googleDrive.verify')"
                 icon="pi pi-refresh"
                 severity="secondary"
                 @click="checkConnectionStatus"
               />
               <Button
-                label="Ver Archivos"
+                :label="t('integrations.googleDrive.viewFiles')"
                 icon="pi pi-folder-open"
                 severity="info"
                 @click="$router.push('/drive/files')"
@@ -426,45 +428,45 @@ onMounted(async () => {
       <div class="panel-header">
         <span class="step-badge">3</span>
         <div>
-          <p class="panel-title">Capacidades disponibles</p>
-          <p class="panel-subtitle">Lo que podés hacer una vez conectado</p>
+          <p class="panel-title">{{ t('integrations.googleDrive.capabilities') }}</p>
+          <p class="panel-subtitle">{{ t('integrations.googleDrive.capabilitiesSubtitle') }}</p>
         </div>
       </div>
 
       <div class="capabilities-grid">
         <div class="capability-item">
           <i class="pi pi-file-pdf capability-icon"></i>
-          <span>Leer documentos desde el chat</span>
+          <span>{{ t('integrations.googleDrive.capReadDocs') }}</span>
         </div>
         <div class="capability-item">
           <i class="pi pi-search capability-icon"></i>
-          <span>Buscar archivos por nombre o contenido</span>
+          <span>{{ t('integrations.googleDrive.capSearchFiles') }}</span>
         </div>
         <div class="capability-item">
           <i class="pi pi-database capability-icon"></i>
-          <span>Indexar documentos para búsqueda semántica</span>
+          <span>{{ t('integrations.googleDrive.capIndexDocs') }}</span>
         </div>
         <div class="capability-item">
           <i class="pi pi-folder capability-icon"></i>
-          <span>Listar archivos y carpetas</span>
+          <span>{{ t('integrations.googleDrive.capListFiles') }}</span>
         </div>
         <div class="capability-item">
           <i class="pi pi-sync capability-icon"></i>
-          <span>Sincronizar Drive con el índice de búsqueda</span>
+          <span>{{ t('integrations.googleDrive.capSyncDrive') }}</span>
         </div>
         <div class="capability-item">
           <i class="pi pi-shield capability-icon"></i>
-          <span>Acceso seguro mediante OAuth 2.0</span>
+          <span>{{ t('integrations.googleDrive.capSecureAccess') }}</span>
         </div>
       </div>
 
       <div class="formats-row">
-        <span class="formats-label">Formatos soportados:</span>
+        <span class="formats-label">{{ t('integrations.googleDrive.supportedFormats') }}</span>
         <span class="format-tag">Docs</span>
         <span class="format-tag">Sheets</span>
         <span class="format-tag">PDF</span>
-        <span class="format-tag">Imágenes</span>
-        <span class="format-tag">y más</span>
+        <span class="format-tag">Images</span>
+        <span class="format-tag">{{ t('integrations.googleDrive.formatMore') }}</span>
       </div>
     </div>
 

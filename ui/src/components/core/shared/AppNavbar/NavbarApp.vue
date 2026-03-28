@@ -1,14 +1,21 @@
 <script setup lang="ts">
 import { RouterLink, useRoute, useRouter } from 'vue-router'
+import { useI18n } from 'vue-i18n'
 import gillieIcon from '@/assets/icons/gillie-logo.png'
 import { useBackendStatus } from '@/composables/useBackendStatus'
 
 const route = useRoute()
 const router = useRouter()
 const { isActive, cause } = useBackendStatus()
+const { t, locale } = useI18n()
 
 const isActiveLink = (path: string) => route.path === path
 const canGoBack = () => route.path !== '/app/dashboard'
+
+const setLocale = (lang: string) => {
+  locale.value = lang
+  localStorage.setItem('gillie-lang', lang)
+}
 
 const routerLinks: { icon: string; label: string; url: string }[] = []
 </script>
@@ -17,7 +24,7 @@ const routerLinks: { icon: string; label: string; url: string }[] = []
   <nav class="navbar">
     <!-- Brand -->
     <div class="navbar-brand">
-      <button v-if="canGoBack()" class="back-btn" @click="router.back()" title="Volver">
+      <button v-if="canGoBack()" class="back-btn" @click="router.back()" :title="t('nav.back')">
         <i class="pi pi-arrow-left" />
       </button>
       <img :src="gillieIcon" alt="Gillie" class="brand-logo" />
@@ -37,12 +44,27 @@ const routerLinks: { icon: string; label: string; url: string }[] = []
       </RouterLink>
     </div>
 
-    <!-- Status -->
+    <!-- Right side: language switcher + status -->
     <div class="navbar-end">
+      <!-- Language Switcher -->
+      <div class="lang-switcher">
+        <button
+          class="lang-btn"
+          :class="{ 'lang-btn--active': locale === 'en' }"
+          @click="setLocale('en')"
+        >EN</button>
+        <button
+          class="lang-btn"
+          :class="{ 'lang-btn--active': locale === 'es' }"
+          @click="setLocale('es')"
+        >ES</button>
+      </div>
+
+      <!-- Status indicator -->
       <div class="status-indicator" :class="isActive ? 'status--active' : 'status--inactive'">
         <span class="status-dot" />
         <div class="status-text">
-          <span class="status-label">{{ isActive ? 'Activo' : 'Inactivo' }}</span>
+          <span class="status-label">{{ isActive ? t('nav.active') : t('nav.inactive') }}</span>
           <span v-if="!isActive && cause" class="status-cause">{{ cause }}</span>
         </div>
       </div>
@@ -136,13 +158,53 @@ const routerLinks: { icon: string; label: string; url: string }[] = []
   color: var(--do-blue);
 }
 
-/* Status */
+/* Right side */
 .navbar-end {
   display: flex;
   align-items: center;
+  gap: 0.75rem;
   flex-shrink: 0;
 }
 
+/* Language Switcher */
+.lang-switcher {
+  display: flex;
+  align-items: center;
+  gap: 0.1rem;
+  background: rgba(255,255,255,0.05);
+  border: 1px solid rgba(255,255,255,0.1);
+  border-radius: 0.4rem;
+  padding: 0.15rem;
+}
+
+.lang-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0.2rem 0.45rem;
+  border: none;
+  background: transparent;
+  color: var(--do-text-secondary);
+  font-size: 0.7rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  border-radius: 0.25rem;
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s;
+  line-height: 1;
+}
+
+.lang-btn:hover {
+  background: rgba(255,255,255,0.08);
+  color: var(--do-text);
+}
+
+.lang-btn--active {
+  background: rgba(59,130,246,0.25);
+  color: var(--do-blue);
+}
+
+/* Status */
 .status-indicator {
   display: flex;
   align-items: center;

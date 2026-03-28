@@ -6,6 +6,7 @@ import { useAssistant } from '@/composables/useAssistant'
 import { useCalendar } from '@/composables/useCalendar'
 import { useOAuthPopup } from '@/composables/useOAuthPopup'
 import { useErrorToast } from '@/composables/useErrorToast'
+import { useI18n } from 'vue-i18n'
 import Toast from 'primevue/toast'
 import Button from 'primevue/button'
 import Card from 'primevue/card'
@@ -14,6 +15,7 @@ import InputSwitch from 'primevue/inputswitch'
 import InputText from 'primevue/inputtext'
 import Password from 'primevue/password'
 
+const { t } = useI18n()
 const route = useRoute()
 const router = useRouter()
 
@@ -58,8 +60,8 @@ const handleSaveCredentials = async () => {
   if (!credentials.clientId || !credentials.clientSecret) {
     toast.add({
       severity: 'warn',
-      summary: 'Campos requeridos',
-      detail: 'Client ID y Client Secret son obligatorios',
+      summary: t('integrations.googleCalendar.clientIdRequired'),
+      detail: t('integrations.googleCalendar.clientIdRequired'),
       life: 3000,
     })
     return
@@ -73,8 +75,8 @@ const handleSaveCredentials = async () => {
     credentialsSaved.value = true
     toast.add({
       severity: 'success',
-      summary: 'Credenciales guardadas',
-      detail: 'Las credenciales de Google OAuth se guardaron correctamente',
+      summary: t('integrations.googleCalendar.saved'),
+      detail: t('integrations.googleCalendar.credentialsSavedMsg'),
       life: 3000,
     })
   } catch {
@@ -85,27 +87,27 @@ const handleSaveCredentials = async () => {
 const errorWatchers = [
   {
     flag: isSaveCredentialsError,
-    summary: 'Error al guardar credenciales',
+    summary: t('integrations.googleCalendar.errorSaveCredentials'),
     detail: saveCredentialsError,
   },
   {
     flag: isAddIntegrationError,
-    summary: 'Error al guardar configuración',
+    summary: t('integrations.googleCalendar.errorSaveConfig'),
     detail: addIntegrationError,
   },
   {
     flag: isGetAssistantProfileError,
-    summary: 'Error al cargar perfil',
+    summary: t('integrations.googleCalendar.errorLoadProfile'),
     detail: getAssistantProfileError,
   },
   {
     flag: isGetAuthUrlError,
-    summary: 'Error al obtener URL de autorización',
+    summary: t('integrations.googleCalendar.errorGetAuthUrl'),
     detail: getAuthUrlError,
   },
   {
     flag: isCheckStatusError,
-    summary: 'Error al verificar estado',
+    summary: t('integrations.googleCalendar.errorCheckStatus'),
     detail: checkStatusError,
   },
 ]
@@ -127,8 +129,8 @@ const connectGoogleCalendar = async () => {
     if (!assistantProfile.value?.id) {
       toast.add({
         severity: 'error',
-        summary: 'Error',
-        detail: 'No se pudo obtener el ID del perfil',
+        summary: t('common.error'),
+        detail: t('integrations.googleCalendar.errorGetProfileId'),
         life: 3000,
       })
       return
@@ -146,8 +148,8 @@ const connectGoogleCalendar = async () => {
     } else {
       toast.add({
         severity: 'error',
-        summary: 'Error',
-        detail: 'No se pudo obtener la URL de autorización',
+        summary: t('common.error'),
+        detail: t('integrations.googleCalendar.errorGetAuthUrlMsg'),
         life: 3000,
       })
     }
@@ -198,8 +200,8 @@ const activateAfterOAuth = async () => {
     await addIntegration(calendarIntegration)
     toast.add({
       severity: 'success',
-      summary: '¡Conectado!',
-      detail: 'Google Calendar conectado correctamente',
+      summary: t('integrations.googleCalendar.connectedSuccess'),
+      detail: t('integrations.googleCalendar.connectedSuccessDesc'),
       life: 4000,
     })
   }
@@ -224,24 +226,24 @@ onMounted(async () => {
   if (route.query.success === 'true') {
     toast.add({
       severity: 'success',
-      summary: '¡Conexión exitosa!',
-      detail: 'Tu cuenta de Google Calendar ha sido conectada correctamente',
+      summary: t('integrations.googleCalendar.connectedSuccess'),
+      detail: t('integrations.googleCalendar.connectedSuccessDesc'),
       life: 5000,
     })
     await checkConnectionStatus()
     router.replace({ query: {} })
   } else if (route.query.error) {
     const errorMessages: Record<string, string> = {
-      invalid_request: 'Solicitud inválida. Por favor, intenta nuevamente.',
-      auth_failed: 'Falló la autorización con Google. Por favor, intenta nuevamente.',
+      invalid_request: t('integrations.googleCalendar.invalidRequest'),
+      auth_failed: t('integrations.googleCalendar.authFailed'),
     }
     const errorDetail =
       errorMessages[route.query.error as string] ||
-      'Ocurrió un error al conectar con Google Calendar'
+      t('integrations.googleCalendar.connectionErrorDefault')
 
     toast.add({
       severity: 'error',
-      summary: 'Error de conexión',
+      summary: t('integrations.googleCalendar.connectionError'),
       detail: errorDetail,
       life: 5000,
     })
@@ -261,12 +263,12 @@ onMounted(async () => {
         </div>
         <div class="header-text">
           <h1 class="page-title">Google Calendar</h1>
-          <p class="page-subtitle">Conecta tu asistente con Google Calendar para gestionar eventos y agenda</p>
+          <p class="page-subtitle">{{ t('integrations.googleCalendar.subtitle') }}</p>
         </div>
       </div>
       <div class="header-toggle">
         <span class="toggle-status" :class="{ active: calendarIntegration.activated }">
-          {{ calendarIntegration.activated ? 'Activa' : 'Inactiva' }}
+          {{ calendarIntegration.activated ? t('integrations.active') : t('integrations.inactive') }}
         </span>
         <InputSwitch v-model="calendarIntegration.activated" />
       </div>
@@ -277,15 +279,15 @@ onMounted(async () => {
       <div class="panel-header">
         <span class="step-badge">1</span>
         <div>
-          <p class="panel-title">Credenciales OAuth</p>
-          <p class="panel-subtitle">Proyecto de Google Cloud Console con la API de Calendar habilitada</p>
+          <p class="panel-title">{{ t('integrations.googleCalendar.oauthCredentials') }}</p>
+          <p class="panel-subtitle">{{ t('integrations.googleCalendar.oauthSubtitle') }}</p>
         </div>
       </div>
 
       <div class="panel-body">
         <div v-if="savedClientId && !credentialsSaved" class="credentials-saved-notice">
           <i class="pi pi-check-circle"></i>
-          Credenciales guardadas — Client ID: <strong>{{ savedClientId }}</strong>
+          {{ t('integrations.googleCalendar.credentialsSaved') }} <strong>{{ savedClientId }}</strong>
         </div>
 
         <div class="field-group">
@@ -317,7 +319,7 @@ onMounted(async () => {
         <div class="field-group">
           <label class="field-label">
             Redirect URI
-            <span class="optional">opcional</span>
+            <span class="optional">{{ t('integrations.telegram.optional') }}</span>
           </label>
           <InputText
             v-model="credentials.redirectUri"
@@ -328,11 +330,11 @@ onMounted(async () => {
 
         <div class="panel-footer">
           <span v-if="credentialsSaved" class="saved-badge">
-            <i class="pi pi-check-circle"></i> Guardado
+            <i class="pi pi-check-circle"></i> {{ t('integrations.googleCalendar.saved') }}
           </span>
           <span v-else class="spacer"></span>
           <Button
-            label="Guardar Credenciales"
+            :label="t('integrations.googleCalendar.saveCredentials')"
             icon="pi pi-save"
             severity="primary"
             :loading="isLoading"
@@ -348,8 +350,8 @@ onMounted(async () => {
       <div class="panel-header">
         <span class="step-badge">2</span>
         <div>
-          <p class="panel-title">Conectar cuenta de Google</p>
-          <p class="panel-subtitle">Autoriza el acceso mediante OAuth 2.0</p>
+          <p class="panel-title">{{ t('integrations.googleCalendar.connectAccount') }}</p>
+          <p class="panel-subtitle">{{ t('integrations.googleCalendar.connectAccountSubtitle') }}</p>
         </div>
       </div>
 
@@ -360,9 +362,9 @@ onMounted(async () => {
             <i class="pi pi-check-circle"></i>
           </div>
           <div class="connection-state-text">
-            <p class="connection-state-title">Conectado a Google Calendar</p>
+            <p class="connection-state-title">{{ t('integrations.googleCalendar.connected') }}</p>
             <p class="connection-state-subtitle">
-              Tu cuenta está vinculada. Podés crear y gestionar eventos desde el asistente.
+              {{ t('integrations.googleCalendar.connectedDesc') }}
             </p>
           </div>
         </div>
@@ -373,9 +375,9 @@ onMounted(async () => {
             <i class="pi pi-times-circle"></i>
           </div>
           <div class="connection-state-text">
-            <p class="connection-state-title">No conectado</p>
+            <p class="connection-state-title">{{ t('integrations.googleCalendar.notConnected') }}</p>
             <p class="connection-state-subtitle">
-              Autorizá el acceso a tu cuenta de Google Calendar para comenzar a usar la integración.
+              {{ t('integrations.googleCalendar.notConnectedDesc') }}
             </p>
           </div>
         </div>
@@ -386,10 +388,10 @@ onMounted(async () => {
             <span class="meta-label">
               {{
                 isConnected
-                  ? 'Conectado'
+                  ? t('integrations.googleCalendar.statusConnected')
                   : searchCalendarIntegration
-                    ? 'Configurado pero no conectado'
-                    : 'Sin conexión'
+                    ? t('integrations.googleCalendar.statusConfigured')
+                    : t('integrations.googleCalendar.statusNoConnection')
               }}
             </span>
           </div>
@@ -397,7 +399,7 @@ onMounted(async () => {
           <div class="connection-actions">
             <Button
               v-if="!isConnected"
-              label="Conectar con Google"
+              :label="t('integrations.googleCalendar.connectGoogle')"
               icon="pi pi-google"
               severity="primary"
               :disabled="!calendarIntegration.activated"
@@ -405,7 +407,7 @@ onMounted(async () => {
             />
             <template v-else>
               <Button
-                label="Verificar"
+                :label="t('integrations.googleCalendar.verify')"
                 icon="pi pi-refresh"
                 severity="secondary"
                 @click="checkConnectionStatus"
@@ -421,35 +423,35 @@ onMounted(async () => {
       <div class="panel-header">
         <span class="step-badge">3</span>
         <div>
-          <p class="panel-title">Capacidades disponibles</p>
-          <p class="panel-subtitle">Lo que podés hacer una vez conectado</p>
+          <p class="panel-title">{{ t('integrations.googleCalendar.capabilities') }}</p>
+          <p class="panel-subtitle">{{ t('integrations.googleCalendar.capabilitiesSubtitle') }}</p>
         </div>
       </div>
 
       <div class="capabilities-grid">
         <div class="capability-item">
           <i class="pi pi-plus-circle capability-icon"></i>
-          <span>Crear eventos</span>
+          <span>{{ t('integrations.googleCalendar.createEvents') }}</span>
         </div>
         <div class="capability-item">
           <i class="pi pi-list capability-icon"></i>
-          <span>Listar próximos</span>
+          <span>{{ t('integrations.googleCalendar.listEvents') }}</span>
         </div>
         <div class="capability-item">
           <i class="pi pi-pencil capability-icon"></i>
-          <span>Actualizar eventos</span>
+          <span>{{ t('integrations.googleCalendar.updateEvents') }}</span>
         </div>
         <div class="capability-item">
           <i class="pi pi-trash capability-icon"></i>
-          <span>Eliminar eventos</span>
+          <span>{{ t('integrations.googleCalendar.deleteEvents') }}</span>
         </div>
         <div class="capability-item">
           <i class="pi pi-users capability-icon"></i>
-          <span>Añadir asistentes</span>
+          <span>{{ t('integrations.googleCalendar.addAttendees') }}</span>
         </div>
         <div class="capability-item">
           <i class="pi pi-sync capability-icon"></i>
-          <span>Sincronización automática</span>
+          <span>{{ t('integrations.googleCalendar.autoSync') }}</span>
         </div>
       </div>
     </div>

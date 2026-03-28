@@ -5,7 +5,10 @@ import LoadingSpinner from '@/components/core/LoadingSpinner/LoadingSpinner.vue'
 import Toast from 'primevue/toast'
 import { useAssistant } from '@/composables/useAssistant'
 import { useErrorToast } from '@/composables/useErrorToast'
+import { useI18n } from 'vue-i18n'
 import { onMounted, watch } from 'vue'
+
+const { t } = useI18n()
 
 const {
   assistantProfile,
@@ -25,12 +28,12 @@ const {
 const errorWatchers = [
   {
     flag: isRemoveFileByIdError,
-    summary: 'Error al eliminar archivo',
+    summary: t('integrations.store.errorDeleteFileTitle'),
     detail: removeFileByIdError,
   },
   {
     flag: isGetAssistantProfileError,
-    summary: 'Error al cargar archivos',
+    summary: t('integrations.store.errorLoadFileTitle'),
     detail: getAssistantProfileError,
   },
 ]
@@ -45,8 +48,8 @@ watch(isRemoveFileByIdSuccess, (value) => {
   if (value) {
     toast.add({
       severity: 'success',
-      summary: 'Archivo eliminado',
-      detail: 'El archivo se eliminó correctamente',
+      summary: t('integrations.store.fileDeleted'),
+      detail: t('integrations.store.fileDeletedDesc'),
       life: 3000,
     })
   }
@@ -73,9 +76,9 @@ const removeFile = async (fileId: string) => {
           <i class="pi pi-cloud"></i>
         </div>
         <div class="header-content">
-          <h1 class="integration-title">Integración de Almacenamiento</h1>
+          <h1 class="integration-title">{{ t('integrations.store.title') }}</h1>
           <p class="integration-subtitle">
-            Gestiona archivos para que tu asistente pueda acceder a ellos
+            {{ t('integrations.store.subtitle') }}
           </p>
         </div>
       </div>
@@ -89,11 +92,9 @@ const removeFile = async (fileId: string) => {
             <i class="pi pi-info-circle"></i>
           </div>
           <div class="info-text">
-            <h3>¿Cómo funciona?</h3>
+            <h3>{{ t('integrations.store.howItWorks') }}</h3>
             <p>
-              Sube archivos que tu asistente podrá consultar y utilizar para responder preguntas más
-              precisas. Los archivos se almacenan de forma segura y están disponibles solo para tu
-              asistente.
+              {{ t('integrations.store.howItWorksDesc') }}
             </p>
           </div>
         </div>
@@ -110,8 +111,8 @@ const removeFile = async (fileId: string) => {
               <i class="pi pi-cloud-upload"></i>
             </div>
             <div class="header-text">
-              <h3>Subir Archivos</h3>
-              <p>Arrastra archivos o haz clic para seleccionar</p>
+              <h3>{{ t('integrations.store.uploadFiles') }}</h3>
+              <p>{{ t('integrations.store.uploadFilesDesc') }}</p>
             </div>
           </div>
         </template>
@@ -130,8 +131,8 @@ const removeFile = async (fileId: string) => {
               <i class="pi pi-file"></i>
             </div>
             <div class="header-text">
-              <h3>Archivos Almacenados</h3>
-              <p>{{ assistantProfile?.files?.length || 0 }} archivo(s) disponible(s)</p>
+              <h3>{{ t('integrations.store.storedFiles') }}</h3>
+              <p>{{ assistantProfile?.files?.length || 0 }} {{ t('integrations.store.availableFiles') }}</p>
             </div>
           </div>
         </template>
@@ -140,13 +141,13 @@ const removeFile = async (fileId: string) => {
             <!-- Loading State -->
             <div v-if="isGetAssistantProfilePending" class="loading-state">
               <LoadingSpinner />
-              <p>Cargando archivos...</p>
+              <p>{{ t('integrations.store.loadingFiles') }}</p>
             </div>
 
             <!-- Error State -->
             <div v-else-if="isGetAssistantProfileError" class="error-state">
               <i class="pi pi-exclamation-triangle"></i>
-              <p>Error al cargar los archivos</p>
+              <p>{{ t('integrations.store.errorLoadFiles') }}</p>
               <small>{{ getAssistantProfileError }}</small>
             </div>
 
@@ -161,14 +162,14 @@ const removeFile = async (fileId: string) => {
                     <a :href="file.url" target="_blank" rel="noopener noreferrer" class="file-name">
                       {{ file.name }}
                     </a>
-                    <span class="file-meta">Archivo disponible para el asistente</span>
+                    <span class="file-meta">{{ t('integrations.store.fileAvailable') }}</span>
                   </div>
                 </div>
                 <button
                   class="delete-button"
                   @click="removeFile(file.id)"
                   :disabled="isRemoveFileByIdPending"
-                  title="Eliminar archivo"
+                  :title="t('integrations.store.deleteFile')"
                 >
                   <i class="pi pi-trash"></i>
                 </button>
@@ -177,13 +178,13 @@ const removeFile = async (fileId: string) => {
               <!-- Remove File Loading -->
               <div v-if="isRemoveFileByIdPending" class="action-loading">
                 <LoadingSpinner />
-                <p>Eliminando archivo...</p>
+                <p>{{ t('integrations.store.deletingFile') }}</p>
               </div>
 
               <!-- Remove File Error -->
               <div v-if="isRemoveFileByIdError" class="action-error">
                 <i class="pi pi-exclamation-triangle"></i>
-                <p>Error al eliminar el archivo</p>
+                <p>{{ t('integrations.store.errorDeleteFile') }}</p>
                 <small>{{ removeFileByIdError }}</small>
               </div>
             </div>
@@ -191,8 +192,8 @@ const removeFile = async (fileId: string) => {
             <!-- Empty State -->
             <div v-else class="empty-state">
               <i class="pi pi-folder-open"></i>
-              <h4>No hay archivos almacenados</h4>
-              <p>Sube tu primer archivo para comenzar</p>
+              <h4>{{ t('integrations.store.noFiles') }}</h4>
+              <p>{{ t('integrations.store.noFilesDesc') }}</p>
             </div>
           </div>
         </template>

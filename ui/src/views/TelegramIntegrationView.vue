@@ -3,6 +3,7 @@ import type { IntegrationParams, TelegramIntegrationConfig } from '@/types/assis
 import { onMounted, reactive, computed, watch, ref } from 'vue'
 import { useAssistant } from '@/composables/useAssistant'
 import { useErrorToast } from '@/composables/useErrorToast'
+import { useI18n } from 'vue-i18n'
 import Toast from 'primevue/toast'
 import InputText from 'primevue/inputtext'
 import Button from 'primevue/button'
@@ -20,9 +21,11 @@ const {
   getAssistantProfileError,
 } = useAssistant()
 
+const { t } = useI18n()
+
 const errorWatchers = [
-  { flag: isAddIntegrationError, summary: 'Error al guardar configuración', detail: addIntegrationError },
-  { flag: isGetAssistantProfileError, summary: 'Error al cargar perfil', detail: getAssistantProfileError },
+  { flag: isAddIntegrationError, summary: t('systemCommands.errorSaveConfig'), detail: addIntegrationError },
+  { flag: isGetAssistantProfileError, summary: t('systemCommands.errorLoadProfile'), detail: getAssistantProfileError },
 ]
 
 const { toast } = useErrorToast(errorWatchers)
@@ -44,13 +47,13 @@ const validationErrors = reactive({
 const saveConfig = async () => {
   const config = telegramIntegration.config as TelegramIntegrationConfig
 
-  validationErrors.bot_token = !config.bot_token ? 'El Bot Token es obligatorio.' : ''
+  validationErrors.bot_token = !config.bot_token ? t('integrations.telegram.botTokenHelp') : ''
 
   if (validationErrors.bot_token) {
     toast.add({
       severity: 'warn',
-      summary: 'Campos requeridos',
-      detail: 'Por favor completa todos los campos obligatorios',
+      summary: t('common.requiredFields'),
+      detail: t('common.completeRequired'),
       life: 3000,
     })
     return
@@ -59,7 +62,7 @@ const saveConfig = async () => {
   try {
     await addIntegration(telegramIntegration)
     await getAssistantProfile()
-    toast.add({ severity: 'success', summary: 'Configuración guardada', life: 3000 })
+    toast.add({ severity: 'success', summary: t('integrations.saveConfig'), life: 3000 })
   } catch (error) {
     console.error('Error al guardar la configuración:', error)
   }
@@ -101,7 +104,7 @@ const setWebhookUrl = computed(() => `${API_BASE}/api/telegram/set-webhook`)
 const registerWebhook = async () => {
   if (!publicUrl.value.trim()) {
     webhookStatus.value = 'error'
-    webhookStatusMessage.value = 'Ingresá la URL pública (ngrok) primero.'
+    webhookStatusMessage.value = t('integrations.telegram.enterPublicUrl')
     return
   }
   isRegisteringWebhook.value = true
@@ -114,7 +117,7 @@ const registerWebhook = async () => {
     })
     if (res.ok) {
       webhookStatus.value = 'success'
-      webhookStatusMessage.value = `Webhook registrado: ${webhookUrl.value}`
+      webhookStatusMessage.value = `${t('integrations.telegram.webhookRegistered')}: ${webhookUrl.value}`
     } else {
       const err = await res.json().catch(() => ({}))
       webhookStatus.value = 'error'
@@ -152,13 +155,13 @@ onMounted(async () => {
           <i class="pi pi-send"></i>
         </div>
         <div class="header-text">
-          <h1 class="page-title">Telegram</h1>
-          <p class="page-subtitle">Conecta el asistente a tu bot para responder mensajes automáticamente</p>
+          <h1 class="page-title">{{ t('integrations.telegram.title') }}</h1>
+          <p class="page-subtitle">{{ t('integrations.telegram.subtitle') }}</p>
         </div>
       </div>
       <div class="header-toggle">
         <span class="toggle-status" :class="{ active: telegramIntegration.activated }">
-          {{ telegramIntegration.activated ? 'Activa' : 'Inactiva' }}
+          {{ telegramIntegration.activated ? t('integrations.active') : t('integrations.inactive') }}
         </span>
         <InputSwitch v-model="telegramIntegration.activated" />
       </div>
@@ -169,8 +172,8 @@ onMounted(async () => {
       <div class="panel-header">
         <span class="step-badge">1</span>
         <div>
-          <p class="panel-title">Credenciales del Bot</p>
-          <p class="panel-subtitle">Obtenidas desde @BotFather en Telegram</p>
+          <p class="panel-title">{{ t('integrations.telegram.botCredentials') }}</p>
+          <p class="panel-subtitle">{{ t('integrations.telegram.botCredentialsSubtitle') }}</p>
         </div>
       </div>
 
@@ -193,26 +196,23 @@ onMounted(async () => {
           <Message v-if="validationErrors.bot_token" severity="error" class="field-error">
             {{ validationErrors.bot_token }}
           </Message>
-          <small class="field-help">Token obtenido enviando <code>/newbot</code> a <strong>@BotFather</strong>.</small>
+          <small class="field-help">{{ t('integrations.telegram.botTokenHelp') }}</small>
         </div>
 
         <div class="field-group">
           <label for="secret_token" class="field-label">
             <i class="pi pi-lock field-icon"></i>
             Secret Token
-            <span class="optional">opcional</span>
+            <span class="optional">{{ t('integrations.telegram.optional') }}</span>
           </label>
           <InputText
             id="secret_token"
             v-model="(telegramIntegration.config as TelegramIntegrationConfig).secret_token"
-            placeholder="Mi token secreto personalizado"
+            :placeholder="t('integrations.telegram.secretTokenPlaceholder')"
             :disabled="!telegramIntegration.activated"
             class="w-full"
           />
-          <small class="field-help">
-            Si lo configurás, el webhook solo acepta requests con este token en el header
-            <code>X-Telegram-Bot-Api-Secret-Token</code>.
-          </small>
+          <small class="field-help">{{ t('integrations.telegram.secretTokenHelp') }}</small>
         </div>
 
         <div class="panel-footer">
@@ -220,13 +220,13 @@ onMounted(async () => {
             <template v-if="currentIntegration">
               <span class="saved-dot" :class="{ configured: !!(currentIntegration.config as unknown as TelegramIntegrationConfig).bot_token }"></span>
               <span class="saved-label">
-                {{ (currentIntegration.config as unknown as TelegramIntegrationConfig).bot_token ? 'Token configurado' : 'Sin token guardado' }}
+                {{ (currentIntegration.config as unknown as TelegramIntegrationConfig).bot_token ? t('integrations.telegram.tokenConfigured') : t('integrations.telegram.noToken') }}
               </span>
             </template>
           </div>
           <Button
             type="submit"
-            label="Guardar"
+            :label="t('common.save')"
             icon="pi pi-save"
             severity="primary"
             :disabled="!telegramIntegration.activated"
@@ -240,8 +240,8 @@ onMounted(async () => {
       <div class="panel-header">
         <span class="step-badge">2</span>
         <div>
-          <p class="panel-title">Registrar Webhook</p>
-          <p class="panel-subtitle">Apunta a Telegram hacia la URL de tu servidor</p>
+          <p class="panel-title">{{ t('integrations.telegram.registerWebhook') }}</p>
+          <p class="panel-subtitle">{{ t('integrations.telegram.registerWebhookSubtitle') }}</p>
         </div>
       </div>
 
@@ -249,29 +249,29 @@ onMounted(async () => {
         <div class="field-group">
           <label class="field-label">
             <i class="pi pi-globe field-icon"></i>
-            URL pública del servidor
-            <span class="optional">ngrok / cloudflare / dominio propio</span>
+            {{ t('integrations.telegram.publicUrl') }}
+            <span class="optional">ngrok / cloudflare / {{ t('integrations.telegram.publicUrl') }}</span>
           </label>
           <InputText
             v-model="publicUrl"
-            placeholder="https://abc123.ngrok.io"
+            :placeholder="t('integrations.telegram.publicUrlPlaceholder')"
             class="w-full"
           />
-          <small class="field-help">Dejá vacío si ya tenés un dominio propio configurado.</small>
+          <small class="field-help">{{ t('integrations.telegram.publicUrlHelp') }}</small>
         </div>
 
         <div class="webhook-row">
           <div class="field-group webhook-field">
             <label class="field-label">
               <i class="pi pi-link field-icon"></i>
-              Webhook URL generada
+              {{ t('integrations.webhookUrl') }}
             </label>
             <div class="webhook-url-wrap">
               <code class="webhook-url-text">{{ webhookUrl }}</code>
               <button
                 class="copy-btn"
                 type="button"
-                title="Copiar URL"
+                :title="t('integrations.copyUrl')"
                 @click="navigator.clipboard.writeText(webhookUrl)"
               >
                 <i class="pi pi-copy"></i>
@@ -290,7 +290,7 @@ onMounted(async () => {
             </Message>
           </div>
           <Button
-            label="Registrar en Telegram"
+            :label="t('integrations.telegram.registerBtn')"
             icon="pi pi-check"
             severity="primary"
             :loading="isRegisteringWebhook"
@@ -306,8 +306,8 @@ onMounted(async () => {
       <div class="panel-header">
         <span class="step-badge">3</span>
         <div>
-          <p class="panel-title">Guía de configuración</p>
-          <p class="panel-subtitle">Pasos recomendados para poner en marcha el bot</p>
+          <p class="panel-title">{{ t('integrations.setupGuide') }}</p>
+          <p class="panel-subtitle">{{ t('integrations.telegram.registerWebhookSubtitle') }}</p>
         </div>
       </div>
 

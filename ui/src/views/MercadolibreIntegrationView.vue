@@ -2,12 +2,14 @@
 import type { IntegrationParams, MeliIntegrationConfig } from '@/types/assistant'
 import { onMounted, reactive, computed, watch } from 'vue'
 import { useAssistant } from '@/composables/useAssistant'
+import { useI18n } from 'vue-i18n'
 import InputText from 'primevue/inputtext'
 import Button from 'primevue/button'
 import Card from 'primevue/card'
 import Message from 'primevue/message'
 import InputSwitch from 'primevue/inputswitch'
 
+const { t } = useI18n()
 const { addIntegration, getAssistantProfile, assistantProfile } = useAssistant()
 
 const meliIntegration = reactive<IntegrationParams>({
@@ -28,8 +30,8 @@ const validationErrors = reactive({
 const saveConfig = async () => {
   const config = meliIntegration.config as MeliIntegrationConfig
 
-  validationErrors.app_id = !config.app_id ? 'El App ID es obligatorio.' : ''
-  validationErrors.client_secret = !config.client_secret ? 'El Client Secret es obligatorio.' : ''
+  validationErrors.app_id = !config.app_id ? t('integrations.mercadolibre.appIdRequired') : ''
+  validationErrors.client_secret = !config.client_secret ? t('integrations.mercadolibre.clientSecretRequired') : ''
 
   if (validationErrors.app_id || validationErrors.client_secret) {
     return
@@ -87,17 +89,17 @@ onMounted(async () => {
           <i class="pi pi-shopping-cart"></i>
         </div>
         <div class="header-content">
-          <h1 class="integration-title">Integración MercadoLibre</h1>
-          <p class="integration-subtitle">Conecta tu asistente con la API de MercadoLibre</p>
+          <h1 class="integration-title">{{ t('integrations.mercadolibre.title') }}</h1>
+          <p class="integration-subtitle">{{ t('integrations.mercadolibre.subtitle') }}</p>
         </div>
       </div>
 
       <div class="activation-toggle">
         <div class="toggle-content">
           <div class="toggle-info">
-            <span class="toggle-label">Estado de la integración</span>
+            <span class="toggle-label">{{ t('integrations.mercadolibre.integrationStatus') }}</span>
             <span class="toggle-status" :class="{ active: meliIntegration.activated }">
-              {{ meliIntegration.activated ? 'Activa' : 'Inactiva' }}
+              {{ meliIntegration.activated ? t('integrations.active') : t('integrations.inactive') }}
             </span>
           </div>
           <InputSwitch v-model="meliIntegration.activated" class="modern-switch" />
@@ -128,7 +130,7 @@ onMounted(async () => {
               <Message v-if="validationErrors.app_id" severity="error" class="field-error">
                 {{ validationErrors.app_id }}
               </Message>
-              <small class="field-help">Identificador único de tu aplicación en MercadoLibre</small>
+              <small class="field-help">{{ t('integrations.mercadolibre.appIdHelp') }}</small>
             </div>
 
             <div class="field-group">
@@ -149,14 +151,14 @@ onMounted(async () => {
               <Message v-if="validationErrors.client_secret" severity="error" class="field-error">
                 {{ validationErrors.client_secret }}
               </Message>
-              <small class="field-help">Clave secreta para autenticar tu aplicación</small>
+              <small class="field-help">{{ t('integrations.mercadolibre.clientSecretHelp') }}</small>
             </div>
           </div>
 
           <div class="form-actions">
             <Button
               type="submit"
-              label="Guardar Configuración"
+              :label="t('integrations.saveConfig')"
               icon="pi pi-save"
               severity="warning"
               :disabled="!meliIntegration.activated"
@@ -171,7 +173,7 @@ onMounted(async () => {
       <template #header>
         <div class="status-header">
           <i class="pi pi-cog status-icon"></i>
-          <span class="status-title">Configuración Actual</span>
+          <span class="status-title">{{ t('integrations.mercadolibre.currentConfig') }}</span>
         </div>
       </template>
       <template #content>
@@ -185,8 +187,8 @@ onMounted(async () => {
               {{
                 searchMeliIntegration
                   ? (searchMeliIntegration.config as unknown as MeliIntegrationConfig).app_id ||
-                    'No configurado'
-                  : 'No configurado'
+                    t('integrations.notConfigured')
+                  : t('integrations.notConfigured')
               }}
             </div>
           </div>
@@ -200,8 +202,8 @@ onMounted(async () => {
               {{
                 searchMeliIntegration
                   ? (searchMeliIntegration.config as unknown as MeliIntegrationConfig)
-                      .client_secret || 'No configurado'
-                  : 'No configurado'
+                      .client_secret || t('integrations.notConfigured')
+                  : t('integrations.notConfigured')
               }}
             </div>
           </div>

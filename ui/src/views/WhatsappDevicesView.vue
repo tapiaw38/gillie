@@ -15,9 +15,11 @@ import Tag from 'primevue/tag'
 import Toast from 'primevue/toast'
 import ProgressSpinner from 'primevue/progressspinner'
 import Message from 'primevue/message'
+import { useI18n } from 'vue-i18n'
 
 const whatsapp = useWhatsApp()
 const toast = useToast()
+const { t } = useI18n()
 
 // Country codes
 interface Country {
@@ -74,8 +76,8 @@ const loadDevices = async () => {
   } catch (error) {
     toast.add({
       severity: 'error',
-      summary: 'Error',
-      detail: 'No se pudieron cargar los dispositivos',
+      summary: t('common.error'),
+      detail: t('integrations.whatsappDevices.errorLoadDevices'),
       life: 3000,
     })
     console.error('Error loading devices:', error)
@@ -88,8 +90,8 @@ const createDevice = async () => {
   if (!localPhone.value || !newDevice.value.device_name) {
     toast.add({
       severity: 'warn',
-      summary: 'Campos requeridos',
-      detail: 'Por favor completa todos los campos',
+      summary: t('common.requiredFields'),
+      detail: t('common.completeRequired'),
       life: 3000,
     })
     return
@@ -101,8 +103,8 @@ const createDevice = async () => {
     const device = await whatsapp.createDevice({ ...newDevice.value, phone_number })
     toast.add({
       severity: 'success',
-      summary: 'Dispositivo creado',
-      detail: `Dispositivo ${device.device_name} creado exitosamente`,
+      summary: t('integrations.whatsappDevices.deviceCreated'),
+      detail: `${device.device_name} ${t('integrations.whatsappDevices.deviceCreatedDesc')}`,
       life: 3000,
     })
     showCreateDialog.value = false
@@ -113,8 +115,8 @@ const createDevice = async () => {
   } catch (error) {
     toast.add({
       severity: 'error',
-      summary: 'Error',
-      detail: 'No se pudo crear el dispositivo',
+      summary: t('common.error'),
+      detail: t('integrations.whatsappDevices.errorCreateDevice'),
       life: 3000,
     })
     console.error('Error creating device:', error)
@@ -159,8 +161,8 @@ const connectDevice = async (device: WhatsAppDevice) => {
 
         toast.add({
           severity: 'success',
-          summary: 'Dispositivo autenticado',
-          detail: `${device.device_name} vinculado exitosamente`,
+          summary: t('integrations.whatsappDevices.deviceAuthenticated'),
+          detail: `${device.device_name} ${t('integrations.whatsappDevices.deviceAuthenticatedDesc')}`,
           life: 4000,
         })
         selectedDevice.value = undefined
@@ -168,8 +170,8 @@ const connectDevice = async (device: WhatsAppDevice) => {
       } else if (msg.type === 'error') {
         toast.add({
           severity: 'error',
-          summary: 'Error de autenticación',
-          detail: msg.message || 'Error desconocido',
+          summary: t('integrations.whatsappDevices.errorAuthTitle'),
+          detail: msg.message || t('common.unknownError'),
           life: 4000,
         })
       }
@@ -178,16 +180,16 @@ const connectDevice = async (device: WhatsAppDevice) => {
     ws.onerror = () => {
       toast.add({
         severity: 'error',
-        summary: 'Error de conexión',
-        detail: 'No se pudo conectar al stream QR',
+        summary: t('integrations.whatsappDevices.errorConnTitle'),
+        detail: t('integrations.whatsappDevices.errorConnStream'),
         life: 3000,
       })
     }
   } catch (error) {
     toast.add({
       severity: 'error',
-      summary: 'Error',
-      detail: 'No se pudo iniciar la autenticación',
+      summary: t('common.error'),
+      detail: t('integrations.whatsappDevices.errorConnect'),
       life: 3000,
     })
     console.error('Error connecting device:', error)
@@ -202,16 +204,16 @@ const disconnectDevice = async (device: WhatsAppDevice) => {
     await whatsapp.disconnectDevice(device.id)
     toast.add({
       severity: 'success',
-      summary: 'Dispositivo desconectado',
-      detail: `${device.device_name} desconectado exitosamente`,
+      summary: t('integrations.whatsappDevices.deviceDisconnected'),
+      detail: `${device.device_name} ${t('integrations.whatsappDevices.deviceDisconnectedDesc')}`,
       life: 3000,
     })
     await loadDevices()
   } catch (error) {
     toast.add({
       severity: 'error',
-      summary: 'Error',
-      detail: 'No se pudo desconectar el dispositivo',
+      summary: t('common.error'),
+      detail: t('integrations.whatsappDevices.errorDisconnect'),
       life: 3000,
     })
     console.error('Error disconnecting device:', error)
@@ -221,7 +223,7 @@ const disconnectDevice = async (device: WhatsAppDevice) => {
 }
 
 const deleteDevice = async (device: WhatsAppDevice) => {
-  if (!confirm(`¿Estás seguro de eliminar el dispositivo ${device.device_name}?`)) {
+  if (!confirm(`${t('integrations.whatsappDevices.confirmDelete')} ${device.device_name}?`)) {
     return
   }
 
@@ -230,16 +232,16 @@ const deleteDevice = async (device: WhatsAppDevice) => {
     await whatsapp.deleteDevice(device.id)
     toast.add({
       severity: 'success',
-      summary: 'Dispositivo eliminado',
-      detail: `${device.device_name} eliminado exitosamente`,
+      summary: t('integrations.whatsappDevices.deviceDeleted'),
+      detail: `${device.device_name} ${t('integrations.whatsappDevices.deviceDeletedDesc')}`,
       life: 3000,
     })
     await loadDevices()
   } catch (error) {
     toast.add({
       severity: 'error',
-      summary: 'Error',
-      detail: 'No se pudo eliminar el dispositivo',
+      summary: t('common.error'),
+      detail: t('integrations.whatsappDevices.errorDelete'),
       life: 3000,
     })
     console.error('Error deleting device:', error)
@@ -260,10 +262,10 @@ const getStatusSeverity = (status: string) => {
 
 const getStatusLabel = (status: string) => {
   const labelMap: Record<string, string> = {
-    authenticated: 'Autenticado',
-    connected: 'Conectado',
-    connecting: 'Conectando',
-    disconnected: 'Desconectado',
+    authenticated: t('integrations.whatsappDevices.statusAuthenticated'),
+    connected: t('integrations.whatsappDevices.statusConnected'),
+    connecting: t('integrations.whatsappDevices.statusConnecting'),
+    disconnected: t('integrations.whatsappDevices.statusDisconnected'),
   }
   return labelMap[status] || status
 }
@@ -302,12 +304,12 @@ onMounted(() => {
           <i class="pi pi-whatsapp"></i>
         </div>
         <div class="header-text">
-          <h1 class="page-title">Dispositivos WhatsApp</h1>
-          <p class="page-subtitle">Gestiona tus dispositivos WhatsApp conectados al asistente IA</p>
+          <h1 class="page-title">{{ t('integrations.whatsappDevices.title') }}</h1>
+          <p class="page-subtitle">{{ t('integrations.whatsappDevices.subtitle') }}</p>
         </div>
       </div>
       <Button
-        label="Agregar Dispositivo"
+        :label="t('integrations.whatsappDevices.addDevice')"
         icon="pi pi-plus"
         severity="primary"
         :disabled="loading"
@@ -320,16 +322,14 @@ onMounted(() => {
       <!-- Loading state -->
       <div v-if="loading && !hasDevices" class="loading-state">
         <ProgressSpinner style="width: 2.5rem; height: 2.5rem;" />
-        <p class="loading-text">Cargando dispositivos…</p>
+        <p class="loading-text">{{ t('integrations.whatsappDevices.loadingDevices') }}</p>
       </div>
 
       <!-- Empty state -->
       <div v-else-if="!hasDevices && !loading" class="empty-state">
         <i class="pi pi-mobile empty-icon"></i>
-        <p class="empty-title">Sin dispositivos configurados</p>
-        <p class="empty-subtitle">
-          Haz clic en "Agregar Dispositivo" para vincular tu primer número de WhatsApp.
-        </p>
+        <p class="empty-title">{{ t('integrations.whatsappDevices.noDevices') }}</p>
+        <p class="empty-subtitle">{{ t('integrations.whatsappDevices.noDevicesDesc') }}</p>
       </div>
 
       <!-- DataTable -->
@@ -343,7 +343,7 @@ onMounted(() => {
         :rows="10"
         class="devices-table"
       >
-        <Column field="device_name" header="Nombre del Dispositivo" :sortable="true">
+        <Column field="device_name" :header="t('integrations.whatsappDevices.deviceName')" :sortable="true">
           <template #body="{ data }">
             <div class="device-name">
               <i class="pi pi-mobile"></i>
@@ -352,13 +352,13 @@ onMounted(() => {
           </template>
         </Column>
 
-        <Column field="phone_number" header="Teléfono" :sortable="true">
+        <Column field="phone_number" :header="t('integrations.whatsappDevices.phone')" :sortable="true">
           <template #body="{ data }">
             <span class="phone-number">{{ data.phone_number }}</span>
           </template>
         </Column>
 
-        <Column field="status" header="Estado" :sortable="true">
+        <Column field="status" :header="t('integrations.whatsappDevices.status')" :sortable="true">
           <template #body="{ data }">
             <Tag
               :severity="getStatusSeverity(data.status)"
@@ -367,22 +367,22 @@ onMounted(() => {
           </template>
         </Column>
 
-        <Column field="last_connected_at" header="Última Conexión" :sortable="true">
+        <Column field="last_connected_at" :header="t('integrations.whatsappDevices.lastConnection')" :sortable="true">
           <template #body="{ data }">
             <span v-if="data.last_connected_at" class="date">
-              {{ new Date(data.last_connected_at).toLocaleString('es-ES') }}
+              {{ new Date(data.last_connected_at).toLocaleString() }}
             </span>
-            <span v-else class="text-muted">Nunca</span>
+            <span v-else class="text-muted">{{ t('common.never') }}</span>
           </template>
         </Column>
 
-        <Column header="Acciones" :exportable="false">
+        <Column :header="t('integrations.whatsappDevices.actions')" :exportable="false">
           <template #body="{ data }">
             <div class="action-buttons">
               <Button
                 v-if="data.status === 'disconnected'"
                 icon="pi pi-qrcode"
-                label="Conectar"
+                :label="t('integrations.whatsappDevices.connect')"
                 severity="success"
                 size="small"
                 :disabled="loading"
@@ -391,7 +391,7 @@ onMounted(() => {
               <Button
                 v-else-if="data.status === 'authenticated' || data.status === 'connected'"
                 icon="pi pi-power-off"
-                label="Desconectar"
+                :label="t('integrations.whatsappDevices.disconnect')"
                 severity="warning"
                 size="small"
                 :disabled="loading"
@@ -414,14 +414,14 @@ onMounted(() => {
     <!-- Create Device Dialog -->
     <Dialog
       v-model:visible="showCreateDialog"
-      header="Agregar Nuevo Dispositivo"
+      :header="t('integrations.whatsappDevices.createDevice')"
       :modal="true"
       :style="{ width: '500px' }"
       class="create-dialog"
     >
       <div class="form-container">
         <div class="field">
-          <label for="phone">Número de Teléfono</label>
+          <label for="phone">{{ t('integrations.whatsappDevices.phoneNumber') }}</label>
           <div class="phone-input-group">
             <Dropdown
               v-model="selectedCountry"
@@ -445,31 +445,31 @@ onMounted(() => {
               class="phone-number-input"
             />
           </div>
-          <small class="field-hint">Ingresa el número sin el código de país</small>
+          <small class="field-hint">{{ t('integrations.whatsappDevices.enterWithoutCode') }}</small>
         </div>
 
         <div class="field">
-          <label for="name">Nombre del Dispositivo</label>
+          <label for="name">{{ t('integrations.whatsappDevices.deviceNameLabel') }}</label>
           <InputText
             id="name"
             v-model="newDevice.device_name"
-            placeholder="Mi Teléfono"
+            :placeholder="t('integrations.whatsappDevices.deviceNamePlaceholder')"
             class="w-full"
             :disabled="loading"
           />
-          <small class="field-hint">Un nombre descriptivo para identificar tu dispositivo</small>
+          <small class="field-hint">{{ t('integrations.whatsappDevices.deviceNameHint') }}</small>
         </div>
       </div>
 
       <template #footer>
         <Button
-          label="Cancelar"
+          :label="t('common.cancel')"
           icon="pi pi-times"
           text
           :disabled="loading"
           @click="showCreateDialog = false"
         />
-        <Button label="Crear" icon="pi pi-check" :loading="loading" @click="createDevice" />
+        <Button :label="t('integrations.whatsappDevices.create')" icon="pi pi-check" :loading="loading" @click="createDevice" />
       </template>
     </Dialog>
 

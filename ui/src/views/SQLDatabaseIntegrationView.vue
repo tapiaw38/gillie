@@ -3,12 +3,15 @@ import type { IntegrationParams, Integration, SQLDatabaseIntegrationConfig, SQLD
 import { onMounted, reactive, ref, computed } from 'vue'
 import { useAssistant } from '@/composables/useAssistant'
 import { useErrorToast } from '@/composables/useErrorToast'
+import { useI18n } from 'vue-i18n'
 import Toast from 'primevue/toast'
 import InputText from 'primevue/inputtext'
 import Button from 'primevue/button'
 import Card from 'primevue/card'
 import Message from 'primevue/message'
 import InputSwitch from 'primevue/inputswitch'
+
+const { t } = useI18n()
 
 const {
   addIntegration,
@@ -24,9 +27,9 @@ const {
 } = useAssistant()
 
 const errorWatchers = [
-  { flag: isAddIntegrationError, summary: 'Error al guardar configuración', detail: addIntegrationError },
-  { flag: isRemoveIntegrationByIdError, summary: 'Error al eliminar base de datos', detail: removeIntegrationByIdError },
-  { flag: isGetAssistantProfileError, summary: 'Error al cargar perfil', detail: getAssistantProfileError },
+  { flag: isAddIntegrationError, summary: t('integrations.sqlDatabase.errorSaveConfig'), detail: addIntegrationError },
+  { flag: isRemoveIntegrationByIdError, summary: t('integrations.sqlDatabase.errorDeleteDb'), detail: removeIntegrationByIdError },
+  { flag: isGetAssistantProfileError, summary: t('integrations.sqlDatabase.errorLoadProfile'), detail: getAssistantProfileError },
 ]
 
 const { toast } = useErrorToast(errorWatchers)
@@ -125,18 +128,18 @@ const cancelForm = () => {
 
 // ── Save ─────────────────────────────────────────────────────────────────────
 const saveForm = async () => {
-  formValidationErrors.alias = !formAlias.value.trim() ? 'El nombre/alias es obligatorio.' : ''
+  formValidationErrors.alias = !formAlias.value.trim() ? t('integrations.sqlDatabase.aliasRequired') : ''
   formValidationErrors.connection_string = !formConnectionString.value.trim()
-    ? 'La cadena de conexión es obligatoria.'
+    ? t('integrations.sqlDatabase.connectionStringRequired')
     : ''
-  const hasValidTable = formAllowedTables.some((t) => t.name.trim())
-  formValidationErrors.tables = !hasValidTable ? 'Agregá al menos una tabla con nombre.' : ''
+  const hasValidTable = formAllowedTables.some((tbl) => tbl.name.trim())
+  formValidationErrors.tables = !hasValidTable ? t('integrations.sqlDatabase.tableRequired') : ''
 
   if (formValidationErrors.alias || formValidationErrors.connection_string || formValidationErrors.tables) {
     toast.add({
       severity: 'warn',
-      summary: 'Campos requeridos',
-      detail: 'Por favor completa todos los campos obligatorios',
+      summary: t('common.requiredFields'),
+      detail: t('common.completeRequired'),
       life: 3000,
     })
     return
@@ -159,7 +162,7 @@ const saveForm = async () => {
     await getAssistantProfile()
     toast.add({
       severity: 'success',
-      summary: editingId.value ? 'Base de datos actualizada' : 'Base de datos guardada',
+      summary: editingId.value ? t('integrations.sqlDatabase.databaseUpdated') : t('integrations.sqlDatabase.databaseSaved'),
       life: 3000,
     })
     showAddForm.value = false
@@ -172,19 +175,19 @@ const saveForm = async () => {
 // ── Delete ───────────────────────────────────────────────────────────────────
 const deleteDb = async (id: string) => {
   if (!id) {
-    toast.add({ severity: 'warn', summary: 'No se puede eliminar', detail: 'Esta integración no tiene ID', life: 3000 })
+    toast.add({ severity: 'warn', summary: t('integrations.sqlDatabase.cantDelete'), detail: t('integrations.sqlDatabase.cantDeleteDesc'), life: 3000 })
     return
   }
-  const confirmed = confirm('¿Estás seguro de que querés eliminar esta base de datos?')
+  const confirmed = confirm(t('integrations.sqlDatabase.confirmDelete'))
   if (!confirmed) return
 
   try {
     await removeIntegrationById(id)
     await getAssistantProfile()
-    toast.add({ severity: 'success', summary: 'Base de datos eliminada', life: 3000 })
+    toast.add({ severity: 'success', summary: t('integrations.sqlDatabase.databaseDeleted'), life: 3000 })
   } catch (error) {
     console.error('Error al eliminar la base de datos:', error)
-    toast.add({ severity: 'error', summary: 'Error al eliminar', detail: String(error), life: 4000 })
+    toast.add({ severity: 'error', summary: t('integrations.sqlDatabase.errorDeleteDb'), detail: String(error), life: 4000 })
   }
 }
 
@@ -203,15 +206,15 @@ onMounted(async () => {
           <i class="pi pi-database"></i>
         </div>
         <div class="header-content">
-          <h1 class="integration-title">Bases de Datos SQL</h1>
+          <h1 class="integration-title">{{ t('integrations.sqlDatabase.title') }}</h1>
           <p class="integration-subtitle">
-            Conecta el asistente a múltiples bases de datos PostgreSQL para consultar datos en tiempo real
+            {{ t('integrations.sqlDatabase.subtitle') }}
           </p>
         </div>
       </div>
 
       <Button
-        label="Agregar base de datos"
+        :label="t('integrations.sqlDatabase.addDatabase')"
         icon="pi pi-plus"
         @click="openAddForm"
       />
@@ -220,7 +223,7 @@ onMounted(async () => {
     <!-- Add / Edit Form -->
     <Card v-if="showAddForm" class="form-card">
       <template #content>
-        <h3 class="form-title">{{ editingId ? 'Editar base de datos' : 'Nueva base de datos' }}</h3>
+        <h3 class="form-title">{{ editingId ? t('integrations.sqlDatabase.editDatabase') : t('integrations.sqlDatabase.newDatabase') }}</h3>
 
         <form class="config-form" @submit.prevent="saveForm">
           <div class="form-grid">
@@ -229,14 +232,14 @@ onMounted(async () => {
             <div class="field-group">
               <label for="form_alias" class="field-label">
                 <i class="pi pi-tag field-icon"></i>
-                Nombre / Alias
+                {{ t('integrations.sqlDatabase.alias') }}
                 <span class="required">*</span>
               </label>
               <div class="input-wrapper">
                 <InputText
                   id="form_alias"
                   v-model="formAlias"
-                  placeholder="CRM, ERP, Inventario..."
+                  :placeholder="t('integrations.sqlDatabase.aliasPlaceholder')"
                   :invalid="!!formValidationErrors.alias"
                   class="w-full"
                 />
@@ -244,14 +247,14 @@ onMounted(async () => {
               <Message v-if="formValidationErrors.alias" severity="error" class="field-error">
                 {{ formValidationErrors.alias }}
               </Message>
-              <small class="field-help">Nombre identificador de esta conexión.</small>
+              <small class="field-help">{{ t('integrations.sqlDatabase.aliasHelp') }}</small>
             </div>
 
             <!-- Connection string -->
             <div class="field-group">
               <label for="form_connection_string" class="field-label">
                 <i class="pi pi-link field-icon"></i>
-                Cadena de conexión
+                {{ t('integrations.sqlDatabase.connectionString') }}
                 <span class="required">*</span>
               </label>
               <div class="input-wrapper">
@@ -267,7 +270,7 @@ onMounted(async () => {
                 {{ formValidationErrors.connection_string }}
               </Message>
               <small class="field-help">
-                Usá un usuario con permisos <strong>solo de lectura</strong> en las tablas permitidas.
+                {{ t('integrations.sqlDatabase.connectionStringHelp') }}
               </small>
             </div>
 
@@ -277,12 +280,12 @@ onMounted(async () => {
                 <div class="tables-header">
                   <label class="field-label">
                     <i class="pi pi-table field-icon"></i>
-                    Tablas permitidas
+                    {{ t('integrations.sqlDatabase.allowedTables') }}
                     <span class="required">*</span>
                   </label>
                   <Button
                     type="button"
-                    label="Agregar tabla"
+                    :label="t('integrations.sqlDatabase.addTable')"
                     icon="pi pi-plus"
                     outlined
                     size="small"
@@ -303,7 +306,7 @@ onMounted(async () => {
                     />
                     <InputText
                       v-model="table.description"
-                      placeholder="Catálogo de productos con columnas: id, nombre, precio, stock..."
+                      :placeholder="t('integrations.sqlDatabase.tableDescriptionPlaceholder')"
                       class="table-desc-field"
                     />
                     <Button
@@ -323,7 +326,7 @@ onMounted(async () => {
                   {{ formValidationErrors.tables }}
                 </Message>
                 <small class="field-help">
-                  El asistente solo podrá consultar estas tablas. Describí las columnas para que sepa qué puede consultar.
+                  {{ t('integrations.sqlDatabase.connectionStringHelp') }}
                 </small>
               </div>
             </div>
@@ -334,7 +337,7 @@ onMounted(async () => {
                 <div class="permissions-header">
                   <label class="field-label">
                     <i class="pi pi-shield field-icon"></i>
-                    Permisos de operaciones
+                    {{ t('integrations.sqlDatabase.dmlPermissions') }}
                   </label>
                 </div>
 
@@ -343,9 +346,9 @@ onMounted(async () => {
                     <div class="permission-info">
                       <span class="permission-name">{{ op }}</span>
                       <span class="permission-desc">{{
-                        op === 'INSERT' ? 'Insertar nuevas filas' :
-                        op === 'UPDATE' ? 'Modificar filas existentes' :
-                        'Eliminar filas'
+                        op === 'INSERT' ? t('integrations.sqlDatabase.insertDesc') :
+                        op === 'UPDATE' ? t('integrations.sqlDatabase.updateDesc') :
+                        t('integrations.sqlDatabase.deleteDesc')
                       }}</span>
                     </div>
                     <InputSwitch v-model="formDmlPermissions[op]" />
@@ -353,7 +356,7 @@ onMounted(async () => {
 
                   <div class="always-blocked-row">
                     <i class="pi pi-lock always-blocked-icon"></i>
-                    <span class="always-blocked-label">Siempre bloqueado:</span>
+                    <span class="always-blocked-label">{{ t('integrations.sqlDatabase.alwaysBlocked') }}:</span>
                     <div class="always-blocked-tags">
                       <span v-for="kw in ALWAYS_BLOCKED" :key="kw" class="blocked-tag">{{ kw }}</span>
                     </div>
@@ -361,7 +364,7 @@ onMounted(async () => {
                 </div>
 
                 <small class="field-help">
-                  SELECT siempre está permitido. DDL (DROP, ALTER…) no puede habilitarse.
+                  {{ t('integrations.sqlDatabase.dmlHelp') }}
                 </small>
               </div>
             </div>
@@ -371,9 +374,9 @@ onMounted(async () => {
               <div class="activation-toggle">
                 <div class="toggle-content">
                   <div class="toggle-info">
-                    <span class="toggle-label">Estado de la integración</span>
+                    <span class="toggle-label">{{ t('integrations.mercadolibre.integrationStatus') }}</span>
                     <span class="toggle-status" :class="{ active: formActivated }">
-                      {{ formActivated ? 'Activa' : 'Inactiva' }}
+                      {{ formActivated ? t('integrations.active') : t('integrations.inactive') }}
                     </span>
                   </div>
                   <InputSwitch v-model="formActivated" class="modern-switch" />
@@ -386,14 +389,14 @@ onMounted(async () => {
           <div class="form-actions">
             <Button
               type="button"
-              label="Cancelar"
+              :label="t('common.cancel')"
               severity="secondary"
               outlined
               @click="cancelForm"
             />
             <Button
               type="submit"
-              :label="editingId ? 'Actualizar' : 'Guardar'"
+              :label="editingId ? t('common.edit') : t('integrations.sqlDatabase.saveDatabase')"
               icon="pi pi-save"
               severity="primary"
             />
@@ -404,7 +407,7 @@ onMounted(async () => {
 
     <!-- Empty state -->
     <div v-if="dbIntegrations.length === 0 && !showAddForm" class="empty-state">
-      No hay bases de datos configuradas. Agrega una para comenzar.
+      {{ t('integrations.sqlDatabase.noDatabases') }}. {{ t('integrations.sqlDatabase.noDatabasesDesc') }}
     </div>
 
     <!-- Database list -->
@@ -416,7 +419,7 @@ onMounted(async () => {
       <div class="db-card-header">
         <span class="db-name">{{ db.name }}</span>
         <span class="db-status" :class="{ active: db.activated }">
-          {{ db.activated ? 'Activa' : 'Inactiva' }}
+          {{ db.activated ? t('integrations.active') : t('integrations.inactive') }}
         </span>
       </div>
       <div class="db-card-body">

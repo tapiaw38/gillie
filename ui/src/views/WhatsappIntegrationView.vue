@@ -3,6 +3,7 @@ import type { IntegrationParams, WhatsappIntegrationConfig } from '@/types/assis
 import { onMounted, reactive, computed, watch } from 'vue'
 import { useAssistant } from '@/composables/useAssistant'
 import { useErrorToast } from '@/composables/useErrorToast'
+import { useI18n } from 'vue-i18n'
 import Toast from 'primevue/toast'
 import InputText from 'primevue/inputtext'
 import Button from 'primevue/button'
@@ -20,15 +21,17 @@ const {
   getAssistantProfileError,
 } = useAssistant()
 
+const { t } = useI18n()
+
 const errorWatchers = [
   {
     flag: isAddIntegrationError,
-    summary: 'Error al guardar configuración',
+    summary: t('systemCommands.errorSaveConfig'),
     detail: addIntegrationError,
   },
   {
     flag: isGetAssistantProfileError,
-    summary: 'Error al cargar perfil',
+    summary: t('systemCommands.errorLoadProfile'),
     detail: getAssistantProfileError,
   },
 ]
@@ -55,12 +58,12 @@ const validationErrors = reactive({
 const saveConfig = async () => {
   const config = whatsappIntegration.config as WhatsappIntegrationConfig
 
-  validationErrors.accessToken = !config.accessToken ? 'El token de acceso es obligatorio.' : ''
+  validationErrors.accessToken = !config.accessToken ? t('integrations.whatsapp.accessTokenRequired') : ''
   validationErrors.phoneNumberId = !config.phoneNumberId
-    ? 'El ID de número de teléfono es obligatorio.'
+    ? t('integrations.whatsapp.phoneNumberIdRequired')
     : ''
   validationErrors.businessAccountId = !config.businessAccountId
-    ? 'El ID de cuenta de WhatsApp Business es obligatorio.'
+    ? t('integrations.whatsapp.businessAccountIdRequired')
     : ''
 
   if (
@@ -70,8 +73,8 @@ const saveConfig = async () => {
   ) {
     toast.add({
       severity: 'warn',
-      summary: 'Campos requeridos',
-      detail: 'Por favor completa todos los campos obligatorios',
+      summary: t('common.requiredFields'),
+      detail: t('common.completeRequired'),
       life: 3000,
     })
     return
@@ -133,13 +136,13 @@ onMounted(async () => {
           <i class="pi pi-whatsapp"></i>
         </div>
         <div class="header-text">
-          <h1 class="page-title">WhatsApp Business API</h1>
-          <p class="page-subtitle">Conecta tu asistente con la API oficial de WhatsApp Business</p>
+          <h1 class="page-title">{{ t('integrations.whatsapp.title') }}</h1>
+          <p class="page-subtitle">{{ t('integrations.whatsapp.subtitle') }}</p>
         </div>
       </div>
       <div class="header-toggle">
         <span class="toggle-status" :class="{ active: whatsappIntegration.activated }">
-          {{ whatsappIntegration.activated ? 'Activa' : 'Inactiva' }}
+          {{ whatsappIntegration.activated ? t('integrations.active') : t('integrations.inactive') }}
         </span>
         <InputSwitch v-model="whatsappIntegration.activated" />
       </div>
@@ -150,8 +153,8 @@ onMounted(async () => {
       <div class="panel-header">
         <span class="step-badge">1</span>
         <div>
-          <p class="panel-title">Credenciales API</p>
-          <p class="panel-subtitle">Configuración de acceso a WhatsApp Business</p>
+          <p class="panel-title">{{ t('integrations.whatsapp.credentialsTitle') }}</p>
+          <p class="panel-subtitle">{{ t('integrations.whatsapp.credentialsSubtitle') }}</p>
         </div>
       </div>
 
@@ -159,7 +162,7 @@ onMounted(async () => {
         <div class="field-group">
           <label for="accessToken" class="field-label">
             <i class="pi pi-key field-icon"></i>
-            Token de Acceso
+            {{ t('integrations.whatsapp.accessToken') }}
           </label>
           <InputText
             id="accessToken"
@@ -173,13 +176,13 @@ onMounted(async () => {
           <Message v-if="validationErrors.accessToken" severity="error" class="field-error">
             {{ validationErrors.accessToken }}
           </Message>
-          <small class="field-help">Token temporal o permanente de la API de WhatsApp</small>
+          <small class="field-help">{{ t('integrations.whatsapp.accessTokenHelp') }}</small>
         </div>
 
         <div class="field-group">
           <label for="phoneNumberId" class="field-label">
             <i class="pi pi-phone field-icon"></i>
-            ID de Número de Teléfono
+            {{ t('integrations.whatsapp.phoneNumberId') }}
           </label>
           <InputText
             id="phoneNumberId"
@@ -192,7 +195,7 @@ onMounted(async () => {
           <Message v-if="validationErrors.phoneNumberId" severity="error" class="field-error">
             {{ validationErrors.phoneNumberId }}
           </Message>
-          <small class="field-help">Número vinculado a la API de WhatsApp</small>
+          <small class="field-help">{{ t('integrations.whatsapp.phoneNumberIdHelp') }}</small>
         </div>
 
         <div class="field-group">

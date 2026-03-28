@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { onMounted, reactive, ref, watch } from 'vue'
+import { onMounted, reactive, ref, watch, computed } from 'vue'
 import Card from 'primevue/card'
 import Toast from 'primevue/toast'
 import { useAssistant } from '@/composables/useAssistant'
@@ -12,6 +12,9 @@ import Tag from 'primevue/tag'
 import InputSwitch from 'primevue/inputswitch'
 import { useToogle } from '@/composables/useToogle'
 import type { ApiKeyParams } from '@/types/assistant.ts'
+import { useI18n } from 'vue-i18n'
+
+const { t } = useI18n()
 
 const { toogleValue: isVisibleAddApiKey } = useToogle(false)
 const { toogleValue: isVisibleRemoveApiKey } = useToogle(false)
@@ -41,12 +44,12 @@ const {
 const errorWatchers = [
   {
     flag: isAddApiKeyError,
-    summary: 'Error al agregar API Key',
+    summary: t('myAccount.errorAddKey'),
     detail: addApiKeyError,
   },
   {
     flag: isRemoveApiKeyError,
-    summary: 'Error al eliminar API Key',
+    summary: t('myAccount.errorDeleteKey'),
     detail: removeApiKeyError,
   },
 ]
@@ -61,8 +64,8 @@ watch(isAddApiKeySuccess, (value) => {
   if (value) {
     toast.add({
       severity: 'success',
-      summary: 'API Key agregada',
-      detail: 'La API Key se creó correctamente',
+      summary: t('myAccount.keyAdded'),
+      detail: t('myAccount.keyAddedDesc'),
       life: 3000,
     })
   }
@@ -72,8 +75,8 @@ watch(isRemoveApiKeySuccess, (value) => {
   if (value) {
     toast.add({
       severity: 'success',
-      summary: 'API Key eliminada',
-      detail: 'La API Key se eliminó correctamente',
+      summary: t('myAccount.keyDeleted'),
+      detail: t('myAccount.keyDeletedDesc'),
       life: 3000,
     })
   }
@@ -92,16 +95,16 @@ const toggleTts = async (value: boolean) => {
     await updateAssistantProfile({ tts_enabled: value })
     toast.add({
       severity: 'success',
-      summary: 'Configuración guardada',
-      detail: value ? 'Respuestas en audio activadas' : 'Respuestas en audio desactivadas',
+      summary: t('myAccount.configSaved'),
+      detail: value ? t('myAccount.audioActivated') : t('myAccount.audioDeactivated'),
       life: 3000,
     })
   } catch {
     ttsEnabled.value = !value
     toast.add({
       severity: 'error',
-      summary: 'Error',
-      detail: 'No se pudo actualizar la configuración',
+      summary: t('common.error'),
+      detail: t('myAccount.errorUpdateConfig'),
       life: 3000,
     })
   }
@@ -111,7 +114,7 @@ const addApiKeyParams = reactive<ApiKeyParams>({
   description: '',
 })
 
-const modalTitleAddApiKey = ref('Agregar Api Key')
+const modalTitleAddApiKey = computed(() => t('myAccount.addKeyTitle'))
 const changeAddApiKeyVisible = (value: boolean) => {
   isVisibleAddApiKey.value = value
 }
@@ -122,13 +125,13 @@ const addApiKeyHandler = async () => {
     addApiKeyParams.description = ''
     isVisibleAddApiKey.value = false
   } catch (error) {
-    console.error('Error al agregar el api key:', error)
+    console.error('Error adding api key:', error)
   }
 }
 
 const removeApiKeyDeleteData = ref<string | null>(null)
 
-const modalTitleRemoveApiKey = ref('Eliminar Api Key')
+const modalTitleRemoveApiKey = computed(() => t('myAccount.deleteKeyTitle'))
 const changeRemoveApiKeyVisible = (value: boolean) => {
   isVisibleRemoveApiKey.value = value
 }
@@ -139,7 +142,7 @@ const removeApiKeyHandler = async () => {
     await removeApiKey(removeApiKeyDeleteData.value)
     isVisibleRemoveApiKey.value = false
   } catch (error) {
-    console.error('Error al eliminar el api key:', error)
+    console.error('Error removing api key:', error)
   }
 }
 
@@ -147,8 +150,8 @@ const copyApiKey = (apiKey: string) => {
   navigator.clipboard.writeText(apiKey)
   toast.add({
     severity: 'success',
-    summary: 'API Key copiada',
-    detail: 'La API Key se copió al portapapeles',
+    summary: t('myAccount.keyCopied'),
+    detail: t('myAccount.keyCopiedDesc'),
     life: 3000,
   })
 }
@@ -168,15 +171,15 @@ const removeApiKeyOpenModal = (apiKeyID: string) => {
           <i class="pi pi-key"></i>
         </div>
         <div class="title-section">
-          <h1 class="page-title">Mi Cuenta</h1>
-          <p class="page-subtitle">Gestiona las claves de acceso a la API</p>
+          <h1 class="page-title">{{ t('myAccount.title') }}</h1>
+          <p class="page-subtitle">{{ t('myAccount.subtitle') }}</p>
         </div>
       </div>
     </div>
 
     <div v-if="isGetAssistantProfilePending" class="loading-state">
       <LoadingSpinner />
-      <p>Cargando información de la cuenta...</p>
+      <p>{{ t('myAccount.loadingAccount') }}</p>
     </div>
 
     <div v-else-if="assistantProfile" class="api-keys-section">
@@ -189,8 +192,8 @@ const removeApiKeyOpenModal = (apiKeyID: string) => {
                 <i class="pi pi-volume-up"></i>
               </div>
               <div class="tts-details">
-                <h3>Respuestas en Audio</h3>
-                <p>El asistente responderá con un mensaje de voz además del texto</p>
+                <h3>{{ t('myAccount.audioResponses') }}</h3>
+                <p>{{ t('myAccount.audioResponsesDesc') }}</p>
               </div>
             </div>
             <InputSwitch
@@ -210,16 +213,16 @@ const removeApiKeyOpenModal = (apiKeyID: string) => {
                 <i class="pi pi-key"></i>
               </div>
               <div class="api-details">
-                <h3>Claves API</h3>
+                <h3>{{ t('myAccount.apiKeys') }}</h3>
                 <p>
                   {{ assistantProfile?.api_keys?.filter((key) => key.is_active).length || 0 }}
-                  clave(s) activa(s)
+                  {{ t('myAccount.activeKeys') }}
                 </p>
               </div>
             </div>
             <Button
               icon="pi pi-plus"
-              label="Nueva Clave"
+              :label="t('myAccount.newKey')"
               severity="primary"
               @click="isVisibleAddApiKey = true"
             />
@@ -238,7 +241,7 @@ const removeApiKeyOpenModal = (apiKeyID: string) => {
                 <div class="key-info">
                   <div class="key-header">
                     <Tag :value="apiKey.description" severity="info" class="key-tag" />
-                    <span class="key-date">Creada recientemente</span>
+                    <span class="key-date">{{ t('myAccount.recentlyCreated') }}</span>
                   </div>
                   <div class="key-value-container">
                     <div class="key-value">
@@ -250,14 +253,14 @@ const removeApiKeyOpenModal = (apiKeyID: string) => {
                         severity="warning"
                         size="small"
                         @click="copyApiKey(apiKey.value)"
-                        title="Copiar clave"
+                        :title="t('myAccount.copyKey')"
                       />
                       <Button
                         icon="pi pi-trash"
                         severity="danger"
                         size="small"
                         @click="removeApiKeyOpenModal(apiKey.id)"
-                        title="Eliminar clave"
+                        :title="t('myAccount.deleteKey')"
                       />
                     </div>
                   </div>
@@ -268,10 +271,10 @@ const removeApiKeyOpenModal = (apiKeyID: string) => {
             <!-- Empty State -->
             <div v-else class="empty-keys">
               <i class="pi pi-key"></i>
-              <h4>No hay claves API</h4>
-              <p>Crea tu primera clave API para comenzar a usar la integración</p>
+              <h4>{{ t('myAccount.noApiKeys') }}</h4>
+              <p>{{ t('myAccount.noApiKeysDesc') }}</p>
               <Button
-                label="Crear Primera Clave"
+                :label="t('myAccount.createFirstKey')"
                 icon="pi pi-plus"
                 severity="primary"
                 @click="isVisibleAddApiKey = true"
@@ -280,7 +283,7 @@ const removeApiKeyOpenModal = (apiKeyID: string) => {
 
             <div v-if="isAddApiKeyError" class="error-message">
               <i class="pi pi-exclamation-triangle"></i>
-              <span>Error al agregar la clave API: {{ addApiKeyError }}</span>
+              <span>{{ t('myAccount.errorAddKeyMsg') }}: {{ addApiKeyError }}</span>
             </div>
           </div>
         </template>
@@ -295,19 +298,19 @@ const removeApiKeyOpenModal = (apiKeyID: string) => {
     >
       <div class="modal-form">
         <div class="form-field">
-          <label for="api_key_description">Descripción de la Clave</label>
+          <label for="api_key_description">{{ t('myAccount.keyDescription') }}</label>
           <InputText
             id="api_key_description"
             v-model="addApiKeyParams.description"
-            placeholder="Ej: Clave para producción"
+            :placeholder="t('myAccount.keyDescriptionPlaceholder')"
           />
-          <small>Ayuda a identificar el propósito de esta clave API</small>
+          <small>{{ t('myAccount.keyDescriptionHelp') }}</small>
         </div>
       </div>
       <div class="modal-actions">
-        <Button label="Cancelar" severity="secondary" @click="isVisibleAddApiKey = false" />
+        <Button :label="t('common.cancel')" severity="secondary" @click="isVisibleAddApiKey = false" />
         <Button
-          label="Crear Clave"
+          :label="t('myAccount.createKey')"
           icon="pi pi-key"
           :loading="isAddApiKeyPending"
           @click="addApiKeyHandler"
@@ -325,18 +328,15 @@ const removeApiKeyOpenModal = (apiKeyID: string) => {
         <div class="warning-content">
           <i class="pi pi-exclamation-triangle warning-icon"></i>
           <div class="warning-text">
-            <h4>¿Eliminar clave API?</h4>
-            <p>
-              Esta acción no se puede deshacer. Las aplicaciones que usen esta clave dejarán de
-              funcionar.
-            </p>
+            <h4>{{ t('myAccount.deleteKeyConfirm') }}</h4>
+            <p>{{ t('myAccount.deleteKeyWarning') }}</p>
           </div>
         </div>
       </div>
       <div class="modal-actions">
-        <Button label="Cancelar" severity="secondary" @click="isVisibleRemoveApiKey = false" />
+        <Button :label="t('common.cancel')" severity="secondary" @click="isVisibleRemoveApiKey = false" />
         <Button
-          label="Eliminar"
+          :label="t('common.delete')"
           icon="pi pi-trash"
           severity="danger"
           :loading="isRemoveApiKeyPending"
@@ -345,7 +345,7 @@ const removeApiKeyOpenModal = (apiKeyID: string) => {
       </div>
       <div v-if="isRemoveApiKeyError" class="modal-error">
         <i class="pi pi-exclamation-triangle"></i>
-        <span>Error al eliminar la clave: {{ removeApiKeyError }}</span>
+        <span>{{ t('myAccount.errorDeleteKeyMsg') }}: {{ removeApiKeyError }}</span>
       </div>
     </DefaultModal>
 

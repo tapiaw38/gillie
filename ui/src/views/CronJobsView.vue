@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { ref, reactive, computed, onMounted } from 'vue'
 import { useToast } from 'primevue/usetoast'
+import { useI18n } from 'vue-i18n'
 import Card from 'primevue/card'
 import Button from 'primevue/button'
 import InputText from 'primevue/inputtext'
@@ -78,6 +79,7 @@ async function apiFetch<T>(path: string, init: RequestInit = {}): Promise<T> {
 
 // ─── State ────────────────────────────────────────────────────────────────────
 
+const { t } = useI18n()
 const toast = useToast()
 const jobs = ref<Job[]>([])
 const loading = ref(false)
@@ -92,26 +94,26 @@ const showRunResult = ref(false)
 
 // ─── Dropdown options ─────────────────────────────────────────────────────────
 
-const sourceTypeOptions = [
-  { label: 'Comando del sistema', value: 'system_command' },
+const sourceTypeOptions = computed(() => [
+  { label: t('cronJobs.sourceCommand'), value: 'system_command' },
   { label: 'HTTP GET', value: 'http_get' },
-  { label: 'Texto estático', value: 'static' },
-]
+  { label: t('cronJobs.sourceStatic'), value: 'static' },
+])
 
-const destinationTypeOptions = [
-  { label: 'WhatsApp', value: 'whatsapp' },
-  { label: 'Telegram', value: 'telegram' },
-  { label: 'Slack', value: 'slack' },
-  { label: 'Ninguno', value: 'none' },
-]
+const destinationTypeOptions = computed(() => [
+  { label: t('cronJobs.destWhatsApp'), value: 'whatsapp' },
+  { label: t('cronJobs.destTelegram'), value: 'telegram' },
+  { label: t('cronJobs.destSlack'), value: 'slack' },
+  { label: t('cronJobs.destNone'), value: 'none' },
+])
 
-const cronExamples = [
-  { label: 'Cada 5 minutos', value: '*/5 * * * *' },
-  { label: 'Cada hora', value: '0 * * * *' },
-  { label: 'Todos los días a las 9:00', value: '0 9 * * *' },
-  { label: 'Lunes a viernes a las 8:00', value: '0 8 * * 1-5' },
-  { label: 'Cada domingo a medianoche', value: '0 0 * * 0' },
-]
+const cronExamples = computed(() => [
+  { label: t('cronJobs.every5min'), value: '*/5 * * * *' },
+  { label: t('cronJobs.everyHour'), value: '0 * * * *' },
+  { label: t('cronJobs.daily9am'), value: '0 9 * * *' },
+  { label: t('cronJobs.weekdays8am'), value: '0 8 * * 1-5' },
+  { label: t('cronJobs.sunMidnight'), value: '0 0 * * 0' },
+])
 
 // ─── Form state ───────────────────────────────────────────────────────────────
 
@@ -146,16 +148,16 @@ const sourceParamKey = computed(() => {
 })
 
 const sourceParamLabel = computed(() => {
-  if (form.source_type === 'system_command') return 'Comando'
-  if (form.source_type === 'http_get') return 'URL'
-  if (form.source_type === 'static') return 'Texto'
+  if (form.source_type === 'system_command') return t('cronJobs.command')
+  if (form.source_type === 'http_get') return t('cronJobs.url')
+  if (form.source_type === 'static') return t('cronJobs.text')
   return ''
 })
 
 const sourceParamPlaceholder = computed(() => {
   if (form.source_type === 'system_command') return 'df -h / uptime'
   if (form.source_type === 'http_get') return 'https://api.example.com/data'
-  if (form.source_type === 'static') return 'Texto que se enviará al destino'
+  if (form.source_type === 'static') return t('cronJobs.text')
   return ''
 })
 
@@ -167,9 +169,9 @@ const destinationParamKey = computed(() => {
 })
 
 const destinationParamLabel = computed(() => {
-  if (form.destination_type === 'whatsapp') return 'Teléfono'
+  if (form.destination_type === 'whatsapp') return t('cronJobs.phone')
   if (form.destination_type === 'telegram') return 'Chat ID'
-  if (form.destination_type === 'slack') return 'Canal'
+  if (form.destination_type === 'slack') return t('cronJobs.channel')
   return ''
 })
 
@@ -190,8 +192,8 @@ const loadJobs = async () => {
   } catch (err) {
     toast.add({
       severity: 'error',
-      summary: 'Error al cargar tareas',
-      detail: err instanceof Error ? err.message : 'Error desconocido',
+      summary: t('cronJobs.errorLoad'),
+      detail: err instanceof Error ? err.message : t('common.unknownError'),
       life: 4000,
     })
   } finally {
@@ -200,18 +202,18 @@ const loadJobs = async () => {
 }
 
 const validateForm = (): boolean => {
-  validationErrors.name = !form.name.trim() ? 'El nombre es obligatorio.' : ''
-  validationErrors.cron_expr = !form.cron_expr.trim() ? 'La expresión cron es obligatoria.' : ''
+  validationErrors.name = !form.name.trim() ? t('cronJobs.nameRequired') : ''
+  validationErrors.cron_expr = !form.cron_expr.trim() ? t('cronJobs.cronRequired') : ''
 
   const sourceKey = sourceParamKey.value
   const sourceValue = sourceKey ? (form.source_params[sourceKey] ?? '') : ''
   validationErrors.source_params =
-    sourceKey && !sourceValue.trim() ? `El campo "${sourceParamLabel.value}" es obligatorio.` : ''
+    sourceKey && !sourceValue.trim() ? t('cronJobs.fieldRequired', { field: sourceParamLabel.value }) : ''
 
   const destKey = destinationParamKey.value
   const destValue = destKey ? (form.destination_params[destKey] ?? '') : ''
   validationErrors.destination_params =
-    destKey && !destValue.trim() ? `El campo "${destinationParamLabel.value}" es obligatorio.` : ''
+    destKey && !destValue.trim() ? t('cronJobs.fieldRequired', { field: destinationParamLabel.value }) : ''
 
   return !Object.values(validationErrors).some(Boolean)
 }
@@ -228,8 +230,8 @@ const createJob = async () => {
   if (!validateForm()) {
     toast.add({
       severity: 'warn',
-      summary: 'Campos requeridos',
-      detail: 'Por favor completa todos los campos obligatorios.',
+      summary: t('cronJobs.requiredFields'),
+      detail: t('common.completeRequired'),
       life: 3000,
     })
     return
@@ -241,15 +243,15 @@ const createJob = async () => {
       method: 'POST',
       body: JSON.stringify(form),
     })
-    toast.add({ severity: 'success', summary: 'Tarea creada', life: 3000 })
+    toast.add({ severity: 'success', summary: t('cronJobs.taskCreated'), life: 3000 })
     resetForm()
     showCreateForm.value = false
     await loadJobs()
   } catch (err) {
     toast.add({
       severity: 'error',
-      summary: 'Error al crear tarea',
-      detail: err instanceof Error ? err.message : 'Error desconocido',
+      summary: t('cronJobs.errorCreate'),
+      detail: err instanceof Error ? err.message : t('common.unknownError'),
       life: 4000,
     })
   } finally {
@@ -268,13 +270,13 @@ const deleteJob = async () => {
   showDeleteConfirm.value = false
   try {
     await apiFetch(`/api/v1/jobs/${jobToDelete.value.id}`, { method: 'DELETE' })
-    toast.add({ severity: 'success', summary: 'Tarea eliminada', life: 3000 })
+    toast.add({ severity: 'success', summary: t('cronJobs.taskDeleted'), life: 3000 })
     jobs.value = jobs.value.filter((j) => j.id !== jobToDelete.value!.id)
   } catch (err) {
     toast.add({
       severity: 'error',
-      summary: 'Error al eliminar',
-      detail: err instanceof Error ? err.message : 'Error desconocido',
+      summary: t('cronJobs.errorDelete'),
+      detail: err instanceof Error ? err.message : t('common.unknownError'),
       life: 4000,
     })
   } finally {
@@ -293,8 +295,8 @@ const runJob = async (job: Job) => {
   } catch (err) {
     toast.add({
       severity: 'error',
-      summary: 'Error al ejecutar tarea',
-      detail: err instanceof Error ? err.message : 'Error desconocido',
+      summary: t('cronJobs.errorRun'),
+      detail: err instanceof Error ? err.message : t('common.unknownError'),
       life: 4000,
     })
   } finally {
@@ -357,13 +359,11 @@ onMounted(loadJobs)
           <i class="pi pi-clock"></i>
         </div>
         <div class="header-content">
-          <h1 class="integration-title">Cron Jobs</h1>
-          <p class="integration-subtitle">
-            Gestiona tareas programadas: envía datos por WhatsApp, Telegram o Slack con frecuencia configurable
-          </p>
+          <h1 class="integration-title">{{ t('cronJobs.title') }}</h1>
+          <p class="integration-subtitle">{{ t('cronJobs.subtitle') }}</p>
         </div>
         <Button
-          label="Nueva tarea"
+          :label="t('cronJobs.newTask')"
           icon="pi pi-plus"
           severity="primary"
           class="new-job-btn"
@@ -379,7 +379,7 @@ onMounted(loadJobs)
       <div v-if="loading" class="panel state-panel">
         <div class="centered-state">
           <i class="pi pi-spin pi-spinner state-icon"></i>
-          <p>Cargando tareas programadas…</p>
+          <p>{{ t('cronJobs.loadingTasks') }}</p>
         </div>
       </div>
 
@@ -387,10 +387,10 @@ onMounted(loadJobs)
       <div v-else-if="jobs.length === 0" class="panel state-panel">
         <div class="centered-state">
           <i class="pi pi-calendar-times state-icon empty-icon"></i>
-          <h3>Sin tareas programadas</h3>
-          <p>Crea tu primera tarea para automatizar envíos periódicos</p>
+          <h3>{{ t('cronJobs.noTasks') }}</h3>
+          <p>{{ t('cronJobs.noTasksDesc') }}</p>
           <Button
-            label="Crear primera tarea"
+            :label="t('cronJobs.createFirstTask')"
             icon="pi pi-plus"
             severity="primary"
             @click="showCreateForm = true"
@@ -410,7 +410,7 @@ onMounted(loadJobs)
               </div>
               <div class="job-badges">
                 <Tag
-                  :value="job.enabled ? 'Activo' : 'Inactivo'"
+                  :value="job.enabled ? t('cronJobs.active') : t('cronJobs.inactive')"
                   :severity="job.enabled ? 'success' : 'secondary'"
                   class="enabled-tag"
                 />
@@ -425,11 +425,11 @@ onMounted(loadJobs)
 
             <div class="job-meta-grid">
               <div class="meta-item">
-                <span class="meta-label"><i class="pi pi-clock"></i> Cron</span>
+                <span class="meta-label"><i class="pi pi-clock"></i> {{ t('cronJobs.cron') }}</span>
                 <code class="meta-value cron-value">{{ job.cron_expr }}</code>
               </div>
               <div class="meta-item">
-                <span class="meta-label"><i class="pi pi-arrow-right-arrow-left"></i> Flujo</span>
+                <span class="meta-label"><i class="pi pi-arrow-right-arrow-left"></i> {{ t('cronJobs.flow') }}</span>
                 <span class="meta-value flow-value">
                   <span class="flow-badge source">{{ sourceTypeLabel(job.source_type) }}</span>
                   <i class="pi pi-arrow-right flow-arrow"></i>
@@ -437,18 +437,18 @@ onMounted(loadJobs)
                 </span>
               </div>
               <div class="meta-item">
-                <span class="meta-label"><i class="pi pi-history"></i> Última ejecución</span>
+                <span class="meta-label"><i class="pi pi-history"></i> {{ t('cronJobs.lastRun') }}</span>
                 <span class="meta-value">{{ formatDate(job.last_run_at) }}</span>
               </div>
               <div v-if="job.last_result" class="meta-item meta-item--full">
-                <span class="meta-label"><i class="pi pi-info-circle"></i> Último resultado</span>
+                <span class="meta-label"><i class="pi pi-info-circle"></i> {{ t('cronJobs.lastResult') }}</span>
                 <code class="meta-value result-value">{{ job.last_result }}</code>
               </div>
             </div>
 
             <div class="job-actions">
               <Button
-                label="Ejecutar ahora"
+                :label="t('cronJobs.runNow')"
                 icon="pi pi-play"
                 severity="success"
                 size="small"
@@ -457,7 +457,7 @@ onMounted(loadJobs)
                 @click="runJob(job)"
               />
               <Button
-                label="Eliminar"
+                :label="t('cronJobs.delete')"
                 icon="pi pi-trash"
                 severity="danger"
                 size="small"
@@ -476,7 +476,7 @@ onMounted(loadJobs)
     <!-- Create job dialog -->
     <Dialog
       v-model:visible="showCreateForm"
-      header="Nueva tarea programada"
+      :header="t('cronJobs.newTaskDialog')"
       :style="{ width: '640px', maxWidth: '96vw' }"
       modal
       :draggable="false"
@@ -488,12 +488,12 @@ onMounted(loadJobs)
         <div class="field-group">
           <label class="field-label">
             <i class="pi pi-tag field-icon"></i>
-            Nombre
+            {{ t('cronJobs.taskName') }}
             <span class="required">*</span>
           </label>
           <InputText
             v-model="form.name"
-            placeholder="Reporte diario de disco"
+            :placeholder="t('cronJobs.taskNamePlaceholder')"
             :invalid="!!validationErrors.name"
             class="w-full"
           />
@@ -506,12 +506,12 @@ onMounted(loadJobs)
         <div class="field-group">
           <label class="field-label">
             <i class="pi pi-align-left field-icon"></i>
-            Descripción
-            <span class="optional">(opcional)</span>
+            {{ t('cronJobs.taskDescription') }}
+            <span class="optional">({{ t('common.optional') }})</span>
           </label>
           <InputText
             v-model="form.description"
-            placeholder="Descripción breve de la tarea"
+            :placeholder="t('cronJobs.taskDescriptionPlaceholder')"
             class="w-full"
           />
         </div>
@@ -520,7 +520,7 @@ onMounted(loadJobs)
         <div class="field-group">
           <label class="field-label">
             <i class="pi pi-clock field-icon"></i>
-            Expresión cron
+            {{ t('cronJobs.cronExpression') }}
             <span class="required">*</span>
           </label>
           <InputText
@@ -533,7 +533,7 @@ onMounted(loadJobs)
             {{ validationErrors.cron_expr }}
           </Message>
           <div class="cron-examples">
-            <span class="examples-label">Ejemplos:</span>
+            <span class="examples-label">{{ t('cronJobs.examples') }}:</span>
             <button
               v-for="ex in cronExamples"
               :key="ex.value"
@@ -550,7 +550,7 @@ onMounted(loadJobs)
         <div class="field-group">
           <label class="field-label">
             <i class="pi pi-database field-icon"></i>
-            Tipo de origen
+            {{ t('cronJobs.sourceType') }}
           </label>
           <Dropdown
             v-model="form.source_type"
@@ -593,7 +593,7 @@ onMounted(loadJobs)
         <div class="field-group">
           <label class="field-label">
             <i class="pi pi-send field-icon"></i>
-            Tipo de destino
+            {{ t('cronJobs.destinationType') }}
           </label>
           <Dropdown
             v-model="form.destination_type"
@@ -627,23 +627,21 @@ onMounted(loadJobs)
         <div class="field-group">
           <label class="field-label">
             <i class="pi pi-file-edit field-icon"></i>
-            Template del mensaje
+            {{ t('cronJobs.messageTemplate') }}
           </label>
           <InputText
             v-model="form.message_template"
-            placeholder="{{output}}"
+            :placeholder="t('cronJobs.messageTemplatePlaceholder')"
             class="w-full"
           />
-          <small class="field-help">
-            Usa <code>&#123;&#123;output&#125;&#125;</code> para insertar el resultado del origen en el mensaje.
-          </small>
+          <small class="field-help">{{ t('cronJobs.messageTemplateHelp') }}</small>
         </div>
 
         <!-- Enabled toggle -->
         <div class="field-group field-group--row">
           <label class="field-label">
             <i class="pi pi-power-off field-icon"></i>
-            Habilitada al crear
+            {{ t('cronJobs.enabledOnCreate') }}
           </label>
           <InputSwitch v-model="form.enabled" class="modern-switch" />
         </div>
@@ -651,14 +649,14 @@ onMounted(loadJobs)
         <div class="dialog-actions">
           <Button
             type="button"
-            label="Cancelar"
+            :label="t('common.cancel')"
             severity="secondary"
             outlined
             @click="showCreateForm = false"
           />
           <Button
             type="submit"
-            label="Crear tarea"
+            :label="t('cronJobs.createTask')"
             icon="pi pi-check"
             severity="primary"
             :loading="submitting"
@@ -671,7 +669,7 @@ onMounted(loadJobs)
     <!-- Delete confirmation dialog -->
     <Dialog
       v-model:visible="showDeleteConfirm"
-      header="Eliminar tarea"
+      :header="t('cronJobs.confirmDeleteTitle')"
       :style="{ width: '420px', maxWidth: '96vw' }"
       modal
       :draggable="false"
@@ -679,18 +677,18 @@ onMounted(loadJobs)
       <div class="confirm-body">
         <i class="pi pi-exclamation-triangle confirm-icon"></i>
         <p>
-          ¿Eliminar la tarea <strong>{{ jobToDelete?.name }}</strong>? Esta acción no se puede deshacer.
+          {{ t('cronJobs.confirmDeleteMsg') }} <strong>{{ jobToDelete?.name }}</strong>?
         </p>
       </div>
       <div class="dialog-actions">
         <Button
-          label="Cancelar"
+          :label="t('common.cancel')"
           severity="secondary"
           outlined
           @click="showDeleteConfirm = false"
         />
         <Button
-          label="Eliminar"
+          :label="t('common.delete')"
           icon="pi pi-trash"
           severity="danger"
           @click="deleteJob"
@@ -701,7 +699,7 @@ onMounted(loadJobs)
     <!-- Run result dialog -->
     <Dialog
       v-model:visible="showRunResult"
-      header="Resultado de ejecución"
+      :header="t('cronJobs.runResult')"
       :style="{ width: '520px', maxWidth: '96vw' }"
       modal
       :draggable="false"
@@ -714,12 +712,12 @@ onMounted(loadJobs)
           />
         </div>
         <div class="result-output">
-          <span class="meta-label">Salida</span>
+          <span class="meta-label">{{ t('cronJobs.runResult') }}</span>
           <pre class="result-pre">{{ lastRunResult.result }}</pre>
         </div>
       </div>
       <div class="dialog-actions">
-        <Button label="Cerrar" severity="secondary" @click="showRunResult = false" />
+        <Button :label="t('common.close')" severity="secondary" @click="showRunResult = false" />
       </div>
     </Dialog>
 

@@ -3,6 +3,7 @@ import type { IntegrationParams, SlackIntegrationConfig } from '@/types/assistan
 import { onMounted, reactive, computed, watch } from 'vue'
 import { useAssistant } from '@/composables/useAssistant'
 import { useErrorToast } from '@/composables/useErrorToast'
+import { useI18n } from 'vue-i18n'
 import Toast from 'primevue/toast'
 import InputText from 'primevue/inputtext'
 import Button from 'primevue/button'
@@ -20,9 +21,11 @@ const {
   getAssistantProfileError,
 } = useAssistant()
 
+const { t } = useI18n()
+
 const errorWatchers = [
-  { flag: isAddIntegrationError, summary: 'Error al guardar configuración', detail: addIntegrationError },
-  { flag: isGetAssistantProfileError, summary: 'Error al cargar perfil', detail: getAssistantProfileError },
+  { flag: isAddIntegrationError, summary: t('systemCommands.errorSaveConfig'), detail: addIntegrationError },
+  { flag: isGetAssistantProfileError, summary: t('systemCommands.errorLoadProfile'), detail: getAssistantProfileError },
 ]
 
 const { toast } = useErrorToast(errorWatchers)
@@ -44,13 +47,13 @@ const validationErrors = reactive({
 const saveConfig = async () => {
   const config = slackIntegration.config as SlackIntegrationConfig
 
-  validationErrors.bot_token = !config.bot_token ? 'El Bot Token es obligatorio.' : ''
+  validationErrors.bot_token = !config.bot_token ? t('integrations.slack.botTokenHelp') : ''
 
   if (validationErrors.bot_token) {
     toast.add({
       severity: 'warn',
-      summary: 'Campos requeridos',
-      detail: 'Por favor completa todos los campos obligatorios',
+      summary: t('common.requiredFields'),
+      detail: t('common.completeRequired'),
       life: 3000,
     })
     return
@@ -59,7 +62,7 @@ const saveConfig = async () => {
   try {
     await addIntegration(slackIntegration)
     await getAssistantProfile()
-    toast.add({ severity: 'success', summary: 'Configuración guardada', life: 3000 })
+    toast.add({ severity: 'success', summary: t('integrations.slack.credentialsSaved'), life: 3000 })
   } catch (error) {
     console.error('Error al guardar la configuración:', error)
   }
@@ -110,13 +113,13 @@ onMounted(async () => {
           <i class="pi pi-slack"></i>
         </div>
         <div class="header-text">
-          <h1 class="page-title">Slack</h1>
-          <p class="page-subtitle">Conecta el asistente a tu workspace de Slack para responder mensajes automáticamente</p>
+          <h1 class="page-title">{{ t('integrations.slack.title') }}</h1>
+          <p class="page-subtitle">{{ t('integrations.slack.subtitle') }}</p>
         </div>
       </div>
       <div class="header-toggle">
         <span class="toggle-status" :class="{ active: slackIntegration.activated }">
-          {{ slackIntegration.activated ? 'Activa' : 'Inactiva' }}
+          {{ slackIntegration.activated ? t('integrations.active') : t('integrations.inactive') }}
         </span>
         <InputSwitch v-model="slackIntegration.activated" />
       </div>
@@ -127,8 +130,8 @@ onMounted(async () => {
       <div class="panel-header">
         <span class="step-badge">1</span>
         <div>
-          <p class="panel-title">Credenciales de Slack</p>
-          <p class="panel-subtitle">Obtenidas desde el panel de tu Slack App</p>
+          <p class="panel-title">{{ t('integrations.slack.credentialsTitle') }}</p>
+          <p class="panel-subtitle">{{ t('integrations.slack.credentialsSubtitle') }}</p>
         </div>
       </div>
 
@@ -151,9 +154,7 @@ onMounted(async () => {
           <Message v-if="validationErrors.bot_token" severity="error" class="field-error">
             {{ validationErrors.bot_token }}
           </Message>
-          <small class="field-help">
-            Token OAuth del bot. Lo encontrás en <strong>OAuth &amp; Permissions</strong> de tu Slack App.
-          </small>
+          <small class="field-help">{{ t('integrations.slack.botTokenHelp') }}</small>
         </div>
 
         <div class="field-group">
@@ -169,16 +170,14 @@ onMounted(async () => {
             class="w-full"
             type="password"
           />
-          <small class="field-help">
-            Recomendado para verificar webhooks. Lo encontrás en <strong>Basic Information</strong>.
-          </small>
+          <small class="field-help">{{ t('integrations.slack.signingSecretHelp') }}</small>
         </div>
 
         <div class="panel-footer">
           <div></div>
           <Button
             type="submit"
-            label="Guardar Configuración"
+            :label="t('integrations.saveConfig')"
             icon="pi pi-save"
             severity="primary"
             :disabled="!slackIntegration.activated"
@@ -192,8 +191,8 @@ onMounted(async () => {
       <div class="panel-header">
         <span class="step-badge">2</span>
         <div>
-          <p class="panel-title">Estado Actual</p>
-          <p class="panel-subtitle">Configuración guardada e información de integración</p>
+          <p class="panel-title">{{ t('integrations.currentState') }}</p>
+          <p class="panel-subtitle">{{ t('integrations.whatsapp.currentStateSubtitle') }}</p>
         </div>
       </div>
 
@@ -209,15 +208,13 @@ onMounted(async () => {
               <button
                 class="copy-btn"
                 type="button"
-                title="Copiar URL"
+                :title="t('integrations.copyUrl')"
                 @click="navigator.clipboard.writeText(webhookUrl)"
               >
                 <i class="pi pi-copy"></i>
               </button>
             </div>
-            <small class="field-help">
-              Configurá esta URL en <strong>Event Subscriptions</strong> de tu Slack App.
-            </small>
+            <small class="field-help">{{ t('integrations.slack.webhookHelp') }}</small>
           </div>
         </div>
 
@@ -231,8 +228,8 @@ onMounted(async () => {
               {{ currentIntegration
                 ? (currentIntegration.config as unknown as SlackIntegrationConfig).bot_token
                   ? '•••••••••••••••••••'
-                  : 'No configurado'
-                : 'No configurado' }}
+                  : t('integrations.notConfigured')
+                : t('integrations.notConfigured') }}
             </span>
           </div>
         </div>
@@ -247,8 +244,8 @@ onMounted(async () => {
               {{ currentIntegration
                 ? (currentIntegration.config as unknown as SlackIntegrationConfig).signing_secret
                   ? '•••••••••••••••••••'
-                  : 'No configurado'
-                : 'No configurado' }}
+                  : t('integrations.notConfigured')
+                : t('integrations.notConfigured') }}
             </span>
           </div>
         </div>
@@ -260,35 +257,35 @@ onMounted(async () => {
       <div class="panel-header">
         <span class="step-badge">3</span>
         <div>
-          <p class="panel-title">Guía de Configuración</p>
-          <p class="panel-subtitle">Pasos para conectar tu Slack App al asistente</p>
+          <p class="panel-title">{{ t('integrations.setupGuide') }}</p>
+          <p class="panel-subtitle">{{ t('integrations.slack.stepsSubtitle') }}</p>
         </div>
       </div>
 
       <ol class="steps-list">
         <li class="step-item">
           <span class="step-num">1</span>
-          <span>Creá una Slack App en <code>api.slack.com/apps</code></span>
+          <span>{{ t('integrations.slack.guideStep1') }}</span>
         </li>
         <li class="step-item">
           <span class="step-num">2</span>
-          <span>En <strong>OAuth &amp; Permissions</strong>, agregá el scope <code>chat:write</code></span>
+          <span>{{ t('integrations.slack.guideStep2') }}</span>
         </li>
         <li class="step-item">
           <span class="step-num">3</span>
-          <span>Instalá la app en tu workspace y copiá el <strong>Bot Token</strong></span>
+          <span>{{ t('integrations.slack.guideStep3') }}</span>
         </li>
         <li class="step-item">
           <span class="step-num">4</span>
-          <span>En <strong>Event Subscriptions</strong>, activá y pegá la Webhook URL del paso 2</span>
+          <span>{{ t('integrations.slack.guideStep4') }}</span>
         </li>
         <li class="step-item">
           <span class="step-num">5</span>
-          <span>Suscribite al evento <code>message.channels</code> o <code>message.im</code></span>
+          <span>{{ t('integrations.slack.guideStep5') }}</span>
         </li>
         <li class="step-item">
           <span class="step-num">6</span>
-          <span>Copiá el <strong>Signing Secret</strong> de Basic Information</span>
+          <span>{{ t('integrations.slack.guideStep6') }}</span>
         </li>
       </ol>
     </div>
