@@ -77,9 +77,12 @@ const jsonExample = `[
           class="progress-step"
           :class="{ active: activeStep === step - 1, completed: activeStep > step - 1 }"
         >
-          <div class="step-circle">
-            <i v-if="activeStep > step - 1" class="pi pi-check"></i>
-            <span v-else>{{ step }}</span>
+          <div class="stepper-track">
+            <div class="step-circle">
+              <i v-if="activeStep > step - 1" class="pi pi-check"></i>
+              <span v-else>{{ step }}</span>
+            </div>
+            <div v-if="step < totalSteps" class="step-connector"></div>
           </div>
           <div class="step-label">
             {{
@@ -97,10 +100,12 @@ const jsonExample = `[
 
       <!-- Step 1: Introduction -->
       <div v-if="activeStep === 0" class="step-content">
-        <div class="step-icon intro">
-          <i class="pi pi-info-circle"></i>
+        <div class="step-heading">
+          <div class="step-icon intro">
+            <i class="pi pi-info-circle"></i>
+          </div>
+          <h3>¿Qué son los Workflows?</h3>
         </div>
-        <h3>¿Qué son los Workflows?</h3>
         <p>
           Los workflows te permiten crear procesos automatizados con múltiples pasos que se
           ejecutan secuencialmente.
@@ -138,49 +143,54 @@ const jsonExample = `[
         </div>
 
         <div class="step-actions">
-          <Button label="Siguiente" icon="pi pi-arrow-right" @click="nextStep" />
+          <span></span>
+          <Button label="Siguiente" icon="pi pi-arrow-right" icon-pos="right" @click="nextStep" />
         </div>
       </div>
 
       <!-- Step 2: JSON Configuration -->
       <div v-if="activeStep === 1" class="step-content">
-        <div class="step-icon json">
-          <i class="pi pi-code"></i>
-        </div>
-        <h3>Configurar con JSON</h3>
-
-        <div class="config-steps">
-          <div class="config-step">
-            <span class="step-number">1</span>
-            <div class="step-info">
-              <h4>Click en "Editar"</h4>
-              <p>Activa el modo de edición del JSON</p>
-            </div>
+        <div class="step-heading">
+          <div class="step-icon json">
+            <i class="pi pi-code"></i>
           </div>
-
-          <div class="config-step">
-            <span class="step-number">2</span>
-            <div class="step-info">
-              <h4>Escribe tu workflow</h4>
-              <p>Define steps, métodos HTTP y parámetros</p>
-            </div>
-          </div>
-
-          <div class="config-step">
-            <span class="step-number">3</span>
-            <div class="step-info">
-              <h4>Guarda los cambios</h4>
-              <p>Click en "Guardar Funciones"</p>
-            </div>
-          </div>
+          <h3>Configurar con JSON</h3>
         </div>
 
-        <div class="code-example">
-          <div class="code-header">
-            <i class="pi pi-file-edit"></i>
-            <span>Ejemplo de workflow</span>
+        <div class="step-two-col">
+          <div class="config-steps">
+            <div class="config-step">
+              <span class="step-number">1</span>
+              <div class="step-info">
+                <h4>Click en "Editar"</h4>
+                <p>Activa el modo de edición del JSON</p>
+              </div>
+            </div>
+
+            <div class="config-step">
+              <span class="step-number">2</span>
+              <div class="step-info">
+                <h4>Escribe tu workflow</h4>
+                <p>Define steps, métodos HTTP y parámetros</p>
+              </div>
+            </div>
+
+            <div class="config-step">
+              <span class="step-number">3</span>
+              <div class="step-info">
+                <h4>Guarda los cambios</h4>
+                <p>Click en "Guardar Funciones"</p>
+              </div>
+            </div>
           </div>
-          <pre class="code-block">{{ jsonExample }}</pre>
+
+          <div class="code-example">
+            <div class="code-header">
+              <i class="pi pi-file-edit"></i>
+              <span>Ejemplo de workflow</span>
+            </div>
+            <pre class="code-block">{{ jsonExample }}</pre>
+          </div>
         </div>
 
         <div class="step-actions">
@@ -190,72 +200,76 @@ const jsonExample = `[
             icon="pi pi-arrow-left"
             @click="prevStep"
           />
-          <Button label="Siguiente" icon="pi pi-arrow-right" @click="nextStep" />
+          <Button label="Siguiente" icon="pi pi-arrow-right" icon-pos="right" @click="nextStep" />
         </div>
       </div>
 
       <!-- Step 3: Visual Configuration -->
       <div v-if="activeStep === 2" class="step-content">
-        <div class="step-icon visual">
-          <i class="pi pi-sitemap"></i>
-        </div>
-        <h3>Configurar Visualmente</h3>
-
-        <div class="config-steps">
-          <div class="config-step">
-            <span class="step-number">1</span>
-            <div class="step-info">
-              <h4>Click en "Editar"</h4>
-              <p>Activa el modo de edición</p>
-            </div>
+        <div class="step-heading">
+          <div class="step-icon visual">
+            <i class="pi pi-sitemap"></i>
           </div>
-
-          <div class="config-step">
-            <span class="step-number">2</span>
-            <div class="step-info">
-              <h4>Click en "Editor Visual"</h4>
-              <p>Cambia al modo visual interactivo</p>
-            </div>
-          </div>
-
-          <div class="config-step">
-            <span class="step-number">3</span>
-            <div class="step-info">
-              <h4>Agrega nodos</h4>
-              <p>Usa botones "Agregar HTTP" o "Agregar Condición"</p>
-            </div>
-          </div>
-
-          <div class="config-step">
-            <span class="step-number">4</span>
-            <div class="step-info">
-              <h4>Configura cada nodo</h4>
-              <p>Click en un nodo para editar URL, método, parámetros</p>
-            </div>
-          </div>
-
-          <div class="config-step">
-            <span class="step-number">5</span>
-            <div class="step-info">
-              <h4>Conecta los nodos</h4>
-              <p>Arrastra desde un punto de conexión a otro</p>
-            </div>
-          </div>
-
-          <div class="config-step">
-            <span class="step-number">6</span>
-            <div class="step-info">
-              <h4>Guarda el workflow</h4>
-              <p>Click en "Guardar Workflow"</p>
-            </div>
-          </div>
+          <h3>Configurar Visualmente</h3>
         </div>
 
-        <div class="tip-box">
-          <i class="pi pi-lightbulb"></i>
-          <div>
-            <strong>Tip:</strong> Puedes arrastrar los nodos para reorganizarlos incluso en
-            modo lectura.
+        <div class="step-two-col">
+          <div class="config-steps">
+            <div class="config-step">
+              <span class="step-number">1</span>
+              <div class="step-info">
+                <h4>Click en "Editar"</h4>
+                <p>Activa el modo de edición</p>
+              </div>
+            </div>
+
+            <div class="config-step">
+              <span class="step-number">2</span>
+              <div class="step-info">
+                <h4>Click en "Editor Visual"</h4>
+                <p>Cambia al modo visual interactivo</p>
+              </div>
+            </div>
+
+            <div class="config-step">
+              <span class="step-number">3</span>
+              <div class="step-info">
+                <h4>Agrega nodos</h4>
+                <p>Usa botones "Agregar HTTP" o "Agregar Condición"</p>
+              </div>
+            </div>
+
+            <div class="config-step">
+              <span class="step-number">4</span>
+              <div class="step-info">
+                <h4>Configura cada nodo</h4>
+                <p>Click en un nodo para editar URL, método, parámetros</p>
+              </div>
+            </div>
+
+            <div class="config-step">
+              <span class="step-number">5</span>
+              <div class="step-info">
+                <h4>Conecta los nodos</h4>
+                <p>Arrastra desde un punto de conexión a otro</p>
+              </div>
+            </div>
+
+            <div class="config-step">
+              <span class="step-number">6</span>
+              <div class="step-info">
+                <h4>Guarda el workflow</h4>
+                <p>Click en "Guardar Workflow"</p>
+              </div>
+            </div>
+          </div>
+
+          <div class="tip-box">
+            <i class="pi pi-lightbulb"></i>
+            <div>
+              <strong>Tip:</strong> Puedes arrastrar los nodos para reorganizarlos incluso en
+              modo lectura.
+            </div>
           </div>
         </div>
 
@@ -266,16 +280,18 @@ const jsonExample = `[
             icon="pi pi-arrow-left"
             @click="prevStep"
           />
-          <Button label="Siguiente" icon="pi pi-arrow-right" @click="nextStep" />
+          <Button label="Siguiente" icon="pi pi-arrow-right" icon-pos="right" @click="nextStep" />
         </div>
       </div>
 
       <!-- Step 4: Tips & Best Practices -->
       <div v-if="activeStep === 3" class="step-content">
-        <div class="step-icon tips">
-          <i class="pi pi-star"></i>
+        <div class="step-heading">
+          <div class="step-icon tips">
+            <i class="pi pi-star"></i>
+          </div>
+          <h3>Consejos y Buenas Prácticas</h3>
         </div>
-        <h3>Consejos y Buenas Prácticas</h3>
 
         <div class="tips-list">
           <div class="tip-item">
@@ -328,7 +344,7 @@ const jsonExample = `[
             icon="pi pi-arrow-left"
             @click="prevStep"
           />
-          <Button label="Finalizar" icon="pi pi-check" @click="closeModal" />
+          <Button label="Finalizar" severity="success" icon="pi pi-check" @click="closeModal" />
         </div>
       </div>
     </div>
@@ -341,6 +357,10 @@ const jsonExample = `[
   max-width: 760px;
 }
 
+:deep(.guide-dialog .p-dialog) {
+  background: var(--do-bg);
+}
+
 :deep(.guide-dialog .p-dialog-header) {
   background: var(--gradient-primary);
   color: white;
@@ -348,6 +368,7 @@ const jsonExample = `[
 }
 
 :deep(.guide-dialog .p-dialog-content) {
+  background: var(--do-bg);
   padding: 2rem;
 }
 
@@ -368,16 +389,17 @@ const jsonExample = `[
 }
 
 .guide-content {
-  min-height: 500px;
+  max-height: 80vh;
+  overflow-y: auto;
 }
 
-/* Progress Steps */
+/* Progress Steps — horizontal stepper with connecting lines */
 .progress-steps {
   display: flex;
+  align-items: flex-start;
   justify-content: center;
-  gap: 2rem;
   margin-bottom: 2rem;
-  padding: 1rem;
+  padding: 1rem 0;
 }
 
 .progress-step {
@@ -385,19 +407,38 @@ const jsonExample = `[
   flex-direction: column;
   align-items: center;
   gap: 0.5rem;
+  flex: 1;
+  max-width: 120px;
+}
+
+.stepper-track {
+  display: flex;
+  align-items: center;
+  width: 100%;
 }
 
 .step-circle {
-  width: 48px;
-  height: 48px;
+  width: 40px;
+  height: 40px;
   border-radius: 50%;
   display: flex;
   align-items: center;
   justify-content: center;
   font-weight: 600;
-  background: #e2e8f0;
+  font-size: 0.875rem;
+  background: rgba(255, 255, 255, 0.08);
   color: var(--do-text-muted);
   transition: all 0.3s ease;
+  flex-shrink: 0;
+  border: 1px solid var(--do-border-light);
+}
+
+.step-connector {
+  flex: 1;
+  height: 1px;
+  background: var(--do-border-light);
+  margin: 0 4px;
+  transition: background 0.3s ease;
 }
 
 .progress-step.active .step-circle {
@@ -405,17 +446,25 @@ const jsonExample = `[
   color: white;
   box-shadow: 0 4px 12px rgba(37, 99, 235, 0.4);
   transform: scale(1.1);
+  border-color: transparent;
 }
 
 .progress-step.completed .step-circle {
   background: var(--gradient-success);
   color: white;
+  border-color: transparent;
+}
+
+.progress-step.completed .step-connector {
+  background: var(--color-success);
 }
 
 .step-label {
-  font-size: 0.875rem;
+  font-size: 0.75rem;
   font-weight: 500;
   color: var(--do-text-muted);
+  text-align: center;
+  white-space: nowrap;
 }
 
 .progress-step.active .step-label {
@@ -423,24 +472,35 @@ const jsonExample = `[
   font-weight: 600;
 }
 
+.progress-step.completed .step-label {
+  color: var(--color-success);
+}
+
 /* Step Content */
 .step-content {
   display: flex;
   flex-direction: column;
-  gap: 2rem;
-  padding: 1rem 0;
+  gap: 1.5rem;
+  padding: 0.5rem 0;
+}
+
+/* Step heading: icon + title inline */
+.step-heading {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
 }
 
 .step-icon {
-  width: 80px;
-  height: 80px;
+  width: 56px;
+  height: 56px;
   border-radius: 50%;
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 2rem;
+  font-size: 1.5rem;
   color: white;
-  margin: 0 auto;
+  flex-shrink: 0;
 }
 
 .step-icon.intro {
@@ -460,26 +520,24 @@ const jsonExample = `[
 }
 
 .step-content h3 {
-  text-align: center;
-  font-size: 1.5rem;
+  font-size: 1.375rem;
   font-weight: 600;
-  color: #1e293b;
+  color: var(--do-text);
   margin: 0;
 }
 
-.step-content p {
-  text-align: center;
+.step-content > p {
   color: var(--do-text-muted);
   font-size: 1rem;
   line-height: 1.6;
+  margin: 0;
 }
 
 /* Features Grid */
 .features-grid {
   display: grid;
   grid-template-columns: repeat(2, 1fr);
-  gap: 1.5rem;
-  margin-top: 1rem;
+  gap: 1rem;
 }
 
 .feature-item {
@@ -487,9 +545,10 @@ const jsonExample = `[
   align-items: center;
   gap: 1rem;
   padding: 1rem;
-  background: #f8fafc;
+  background: rgba(255, 255, 255, 0.05);
   border-radius: 0.75rem;
-  border: 1px solid #e2e8f0;
+  border: 1px solid var(--do-border-light);
+  border-left: 3px solid var(--color-primary);
 }
 
 .feature-item i {
@@ -502,7 +561,7 @@ const jsonExample = `[
   margin: 0 0 0.25rem 0;
   font-size: 0.875rem;
   font-weight: 600;
-  color: #1e293b;
+  color: var(--do-text);
 }
 
 .feature-item p {
@@ -512,21 +571,47 @@ const jsonExample = `[
   text-align: left;
 }
 
-/* Config Steps */
+/* Two-column layout for steps 2 and 3 */
+.step-two-col {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 1.5rem;
+  align-items: start;
+}
+
+/* Config Steps — vertical connected list */
 .config-steps {
   display: flex;
   flex-direction: column;
-  gap: 1rem;
+  position: relative;
+}
+
+.config-steps::before {
+  content: '';
+  position: absolute;
+  left: 15px;
+  top: 32px;
+  bottom: 16px;
+  width: 1px;
+  background: var(--do-border-light);
+  z-index: 0;
 }
 
 .config-step {
   display: flex;
   align-items: flex-start;
   gap: 1rem;
-  padding: 1rem;
-  background: #f8fafc;
+  padding: 0.75rem;
+  background: rgba(255, 255, 255, 0.05);
   border-radius: 0.75rem;
-  border: 1px solid #e2e8f0;
+  border: 1px solid var(--do-border-light);
+  position: relative;
+  z-index: 1;
+  margin-bottom: 0.5rem;
+}
+
+.config-step:last-child {
+  margin-bottom: 0;
 }
 
 .step-number {
@@ -539,19 +624,22 @@ const jsonExample = `[
   align-items: center;
   justify-content: center;
   font-weight: 600;
+  font-size: 0.875rem;
   flex-shrink: 0;
+  position: relative;
+  z-index: 2;
 }
 
 .step-info h4 {
   margin: 0 0 0.25rem 0;
-  font-size: 1rem;
+  font-size: 0.9375rem;
   font-weight: 600;
-  color: #1e293b;
+  color: var(--do-text);
 }
 
 .step-info p {
   margin: 0;
-  font-size: 0.875rem;
+  font-size: 0.8125rem;
   color: var(--do-text-muted);
   text-align: left;
 }
@@ -560,7 +648,7 @@ const jsonExample = `[
 .code-example {
   border-radius: 0.75rem;
   overflow: hidden;
-  border: 1px solid #e2e8f0;
+  border: 1px solid var(--do-border-light);
 }
 
 .code-header {
@@ -590,69 +678,72 @@ const jsonExample = `[
 /* Tip Box */
 .tip-box {
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   gap: 1rem;
   padding: 1rem;
-  background: #fef3c7;
-  border: 1px solid #fbbf24;
+  background: rgba(251, 191, 36, 0.12);
+  border: 1px solid rgba(251, 191, 36, 0.35);
   border-radius: 0.75rem;
+  color: var(--do-text);
 }
 
 .tip-box i {
   font-size: 1.5rem;
   color: var(--color-warning);
   flex-shrink: 0;
+  margin-top: 0.125rem;
 }
 
 .tip-box strong {
-  color: #92400e;
+  color: var(--color-warning);
 }
 
 /* Tips List */
 .tips-list {
   display: flex;
   flex-direction: column;
-  gap: 1rem;
+  gap: 0.75rem;
 }
 
 .tip-item {
   display: flex;
   align-items: flex-start;
   gap: 1rem;
-  padding: 1rem;
-  background: #f0fdf4;
+  padding: 0.875rem 1rem;
+  background: rgba(34, 197, 94, 0.08);
   border-radius: 0.75rem;
-  border: 1px solid #86efac;
+  border: 1px solid rgba(34, 197, 94, 0.25);
 }
 
 .tip-item i {
   font-size: 1.25rem;
   color: var(--color-success);
   flex-shrink: 0;
-  margin-top: 0.25rem;
+  margin-top: 0.125rem;
 }
 
 .tip-item h4 {
   margin: 0 0 0.25rem 0;
   font-size: 0.875rem;
   font-weight: 600;
-  color: #065f46;
+  color: var(--color-success);
 }
 
 .tip-item p {
   margin: 0;
   font-size: 0.875rem;
-  color: #047857;
+  color: var(--do-text-muted);
   text-align: left;
 }
 
-/* Step Actions */
+/* Step Actions — full-width, space-between */
 .step-actions {
   display: flex;
-  justify-content: center;
+  justify-content: space-between;
+  align-items: center;
   gap: 1rem;
   padding-top: 1rem;
-  border-top: 1px solid #e2e8f0;
+  border-top: 1px solid var(--do-border-light);
 }
 
 /* Responsive */
@@ -666,19 +757,20 @@ const jsonExample = `[
     grid-template-columns: 1fr;
   }
 
+  .step-two-col {
+    grid-template-columns: 1fr;
+  }
+
   .step-content {
-    padding: 0.5rem 0;
+    padding: 0.25rem 0;
   }
 
   .progress-steps {
-    flex-direction: column;
-    gap: 1rem;
+    gap: 0;
   }
 
-  .progress-step {
-    flex-direction: row;
-    justify-content: flex-start;
-    gap: 1rem;
+  .config-steps::before {
+    display: none;
   }
 }
 </style>
