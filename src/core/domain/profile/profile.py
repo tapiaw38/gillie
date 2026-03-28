@@ -13,8 +13,6 @@ class Profile(BaseModel):
     functions: Optional[str] = None
     tool_prompts: Optional[str] = None
     disabled_tools: Optional[List[str]] = None
-    business_context: Optional[str] = None
-    role: Optional[str] = None
     user_id: Optional[str] = None
     created_at: Optional[datetime] = Field(default=None)
     updated_at: Optional[datetime] = Field(default=None)

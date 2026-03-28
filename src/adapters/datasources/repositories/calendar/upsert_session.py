@@ -8,6 +8,7 @@ from src.core.platform.errors.mappings.calendar import CalendarSessionQueryError
 def upsert_session(client, session: CalendarSession) -> str:
     try:
         doc = session.dict(by_alias=True, exclude_none=True)
+        doc.pop("_id", None)  # _id is immutable in MongoDB — must not be in replace body
         doc["updated_at"] = datetime.now()
         result = client.replace_one(
             {"user_id": session.user_id},

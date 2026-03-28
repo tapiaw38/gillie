@@ -1,14 +1,18 @@
 <script setup lang="ts">
 import type { IntegrationParams, GoogleDriveIntegrationConfig } from '@/types/assistant'
-import { onMounted, reactive, computed, watch } from 'vue'
+import { onMounted, reactive, computed, watch, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useAssistant } from '@/composables/useAssistant'
+import { useDrive } from '@/composables/useDrive'
+import { useOAuthPopup } from '@/composables/useOAuthPopup'
 import { useErrorToast } from '@/composables/useErrorToast'
 import Toast from 'primevue/toast'
 import Button from 'primevue/button'
 import Card from 'primevue/card'
 import Message from 'primevue/message'
 import InputSwitch from 'primevue/inputswitch'
+import InputText from 'primevue/inputtext'
+import Password from 'primevue/password'
 
 const route = useRoute()
 const router = useRouter()
@@ -23,7 +27,67 @@ const {
   getAssistantProfileError,
 } = useAssistant()
 
+const {
+  getCredentials,
+  saveCredentials,
+  getAuthorizationUrl,
+  checkStatus,
+  isConnected,
+  isLoading,
+  savedClientId,
+  savedRedirectUri,
+  hasSecret,
+  isSaveCredentialsError,
+  saveCredentialsError,
+  isGetAuthUrlError,
+  getAuthUrlError,
+  isCheckStatusError,
+  checkStatusError,
+} = useDrive()
+
+const { openOAuthPopup } = useOAuthPopup()
+
+const credentials = reactive({
+  clientId: '',
+  clientSecret: '',
+  redirectUri: '',
+})
+const credentialsSaved = ref(false)
+
+const handleSaveCredentials = async () => {
+  if (!credentials.clientId || !credentials.clientSecret) {
+    toast.add({
+      severity: 'warn',
+      summary: 'Campos requeridos',
+      detail: 'Client ID y Client Secret son obligatorios',
+      life: 3000,
+    })
+    return
+  }
+  try {
+    await saveCredentials(
+      credentials.clientId,
+      credentials.clientSecret,
+      credentials.redirectUri || undefined,
+    )
+    credentialsSaved.value = true
+    toast.add({
+      severity: 'success',
+      summary: 'Credenciales guardadas',
+      detail: 'Las credenciales de Google OAuth se guardaron correctamente',
+      life: 3000,
+    })
+  } catch {
+    // handled by errorWatchers
+  }
+}
+
 const errorWatchers = [
+  {
+    flag: isSaveCredentialsError,
+    summary: 'Error al guardar credenciales',
+    detail: saveCredentialsError,
+  },
   {
     flag: isAddIntegrationError,
     summary: 'Error al guardar configuración',
@@ -33,6 +97,16 @@ const errorWatchers = [
     flag: isGetAssistantProfileError,
     summary: 'Error al cargar perfil',
     detail: getAssistantProfileError,
+  },
+  {
+    flag: isGetAuthUrlError,
+    summary: 'Error al obtener URL de autorización',
+    detail: getAuthUrlError,
+  },
+  {
+    flag: isCheckStatusError,
+    summary: 'Error al verificar estado',
+    detail: checkStatusError,
   },
 ]
 
@@ -48,37 +122,39 @@ const driveIntegration = reactive<IntegrationParams>({
   } as GoogleDriveIntegrationConfig,
 })
 
-const isConnected = computed(() => {
-  const config = driveIntegration.config as GoogleDriveIntegrationConfig
-  return config.is_connected === true
-})
-
-const searchDriveIntegration = computed(() => {
-  return assistantProfile.value?.integrations?.find(
-    (integration) => integration.name === 'google_drive',
-  )
-})
-
 const connectGoogleDrive = async () => {
-  if (!assistantProfile.value?.id) {
-    toast.add({
-      severity: 'error',
-      summary: 'Error',
-      detail: 'No se pudo obtener el ID del perfil',
-      life: 3000,
-    })
-    return
+  try {
+    if (!assistantProfile.value?.id) {
+      toast.add({
+        severity: 'error',
+        summary: 'Error',
+        detail: 'No se pudo obtener el ID del perfil',
+        life: 3000,
+      })
+      return
+    }
+
+    const config = driveIntegration.config as GoogleDriveIntegrationConfig
+    config.profile_id = assistantProfile.value.id
+
+    // Get authorization URL
+    const authData = await getAuthorizationUrl(config.profile_id)
+
+    if (authData && authData.authorization_url) {
+      openOAuthPopup(authData.authorization_url, async () => {
+        await checkConnectionStatus()
+      })
+    } else {
+      toast.add({
+        severity: 'error',
+        summary: 'Error',
+        detail: 'No se pudo obtener la URL de autorización',
+        life: 3000,
+      })
+    }
+  } catch (error) {
+    console.error('Error al conectar Google Drive:', error)
   }
-
-  const config = driveIntegration.config as GoogleDriveIntegrationConfig
-  config.profile_id = assistantProfile.value.id
-
-  toast.add({
-    severity: 'info',
-    summary: 'Próximamente',
-    detail: 'La conexión con Google Drive estará disponible pronto',
-    life: 4000,
-  })
 }
 
 const updateIntegration = async () => {
@@ -97,8 +173,39 @@ watch(
   },
 )
 
+const searchDriveIntegration = computed(() => {
+  return assistantProfile.value?.integrations?.find(
+    (integration) => integration.name === 'google_drive',
+  )
+})
+
+const checkConnectionStatus = async () => {
+  if (!assistantProfile.value?.id) return
+
+  try {
+    const wasConnected = isConnected.value
+    await checkStatus(assistantProfile.value.id)
+    if (!wasConnected && isConnected.value) {
+      // Auto-activate integration when OAuth connection is confirmed
+      driveIntegration.activated = true
+      const config = driveIntegration.config as GoogleDriveIntegrationConfig
+      config.profile_id = assistantProfile.value.id
+      config.is_connected = true
+      await addIntegration(driveIntegration)
+      toast.add({
+        severity: 'success',
+        summary: '¡Conectado!',
+        detail: 'Google Drive conectado correctamente',
+        life: 4000,
+      })
+    }
+  } catch (error) {
+    console.error('Error al verificar estado de conexión:', error)
+  }
+}
+
 onMounted(async () => {
-  await getAssistantProfile()
+  await Promise.all([getAssistantProfile(), getCredentials()])
 
   assistantProfile.value?.integrations?.forEach((integration) => {
     if (integration.name === 'google_drive') {
@@ -111,6 +218,8 @@ onMounted(async () => {
     }
   })
 
+  await checkConnectionStatus()
+
   if (route.query.success === 'true') {
     toast.add({
       severity: 'success',
@@ -118,6 +227,7 @@ onMounted(async () => {
       detail: 'Tu cuenta de Google Drive ha sido conectada correctamente',
       life: 5000,
     })
+    await checkConnectionStatus()
     router.replace({ query: {} })
   } else if (route.query.error) {
     const errorMessages: Record<string, string> = {
@@ -165,6 +275,76 @@ onMounted(async () => {
         </div>
       </div>
     </div>
+
+    <!-- Credentials Card -->
+    <Card class="config-card credentials-card">
+      <template #content>
+        <div class="credentials-section">
+          <div class="credentials-header">
+            <i class="pi pi-key credentials-icon"></i>
+            <div>
+              <h3 class="credentials-title">Credenciales OAuth</h3>
+              <p class="credentials-subtitle">
+                Ingresa las credenciales de tu proyecto en Google Cloud Console
+              </p>
+            </div>
+          </div>
+
+          <div class="credentials-form">
+            <div v-if="savedClientId && !credentialsSaved" class="saved-credentials-info">
+              <i class="pi pi-check-circle"></i>
+              Credenciales configuradas — Client ID: <strong>{{ savedClientId }}</strong>
+            </div>
+
+            <div class="field">
+              <label class="field-label">Client ID <span class="required">*</span></label>
+              <InputText
+                v-model="credentials.clientId"
+                :placeholder="savedClientId || 'xxxxxxxx.apps.googleusercontent.com'"
+                class="field-input"
+              />
+            </div>
+
+            <div class="field">
+              <label class="field-label">Client Secret <span class="required">*</span></label>
+              <Password
+                v-model="credentials.clientSecret"
+                :placeholder="hasSecret ? '••••••••••••• (ya configurado)' : 'GOCSPX-...'"
+                class="field-input"
+                :feedback="false"
+                toggleMask
+              />
+            </div>
+
+            <div class="field">
+              <label class="field-label">
+                Redirect URI
+                <span class="field-hint">(opcional)</span>
+              </label>
+              <InputText
+                v-model="credentials.redirectUri"
+                :placeholder="savedRedirectUri || 'http://localhost:8000/api/v1/drive/oauth/callback'"
+                class="field-input"
+              />
+            </div>
+
+            <div class="credentials-actions">
+              <Button
+                label="Guardar Credenciales"
+                icon="pi pi-save"
+                severity="primary"
+                :loading="isLoading"
+                :disabled="(!credentials.clientId && !savedClientId) || (!credentials.clientSecret && !hasSecret)"
+                @click="handleSaveCredentials"
+              />
+              <span v-if="credentialsSaved" class="saved-badge">
+                <i class="pi pi-check-circle"></i> Guardado
+              </span>
+            </div>
+          </div>
+        </div>
+      </template>
+    </Card>
 
     <!-- Connection Card -->
     <Card class="config-card" :class="{ 'card-disabled': !driveIntegration.activated }">
@@ -218,7 +398,7 @@ onMounted(async () => {
                 label="Verificar Conexión"
                 icon="pi pi-refresh"
                 severity="secondary"
-                @click="connectGoogleDrive"
+                @click="checkConnectionStatus"
               />
               <Button
                 label="Ver Archivos"
@@ -280,15 +460,16 @@ onMounted(async () => {
           <ul class="capabilities-list">
             <li><i class="pi pi-check"></i> Leer documentos de Google Drive desde el chat</li>
             <li><i class="pi pi-check"></i> Buscar archivos por nombre o contenido</li>
-            <li><i class="pi pi-check"></i> Crear y editar documentos de texto</li>
+            <li><i class="pi pi-check"></i> Indexar documentos para búsqueda semántica</li>
             <li><i class="pi pi-check"></i> Listar archivos y carpetas</li>
-            <li><i class="pi pi-check"></i> Subir archivos al Drive</li>
-            <li><i class="pi pi-check"></i> Compartir documentos con otros usuarios</li>
+            <li><i class="pi pi-check"></i> Sincronizar Drive con el índice de búsqueda</li>
+            <li><i class="pi pi-check"></i> Acceso seguro mediante OAuth 2.0</li>
           </ul>
         </div>
       </template>
     </Card>
 
+    <!-- Toast for Notifications -->
     <Toast position="top-right" />
   </div>
 </template>
@@ -299,10 +480,11 @@ onMounted(async () => {
   margin: 0 auto;
   padding: 1rem 1.25rem;
   min-height: 100vh;
-  background: linear-gradient(135deg, #f8fafc 0%, #e2e8f0 100%);
+  background: var(--do-bg);
   box-sizing: border-box;
 }
 
+/* Header Section */
 .header-section {
   margin-bottom: 1.25rem;
 }
@@ -337,27 +519,24 @@ onMounted(async () => {
 .integration-title {
   font-size: 1.6rem;
   font-weight: 700;
-  color: #1e293b;
   margin: 0 0 0.25rem 0;
-  background: linear-gradient(135deg, #1e293b 0%, #475569 100%);
-  -webkit-background-clip: text;
-  -webkit-text-fill-color: transparent;
-  background-clip: text;
+  color: var(--do-text);
 }
 
 .integration-subtitle {
   font-size: 0.95rem;
-  color: #64748b;
+  color: var(--do-text-muted);
   margin: 0;
   font-weight: 400;
 }
 
+/* Activation Toggle */
 .activation-toggle {
-  background: white;
+  background: rgba(255,255,255,0.04);
   border-radius: 0.75rem;
   padding: 1rem;
   box-shadow: 0 3px 14px rgba(0, 0, 0, 0.06);
-  border: 1px solid #e2e8f0;
+  border: 1px solid var(--vt-c-gray-200);
 }
 
 .toggle-content {
@@ -375,7 +554,7 @@ onMounted(async () => {
 .toggle-label {
   font-size: 0.95rem;
   font-weight: 600;
-  color: #374151;
+  color: var(--do-text);
 }
 
 .toggle-status {
@@ -393,12 +572,111 @@ onMounted(async () => {
   transform: scale(1.1);
 }
 
+/* Credentials Card */
+.credentials-section {
+  display: flex;
+  flex-direction: column;
+  gap: 1.25rem;
+}
+
+.credentials-header {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.credentials-icon {
+  font-size: 1.4rem;
+  color: var(--color-primary);
+}
+
+.credentials-title {
+  font-size: 1rem;
+  font-weight: 600;
+  color: var(--do-text);
+  margin: 0 0 0.2rem;
+}
+
+.credentials-subtitle {
+  font-size: 0.85rem;
+  color: var(--do-text-muted);
+  margin: 0;
+}
+
+.saved-credentials-info {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 0.85rem;
+  color: var(--color-success);
+  background: rgba(34, 197, 94, 0.08);
+  border: 1px solid rgba(34, 197, 94, 0.25);
+  border-radius: 0.5rem;
+  padding: 0.6rem 0.75rem;
+}
+
+.credentials-form {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+}
+
+.field-label {
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: var(--do-text-secondary);
+}
+
+.field-hint {
+  font-weight: 400;
+  color: var(--do-text-muted);
+}
+
+.required {
+  color: var(--color-danger);
+}
+
+.field-input {
+  width: 100%;
+}
+
+:deep(.field-input.p-password) {
+  width: 100%;
+}
+
+:deep(.field-input.p-password .p-inputtext) {
+  width: 100%;
+}
+
+.credentials-actions {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  padding-top: 0.25rem;
+}
+
+.saved-badge {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  font-size: 0.85rem;
+  font-weight: 500;
+  color: var(--color-success);
+}
+
+/* Connection Card */
 .config-card {
   margin-bottom: 1.25rem;
   border-radius: 0.75rem;
   overflow: hidden;
   box-shadow: 0 8px 30px rgba(0, 0, 0, 0.08);
-  border: 1px solid #e2e8f0;
+  border: 1px solid var(--vt-c-gray-200);
   transition: all 0.2s ease;
 }
 
@@ -456,17 +734,18 @@ onMounted(async () => {
   gap: 1rem;
 }
 
+/* Information Card */
 .info-card {
   border-radius: 0.75rem;
   overflow: hidden;
   box-shadow: 0 8px 30px rgba(0, 0, 0, 0.08);
-  border: 1px solid #e2e8f0;
+  border: 1px solid var(--vt-c-gray-200);
 }
 
 :deep(.info-card .p-card-header) {
-  background: linear-gradient(135deg, #f8fafc 0%, #e2e8f0 100%);
+  background: rgba(255,255,255,0.04);
   padding: 1rem 1.25rem;
-  border-bottom: 1px solid #e2e8f0;
+  border-bottom: 1px solid var(--vt-c-gray-200);
 }
 
 .info-header {
@@ -483,7 +762,7 @@ onMounted(async () => {
 .info-title {
   font-size: 1.05rem;
   font-weight: 600;
-  color: #374151;
+  color: var(--do-text);
 }
 
 :deep(.info-card .p-card-content) {
@@ -501,9 +780,9 @@ onMounted(async () => {
   flex-direction: column;
   gap: 0.5rem;
   padding: 0.75rem;
-  background: #f8fafc;
+  background: rgba(255,255,255,0.04);
   border-radius: 0.6rem;
-  border: 1px solid #e2e8f0;
+  border: 1px solid var(--vt-c-gray-200);
 }
 
 .info-label {
@@ -512,7 +791,7 @@ onMounted(async () => {
   gap: 0.5rem;
   font-size: 0.85rem;
   font-weight: 600;
-  color: #64748b;
+  color: var(--do-text-muted);
 }
 
 .info-label i {
@@ -521,20 +800,20 @@ onMounted(async () => {
 
 .info-value {
   font-size: 0.95rem;
-  color: #374151;
+  color: var(--do-text);
   padding-left: 1.5rem;
 }
 
 .capabilities-section {
   margin-top: 1rem;
   padding-top: 1rem;
-  border-top: 1px solid #e2e8f0;
+  border-top: 1px solid var(--vt-c-gray-200);
 }
 
 .capabilities-title {
   font-size: 1rem;
   font-weight: 600;
-  color: #374151;
+  color: var(--do-text);
   margin-bottom: 0.75rem;
 }
 
@@ -552,7 +831,7 @@ onMounted(async () => {
   align-items: center;
   gap: 0.5rem;
   font-size: 0.9rem;
-  color: #475569;
+  color: var(--do-text-muted);
 }
 
 .capabilities-list li i {
@@ -560,6 +839,7 @@ onMounted(async () => {
   font-size: 0.75rem;
 }
 
+/* Responsive Design */
 @media (max-width: 768px) {
   .integration-container {
     padding: 0.75rem;
@@ -573,6 +853,10 @@ onMounted(async () => {
 
   .integration-title {
     font-size: 1.4rem;
+  }
+
+  .integration-subtitle {
+    font-size: 0.95rem;
   }
 
   .toggle-content {
@@ -617,12 +901,18 @@ onMounted(async () => {
     align-items: start;
   }
 
+  .header-section {
+    grid-column: 1 / 3;
+  }
+
+  .credentials-card,
   .config-card {
     grid-column: 1 / 2;
   }
 
   .info-card {
     grid-column: 2 / 3;
+    grid-row: 2 / 4;
     position: sticky;
     top: 5.2rem;
     align-self: start;

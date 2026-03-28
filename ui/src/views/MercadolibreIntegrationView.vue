@@ -254,19 +254,15 @@ onMounted(async () => {
 }
 
 .integration-title {
-  font-size: 2.5rem;
+  font-size: 1.6rem;
   font-weight: 700;
-  color: #1e293b;
   margin: 0 0 0.5rem 0;
-  background: linear-gradient(135deg, #1e293b 0%, #475569 100%);
-  -webkit-background-clip: text;
-  -webkit-text-fill-color: transparent;
-  background-clip: text;
+  color: var(--do-text);
 }
 
 .integration-subtitle {
   font-size: 1.125rem;
-  color: #64748b;
+  color: var(--do-text-muted);
   margin: 0;
   font-weight: 400;
 }
@@ -379,7 +375,7 @@ onMounted(async () => {
 }
 
 .field-help {
-  color: #64748b;
+  color: var(--do-text-muted);
   font-size: 0.875rem;
   font-style: italic;
 }
@@ -449,7 +445,7 @@ onMounted(async () => {
   gap: 0.5rem;
   font-size: 0.875rem;
   font-weight: 600;
-  color: #64748b;
+  color: var(--do-text-muted);
 }
 
 .status-label i {

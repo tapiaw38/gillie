@@ -33,6 +33,7 @@ const integration = reactive<IntegrationParams>({
   activated: false,
   config: {
     blacklist: [],
+    require_confirmation: true,
   } as unknown as SystemCommandsIntegrationConfig,
 })
 
@@ -89,6 +90,7 @@ onMounted(async () => {
       const cfg = integration.config as unknown as SystemCommandsIntegrationConfig
       const saved = i.config as unknown as SystemCommandsIntegrationConfig
       cfg.blacklist = Array.isArray(saved?.blacklist) ? [...saved.blacklist] : []
+      cfg.require_confirmation = saved?.require_confirmation !== false
     }
   })
 })
@@ -122,6 +124,37 @@ onMounted(async () => {
         </div>
       </div>
     </div>
+
+    <!-- Confirmation Toggle Card -->
+    <Card class="config-card" :class="{ 'card-disabled': !integration.activated }">
+      <template #header>
+        <div class="card-header">
+          <i class="pi pi-shield card-header-icon"></i>
+          <span>Verificación por código</span>
+        </div>
+      </template>
+      <template #content>
+        <div class="confirmation-toggle-row">
+          <div class="confirmation-info">
+            <span class="confirmation-label">Requerir confirmación antes de ejecutar</span>
+            <span class="confirmation-desc">
+              <template v-if="(integration.config as unknown as SystemCommandsIntegrationConfig).require_confirmation">
+                El asistente propone el comando y el usuario debe responder con un código de 6 caracteres para ejecutarlo.
+              </template>
+              <template v-else>
+                El asistente ejecuta los comandos directamente sin pedir confirmación.
+              </template>
+            </span>
+          </div>
+          <InputSwitch
+            v-model="(integration.config as unknown as SystemCommandsIntegrationConfig).require_confirmation"
+            :disabled="!integration.activated"
+            class="modern-switch"
+            @change="saveIntegration"
+          />
+        </div>
+      </template>
+    </Card>
 
     <!-- Dynamic Blacklist Card -->
     <Card class="config-card" :class="{ 'card-disabled': !integration.activated }">
@@ -206,7 +239,7 @@ onMounted(async () => {
   margin: 0 auto;
   padding: 1rem 1.25rem;
   min-height: 100vh;
-  background: linear-gradient(135deg, #f8fafc 0%, #e2e8f0 100%);
+  background: var(--do-bg);
   box-sizing: border-box;
 }
 
@@ -240,24 +273,21 @@ onMounted(async () => {
   font-size: 1.6rem;
   font-weight: 700;
   margin: 0 0 0.25rem 0;
-  background: linear-gradient(135deg, #1e293b 0%, #475569 100%);
-  -webkit-background-clip: text;
-  -webkit-text-fill-color: transparent;
-  background-clip: text;
+  color: var(--do-text);
 }
 
 .integration-subtitle {
   font-size: 0.95rem;
-  color: #64748b;
+  color: var(--do-text-muted);
   margin: 0;
 }
 
 .activation-toggle {
-  background: white;
+  background: rgba(255,255,255,0.04);
   border-radius: 0.75rem;
   padding: 1rem;
-  box-shadow: 0 3px 14px rgba(0, 0, 0, 0.06);
-  border: 1px solid #e2e8f0;
+  box-shadow: none;
+  border: 1px solid rgba(255,255,255,0.08);
 }
 
 .toggle-content {
@@ -268,7 +298,7 @@ onMounted(async () => {
 
 .toggle-info { display: flex; flex-direction: column; gap: 0.25rem; }
 
-.toggle-label { font-size: 0.95rem; font-weight: 600; color: #374151; }
+.toggle-label { font-size: 0.95rem; font-weight: 600; color: var(--do-text); }
 
 .toggle-status {
   font-size: 0.85rem;
@@ -284,8 +314,8 @@ onMounted(async () => {
 .config-card, .status-card {
   border-radius: 0.75rem;
   overflow: hidden;
-  box-shadow: 0 8px 30px rgba(0, 0, 0, 0.08);
-  border: 1px solid #e2e8f0;
+  box-shadow: none;
+  border: 1px solid rgba(255,255,255,0.08);
   margin-bottom: 1.25rem;
 }
 
@@ -299,11 +329,11 @@ onMounted(async () => {
   align-items: center;
   gap: 0.5rem;
   padding: 0.9rem 1.25rem;
-  background: linear-gradient(135deg, #f8fafc 0%, #e2e8f0 100%);
-  border-bottom: 1px solid #e2e8f0;
+  background: rgba(255,255,255,0.03);
+  border-bottom: 1px solid rgba(255,255,255,0.08);
   font-size: 1rem;
   font-weight: 600;
-  color: #374151;
+  color: var(--do-text);
 }
 
 .card-header-icon { color: var(--color-primary); font-size: 1.1rem; }
@@ -316,9 +346,34 @@ onMounted(async () => {
 
 .section-hint {
   font-size: 0.85rem;
-  color: #64748b;
+  color: var(--do-text-muted);
   font-style: italic;
   margin: 0 0 0.75rem;
+}
+
+.confirmation-toggle-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+}
+
+.confirmation-info {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+
+.confirmation-label {
+  font-size: 0.95rem;
+  font-weight: 600;
+  color: var(--do-text);
+}
+
+.confirmation-desc {
+  font-size: 0.85rem;
+  color: var(--do-text-muted);
+  font-style: italic;
 }
 
 .add-row {
@@ -340,9 +395,9 @@ onMounted(async () => {
   align-items: center;
   justify-content: space-between;
   padding: 0.5rem 0.75rem;
-  background: #f8fafc;
+  background: rgba(255,255,255,0.04);
   border-radius: 0.5rem;
-  border: 1px solid #e2e8f0;
+  border: 1px solid rgba(255,255,255,0.08);
 }
 
 .pattern-text {
@@ -353,7 +408,7 @@ onMounted(async () => {
 
 .empty-hint {
   font-size: 0.85rem;
-  color: #94a3b8;
+  color: var(--do-text-secondary);
   font-style: italic;
   text-align: center;
   padding: 0.75rem 0;

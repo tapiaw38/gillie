@@ -268,7 +268,7 @@ const conversationSelectedHandler = computed(() => {
   margin: 0 auto;
   padding: 2rem;
   min-height: 100vh;
-  background: linear-gradient(135deg, var(--vt-c-gray-50) 0%, var(--do-border-light) 100%);
+  background: var(--do-bg);
 }
 
 /* Header Section */
@@ -280,7 +280,7 @@ const conversationSelectedHandler = computed(() => {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  background: white;
+  background: rgba(255,255,255,0.04);
   padding: 2rem;
   border-radius: 1rem;
   box-shadow: 0 4px 20px var(--shadow-light);
@@ -311,7 +311,7 @@ const conversationSelectedHandler = computed(() => {
 }
 
 .page-title {
-  font-size: 2.5rem;
+  font-size: 1.6rem;
   font-weight: 700;
   color: var(--do-text);
   margin: 0 0 0.5rem 0;
@@ -390,7 +390,7 @@ const conversationSelectedHandler = computed(() => {
 
 :deep(.conversations-card .p-card-header),
 :deep(.messages-card .p-card-header) {
-  background: linear-gradient(135deg, var(--vt-c-gray-50) 0%, var(--do-border-light) 100%);
+  background: rgba(255,255,255,0.04);
   padding: 1.5rem 2rem;
   border-bottom: 1px solid var(--do-border-light);
 }
@@ -510,12 +510,33 @@ const conversationSelectedHandler = computed(() => {
 }
 
 :deep(.modern-table .p-datatable-tbody > tr:hover) {
-  background: var(--vt-c-gray-50);
+  background: rgba(59,130,246,0.06);
 }
 
 :deep(.modern-table .p-datatable-tbody > tr > td) {
   padding: 1rem;
   border-bottom: 1px solid var(--vt-c-gray-100);
+}
+
+:deep(.p-paginator) {
+  background: var(--do-bg-white) !important;
+  border-color: var(--vt-c-gray-200) !important;
+  color: var(--do-text) !important;
+}
+
+:deep(.p-paginator .p-paginator-pages .p-paginator-page),
+:deep(.p-paginator .p-paginator-first),
+:deep(.p-paginator .p-paginator-prev),
+:deep(.p-paginator .p-paginator-next),
+:deep(.p-paginator .p-paginator-last) {
+  color: var(--do-text) !important;
+  background: transparent !important;
+  border-color: var(--vt-c-gray-200) !important;
+}
+
+:deep(.p-paginator .p-paginator-pages .p-paginator-page.p-highlight) {
+  background: var(--color-primary) !important;
+  color: white !important;
 }
 
 .conversation-title {
@@ -587,7 +608,7 @@ const conversationSelectedHandler = computed(() => {
 
 .messages-list {
   padding: 1rem;
-  background: linear-gradient(135deg, var(--vt-c-gray-50) 0%, var(--vt-c-gray-100) 100%);
+  background: rgba(255,255,255,0.03);
   border-radius: 0.75rem;
   min-height: 100%;
 }
@@ -636,7 +657,7 @@ const conversationSelectedHandler = computed(() => {
 
 .message-bubble {
   max-width: 70%;
-  background: white;
+  background: rgba(255,255,255,0.06);
   border-radius: 1rem;
   padding: 1rem;
   box-shadow: 0 4px 20px var(--shadow-light);
@@ -668,7 +689,7 @@ const conversationSelectedHandler = computed(() => {
   left: -8px;
   width: 0;
   height: 0;
-  border-right: 8px solid white;
+  border-right: 8px solid rgba(255,255,255,0.06);
   border-top: 8px solid transparent;
   border-bottom: 8px solid transparent;
 }

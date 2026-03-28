@@ -58,7 +58,8 @@ class AIResponseService:
         message_context: Optional[str] = None,
         conversation_history: Optional[str] = None,
         chat_history: Optional[List[str]] = None,
-        auth_token: Optional[str] = None
+        auth_token: Optional[str] = None,
+        client_workspace: str = "",
     ) -> Tuple[Optional[str], str]:
         """
         Generates an AI response with intelligent function execution.
@@ -77,14 +78,16 @@ class AIResponseService:
                     message_context=message_context,
                     conversation_history=conversation_history,
                     chat_history=chat_history,
-                    auth_token=auth_token
+                    auth_token=auth_token,
+                    client_workspace=client_workspace,
                 )
             else:
                 response = await self._generate_standard_response(
                     user_message=user_message,
                     profile=profile,
                     message_context=message_context,
-                    conversation_history=conversation_history
+                    conversation_history=conversation_history,
+                    client_workspace=client_workspace,
                 )
                 return (None, response)
 
@@ -99,7 +102,8 @@ class AIResponseService:
         message_context: Optional[str],
         conversation_history: Optional[str],
         chat_history: Optional[List[str]],
-        auth_token: Optional[str] = None
+        auth_token: Optional[str] = None,
+        client_workspace: str = "",
     ) -> Tuple[Optional[str], str]:
         """
         Generates response with smart function execution enabled.
@@ -136,7 +140,8 @@ class AIResponseService:
                     user_message=user_message,
                     profile=profile,
                     message_context=message_context,
-                    conversation_history=conversation_history
+                    conversation_history=conversation_history,
+                    client_workspace=client_workspace,
                 )
                 return (None, response)
 
@@ -147,7 +152,8 @@ class AIResponseService:
                 user_message=user_message,
                 profile=profile,
                 message_context=message_context,
-                conversation_history=conversation_history
+                conversation_history=conversation_history,
+                client_workspace=client_workspace,
             )
             return (None, response)
 
@@ -156,7 +162,8 @@ class AIResponseService:
         user_message: str,
         profile,
         message_context: Optional[str],
-        conversation_history: Optional[str]
+        conversation_history: Optional[str],
+        client_workspace: str = "",
     ) -> str:
         """
         Generates a standard AI response without function execution.
@@ -181,7 +188,8 @@ class AIResponseService:
                 user_message,
                 message_context,
                 conversation_history,
-                profile
+                profile,
+                client_workspace=client_workspace,
             )
             return response
 
@@ -194,7 +202,8 @@ class AIResponseService:
         user_message: str,
         profile,
         message_context: Optional[str],
-        conversation_history: Optional[str]
+        conversation_history: Optional[str],
+        client_workspace: str = "",
     ) -> str:
         """
         Generates standard AI response with error fallback.
@@ -213,7 +222,8 @@ class AIResponseService:
                 user_message=user_message,
                 profile=profile,
                 message_context=message_context,
-                conversation_history=conversation_history
+                conversation_history=conversation_history,
+                client_workspace=client_workspace,
             )
         except Exception as fallback_error:
             logger.error(f"Error in fallback AI response: {fallback_error}")

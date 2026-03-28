@@ -15,6 +15,7 @@ from cli.config.schema import (
     LangChainServiceConfig,
     QdrantServiceConfig,
     EmbeddingsServiceConfig,
+    StorageServiceConfig,
     S3ServiceConfig,
     TTSServiceConfig,
     STTServiceConfig,
@@ -68,6 +69,7 @@ def _build_services(services_data: dict) -> ServicesConfig:
         langchain=LangChainServiceConfig(**services_data.get("langchain", {})),
         qdrant=QdrantServiceConfig(**services_data.get("qdrant", {})),
         embeddings=EmbeddingsServiceConfig(**services_data.get("embeddings", {})),
+        storage=StorageServiceConfig(**services_data.get("storage", {})),
         s3=S3ServiceConfig(**services_data.get("s3", {})),
         tts=TTSServiceConfig(**services_data.get("tts", {})),
         stt=STTServiceConfig(**services_data.get("stt", {})),
@@ -89,9 +91,11 @@ def load_soul() -> SoulConfig:
         )
     with open(path, "r") as f:
         data = json.load(f)
+    known_fields = {f.name for f in ProfileConfig.__dataclass_fields__.values()}
+    profile_data = {k: v for k, v in data["profile"].items() if k in known_fields}
     return SoulConfig(
         user_id=data["user_id"],
-        profile=ProfileConfig(**data["profile"]),
+        profile=ProfileConfig(**profile_data),
     )
 
 
@@ -127,6 +131,7 @@ def load_config() -> AssistantConfig:
         logging=LoggingConfig(**data.get("logging", {})),
         tunnel=TunnelConfig(**data.get("tunnel", {})),
         expose=ExposeConfig(**data.get("expose", {})),
+        workspace=data.get("workspace", ""),
     )
 
 
@@ -146,6 +151,7 @@ def save_config(config: AssistantConfig) -> None:
         "logging": asdict(config.logging),
         "tunnel": asdict(config.tunnel),
         "expose": asdict(config.expose),
+        "workspace": config.workspace,
     }
     with open(path, "w") as f:
         json.dump(technical, f, indent=2)

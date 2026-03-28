@@ -96,11 +96,9 @@ class ResponseMeliQuestionsUseCase:
 
             for profile in profiles:
                 try:
-                    # Verificar si el perfil tiene integraciones
                     if not hasattr(profile, "integrations") or not profile.integrations:
                         continue
 
-                    # Buscar integraciones de MercadoLibre activas
                     meli_integrations = [
                         integration
                         for integration in profile.integrations

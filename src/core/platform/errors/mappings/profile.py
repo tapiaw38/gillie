@@ -20,12 +20,6 @@ ProfileCreateNameRequiredError = ErrorDetails(
     message="assistant name is required"
 )
 
-ProfileCreateBusinessNameRequiredError = ErrorDetails(
-    internal_code="profile:create:business-name-required",
-    status_code=400,
-    message="business name is required"
-)
-
 ProfileCreateDuplicateError = ErrorDetails(
     internal_code="profile:create:duplicate",
     status_code=409,

@@ -1,15 +1,11 @@
 export interface AssistantProfileParams {
   assistant_name: string
-  business_name: string
   functions: string
-  business_context: string
 }
 
 export interface AssistantProfileUpdateParams {
   assistant_name?: string
-  business_name?: string
   functions?: string
-  business_context?: string
   tts_enabled?: boolean
   tool_prompts?: string
   disabled_tools?: string[]
@@ -18,9 +14,7 @@ export interface AssistantProfileUpdateParams {
 export interface AssistantProfile {
   id: string
   assistant_name: string
-  business_name: string
   functions: string
-  business_context: string
   user_id: string
   created_at: string
   updated_at: string
@@ -114,13 +108,19 @@ export interface GoogleDriveIntegrationConfig {
   is_connected?: boolean
 }
 
+export interface SQLDatabaseTableEntry {
+  name: string
+  description: string
+}
+
 export interface SQLDatabaseIntegrationConfig {
   connection_string: string
-  allowed_table: string
-  table_description: string
+  allowed_tables: SQLDatabaseTableEntry[]
+  blocked_keywords?: string[]
 }
 
 export interface IntegrationParams {
+  id?: string
   name: string
   type: string
   activated: boolean
@@ -131,6 +131,8 @@ export interface IntegrationParams {
     | GoogleDriveIntegrationConfig
     | SQLDatabaseIntegrationConfig
     | SystemCommandsIntegrationConfig
+    | SlackIntegrationConfig
+    | TelegramIntegrationConfig
 }
 
 export interface ToolPromptsConfig {
@@ -145,10 +147,36 @@ export interface ToolPromptsConfig {
   search_memory?: string
   system_propose?: string
   system_confirm?: string
+  cron_create?: string
+  cron_list?: string
+  cron_delete?: string
+  cron_run?: string
+  read_file?: string
+  write_file?: string
+  edit_file?: string
+  list_directory?: string
+  find_files?: string
+  run_shell?: string
+  grep_files?: string
+  git_status?: string
+  git_diff?: string
+  git_log?: string
+  git_commit?: string
 }
 
 export interface SystemCommandsIntegrationConfig {
   blacklist: string[]
+  require_confirmation: boolean
+}
+
+export interface SlackIntegrationConfig {
+  bot_token: string
+  signing_secret: string
+}
+
+export interface TelegramIntegrationConfig {
+  bot_token: string
+  secret_token: string
 }
 
 export interface IntegrationResponse {

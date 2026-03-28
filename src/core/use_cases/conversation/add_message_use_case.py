@@ -18,7 +18,9 @@ The heavy lifting is delegated to specialized services:
 - MessageHistoryService: Message history management
 """
 
+import asyncio
 import logging
+import os
 from datetime import datetime, timezone
 from typing import Optional, Tuple
 
@@ -61,6 +63,7 @@ class AddMessageUseCase:
         has_image_processor: Optional[str] = None,
         has_text_to_voice: Optional[str] = None,
         auth_token: Optional[str] = None,
+        client_workspace: str = "",
     ) -> list[Message]:
         """
         Executes the add message workflow.
@@ -89,34 +92,35 @@ class AddMessageUseCase:
         Raises:
             ApplicationError: If conversation not found, unauthorized, or validation error
         """
-        # Step 1: Process voice content if provided
         enhanced_content = await self._process_voice_content(message)
 
-        # Step 2: Create user message
+        if message.voice_content and not enhanced_content.strip():
+            logger.warning("Voice content provided but transcription returned no text — skipping")
+            conversation = self._get_and_validate_conversation(conversation_id, user_id)
+            return MessageListOutput.from_output(conversation.messages)
+
         user_message = self._create_user_message(enhanced_content, sender)
 
-        # Step 3: Retrieve and validate conversation
         conversation = self._get_and_validate_conversation(
             conversation_id, user_id
         )
 
-        # Step 4: Add user message to conversation
+        await self._compact_if_needed(conversation, conversation_id)
+
         self._add_message_to_conversation(conversation, user_message)
 
-        # Step 5: Generate AI response
         default_message, ai_response_text = await self._generate_ai_response(
             user_message=user_message,
             conversation=conversation,
             message_context=message.context,
-            auth_token=auth_token
+            auth_token=auth_token,
+            client_workspace=client_workspace,
         )
 
-        # Step 5b: If a pre-configured default message exists, add it first
         if default_message:
             pre_message = self._create_assistant_message(content=default_message)
             self._add_message_to_conversation(conversation, pre_message)
 
-        # Step 6: Process images if enabled
         formatted_images = await self._process_images_if_enabled(
             has_image_processor=has_image_processor,
             user_message=user_message,
@@ -124,7 +128,6 @@ class AddMessageUseCase:
             message_context=message.context
         )
 
-        # Step 7: Generate audio if enabled
         audio_url = await self._generate_audio_if_enabled(
             has_text_to_voice=has_text_to_voice,
             text=ai_response_text,
@@ -132,23 +135,18 @@ class AddMessageUseCase:
             conversation_id=conversation_id
         )
 
-        # Step 8: Create assistant response message
         assistant_message = self._create_assistant_message(
             content=ai_response_text,
             audio_url=audio_url
         )
 
-        # Step 9: Append images to assistant message if available
         if formatted_images:
             assistant_message.content = f"{ai_response_text}\n\n{formatted_images}"
 
-        # Step 10: Add assistant message to conversation
         self._add_message_to_conversation(conversation, assistant_message)
 
-        # Step 11: Persist messages to database
         self._save_messages(conversation_id, conversation.messages)
 
-        # Step 12: Return messages
         return MessageListOutput.from_output(conversation.messages)
 
     async def _process_voice_content(self, message: MessageInput) -> str:
@@ -293,7 +291,8 @@ class AddMessageUseCase:
         user_message: Message,
         conversation,
         message_context: Optional[str],
-        auth_token: Optional[str] = None
+        auth_token: Optional[str] = None,
+        client_workspace: str = "",
     ) -> Tuple[Optional[str], str]:
         """
         Generates AI response using the AI response service.
@@ -309,13 +308,13 @@ class AddMessageUseCase:
         if not self.context_factory.platform_managers:
             logger.warning("Platform services not available, using fallback")
             response = await self._generate_ai_response_fallback(
-                user_message, conversation, message_context
+                user_message, conversation, message_context, client_workspace=client_workspace
             )
             return (None, response)
 
         try:
             # Inject skill context BEFORE any AI processing (highest priority)
-            enhanced_context = self._inject_skill_context(message_context)
+            enhanced_context = self._inject_skill_context(message_context, user_message.content)
 
             # Build chat history for function execution
             chat_history = self.context_factory.platform_managers.message_history.build_chat_history(
@@ -335,19 +334,95 @@ class AddMessageUseCase:
                 message_context=enhanced_context,
                 conversation_history=conversation_history,
                 chat_history=chat_history,
-                auth_token=auth_token
+                auth_token=auth_token,
+                client_workspace=client_workspace,
             )
 
         except Exception as e:
             logger.error(f"Error generating AI response: {e}")
             return (None, self._get_fallback_error_message(conversation.profile))
 
-    def _inject_skill_context(self, message_context: Optional[str]) -> str:
+    async def execute_stream(
+        self,
+        conversation_id: str,
+        content: str,
+        user_id: str,
+        client_workspace: str = "",
+        plan_mode: bool = False,
+    ):
+        """
+        Streaming variant for CLI use. Validates the conversation, saves the user
+        message, streams AI response tokens, then persists the assistant message.
+
+        Yields:
+            str: AI response text tokens as they arrive.
+            dict {"type": "shell_output", "line": str}: real-time stdout lines from
+                run_shell tool invocations, emitted in real time as the process runs.
+            dict {"type": "audio", "url": str}: audio URL when TTS is enabled.
+        """
+        conversation = self._get_and_validate_conversation(conversation_id, user_id)
+
+        compaction_event = await self._compact_if_needed(conversation, conversation_id)
+        if compaction_event:
+            yield compaction_event
+
+        user_message = self._create_user_message(content, SenderEnum.user)
+        self._add_message_to_conversation(conversation, user_message)
+
+        enhanced_context = self._inject_skill_context(None, content)
+        conversation_history = (
+            self.context_factory.platform_managers.message_history
+            .convert_messages_to_string(conversation.messages[-40:])
+            if self.context_factory.platform_managers
+            else ""
+        )
+
+        # Queue for real-time shell stdout lines. LangChainService puts raw lines in,
+        # drains them while _handle_tool_calls runs, and yields shell_output dicts
+        # upstream — we simply forward whatever the generator yields here.
+        shell_output_queue: asyncio.Queue = asyncio.Queue()
+
+        full_text = ""
+        async for token in self.context_factory.integrations.openai.ask_stream(
+            question=content,
+            context=enhanced_context,
+            previous_messages=conversation_history,
+            profile=conversation.profile,
+            conversation_id=conversation_id,
+            shell_output_queue=shell_output_queue,
+            client_workspace=client_workspace,
+            plan_mode=plan_mode,
+        ):
+            # dict tokens (shell_output, etc.) are forwarded as-is; only str
+            # tokens contribute to the persisted assistant message text.
+            yield token
+            if isinstance(token, str):
+                full_text += token
+
+        # Generate audio if TTS is enabled for this profile
+        audio_url = await self._generate_audio_if_enabled(
+            has_text_to_voice=None,
+            text=full_text,
+            user_id=user_id,
+            conversation_id=conversation_id,
+        )
+
+        if audio_url:
+            yield {"type": "audio", "url": audio_url}
+
+        assistant_message = self._create_assistant_message(content=full_text, audio_url=audio_url)
+        self._add_message_to_conversation(conversation, assistant_message)
+        self._save_messages(conversation_id, conversation.messages)
+
+    def _inject_skill_context(self, message_context: Optional[str], user_query: str = "") -> str:
         """
         Inject skill context (general.skill.md + faqs.skill.md) into message context.
+        When a user_query is provided, also searches memory for relevant snippets and
+        appends them so the LLM gets targeted knowledge for the current question.
 
         Args:
             message_context: Original message context
+            user_query: User's message text used to search memory for relevant snippets
 
         Returns:
             Enhanced context with skill knowledge prepended (or original if unavailable)
@@ -359,12 +434,22 @@ class AddMessageUseCase:
             return message_context
 
         try:
-            skill_context = self.context_factory.platform_managers.skill_manager.get_base_context()
+            skill_manager = self.context_factory.platform_managers.skill_manager
+            skill_context = skill_manager.get_base_context()
 
             if not skill_context:
                 return message_context
 
             enhanced_context = f"{skill_context}\n\n{message_context}" if message_context else skill_context
+
+            # Search for query-specific snippets and append them
+            if user_query:
+                search_results = skill_manager.search_memory(user_query)
+                no_results_msg = "No se encontraron resultados relevantes en la memoria"
+                if search_results and no_results_msg not in search_results:
+                    enhanced_context = f"{enhanced_context}\n\n=== CONTEXTO RELEVANTE PARA ESTA CONSULTA ===\n{search_results}"
+                    logger.info("Skill search results injected for query")
+
             logger.info("Skill context injected into message context")
             return enhanced_context
 
@@ -376,7 +461,8 @@ class AddMessageUseCase:
         self,
         user_message: Message,
         conversation,
-        message_context: Optional[str]
+        message_context: Optional[str],
+        client_workspace: str = "",
     ) -> str:
         """
         Fallback method for generating AI response without platform services.
@@ -385,15 +471,14 @@ class AddMessageUseCase:
             user_message: User's message
             conversation: Conversation object
             message_context: Optional message context
+            client_workspace: Optional client workspace path
 
         Returns:
             Generated AI response text
         """
         try:
-            # Inject skill context even in fallback mode
             enhanced_context = self._inject_skill_context(message_context)
 
-            # Manual conversion of messages to string
             conversation_history = " - ".join([
                 f"{msg.sender}: {msg.content}"
                 for msg in conversation.messages
@@ -403,7 +488,8 @@ class AddMessageUseCase:
                 user_message.content,
                 enhanced_context,
                 conversation_history,
-                conversation.profile
+                conversation.profile,
+                client_workspace=client_workspace,
             )
 
             return response
@@ -508,6 +594,157 @@ class AddMessageUseCase:
         except Exception as e:
             logger.error(f"Error generating audio: {e}")
             return None
+
+    async def compact_now(self, conversation_id: str, user_id: str) -> dict:
+        """Force-compact the conversation immediately, regardless of message count."""
+        conversation = self._get_and_validate_conversation(conversation_id, user_id)
+
+        keep_recent = int(os.environ.get("COMPACTION_KEEP_RECENT", "20"))
+        messages_to_summarize = conversation.messages[:-keep_recent] if len(conversation.messages) > keep_recent else conversation.messages
+        non_summary = [m for m in messages_to_summarize if m.sender != SenderEnum.summary]
+
+        if not non_summary:
+            return {"compacted": False, "reason": "No hay mensajes para compactar"}
+
+        summary_text = await self._generate_summary(messages_to_summarize)
+        if not summary_text:
+            return {"compacted": False, "reason": "No se pudo generar el resumen"}
+
+        summary_message = Message(
+            content=f"[RESUMEN DE CONVERSACIÓN ANTERIOR]\n{summary_text}",
+            sender=SenderEnum.summary,
+            created_at=datetime.now(timezone.utc),
+        )
+        recent_messages = conversation.messages[-keep_recent:] if len(conversation.messages) > keep_recent else []
+        conversation.messages = [summary_message] + recent_messages
+        self._save_messages(conversation_id, conversation.messages)
+
+        logger.info(f"Manual compaction: {len(messages_to_summarize)} messages → 1 summary")
+        return {"compacted": True, "summarized": len(messages_to_summarize)}
+
+    async def _compact_if_needed(
+        self,
+        conversation,
+        conversation_id: str,
+    ) -> Optional[dict]:
+        """
+        Compacts the conversation when it exceeds the configured threshold.
+
+        The method mutates ``conversation.messages`` in-place and persists the
+        updated list to the database.  It returns a compaction SSE event dict
+        when compaction was performed, or ``None`` when it was not needed.
+
+        The compaction algorithm:
+        1. Keep the most recent ``keep_recent`` messages untouched.
+        2. From the older messages, filter out any that are already summaries
+           (to avoid re-summarising summaries).
+        3. Call OpenAI for a concise summary of those older messages.
+        4. Replace the older messages with a single summary ``Message``.
+        5. Persist the compacted message list before returning.
+
+        Args:
+            conversation: The ``Conversation`` domain object (mutated in-place).
+            conversation_id: Identifier used for the database update.
+
+        Returns:
+            A compaction SSE event dict if compaction occurred, else ``None``.
+        """
+        threshold = int(os.environ.get("COMPACTION_THRESHOLD", "40"))
+        keep_recent = int(os.environ.get("COMPACTION_KEEP_RECENT", "20"))
+
+        if len(conversation.messages) <= threshold:
+            return None
+
+        messages_to_summarize = conversation.messages[:-keep_recent]
+        recent_messages = conversation.messages[-keep_recent:]
+
+        non_summary = [
+            m for m in messages_to_summarize
+            if m.sender != SenderEnum.summary
+        ]
+        if not non_summary:
+            # All older messages are already summaries — nothing to compact.
+            return None
+
+        summary_text = await self._generate_summary(messages_to_summarize)
+        if not summary_text:
+            # Summarisation failed; continue without compacting so the normal
+            # flow is never broken.
+            return None
+
+        summary_message = Message(
+            content=f"[RESUMEN DE CONVERSACIÓN ANTERIOR]\n{summary_text}",
+            sender=SenderEnum.summary,
+            created_at=datetime.now(timezone.utc),
+        )
+
+        conversation.messages = [summary_message] + recent_messages
+
+        self._save_messages(conversation_id, conversation.messages)
+
+        logger.info(
+            f"Conversation {conversation_id} compacted: "
+            f"{len(messages_to_summarize)} messages condensed into 1 summary"
+        )
+
+        return {
+            "type": "compaction",
+            "message": "Conversación compactada para optimizar el contexto",
+        }
+
+    async def _generate_summary(self, messages: list) -> str:
+        """
+        Generates a concise summary of ``messages`` using OpenAI.
+
+        Only ``user`` and ``assistant`` messages contribute to the summary
+        input; existing ``summary`` messages are presented as-is under their
+        own label so their context is preserved without duplication.
+
+        Args:
+            messages: The messages to summarise.
+
+        Returns:
+            The generated summary text, or an empty string on failure.
+        """
+        _SUMMARIZABLE = {SenderEnum.user, SenderEnum.assistant, SenderEnum.summary}
+
+        history_lines = []
+        for m in messages:
+            if m.sender not in _SUMMARIZABLE or not m.content:
+                continue
+            label = m.sender.value.upper()
+            snippet = m.content[:500]
+            history_lines.append(f"{label}: {snippet}")
+
+        if not history_lines:
+            return ""
+
+        history_text = "\n".join(history_lines)
+
+        system_prompt = (
+            "Eres un asistente que resume conversaciones. Resume la siguiente "
+            "conversación de forma concisa pero completa, preservando:\n"
+            "- Decisiones importantes tomadas\n"
+            "- Problemas resueltos y sus soluciones\n"
+            "- Contexto del proyecto o tarea en curso\n"
+            "- Preferencias o configuraciones mencionadas\n"
+            "- Archivos o código modificado\n\n"
+            "Responde SOLO con el resumen en bullets concisos. Sin introducción ni cierre."
+        )
+        user_prompt = (
+            "Resume esta conversación:\n\n"
+            f"{history_text}"
+        )
+
+        try:
+            summary = await self.context_factory.integrations.openai.simple_completion(
+                system=system_prompt,
+                user=user_prompt,
+            )
+            return summary
+        except Exception as e:
+            logger.error(f"Failed to generate conversation summary: {e}")
+            return ""
 
     def _save_messages(self, conversation_id: str, messages: list[Message]) -> None:
         """

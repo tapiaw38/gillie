@@ -1,3 +1,3 @@
-from .calendar import CalendarSession, CalendarEvent
+from .calendar import CalendarSession, CalendarCredentials
 
-__all__ = ["CalendarSession", "CalendarEvent"]
+__all__ = ["CalendarSession", "CalendarCredentials"]

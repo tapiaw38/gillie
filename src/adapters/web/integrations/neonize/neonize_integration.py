@@ -59,6 +59,10 @@ class NeonizeIntegration:
         os.makedirs(sessions_dir, exist_ok=True)
         self._clients: Dict[str, object] = {}  # device_id → NewAClient
         self._stt_integration = stt_integration  # optional STT for audio transcription
+        # Per-device+JID queues and workers ensure messages from the same sender
+        # are always processed in order without dropping concurrent messages.
+        self._jid_queues: Dict[str, asyncio.Queue] = {}   # key: "{device_id}:{jid}"
+        self._jid_workers: Dict[str, asyncio.Task] = {}   # key: "{device_id}:{jid}"
         _ensure_neonize_loop()
 
     def _session_path(self, device_id: str) -> str:
@@ -293,6 +297,18 @@ class NeonizeIntegration:
         jid_proto = build_jid(user, server)
 
         client = await self.get_client(device_id)
+
+        # Send composing presence indicator before the message
+        try:
+            from neonize.proto.Neonize_pb2 import ChatPresence, ChatPresenceMedia
+            await client.send_chat_presence(
+                jid_proto,
+                ChatPresence.CHAT_PRESENCE_COMPOSING,
+                ChatPresenceMedia.CHAT_PRESENCE_MEDIA_TEXT,
+            )
+        except Exception as _pe:
+            logger.debug(f"[neonize] Could not send composing presence for {jid}: {_pe}")
+
         max_retries = 3
         for attempt in range(max_retries):
             try:
@@ -350,6 +366,40 @@ class NeonizeIntegration:
                 f"[neonize] Failed to send image to {jid} via device {device_id}: {e}",
                 exc_info=True,
             )
+            return None
+
+    async def send_document(self, device_id: str, jid: str, file_url: str, caption: str = "", filename: str = "") -> Optional[str]:
+        """Download a file from file_url and send it as a document to the given JID."""
+        import aiohttp
+        import mimetypes
+        from neonize.utils.jid import build_jid
+
+        if "@" in jid:
+            user, server = jid.rsplit("@", 1)
+        else:
+            user, server = jid, "s.whatsapp.net"
+        jid_proto = build_jid(user, server)
+
+        try:
+            async with aiohttp.ClientSession() as session:
+                async with session.get(file_url) as resp:
+                    resp.raise_for_status()
+                    file_bytes = await resp.read()
+                    content_type = resp.headers.get("Content-Type", "application/octet-stream").split(";")[0]
+
+            if not filename:
+                filename = file_url.split("?")[0].rsplit("/", 1)[-1] or "file"
+
+            mime = content_type or (mimetypes.guess_type(filename)[0] or "application/octet-stream")
+
+            client = await self.get_client(device_id)
+            result = await client.send_document(jid_proto, file_bytes, caption=caption, filename=filename, mimetype=mime)
+            msg_id = str(result.id) if hasattr(result, "id") else str(result)
+            logger.info(f"[neonize] Sent document '{filename}' to {jid} via device {device_id}: id={msg_id}")
+            return msg_id
+
+        except Exception as e:
+            logger.error(f"[neonize] Failed to send document to {jid} via device {device_id}: {e}", exc_info=True)
             return None
 
     async def send_audio(self, device_id: str, jid: str, audio_url: str) -> Optional[str]:
@@ -495,7 +545,11 @@ class NeonizeIntegration:
         msg_event,
         handler: Callable,
     ) -> None:
-        """Extract sender JID and text from a MessageEv and call the handler.
+        """Extract sender JID and text from a MessageEv and enqueue it for processing.
+
+        Messages from the same sender (device+JID) are enqueued so they are
+        always processed sequentially, preventing race conditions when the user
+        sends multiple messages before the AI finishes responding.
 
         Neonize protobuf uses PascalCase field names:
           msg_event.Info             → MessageInfo
@@ -543,9 +597,83 @@ class NeonizeIntegration:
                 return
 
             logger.info(
-                f"[neonize] Dispatching message from {sender_jid} on device {device_id}: {text[:50]!r}"
+                f"[neonize] Queuing message from {sender_jid} on device {device_id}: {text[:50]!r}"
             )
-            await handler(device_id=device_id, sender_jid=sender_jid, text=text)
+            await self._enqueue_message(device_id, sender_jid, text, handler)
 
         except Exception as e:
             logger.error(f"[neonize] _dispatch_message error: {e}", exc_info=True)
+
+    async def _enqueue_message(
+        self,
+        device_id: str,
+        sender_jid: str,
+        text: str,
+        handler: Callable,
+    ) -> None:
+        """Put a message in the per-JID queue and ensure a worker is running."""
+        queue_key = f"{device_id}:{sender_jid}"
+
+        if queue_key not in self._jid_queues:
+            self._jid_queues[queue_key] = asyncio.Queue()
+
+        await self._jid_queues[queue_key].put((text, handler))
+
+        # Start a worker task for this queue if one isn't already running
+        existing = self._jid_workers.get(queue_key)
+        if existing is None or existing.done():
+            task = asyncio.create_task(
+                self._jid_worker(device_id, sender_jid, queue_key)
+            )
+            self._jid_workers[queue_key] = task
+
+    async def _jid_worker(
+        self,
+        device_id: str,
+        sender_jid: str,
+        queue_key: str,
+    ) -> None:
+        """Sequentially process messages for a single device+JID combination."""
+        queue = self._jid_queues.get(queue_key)
+        if queue is None:
+            return
+
+        while not queue.empty():
+            try:
+                text, handler = await queue.get()
+                try:
+                    # Send composing indicator while the AI is processing
+                    try:
+                        from neonize.utils.jid import build_jid as _build_jid
+                        from neonize.proto.Neonize_pb2 import ChatPresence, ChatPresenceMedia
+                        _s_user, _s_server = (
+                            sender_jid.rsplit("@", 1) if "@" in sender_jid
+                            else (sender_jid, "s.whatsapp.net")
+                        )
+                        _jid_proto = _build_jid(_s_user, _s_server)
+                        _dispatch_client = await self.get_client(device_id)
+                        await _dispatch_client.send_chat_presence(
+                            _jid_proto,
+                            ChatPresence.CHAT_PRESENCE_COMPOSING,
+                            ChatPresenceMedia.CHAT_PRESENCE_MEDIA_TEXT,
+                        )
+                    except Exception as _pe:
+                        logger.debug(
+                            f"[neonize] Could not send composing presence for {sender_jid}: {_pe}"
+                        )
+
+                    logger.info(
+                        f"[neonize] Dispatching message from {sender_jid} on device {device_id}: {text[:50]!r}"
+                    )
+                    await handler(device_id=device_id, sender_jid=sender_jid, text=text)
+                except Exception as e:
+                    logger.error(
+                        f"[neonize] Worker error processing message from {sender_jid}: {e}",
+                        exc_info=True,
+                    )
+                finally:
+                    queue.task_done()
+            except asyncio.CancelledError:
+                break
+            except Exception as e:
+                logger.error(f"[neonize] _jid_worker unexpected error: {e}", exc_info=True)

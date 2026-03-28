@@ -14,7 +14,15 @@ export const useCalendar = () => {
   const statusData = ref<CalendarStatusResponse | null>(null)
   const isLoading = ref(false)
 
+  // Credentials state
+  const savedClientId = ref<string>('')
+  const savedRedirectUri = ref<string>('')
+  const hasSecret = ref(false)
+
   // Error states
+  const isSaveCredentialsError = ref(false)
+  const saveCredentialsError = ref<string>('')
+
   const isGetAuthUrlError = ref(false)
   const getAuthUrlError = ref<string>('')
 
@@ -37,6 +45,36 @@ export const useCalendar = () => {
   const isConnected = computed(() => statusData.value?.is_active ?? false)
 
   // Methods
+  const getCredentials = async () => {
+    try {
+      const data = await services.calendarService.getCredentials()
+      savedClientId.value = data.client_id || ''
+      savedRedirectUri.value = data.redirect_uri || ''
+      hasSecret.value = data.has_secret ?? false
+    } catch {
+      // ignore — credentials simply not configured yet
+    }
+  }
+
+  const saveCredentials = async (clientId: string, clientSecret: string, redirectUri?: string) => {
+    isLoading.value = true
+    isSaveCredentialsError.value = false
+    saveCredentialsError.value = ''
+    try {
+      await services.calendarService.saveCredentials(clientId, clientSecret, redirectUri)
+    } catch (error: unknown) {
+      isSaveCredentialsError.value = true
+      saveCredentialsError.value =
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        (error as any)?.response?.data?.message ||
+        (error as Error)?.message ||
+        'Error al guardar credenciales'
+      throw error
+    } finally {
+      isLoading.value = false
+    }
+  }
+
   const getAuthorizationUrl = async (profileId?: string) => {
     isLoading.value = true
     isGetAuthUrlError.value = false
@@ -190,8 +228,13 @@ export const useCalendar = () => {
     statusData,
     isLoading,
     isConnected,
+    savedClientId,
+    savedRedirectUri,
+    hasSecret,
 
     // Error states
+    isSaveCredentialsError,
+    saveCredentialsError,
     isGetAuthUrlError,
     getAuthUrlError,
     isCheckStatusError,
@@ -206,6 +249,8 @@ export const useCalendar = () => {
     deleteEventError,
 
     // Methods
+    getCredentials,
+    saveCredentials,
     getAuthorizationUrl,
     checkStatus,
     createEvent,

@@ -5,6 +5,7 @@ import Button from 'primevue/button'
 import Textarea from 'primevue/textarea'
 import Toast from 'primevue/toast'
 import Dropdown from 'primevue/dropdown'
+import { vTooltip } from 'primevue/tooltip'
 import { useToast } from 'primevue/usetoast'
 import { useAssistant } from '@/composables/useAssistant'
 import WorkflowEditor from '@/components/workflow/WorkflowEditor.vue'
@@ -21,9 +22,10 @@ const isSaving = ref(false)
 const jsonError = ref('')
 const editorMode = ref<'json' | 'visual'>('json')
 const currentWorkflow = ref<WorkflowFunction | null>(null)
-const readonlyViewMode = ref<'visual' | 'json'>('visual')
 const showGuideModal = ref(false)
 const selectedWorkflowIndex = ref(0)
+
+const showWorkflowVisual = ref(false)
 
 const sampleJson = [
   {
@@ -44,7 +46,19 @@ const sampleJson = [
   },
 ]
 
-// Get all workflows from JSON
+// All parsed functions regardless of type
+const allFunctions = computed(() => {
+  try {
+    const parsed = JSON.parse(jsonContent.value)
+    if (Array.isArray(parsed)) return parsed
+    if (parsed.functions && Array.isArray(parsed.functions)) return parsed.functions
+    return []
+  } catch {
+    return []
+  }
+})
+
+// Only workflow-type functions for visual editor
 const availableWorkflows = computed(() => {
   try {
     const parsed = JSON.parse(jsonContent.value)
@@ -59,22 +73,13 @@ const availableWorkflows = computed(() => {
   }
 })
 
-// Check if JSON contains a workflow
-const hasWorkflow = (): boolean => {
-  const workflow = parseJsonToWorkflow()
-  return workflow !== null
-}
+const hasWorkflow = (): boolean => availableWorkflows.value.length > 0
 
 onMounted(async () => {
   await getAssistantProfile()
 
   if (assistantProfile.value?.functions && assistantProfile.value.functions.trim() !== '') {
     jsonContent.value = assistantProfile.value.functions
-    // Auto-detect workflow and set visual mode
-    if (hasWorkflow()) {
-      currentWorkflow.value = parseJsonToWorkflow()
-      readonlyViewMode.value = 'visual'
-    }
   } else {
     jsonContent.value = JSON.stringify(sampleJson, null, 2)
   }
@@ -172,8 +177,6 @@ const saveFunctions = async () => {
 
     await updateAssistantProfile({
       assistant_name: assistantProfile.value?.assistant_name,
-      business_name: assistantProfile.value?.business_name,
-      business_context: assistantProfile.value?.business_context,
       functions: jsonContent.value,
     })
 
@@ -185,6 +188,7 @@ const saveFunctions = async () => {
     })
 
     isEditing.value = false
+    editorMode.value = 'json'
   } catch (error) {
     const errorMessage = error instanceof Error ? error.message : 'Error desconocido al guardar'
     toast.add({
@@ -199,11 +203,17 @@ const saveFunctions = async () => {
 }
 
 const toggleEdit = () => {
-  isEditing.value = !isEditing.value
-  if (!isEditing.value) {
-    jsonContent.value = JSON.stringify(sampleJson, null, 2)
+  if (isEditing.value) {
+    // Cancelling — restore from profile or sample
+    if (assistantProfile.value?.functions && assistantProfile.value.functions.trim() !== '') {
+      jsonContent.value = assistantProfile.value.functions
+    } else {
+      jsonContent.value = JSON.stringify(sampleJson, null, 2)
+    }
     jsonError.value = ''
+    editorMode.value = 'json'
   }
+  isEditing.value = !isEditing.value
 }
 
 const clearJson = () => {
@@ -236,7 +246,6 @@ const parseJsonToWorkflow = (): WorkflowFunction | null => {
     return null
   }
 
-  // Ensure selected index is within bounds
   if (selectedWorkflowIndex.value >= workflows.length) {
     selectedWorkflowIndex.value = 0
   }
@@ -244,7 +253,7 @@ const parseJsonToWorkflow = (): WorkflowFunction | null => {
   return workflows[selectedWorkflowIndex.value]
 }
 
-// Toggle between JSON and Visual editor
+// Toggle between JSON and Visual editor (editing mode)
 const toggleEditorMode = () => {
   if (editorMode.value === 'json') {
     currentWorkflow.value = parseJsonToWorkflow()
@@ -264,11 +273,28 @@ const toggleEditorMode = () => {
   }
 }
 
+// Toggle workflow visual in readonly mode
+const toggleWorkflowVisual = () => {
+  if (showWorkflowVisual.value) {
+    showWorkflowVisual.value = false
+  } else {
+    currentWorkflow.value = parseJsonToWorkflow()
+    if (currentWorkflow.value) {
+      showWorkflowVisual.value = true
+    } else {
+      toast.add({
+        severity: 'warn',
+        summary: 'Sin Workflow',
+        detail: 'No se detectó un workflow válido en el JSON',
+        life: 3000,
+      })
+    }
+  }
+}
+
 // Handle workflow save from visual editor
 const handleWorkflowSave = async (workflow: WorkflowFunction) => {
   jsonContent.value = JSON.stringify([workflow], null, 2)
-
-  // Save to backend
   await saveFunctions()
 }
 
@@ -284,28 +310,29 @@ const handleWorkflowUpdate = (workflow: WorkflowFunction) => {
   })
 }
 
-// Toggle between visual and JSON in readonly mode
-const toggleReadonlyView = () => {
-  if (readonlyViewMode.value === 'visual') {
-    readonlyViewMode.value = 'json'
-  } else {
-    currentWorkflow.value = parseJsonToWorkflow()
-    if (currentWorkflow.value) {
-      readonlyViewMode.value = 'visual'
-    } else {
-      toast.add({
-        severity: 'warn',
-        summary: 'Sin Workflow',
-        detail: 'No se detectó un workflow válido en el JSON',
-        life: 3000,
-      })
-    }
-  }
-}
-
 // Handle workflow selection change
 const handleWorkflowChange = () => {
   currentWorkflow.value = parseJsonToWorkflow()
+}
+
+// Returns icon class based on function type
+const getFunctionIcon = (type: string): string => {
+  switch (type) {
+    case 'workflow': return 'pi pi-sitemap'
+    case 'http': return 'pi pi-globe'
+    case 'function': return 'pi pi-cog'
+    default: return 'pi pi-code'
+  }
+}
+
+// Open workflow visual viewer from a function card
+const openWorkflowForCard = (fn: Record<string, unknown>) => {
+  const idx = availableWorkflows.value.findIndex((w) => w.name === fn.name)
+  if (idx >= 0) {
+    selectedWorkflowIndex.value = idx
+    currentWorkflow.value = parseJsonToWorkflow()
+    showWorkflowVisual.value = true
+  }
 }
 </script>
 
@@ -326,16 +353,70 @@ const handleWorkflowChange = () => {
           </div>
         </div>
         <div class="header-actions">
-          <!-- Guide Button -->
           <Button
-            label="Guía Rápida"
+            v-tooltip.bottom="'Abrir guía de referencia'"
             icon="pi pi-book"
-            class="guide-button"
+            size="small"
             severity="help"
+            text
+            rounded
+            class="header-icon-btn"
             @click="showGuideModal = true"
           />
 
-          <!-- Workflow Selector (only if multiple workflows exist) -->
+          <template v-if="!isEditing">
+            <Button
+              v-if="hasWorkflow()"
+              v-tooltip.bottom="showWorkflowVisual ? 'Ocultar workflow' : 'Ver workflow'"
+              :icon="showWorkflowVisual ? 'pi pi-eye-slash' : 'pi pi-sitemap'"
+              size="small"
+              severity="secondary"
+              text
+              rounded
+              class="header-icon-btn"
+              @click="toggleWorkflowVisual"
+            />
+            <Button
+              v-tooltip.bottom="'Editar funciones'"
+              icon="pi pi-pencil"
+              size="small"
+              rounded
+              class="header-edit-btn"
+              @click="toggleEdit"
+            />
+          </template>
+        </div>
+      </div>
+    </div>
+
+    <!-- Editing Banner -->
+    <div v-if="isEditing" class="editing-banner">
+      <div class="banner-left">
+        <span class="banner-dot"></span>
+        <span class="banner-label">Modo edición</span>
+        <div class="banner-tools">
+          <Button
+            v-tooltip.bottom="'Formatear JSON'"
+            icon="pi pi-refresh"
+            size="small"
+            text
+            @click="formatJson"
+          />
+          <Button
+            v-tooltip.bottom="'Limpiar editor'"
+            icon="pi pi-trash"
+            size="small"
+            text
+            severity="danger"
+            @click="clearJson"
+          />
+          <Button
+            v-tooltip.bottom="'Restaurar ejemplo'"
+            icon="pi pi-undo"
+            size="small"
+            text
+            @click="restoreSample"
+          />
           <Dropdown
             v-if="availableWorkflows.length > 1"
             v-model="selectedWorkflowIndex"
@@ -351,114 +432,179 @@ const handleWorkflowChange = () => {
             class="workflow-selector"
             @change="handleWorkflowChange"
           />
+        </div>
+      </div>
+      <div class="banner-right">
+        <Button
+          v-if="hasWorkflow()"
+          :label="editorMode === 'json' ? 'Editor Visual' : 'Editor JSON'"
+          :icon="editorMode === 'json' ? 'pi pi-sitemap' : 'pi pi-code'"
+          size="small"
+          severity="info"
+          @click="toggleEditorMode"
+        />
+        <Button
+          label="Cancelar"
+          icon="pi pi-times"
+          size="small"
+          severity="secondary"
+          @click="toggleEdit"
+        />
+        <Button
+          label="Guardar"
+          icon="pi pi-save"
+          size="small"
+          :loading="isSaving"
+          :disabled="!!jsonError"
+          @click="saveFunctions"
+        />
+      </div>
+    </div>
 
-          <!-- Toggle view in readonly mode (only if workflow exists) -->
-          <Button
-            v-if="!isEditing && hasWorkflow()"
-            :label="readonlyViewMode === 'visual' ? 'Ver JSON' : 'Ver Workflow'"
-            :icon="readonlyViewMode === 'visual' ? 'pi pi-code' : 'pi pi-sitemap'"
-            class="view-toggle-button"
-            severity="secondary"
-            @click="toggleReadonlyView"
-          />
-
-          <!-- Toggle editor mode (only in editing mode) -->
-          <Button
-            v-if="isEditing"
-            :label="editorMode === 'json' ? 'Editor Visual' : 'Editor JSON'"
-            :icon="editorMode === 'json' ? 'pi pi-sitemap' : 'pi pi-code'"
-            class="mode-toggle-button"
-            severity="info"
-            @click="toggleEditorMode"
-          />
-
-          <!-- Edit/Cancel buttons -->
-          <Button
-            v-if="!isEditing && editorMode === 'json'"
-            label="Editar"
-            icon="pi pi-pencil"
-            class="edit-button"
-            @click="toggleEdit"
-          />
-          <Button
-            v-else-if="editorMode === 'json'"
-            label="Cancelar"
-            icon="pi pi-times"
-            severity="secondary"
-            class="cancel-button"
-            @click="toggleEdit"
-          />
+    <!-- Functions Summary Panel (readonly, has functions) -->
+    <div
+      v-if="!isEditing && allFunctions.length > 0"
+      class="functions-summary"
+    >
+      <div class="summary-header">
+        <span class="summary-title">
+          <i class="pi pi-list"></i>
+          Funciones configuradas
+          <span class="summary-count">{{ allFunctions.length }}</span>
+        </span>
+        <Button
+          v-tooltip.bottom="'Editar funciones'"
+          icon="pi pi-pencil"
+          size="small"
+          text
+          rounded
+          class="summary-edit-btn"
+          @click="toggleEdit"
+        />
+      </div>
+      <div class="functions-grid">
+        <div
+          v-for="fn in allFunctions"
+          :key="fn.name"
+          class="function-card"
+          :class="{
+            'type-border-workflow': fn.type === 'workflow',
+            'type-border-http': fn.type === 'http',
+          }"
+        >
+          <div class="function-card-header">
+            <div class="function-name-row">
+              <i :class="getFunctionIcon(fn.type)" class="function-icon"></i>
+              <span class="function-name">{{ fn.name }}</span>
+            </div>
+            <span
+              class="function-type-badge"
+              :class="{
+                'type-workflow': fn.type === 'workflow',
+                'type-http': fn.type === 'http',
+                'type-default': fn.type !== 'workflow' && fn.type !== 'http',
+              }"
+            >{{ fn.type }}</span>
+          </div>
+          <p class="function-desc">{{ fn.description || 'Sin descripción' }}</p>
+          <div class="function-footer">
+            <div v-if="fn.input_params && fn.input_params.length" class="function-meta">
+              <i class="pi pi-sliders-h"></i>
+              <span>{{ fn.input_params.length }} parámetro{{ fn.input_params.length !== 1 ? 's' : '' }}</span>
+            </div>
+            <div v-else-if="fn.steps && fn.steps.length" class="function-meta">
+              <i class="pi pi-share-alt"></i>
+              <span>{{ fn.steps.length }} paso{{ fn.steps.length !== 1 ? 's' : '' }}</span>
+            </div>
+            <div v-else-if="fn.keywords && fn.keywords.length" class="function-meta">
+              <i class="pi pi-tag"></i>
+              <span>{{ fn.keywords.slice(0, 3).join(', ') }}</span>
+            </div>
+            <Button
+              v-if="fn.type === 'workflow'"
+              label="Ver workflow"
+              icon="pi pi-sitemap"
+              size="small"
+              text
+              class="card-workflow-btn"
+              @click.stop="openWorkflowForCard(fn)"
+            />
+          </div>
         </div>
       </div>
     </div>
 
-    <!-- Visual Workflow Editor (Editing Mode) -->
+    <!-- Empty State (readonly, no functions) -->
+    <Card
+      v-else-if="!isEditing && allFunctions.length === 0"
+      class="empty-state-card"
+    >
+      <template #content>
+        <div class="empty-state">
+          <div class="empty-illustration">
+            <div class="empty-icon-ring">
+              <i class="pi pi-code"></i>
+            </div>
+            <div class="empty-icon-ring empty-ring-2">
+              <i class="pi pi-cog"></i>
+            </div>
+            <div class="empty-icon-ring empty-ring-3">
+              <i class="pi pi-sitemap"></i>
+            </div>
+          </div>
+          <div class="empty-text">
+            <h3 class="empty-title">Sin funciones configuradas</h3>
+            <p class="empty-desc">
+              Aún no has definido ninguna función para tu asistente. Crea tu primera función para extender sus capacidades con workflows, llamadas HTTP o lógica personalizada.
+            </p>
+            <div class="empty-actions">
+              <Button
+                label="Crear primera función"
+                icon="pi pi-plus"
+                class="edit-button"
+                @click="toggleEdit"
+              />
+              <Button
+                label="Ver guía"
+                icon="pi pi-book"
+                severity="secondary"
+                text
+                @click="showGuideModal = true"
+              />
+            </div>
+          </div>
+        </div>
+      </template>
+    </Card>
+
+    <!-- Visual Workflow Viewer (readonly, toggled) -->
     <WorkflowEditor
-      v-if="isEditing && editorMode === 'visual'"
+      v-if="!isEditing && showWorkflowVisual && currentWorkflow"
+      :workflow="currentWorkflow"
+      :readonly="true"
+    />
+
+    <!-- Visual Workflow Editor (editing, visual mode) -->
+    <WorkflowEditor
+      v-else-if="isEditing && editorMode === 'visual'"
       :workflow="currentWorkflow!"
       :readonly="false"
       @save="handleWorkflowSave"
       @update="handleWorkflowUpdate"
     />
 
-    <!-- Visual Workflow Viewer (Readonly Mode) -->
-    <WorkflowEditor
-      v-else-if="!isEditing && readonlyViewMode === 'visual' && currentWorkflow"
-      :workflow="currentWorkflow"
-      :readonly="true"
-    />
-
-    <!-- Main Editor Card (JSON Mode) -->
-    <Card v-else-if="isEditing || readonlyViewMode === 'json'" class="editor-card">
+    <!-- JSON Editor Card (editing, json mode only) -->
+    <Card
+      v-if="isEditing && editorMode === 'json'"
+      class="editor-card"
+    >
       <template #content>
-        <!-- Toolbar (only visible when editing) -->
-        <div v-if="isEditing" class="editor-toolbar">
-          <div class="toolbar-section">
-            <div class="toolbar-title">
-              <i class="pi pi-wrench"></i>
-              <span>Herramientas de Edición</span>
-            </div>
-            <div class="toolbar-actions">
-              <Button
-                label="Formatear"
-                icon="pi pi-refresh"
-                class="toolbar-button format-button"
-                size="small"
-                @click="formatJson"
-              />
-              <Button
-                label="Limpiar"
-                icon="pi pi-trash"
-                class="toolbar-button clear-button"
-                size="small"
-                @click="clearJson"
-              />
-              <Button
-                label="Restaurar"
-                icon="pi pi-undo"
-                class="toolbar-button restore-button"
-                size="small"
-                @click="restoreSample"
-              />
-            </div>
-          </div>
-          <div class="editing-indicator">
-            <i class="pi pi-circle-fill editing-dot"></i>
-            <span>Modo de edición activo</span>
-          </div>
-        </div>
-
-        <!-- JSON Editor -->
         <div class="editor-section">
           <div class="editor-header">
             <label for="json-editor" class="editor-label">
               <i class="pi pi-file-edit"></i>
               Configuración JSON
             </label>
-            <div v-if="!isEditing" class="readonly-badge">
-              <i class="pi pi-lock"></i>
-              Solo lectura
-            </div>
           </div>
 
           <div class="editor-wrapper">
@@ -470,29 +616,15 @@ const handleWorkflowChange = () => {
               class="json-editor"
               :class="{
                 'editor-error': jsonError,
-                'editor-readonly': !isEditing,
               }"
               placeholder="Ingresa tu configuración JSON aquí..."
               @input="validateJson(jsonContent)"
             />
 
-            <!-- Error Message -->
             <div v-if="jsonError" class="error-message">
               <i class="pi pi-exclamation-triangle"></i>
               <span>{{ jsonError }}</span>
             </div>
-          </div>
-
-          <!-- Save Button (only visible when editing) -->
-          <div v-if="isEditing" class="save-section">
-            <Button
-              label="Guardar Funciones"
-              icon="pi pi-save"
-              class="save-button"
-              :loading="isSaving"
-              :disabled="!!jsonError"
-              @click="saveFunctions"
-            />
           </div>
         </div>
       </template>
@@ -509,44 +641,43 @@ const handleWorkflowChange = () => {
 .functions-container {
   max-width: 1200px;
   margin: 0 auto;
-  padding: 2rem;
+  padding: 1.5rem;
   min-height: 100vh;
-  background: linear-gradient(135deg, var(--vt-c-gray-50) 0%, var(--do-border-light) 100%);
+  background: var(--do-bg);
 }
 
 /* Header Section */
 .header-section {
-  margin-bottom: 2rem;
+  margin-bottom: 1.25rem;
 }
 
 .functions-header {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  background: white;
-  padding: 2rem;
-  border-radius: 1rem;
-  box-shadow: 0 4px 20px var(--shadow-light);
+  background: rgba(255, 255, 255, 0.04);
+  padding: 0.875rem 1.25rem;
+  border-radius: 0.875rem;
   border: 1px solid var(--do-border-light);
 }
 
 .header-content {
   display: flex;
   align-items: center;
-  gap: 1.5rem;
+  gap: 0.875rem;
 }
 
 .icon-wrapper {
-  width: 4rem;
-  height: 4rem;
-  border-radius: 1rem;
+  width: 2.25rem;
+  height: 2.25rem;
+  border-radius: 0.625rem;
   background: var(--gradient-primary);
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 2rem;
+  font-size: 1rem;
   color: white;
-  box-shadow: var(--shadow-primary);
+  flex-shrink: 0;
 }
 
 .title-section {
@@ -554,285 +685,470 @@ const handleWorkflowChange = () => {
 }
 
 .page-title {
-  font-size: 2.5rem;
+  font-size: 1.1rem;
   font-weight: 700;
   color: var(--do-text);
-  margin: 0 0 0.5rem 0;
+  margin: 0 0 0.1rem 0;
   background: linear-gradient(135deg, var(--do-text) 0%, var(--do-text-secondary) 100%);
   -webkit-background-clip: text;
   -webkit-text-fill-color: transparent;
   background-clip: text;
+  line-height: 1.3;
 }
 
 .page-subtitle {
-  font-size: 1.125rem;
+  font-size: 0.8rem;
   color: var(--do-text-muted);
   margin: 0;
   font-weight: 400;
+  line-height: 1.3;
 }
 
 .header-actions {
   display: flex;
-  gap: 1rem;
+  align-items: center;
+  gap: 0.375rem;
 }
 
-:deep(.edit-button) {
-  background: var(--gradient-success);
-  border: none;
-  border-radius: 0.75rem;
-  padding: 0.875rem 1.5rem;
-  font-weight: 600;
-  transition: all 0.3s ease;
-  box-shadow: var(--shadow-success);
+.header-icon-btn {
+  width: 2rem;
+  height: 2rem;
 }
 
-:deep(.edit-button:hover) {
-  transform: translateY(-2px);
-  box-shadow: 0 8px 30px var(--shadow-medium);
-}
-
-:deep(.cancel-button) {
-  border-radius: 0.75rem;
-  padding: 0.875rem 1.5rem;
-  font-weight: 600;
-  transition: all 0.3s ease;
-}
-
-:deep(.mode-toggle-button) {
+.header-edit-btn {
   background: var(--gradient-primary);
   border: none;
-  border-radius: 0.75rem;
-  padding: 0.875rem 1.5rem;
-  font-weight: 600;
-  transition: all 0.3s ease;
+  width: 2rem;
+  height: 2rem;
+  border-radius: 50%;
+  color: white;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: transform 0.15s, box-shadow 0.15s;
   box-shadow: var(--shadow-primary);
 }
 
-:deep(.mode-toggle-button:hover) {
-  transform: translateY(-2px);
-  box-shadow: 0 8px 30px var(--shadow-medium);
+.header-edit-btn:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 4px 16px var(--shadow-medium);
 }
 
-:deep(.view-toggle-button) {
-  background: linear-gradient(135deg, var(--do-text-muted) 0%, var(--do-text-secondary) 100%);
-  border: none;
+/* Editing Banner */
+.editing-banner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  background: rgba(var(--color-primary-rgb, 99, 102, 241), 0.08);
+  border: 1px solid rgba(var(--color-primary-rgb, 99, 102, 241), 0.2);
   border-radius: 0.75rem;
-  padding: 0.875rem 1.5rem;
+  padding: 0.75rem 1rem;
+  margin-bottom: 1rem;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+}
+
+.banner-left {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+}
+
+.banner-right {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
+
+.banner-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--color-success, #22c55e);
+  animation: pulse 2s infinite;
+  flex-shrink: 0;
+}
+
+.banner-label {
+  font-size: 0.875rem;
   font-weight: 600;
-  transition: all 0.3s ease;
-  box-shadow: 0 4px 20px var(--shadow-medium);
+  color: var(--do-text);
 }
 
-:deep(.view-toggle-button:hover) {
-  transform: translateY(-2px);
-  box-shadow: 0 8px 30px var(--shadow-medium);
+.banner-tools {
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
 }
 
-:deep(.guide-button) {
-  background: var(--gradient-primary);
-  border: none;
-  border-radius: 0.75rem;
-  padding: 0.875rem 1.5rem;
-  font-weight: 600;
-  transition: all 0.3s ease;
-  box-shadow: var(--shadow-primary);
-}
-
-:deep(.guide-button:hover) {
-  transform: translateY(-2px);
-  box-shadow: 0 8px 30px var(--shadow-medium);
-}
-
-/* Workflow Selector */
+/* Workflow Selector (inside banner) */
 :deep(.workflow-selector) {
-  min-width: 250px;
-  border-radius: 0.75rem;
-  border: 2px solid var(--do-border-light);
-  background: white;
-  transition: all 0.3s ease;
+  min-width: 180px;
+  border-radius: 0.5rem;
+  border: 1px solid var(--do-border-light);
+  background: rgba(255, 255, 255, 0.04);
+  transition: all 0.2s ease;
+  height: 2rem;
 }
 
 :deep(.workflow-selector:hover) {
   border-color: var(--color-primary);
-  box-shadow: var(--shadow-primary);
 }
 
 :deep(.workflow-selector .p-dropdown-label) {
-  padding: 0.75rem 1rem;
+  padding: 0.35rem 0.75rem;
+  font-size: 0.8rem;
   font-weight: 600;
   color: var(--vt-c-gray-700);
 }
 
 :deep(.workflow-selector .p-dropdown-trigger) {
   color: var(--color-primary);
+  width: 2rem;
+}
+
+/* Functions Summary Panel */
+.functions-summary {
+  margin-bottom: 1.25rem;
+}
+
+.summary-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 0.875rem;
+}
+
+.summary-title {
+  font-size: 0.9rem;
+  font-weight: 600;
+  color: var(--do-text-secondary);
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.summary-count {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.35rem;
+  height: 1.35rem;
+  border-radius: 50%;
+  background: var(--gradient-primary);
+  color: white;
+  font-size: 0.7rem;
+  font-weight: 700;
+}
+
+.summary-edit-btn {
+  opacity: 0.7;
+  transition: opacity 0.15s;
+}
+
+.summary-edit-btn:hover {
+  opacity: 1;
+}
+
+.functions-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+  gap: 0.875rem;
+}
+
+/* Function Cards */
+.function-card {
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid var(--do-border-light);
+  border-left: 3px solid var(--do-border-light);
+  border-radius: 0.75rem;
+  padding: 0.875rem 1rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+  transition: transform 0.15s, box-shadow 0.15s;
+  cursor: default;
+}
+
+.function-card:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.15);
+}
+
+.function-card.type-border-workflow {
+  border-left-color: var(--color-primary, #6366f1);
+}
+
+.function-card.type-border-http {
+  border-left-color: var(--color-info, #0ea5e9);
+}
+
+.function-card-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+}
+
+.function-name-row {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  min-width: 0;
+}
+
+.function-icon {
+  color: var(--color-primary);
+  font-size: 0.875rem;
+  flex-shrink: 0;
+}
+
+.function-name {
+  font-weight: 600;
+  font-size: 0.9rem;
+  color: var(--do-text);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.function-type-badge {
+  font-size: 0.65rem;
+  font-weight: 600;
+  padding: 0.175rem 0.5rem;
+  border-radius: 1rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  flex-shrink: 0;
+}
+
+.type-workflow {
+  background: var(--gradient-primary);
+  color: white;
+}
+
+.type-http {
+  background: var(--gradient-info);
+  color: white;
+}
+
+.type-default {
+  background: rgba(255, 255, 255, 0.1);
+  color: var(--do-text-muted);
+}
+
+.function-desc {
+  font-size: 0.82rem;
+  color: var(--do-text-muted);
+  line-height: 1.4;
+  margin: 0;
+}
+
+.function-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  margin-top: 0.125rem;
+}
+
+.function-meta {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  font-size: 0.75rem;
+  color: var(--do-text-muted);
+}
+
+.function-meta i {
+  font-size: 0.7rem;
+  color: var(--color-primary);
+}
+
+:deep(.card-workflow-btn) {
+  padding: 0.2rem 0.5rem;
+  font-size: 0.75rem;
+  border-radius: 0.4rem;
+  color: var(--color-primary);
+  opacity: 0.8;
+  transition: opacity 0.15s;
+}
+
+:deep(.card-workflow-btn:hover) {
+  opacity: 1;
+}
+
+/* Empty State */
+.empty-state-card {
+  margin-bottom: 1.5rem;
+  border-radius: 1rem;
+  overflow: hidden;
+  border: 1px solid var(--do-border-light);
+  background: rgba(255, 255, 255, 0.02);
+}
+
+:deep(.empty-state-card .p-card-content) {
+  padding: 0;
+}
+
+.empty-state {
+  display: grid;
+  grid-template-columns: 220px 1fr;
+  align-items: center;
+  padding: 3rem 2.5rem;
+  gap: 2.5rem;
+}
+
+.empty-illustration {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  position: relative;
+  height: 140px;
+}
+
+.empty-icon-ring {
+  position: absolute;
+  border-radius: 50%;
+  border: 1px solid var(--do-border-light);
+  background: rgba(255, 255, 255, 0.04);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--do-text-muted);
+}
+
+.empty-icon-ring:nth-child(1) {
+  width: 72px;
+  height: 72px;
+  font-size: 1.75rem;
+  color: var(--color-primary);
+  background: rgba(var(--color-primary-rgb, 99, 102, 241), 0.08);
+  border-color: rgba(var(--color-primary-rgb, 99, 102, 241), 0.2);
+  z-index: 3;
+}
+
+.empty-ring-2 {
+  width: 100px;
+  height: 100px;
+  font-size: 1rem;
+  color: var(--do-text-muted);
+  z-index: 2;
+  transform: translate(28px, -20px);
+}
+
+.empty-ring-3 {
+  width: 56px;
+  height: 56px;
+  font-size: 0.875rem;
+  z-index: 2;
+  transform: translate(-30px, 24px);
+}
+
+.empty-text {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.empty-title {
+  font-size: 1.2rem;
+  font-weight: 700;
+  color: var(--do-text);
+  margin: 0;
+}
+
+.empty-desc {
+  font-size: 0.875rem;
+  color: var(--do-text-muted);
+  max-width: 440px;
+  line-height: 1.65;
+  margin: 0;
+}
+
+.empty-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+  margin-top: 0.25rem;
+}
+
+:deep(.edit-button) {
+  background: var(--gradient-success);
+  border: none;
+  border-radius: 0.625rem;
+  font-weight: 600;
+  transition: all 0.2s ease;
+  box-shadow: var(--shadow-success);
+}
+
+:deep(.edit-button:hover) {
+  transform: translateY(-1px);
+  box-shadow: 0 6px 20px var(--shadow-medium);
 }
 
 /* Editor Card */
 .editor-card {
-  margin-bottom: 2rem;
+  margin-bottom: 1.5rem;
   border-radius: 1rem;
   overflow: hidden;
-  box-shadow: 0 10px 40px var(--shadow-light);
   border: 1px solid var(--do-border-light);
-  transition: all 0.3s ease;
+  transition: box-shadow 0.2s ease;
 }
 
 .editor-card:hover {
-  box-shadow: 0 20px 60px var(--shadow-medium);
-  transform: translateY(-2px);
+  box-shadow: 0 8px 32px var(--shadow-light);
 }
 
 :deep(.editor-card .p-card-content) {
   padding: 0;
 }
 
-/* Editor Toolbar */
-.editor-toolbar {
-  background: linear-gradient(135deg, var(--vt-c-gray-100) 0%, var(--do-border-light) 100%);
-  padding: 1.5rem 2rem;
-  border-bottom: 1px solid var(--do-border-light);
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-}
-
-.toolbar-section {
-  display: flex;
-  align-items: center;
-  gap: 2rem;
-}
-
-.toolbar-title {
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
-  font-weight: 600;
-  color: var(--vt-c-gray-700);
-}
-
-.toolbar-title i {
-  color: var(--color-primary);
-  font-size: 1.125rem;
-}
-
-.toolbar-actions {
-  display: flex;
-  gap: 0.75rem;
-}
-
-:deep(.toolbar-button) {
-  border-radius: 0.5rem;
-  font-weight: 500;
-  transition: all 0.3s ease;
-}
-
-:deep(.format-button) {
-  background: var(--gradient-info);
-  border: none;
-  color: white;
-}
-
-:deep(.clear-button) {
-  background: var(--gradient-warning);
-  border: none;
-  color: white;
-}
-
-:deep(.restore-button) {
-  background: linear-gradient(135deg, var(--do-text-muted) 0%, var(--vt-c-gray-700) 100%);
-  border: none;
-  color: white;
-}
-
-:deep(.toolbar-button:hover) {
-  transform: translateY(-1px);
-  box-shadow: 0 4px 20px var(--shadow-medium);
-}
-
-.editing-indicator {
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
-  color: var(--color-success-dark);
-  font-weight: 500;
-  font-size: 0.875rem;
-}
-
-.editing-dot {
-  color: var(--color-success);
-  animation: pulse 2s infinite;
-}
-
-@keyframes pulse {
-  0%,
-  100% {
-    opacity: 1;
-  }
-  50% {
-    opacity: 0.5;
-  }
-}
-
 /* Editor Section */
 .editor-section {
-  padding: 2rem;
+  padding: 1.5rem;
 }
 
 .editor-header {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  margin-bottom: 1.5rem;
+  margin-bottom: 1rem;
 }
 
 .editor-label {
   display: flex;
   align-items: center;
   gap: 0.5rem;
-  font-size: 1.125rem;
+  font-size: 0.95rem;
   font-weight: 600;
   color: var(--vt-c-gray-700);
 }
 
 .editor-label i {
   color: var(--color-primary);
-  font-size: 1.25rem;
-}
-
-.readonly-badge {
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
-  padding: 0.5rem 1rem;
-  background: var(--vt-c-gray-100);
-  border: 1px solid var(--do-border-light);
-  border-radius: 1rem;
-  color: var(--do-text-muted);
-  font-size: 0.875rem;
-  font-weight: 500;
-}
-
-.readonly-badge i {
-  color: var(--vt-c-gray-400);
+  font-size: 1rem;
 }
 
 /* Editor Wrapper */
 .editor-wrapper {
   position: relative;
-  margin-bottom: 2rem;
 }
 
 :deep(.json-editor) {
   width: 100%;
   border: 2px solid var(--do-border-light);
   border-radius: 0.75rem;
-  padding: 1.5rem;
+  padding: 1.25rem;
   font-family: 'SF Mono', 'Monaco', 'Consolas', monospace;
   font-size: 0.875rem;
   line-height: 1.6;
   background: var(--do-text);
   color: var(--do-border-light);
-  transition: all 0.3s ease;
+  transition: border-color 0.2s ease, box-shadow 0.2s ease;
   resize: vertical;
   min-height: 600px;
 }
@@ -843,12 +1159,6 @@ const handleWorkflowChange = () => {
   outline: none;
 }
 
-:deep(.json-editor.editor-readonly) {
-  background: var(--vt-c-gray-50);
-  color: var(--do-text-muted);
-  cursor: not-allowed;
-}
-
 :deep(.json-editor.editor-error) {
   border-color: var(--color-danger);
   box-shadow: 0 0 0 3px var(--vt-c-danger-lighter);
@@ -856,50 +1166,33 @@ const handleWorkflowChange = () => {
 
 /* Error Message */
 .error-message {
-  margin-top: 1rem;
-  padding: 1rem;
+  margin-top: 0.875rem;
+  padding: 0.875rem 1rem;
   background: var(--vt-c-danger-lighter);
   border: 1px solid var(--vt-c-danger-light);
-  border-radius: 0.75rem;
+  border-radius: 0.625rem;
   color: var(--color-danger-dark);
   display: flex;
   align-items: center;
   gap: 0.5rem;
   font-weight: 500;
+  font-size: 0.875rem;
 }
 
 .error-message i {
-  font-size: 1.125rem;
-}
-
-/* Save Section */
-.save-section {
-  display: flex;
-  justify-content: center;
-  padding-top: 1rem;
-  border-top: 1px solid var(--do-border-light);
-}
-
-:deep(.save-button) {
-  background: var(--gradient-success);
-  border: none;
-  border-radius: 0.75rem;
-  padding: 1rem 2rem;
-  font-weight: 600;
   font-size: 1rem;
-  transition: all 0.3s ease;
-  box-shadow: var(--shadow-success);
+  flex-shrink: 0;
 }
 
-:deep(.save-button:hover:not(:disabled)) {
-  transform: translateY(-2px);
-  box-shadow: 0 8px 30px var(--shadow-medium);
-}
-
-:deep(.save-button:disabled) {
-  background: var(--vt-c-gray-400);
-  box-shadow: none;
-  cursor: not-allowed;
+/* Pulse animation */
+@keyframes pulse {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.4;
+  }
 }
 
 /* Responsive Design */
@@ -909,85 +1202,60 @@ const handleWorkflowChange = () => {
   }
 
   .functions-header {
+    flex-wrap: wrap;
+    gap: 0.75rem;
+  }
+
+  .editing-banner {
     flex-direction: column;
-    gap: 1rem;
-    text-align: center;
-    padding: 1.5rem;
-  }
-
-  .header-content {
-    flex-direction: column;
-    gap: 1rem;
-  }
-
-  .header-actions {
-    flex-direction: column;
-    width: 100%;
-  }
-
-  :deep(.workflow-selector) {
-    min-width: 100%;
-  }
-
-  .page-title {
-    font-size: 2rem;
-  }
-
-  .page-subtitle {
-    font-size: 1rem;
-  }
-
-  .editor-toolbar {
-    flex-direction: column;
-    gap: 1rem;
     align-items: stretch;
-    padding: 1rem 1.5rem;
   }
 
-  .toolbar-section {
-    flex-direction: column;
-    gap: 1rem;
+  .banner-right {
+    justify-content: flex-end;
   }
 
-  .toolbar-actions {
+  .functions-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .empty-state {
+    grid-template-columns: 1fr;
+    text-align: center;
+    padding: 2.5rem 1.5rem;
+    gap: 1.5rem;
+  }
+
+  .empty-illustration {
+    height: 100px;
+  }
+
+  .empty-actions {
     justify-content: center;
   }
 
   .editor-section {
-    padding: 1.5rem;
-  }
-
-  .editor-header {
-    flex-direction: column;
-    gap: 1rem;
-    align-items: stretch;
+    padding: 1.25rem;
   }
 
   :deep(.json-editor) {
-    font-size: 0.75rem;
+    font-size: 0.8rem;
     padding: 1rem;
     min-height: 400px;
   }
-
 }
 
 @media (max-width: 480px) {
   .functions-container {
-    padding: 0.5rem;
-  }
-
-  .icon-wrapper {
-    width: 3rem;
-    height: 3rem;
-    font-size: 1.5rem;
+    padding: 0.75rem;
   }
 
   .page-title {
-    font-size: 1.75rem;
+    font-size: 1rem;
   }
 
-  .functions-header {
-    padding: 1rem;
+  .page-subtitle {
+    display: none;
   }
 
   .editor-section {
@@ -1004,19 +1272,19 @@ const handleWorkflowChange = () => {
 @media (prefers-reduced-motion: reduce) {
   .editor-card,
   :deep(.edit-button),
-  :deep(.save-button),
-  :deep(.toolbar-button) {
+  .function-card,
+  .header-edit-btn {
     transition: none;
   }
 
   .editor-card:hover,
   :deep(.edit-button:hover),
-  :deep(.save-button:hover),
-  :deep(.toolbar-button:hover) {
+  .function-card:hover,
+  .header-edit-btn:hover {
     transform: none;
   }
 
-  .editing-dot {
+  .banner-dot {
     animation: none;
   }
 }

@@ -290,7 +290,7 @@ const formatSize = (bytes: number) => {
 .file-card img {
   object-fit: cover;
   border-radius: 4px;
-  background-color: #f8f9fa;
+  background-color: var(--p-surface-ground, #13131a);
   padding: 8px;
 }
 
@@ -303,12 +303,32 @@ const formatSize = (bytes: number) => {
 
 .file-card div {
   font-size: 0.75rem;
-  color: #6b7280;
+  color: var(--p-text-muted-color, #94a3b8);
+}
+
+:deep(.p-fileupload) {
+  background: var(--p-surface-card, #1e1e2e);
+  border-color: var(--p-surface-border, rgba(255,255,255,0.1));
+  color: var(--p-text-color, #e2e8f0);
+}
+
+:deep(.p-fileupload-header) {
+  background: var(--p-surface-card, #1e1e2e);
+  border-color: var(--p-surface-border, rgba(255,255,255,0.1));
+  color: var(--p-text-color, #e2e8f0);
 }
 
 :deep(.p-fileupload-content) {
   max-height: 400px;
   overflow-y: auto;
+  background: var(--p-surface-card, #1e1e2e);
+  border-color: var(--p-surface-border, rgba(255,255,255,0.1));
+  color: var(--p-text-color, #e2e8f0);
+}
+
+:deep(.p-fileupload-empty) {
+  background: var(--p-surface-card, #1e1e2e);
+  color: var(--p-text-muted-color, #94a3b8);
 }
 
 @media (max-width: 768px) {

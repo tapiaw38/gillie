@@ -39,7 +39,7 @@ defineProps<Props>()
 
 <style scoped>
 .condition-node {
-  background: white;
+  background: var(--do-bg);
   border: 2px solid var(--color-warning);
   border-radius: 1rem;
   min-width: 180px;
@@ -68,15 +68,15 @@ defineProps<Props>()
 
 .node-title {
   font-weight: 600;
-  color: #1e293b;
+  color: var(--do-text);
   margin-bottom: 0.5rem;
 }
 
 .condition-text {
   font-size: 0.75rem;
-  color: #64748b;
+  color: var(--do-text-muted);
   font-family: monospace;
-  background: #f8fafc;
+  background: rgba(255,255,255,0.05);
   padding: 0.5rem;
   border-radius: 0.375rem;
 }

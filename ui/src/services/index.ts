@@ -3,6 +3,7 @@ import { conversationService } from './conversation'
 import { sandboxService } from './sandbox'
 import { whatsappService } from './whatsapp'
 import { calendarService } from './calendar'
+import { driveService } from './drive'
 
 class Services {
   assistantService: typeof assistantService
@@ -10,6 +11,7 @@ class Services {
   sandboxService: typeof sandboxService
   whatsappService: typeof whatsappService
   calendarService: typeof calendarService
+  driveService: typeof driveService
 
   constructor() {
     this.assistantService = assistantService
@@ -17,6 +19,7 @@ class Services {
     this.sandboxService = sandboxService
     this.whatsappService = whatsappService
     this.calendarService = calendarService
+    this.driveService = driveService
   }
 }
 

@@ -174,7 +174,6 @@ class DeleteFileByIdUseCase:
                 user_id, file_id
             )
 
-            # Fire-and-forget: S3 and Qdrant run in background, response is immediate
             create_task(_delete_from_s3(self.context_factory.store_service, file.name, file_id))
             create_task(_delete_from_qdrant(self.context_factory.config_service, file.url, file_id, user_id))
             logger.info(f"[Delete] background tasks queued for file {file_id} (S3 + Qdrant)")

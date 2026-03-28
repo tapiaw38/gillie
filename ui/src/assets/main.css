@@ -4,7 +4,275 @@
 #app {
   margin: 0 auto;
   width: 100%;
-  background: var(--surface-ground);
+  background: #060d1a;
+}
+
+/* ── PrimeVue dark overrides ─────────────────────────── */
+.p-card,
+.p-panel,
+.p-dialog,
+.p-sidebar,
+.p-menu,
+.p-menubar,
+.p-tieredmenu,
+.p-contextmenu,
+.p-tabview,
+.p-accordion,
+.p-fieldset,
+.p-scrollpanel,
+.p-datatable,
+.p-dataview,
+.p-listbox,
+.p-dropdown,
+.p-multiselect,
+.p-inputtext,
+.p-textarea,
+.p-inputnumber,
+.p-password input,
+.p-selectbutton,
+.p-togglebutton {
+  background: rgba(255, 255, 255, 0.04) !important;
+  border-color: rgba(255, 255, 255, 0.08) !important;
+  color: #f1f5f9 !important;
+}
+
+.p-card .p-card-header,
+.p-card .p-card-footer,
+.p-panel .p-panel-header,
+.p-tabview .p-tabview-nav,
+.p-accordion .p-accordion-header,
+.p-accordionheader {
+  background: rgba(255, 255, 255, 0.03) !important;
+  border-color: rgba(255, 255, 255, 0.08) !important;
+  color: #f1f5f9 !important;
+}
+
+.p-card .p-card-content,
+.p-panel .p-panel-content,
+.p-tabview .p-tabview-panels,
+.p-accordioncontent-content {
+  background: rgba(255, 255, 255, 0.03) !important;
+  color: #f1f5f9 !important;
+}
+
+.p-accordionpanel {
+  border: 1px solid rgba(255, 255, 255, 0.08) !important;
+  border-radius: 0.5rem !important;
+  overflow: hidden !important;
+  margin-bottom: 0.4rem !important;
+  background: rgba(255, 255, 255, 0.03) !important;
+}
+
+.p-inputtext,
+.p-textarea,
+.p-inputnumber input,
+.p-password input {
+  background: rgba(255, 255, 255, 0.05) !important;
+  border: 1.5px solid rgba(255, 255, 255, 0.1) !important;
+  color: #f1f5f9 !important;
+}
+
+.p-inputtext:focus,
+.p-textarea:focus,
+.p-inputnumber input:focus,
+.p-password input:focus {
+  border-color: #3b82f6 !important;
+  box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.2) !important;
+}
+
+.p-inputtext::placeholder,
+.p-textarea::placeholder {
+  color: #64748b !important;
+}
+
+.p-dropdown,
+.p-multiselect {
+  background: rgba(255, 255, 255, 0.05) !important;
+  border: 1.5px solid rgba(255, 255, 255, 0.1) !important;
+}
+
+.p-dropdown-panel,
+.p-multiselect-panel,
+.p-listbox {
+  background: #0d1b2e !important;
+  border: 1px solid rgba(255, 255, 255, 0.1) !important;
+}
+
+.p-dropdown-item,
+.p-multiselect-item,
+.p-listbox-item {
+  color: #f1f5f9 !important;
+}
+
+.p-dropdown-item:hover,
+.p-multiselect-item:hover,
+.p-listbox-item:hover {
+  background: rgba(59, 130, 246, 0.1) !important;
+}
+
+.p-dialog {
+  background: #0d1b2e !important;
+  border: 1px solid rgba(255, 255, 255, 0.1) !important;
+}
+
+.p-dialog .p-dialog-header {
+  background: rgba(255, 255, 255, 0.03) !important;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08) !important;
+  color: #f1f5f9 !important;
+}
+
+.p-dialog .p-dialog-content {
+  background: #0d1b2e !important;
+  color: #f1f5f9 !important;
+}
+
+.p-datatable .p-datatable-header,
+.p-datatable .p-datatable-footer {
+  background: rgba(255, 255, 255, 0.03) !important;
+  border-color: rgba(255, 255, 255, 0.08) !important;
+  color: #f1f5f9 !important;
+}
+
+.p-datatable .p-datatable-thead > tr > th {
+  background: rgba(255, 255, 255, 0.05) !important;
+  border-color: rgba(255, 255, 255, 0.08) !important;
+  color: #94a3b8 !important;
+}
+
+.p-datatable .p-datatable-tbody > tr {
+  background: transparent !important;
+  color: #f1f5f9 !important;
+}
+
+.p-datatable .p-datatable-tbody > tr:nth-child(even) {
+  background: rgba(255, 255, 255, 0.02) !important;
+}
+
+.p-datatable .p-datatable-tbody > tr:hover {
+  background: rgba(59, 130, 246, 0.06) !important;
+}
+
+.p-datatable .p-datatable-tbody > tr > td {
+  border-color: rgba(255, 255, 255, 0.05) !important;
+}
+
+.p-tabview .p-tabview-nav li .p-tabview-nav-link {
+  background: transparent !important;
+  border-color: rgba(255, 255, 255, 0.08) !important;
+  color: #94a3b8 !important;
+}
+
+.p-tabview .p-tabview-nav li.p-highlight .p-tabview-nav-link {
+  border-color: #3b82f6 !important;
+  color: #3b82f6 !important;
+}
+
+.p-tag {
+  font-weight: 600;
+}
+
+.p-divider::before {
+  border-color: rgba(255, 255, 255, 0.08) !important;
+}
+
+/* Toast & inline messages */
+.p-toast .p-toast-message {
+  background: var(--do-bg-white) !important;
+  border: 1px solid rgba(255, 255, 255, 0.1) !important;
+  color: var(--do-text) !important;
+}
+.p-toast .p-toast-message.p-toast-message-success {
+  background: rgba(10, 207, 131, 0.12) !important;
+  border-color: rgba(10, 207, 131, 0.3) !important;
+}
+.p-toast .p-toast-message.p-toast-message-error {
+  background: rgba(255, 68, 68, 0.12) !important;
+  border-color: rgba(255, 68, 68, 0.3) !important;
+}
+.p-toast .p-toast-message.p-toast-message-warn {
+  background: rgba(245, 166, 35, 0.12) !important;
+  border-color: rgba(245, 166, 35, 0.3) !important;
+}
+.p-toast .p-toast-message.p-toast-message-info {
+  background: rgba(59, 130, 246, 0.12) !important;
+  border-color: rgba(59, 130, 246, 0.3) !important;
+}
+.p-toast .p-toast-message-text,
+.p-toast .p-toast-summary,
+.p-toast .p-toast-detail {
+  color: var(--do-text) !important;
+}
+.p-toast .p-toast-icon-close {
+  color: var(--do-text-secondary) !important;
+}
+
+/* Inline Message (p-message) */
+.p-message {
+  background: rgba(255, 255, 255, 0.06) !important;
+  border: 1px solid rgba(255, 255, 255, 0.1) !important;
+  color: var(--do-text) !important;
+}
+.p-message.p-message-success {
+  background: rgba(10, 207, 131, 0.12) !important;
+  border-color: rgba(10, 207, 131, 0.3) !important;
+}
+.p-message.p-message-error {
+  background: rgba(255, 68, 68, 0.12) !important;
+  border-color: rgba(255, 68, 68, 0.3) !important;
+}
+.p-message.p-message-warn {
+  background: rgba(245, 166, 35, 0.12) !important;
+  border-color: rgba(245, 166, 35, 0.3) !important;
+}
+.p-message.p-message-info {
+  background: rgba(59, 130, 246, 0.12) !important;
+  border-color: rgba(59, 130, 246, 0.3) !important;
+}
+.p-message .p-message-text,
+.p-message .p-message-summary,
+.p-message .p-message-detail {
+  color: var(--do-text) !important;
+}
+
+/* Paginator */
+.p-paginator {
+  background: var(--do-bg-white) !important;
+  border-color: var(--vt-c-gray-200) !important;
+  color: var(--do-text) !important;
+}
+.p-paginator .p-paginator-page,
+.p-paginator .p-paginator-next,
+.p-paginator .p-paginator-prev,
+.p-paginator .p-paginator-first,
+.p-paginator .p-paginator-last {
+  color: var(--do-text-secondary) !important;
+  background: transparent !important;
+  border-color: transparent !important;
+}
+.p-paginator .p-paginator-page.p-highlight {
+  background: rgba(59, 130, 246, 0.15) !important;
+  color: var(--do-blue) !important;
+  border-color: var(--do-blue) !important;
+}
+
+/* View containers */
+.view-container,
+[class$="-container"],
+[class$="-wrapper"],
+[class$="-page"] {
+  background: #060d1a;
+  color: #f1f5f9;
+}
+
+/* Cards / sections within views */
+[class$="-card"],
+[class$="-section"],
+[class$="-panel"],
+[class$="-box"],
+[class$="-header"] {
+  background: rgba(255, 255, 255, 0.03);
+  border-color: rgba(255, 255, 255, 0.07);
+  color: #f1f5f9;
 }
 
 a {

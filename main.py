@@ -16,7 +16,8 @@ from src.core.platform.appcontext.appcontext import new_factory
 from src.core.use_cases.use_cases import create_usecases
 from src.core.platform.nosql.migrations import execute_migrations
 from src.core.platform.objectstorange.s3_session import get_s3_session
-from src.adapters.storeservice.storeservice import StoreServiceImpl
+from src.adapters.storeservice.s3_storeservice import S3StoreService
+from src.adapters.storeservice.local_storeservice import LocalStoreService
 from src.core.platform.services.platform_services import PlatformServices
 from src.core.platform.managers.skill_manager import SkillManager
 from src.core.platform.errors.exception_handler import register_exception_handlers
@@ -92,30 +93,42 @@ whatsapp_devices_client = MongoDBClient(
     config_service.nosql_config.whatsapp_devices.database,
     config_service.nosql_config.whatsapp_devices.collection,
 )
+jobs_client = MongoDBClient(
+    config_service.nosql_config.jobs.database_uri,
+    config_service.nosql_config.jobs.database,
+    config_service.nosql_config.jobs.collection,
+)
 
 calendar_sessions_client = None
-calendar_events_client = None
-gc_cfg = config_service.google_calendar_config
-if gc_cfg and gc_cfg.enabled and config_service.nosql_config.calendar_sessions:
+if config_service.nosql_config.calendar_sessions:
     calendar_sessions_client = MongoDBClient(
         config_service.nosql_config.calendar_sessions.database_uri,
         config_service.nosql_config.calendar_sessions.database,
         config_service.nosql_config.calendar_sessions.collection,
     )
-    calendar_events_client = MongoDBClient(
-        config_service.nosql_config.calendar_events.database_uri,
-        config_service.nosql_config.calendar_events.database,
-        config_service.nosql_config.calendar_events.collection,
+
+drive_sessions_client = None
+if config_service.nosql_config.drive_sessions:
+    drive_sessions_client = MongoDBClient(
+        config_service.nosql_config.drive_sessions.database_uri,
+        config_service.nosql_config.drive_sessions.database,
+        config_service.nosql_config.drive_sessions.collection,
     )
 
 profiles_client.run_migrations(migrations_client.get_collection(), execute_migrations())
 
 # ─── Storage ──────────────────────────────────────────────────────────────────
-s3_session = get_s3_session()
-store_service = StoreServiceImpl(
-    session=s3_session,
-    config=config_service
-)
+_storage_cfg = config_service.storage_config
+if _storage_cfg and _storage_cfg.backend == "local":
+    store_service = LocalStoreService(
+        base_path=_storage_cfg.local_path,
+        base_url=_storage_cfg.local_base_url,
+    )
+    logger.info(f"Storage: local — {_storage_cfg.local_path}")
+else:
+    s3_session = get_s3_session()
+    store_service = S3StoreService(session=s3_session, config=config_service)
+    logger.info("Storage: S3")
 
 # ─── Repositories ─────────────────────────────────────────────────────────────
 datasources = Datasources.create_datasources(
@@ -123,8 +136,9 @@ datasources = Datasources.create_datasources(
     no_sql_profiles_client=profiles_client,
     no_sql_faqs_client=faqs_client,
     no_sql_calendar_sessions_client=calendar_sessions_client,
-    no_sql_calendar_events_client=calendar_events_client,
+    no_sql_drive_sessions_client=drive_sessions_client,
     no_sql_whatsapp_devices_client=whatsapp_devices_client,
+    no_sql_jobs_client=jobs_client,
 )
 
 from src.adapters.datasources.repositories.repositories import Repositories
@@ -133,7 +147,7 @@ repositories = Repositories.create_repositories(datasources)
 # ─── Integrations & Services ──────────────────────────────────────────────────
 skill_manager = SkillManager()
 
-integrations = create_integrations(config_service, calendar_repository=repositories.calendar)
+integrations = create_integrations(config_service, calendar_repository=repositories.calendar, drive_repository=repositories.drive)
 
 integrations.openai.set_skill_manager(skill_manager)
 integrations.openai.set_store_service(store_service)
@@ -153,6 +167,16 @@ context_factory = new_factory(
     platform_services
 )
 usecases = create_usecases(context_factory)
+integrations.openai.set_job_usecases(usecases.jobs)
+
+# ─── Scheduler ───────────────────────────────────────────────────────────────
+scheduler = None
+if repositories.job is not None:
+    from src.core.platform.managers.scheduler_manager import SchedulerManager
+    scheduler = SchedulerManager(
+        job_repository=repositories.job,
+        context_factory=context_factory,
+    )
 
 # ─── Auto-create profile for single-user mode ────────────────────────────────
 if config_service.single_user_config:
@@ -182,10 +206,18 @@ neonize_integration = NeonizeIntegration(sessions_dir="./data/whatsapp", stt_int
 
 
 # ─── Routes & Middleware ──────────────────────────────────────────────────────
-routes_manager = RoutesManager(app, usecases, config_service, neonize_integration=neonize_integration)
+routes_manager = RoutesManager(app, usecases, config_service, neonize_integration=neonize_integration, scheduler=scheduler)
 routes_manager.include_routes()
 
 app.add_middleware(SingleUserMiddleware, user_id=user_id)
+
+
+# ─── Startup: start scheduler ─────────────────────────────────────────────────
+@app.on_event("startup")
+async def start_scheduler():
+    if scheduler is not None:
+        await scheduler.start()
+        logger.info("Scheduler started")
 
 
 # ─── Startup: restore previously connected devices ────────────────────────────

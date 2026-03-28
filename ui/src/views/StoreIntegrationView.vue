@@ -210,7 +210,7 @@ const removeFile = async (fileId: string) => {
   margin: 0 auto;
   padding: 2rem;
   min-height: 100vh;
-  background: linear-gradient(135deg, #f8fafc 0%, #e2e8f0 100%);
+  background: var(--do-bg);
 }
 
 /* Header Section */
@@ -246,19 +246,15 @@ const removeFile = async (fileId: string) => {
 }
 
 .integration-title {
-  font-size: 2.5rem;
+  font-size: 1.6rem;
   font-weight: 700;
-  color: #1e293b;
   margin: 0 0 0.5rem 0;
-  background: linear-gradient(135deg, #1e293b 0%, #475569 100%);
-  -webkit-background-clip: text;
-  -webkit-text-fill-color: transparent;
-  background-clip: text;
+  color: var(--do-text);
 }
 
 .integration-subtitle {
   font-size: 1.125rem;
-  color: #64748b;
+  color: var(--do-text-muted);
   margin: 0;
   font-weight: 400;
 }
@@ -269,8 +265,8 @@ const removeFile = async (fileId: string) => {
   border-radius: 1rem;
   overflow: hidden;
   box-shadow: 0 4px 20px rgba(0, 0, 0, 0.08);
-  border: 1px solid #e2e8f0;
-  background: linear-gradient(135deg, #dbeafe 0%, #bfdbfe 100%);
+  border: 1px solid var(--vt-c-gray-200);
+  background: rgba(59,130,246,0.08);
 }
 
 :deep(.info-card .p-card-content) {
@@ -347,13 +343,13 @@ const removeFile = async (fileId: string) => {
   margin: 0 0 0.25rem 0;
   font-size: 1.25rem;
   font-weight: 600;
-  color: #374151;
+  color: var(--do-text);
 }
 
 .header-text p {
   margin: 0;
   font-size: 0.875rem;
-  color: #64748b;
+  color: var(--do-text-muted);
 }
 
 /* Upload Card */
@@ -361,7 +357,7 @@ const removeFile = async (fileId: string) => {
   border-radius: 1rem;
   overflow: hidden;
   box-shadow: 0 10px 40px rgba(0, 0, 0, 0.1);
-  border: 1px solid #e2e8f0;
+  border: 1px solid var(--vt-c-gray-200);
   transition: all 0.3s ease;
 }
 
@@ -371,8 +367,8 @@ const removeFile = async (fileId: string) => {
 }
 
 :deep(.upload-card .p-card-header) {
-  background: linear-gradient(135deg, #f0fdf4 0%, #dcfce7 100%);
-  border-bottom: 1px solid #e2e8f0;
+  background: rgba(16,185,129,0.08);
+  border-bottom: 1px solid var(--vt-c-gray-200);
 }
 
 :deep(.upload-card .p-card-content) {
@@ -391,7 +387,7 @@ const removeFile = async (fileId: string) => {
   border-radius: 1rem;
   overflow: hidden;
   box-shadow: 0 10px 40px rgba(0, 0, 0, 0.1);
-  border: 1px solid #e2e8f0;
+  border: 1px solid var(--vt-c-gray-200);
   transition: all 0.3s ease;
 }
 
@@ -401,8 +397,8 @@ const removeFile = async (fileId: string) => {
 }
 
 :deep(.files-card .p-card-header) {
-  background: linear-gradient(135deg, #faf5ff 0%, #f3e8ff 100%);
-  border-bottom: 1px solid #e2e8f0;
+  background: rgba(139,92,246,0.08);
+  border-bottom: 1px solid var(--vt-c-gray-200);
 }
 
 :deep(.files-card .p-card-content) {
@@ -432,7 +428,7 @@ const removeFile = async (fileId: string) => {
 .error-state i,
 .empty-state i {
   font-size: 3rem;
-  color: #94a3b8;
+  color: var(--do-text-secondary);
 }
 
 .error-state i,
@@ -446,13 +442,13 @@ const removeFile = async (fileId: string) => {
 .action-loading p,
 .action-error p {
   margin: 0;
-  color: #64748b;
+  color: var(--do-text-muted);
   font-weight: 500;
 }
 
 .empty-state h4 {
   margin: 0;
-  color: #374151;
+  color: var(--do-text);
   font-weight: 600;
 }
 
@@ -474,14 +470,14 @@ const removeFile = async (fileId: string) => {
   align-items: center;
   justify-content: space-between;
   padding: 1rem;
-  background: #f8fafc;
+  background: rgba(255,255,255,0.04);
   border-radius: 0.75rem;
-  border: 1px solid #e2e8f0;
+  border: 1px solid var(--vt-c-gray-200);
   transition: all 0.3s ease;
 }
 
 .file-item:hover {
-  background: white;
+  background: rgba(255,255,255,0.07);
   box-shadow: 0 4px 20px rgba(0, 0, 0, 0.08);
   transform: translateY(-1px);
 }
@@ -516,7 +512,7 @@ const removeFile = async (fileId: string) => {
 
 .file-name {
   font-weight: 600;
-  color: #374151;
+  color: var(--do-text);
   text-decoration: none;
   font-size: 0.875rem;
   word-break: break-all;
@@ -529,7 +525,7 @@ const removeFile = async (fileId: string) => {
 
 .file-meta {
   font-size: 0.75rem;
-  color: #64748b;
+  color: var(--do-text-muted);
 }
 
 .delete-button {
@@ -537,8 +533,8 @@ const removeFile = async (fileId: string) => {
   height: 2.5rem;
   border-radius: 0.5rem;
   border: none;
-  background: #fee2e2;
-  color: var(--color-danger-dark);
+  background: rgba(255,68,68,0.15);
+  color: #fca5a5;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -548,7 +544,7 @@ const removeFile = async (fileId: string) => {
 }
 
 .delete-button:hover:not(:disabled) {
-  background: #fecaca;
+  background: rgba(255,68,68,0.25);
   transform: scale(1.05);
 }
 
@@ -561,9 +557,9 @@ const removeFile = async (fileId: string) => {
 .action-error {
   margin-top: 1rem;
   padding: 1rem;
-  background: #f8fafc;
+  background: rgba(255,255,255,0.04);
   border-radius: 0.75rem;
-  border: 1px solid #e2e8f0;
+  border: 1px solid var(--vt-c-gray-200);
 }
 
 /* Responsive Design */

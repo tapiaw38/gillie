@@ -1,10 +1,12 @@
 from fastapi import APIRouter, Depends, Request, status
+from fastapi.responses import HTMLResponse
 from src.schemas.calendar import (
     CalendarEventInput,
     CalendarEventOutput,
     CalendarEventListOutput,
     CalendarAuthorizationOutput,
     CalendarStatusOutput,
+    CalendarCredentialsInput,
 )
 from src.core.use_cases.use_cases import Usecases
 from typing import Optional
@@ -13,7 +15,7 @@ import logging
 logger = logging.getLogger(__name__)
 
 router = APIRouter(
-    prefix="/calendar",
+    prefix="/api/v1/calendar",
     tags=["calendar"],
 )
 
@@ -31,6 +33,29 @@ def get_usecases() -> Usecases:
     return _usecases_instance
 
 
+@router.get("/credentials", status_code=status.HTTP_200_OK)
+async def get_calendar_credentials(
+    usecases: Usecases = Depends(get_usecases),
+):
+    """Get saved Google Calendar OAuth credentials (client_id only, secret never returned)."""
+    return usecases.calendar.get_credentials_usecase.execute() or {}
+
+
+@router.post("/credentials", status_code=status.HTTP_200_OK)
+async def set_calendar_credentials(
+    creds: CalendarCredentialsInput,
+    usecases: Usecases = Depends(get_usecases),
+):
+    """Save Google OAuth2 app credentials (client_id / client_secret) to MongoDB."""
+    redirect_uri = creds.redirect_uri or "http://localhost:8000/api/v1/calendar/oauth/callback"
+    usecases.calendar.set_credentials_usecase.execute(
+        client_id=creds.client_id,
+        client_secret=creds.client_secret,
+        redirect_uri=redirect_uri,
+    )
+    return {"message": "Credentials saved successfully"}
+
+
 @router.get("/authorize", response_model=CalendarAuthorizationOutput, status_code=status.HTTP_200_OK)
 async def get_authorization_url(
     request: Request,
@@ -46,7 +71,7 @@ async def get_authorization_url(
     )
 
 
-@router.get("/oauth/callback", status_code=status.HTTP_200_OK)
+@router.get("/oauth/callback", response_class=HTMLResponse)
 async def oauth_callback(
     request: Request,
     code: str,
@@ -57,10 +82,25 @@ async def oauth_callback(
     Handle Google OAuth2 callback.
     Google redirects here after the user grants access.
     `state` carries the user_id set during authorization.
+    Returns an HTML page that closes the popup window.
     """
     user_id = state or request.state.user.get("user_id")
     usecases.calendar.handle_oauth_callback_usecase.execute(user_id=user_id, code=code)
-    return {"message": "Google Calendar connected successfully", "user_id": user_id}
+    return HTMLResponse(content="""
+<!DOCTYPE html>
+<html>
+<head><title>Autorización exitosa</title></head>
+<body>
+<p>Autorización exitosa. Cerrando ventana...</p>
+<script>
+  if (window.opener) {
+    try { window.opener.postMessage({ type: 'oauth_success', integration: 'google_calendar' }, '*'); } catch(e) {}
+  }
+  window.close();
+</script>
+</body>
+</html>
+""")
 
 
 @router.get("/status", response_model=CalendarStatusOutput, status_code=status.HTTP_200_OK)
@@ -138,7 +178,7 @@ async def update_calendar_event(
     request: Request,
     usecases: Usecases = Depends(get_usecases),
 ):
-    """Update an existing calendar event."""
+    """Update an existing calendar event. event_id is the Google Calendar event ID."""
     user_id = request.state.user.get("user_id")
 
     updated_event = usecases.calendar.update_event_usecase.execute(
@@ -160,7 +200,7 @@ async def delete_calendar_event(
     request: Request,
     usecases: Usecases = Depends(get_usecases),
 ):
-    """Delete a calendar event."""
+    """Delete a calendar event by its Google Calendar event ID."""
     user_id = request.state.user.get("user_id")
 
     usecases.calendar.delete_event_usecase.execute(
@@ -169,14 +209,3 @@ async def delete_calendar_event(
     )
 
     return {"message": "Event deleted successfully", "event_id": event_id}
-
-
-@router.post("/sync", status_code=status.HTTP_200_OK)
-async def sync_calendar_events(
-    request: Request,
-    usecases: Usecases = Depends(get_usecases),
-):
-    """Sync events from Google Calendar into local storage."""
-    user_id = request.state.user.get("user_id")
-    result = usecases.calendar.sync_events_usecase.execute(user_id=user_id)
-    return result

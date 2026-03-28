@@ -312,8 +312,8 @@ const hasChanges = computed(() => {
   top: 0;
   bottom: 0;
   width: 400px;
-  background: white;
-  box-shadow: -4px 0 20px rgba(0, 0, 0, 0.1);
+  background: var(--do-bg);
+  box-shadow: -4px 0 20px rgba(0, 0, 0, 0.4);
   z-index: 1000;
   overflow-y: auto;
 }
@@ -327,7 +327,7 @@ const hasChanges = computed(() => {
 :deep(.config-card .p-card-header) {
   padding: 1.5rem;
   background: var(--gradient-primary);
-  border-bottom: 1px solid #e2e8f0;
+  border-bottom: 1px solid var(--do-border-light);
 }
 
 .panel-header {
@@ -380,7 +380,7 @@ const hasChanges = computed(() => {
   align-items: center;
   gap: 0.5rem;
   font-weight: 600;
-  color: #374151;
+  color: var(--do-text);
   font-size: 0.875rem;
 }
 
@@ -389,7 +389,7 @@ const hasChanges = computed(() => {
 }
 
 .form-field small {
-  color: #64748b;
+  color: var(--do-text-muted);
   font-size: 0.75rem;
 }
 
@@ -404,7 +404,7 @@ const hasChanges = computed(() => {
   align-items: center;
   gap: 0.5rem;
   padding: 0.5rem;
-  background: #f8fafc;
+  background: rgba(255,255,255,0.05);
   border-radius: 0.5rem;
 }
 
@@ -421,7 +421,7 @@ const hasChanges = computed(() => {
   flex-direction: column;
   gap: 0.75rem;
   padding-top: 1rem;
-  border-top: 1px solid #e2e8f0;
+  border-top: 1px solid var(--do-border-light);
 }
 
 :deep(.form-actions .p-button) {
@@ -434,7 +434,7 @@ const hasChanges = computed(() => {
 }
 
 .config-panel::-webkit-scrollbar-track {
-  background: #f1f5f9;
+  background: var(--do-text);
 }
 
 .config-panel::-webkit-scrollbar-thumb {
@@ -443,6 +443,6 @@ const hasChanges = computed(() => {
 }
 
 .config-panel::-webkit-scrollbar-thumb:hover {
-  background: #94a3b8;
+  background: var(--do-text-secondary);
 }
 </style>

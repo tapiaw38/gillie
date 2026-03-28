@@ -17,7 +17,7 @@ class ListFilesUseCase:
         try:
             service = get_drive_service(self.context_factory, user_id)
             return self.context_factory.integrations.google_drive.list_files(
-                service, user_id, folder_id
+                service, folder_id
             )
         except NewApplicationError:
             raise

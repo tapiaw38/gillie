@@ -39,32 +39,34 @@ EXPORT_EXT_MAP = {
 class GoogleDriveClient:
     """
     Wrapper for the Google Drive API v3.
-    Uses its own OAuth2 scopes (drive.readonly), completely separate from Calendar.
+    Uses full drive scope to support read/write operations.
     Requires: google-api-python-client, google-auth, google-auth-oauthlib
     """
 
-    SCOPES = ["https://www.googleapis.com/auth/drive.readonly"]
+    SCOPES = ["https://www.googleapis.com/auth/drive"]
 
     def __init__(self, client_id: str, client_secret: str, redirect_uri: str):
         self.client_id = client_id
         self.client_secret = client_secret
         self.redirect_uri = redirect_uri
 
-    def get_authorization_url(self, state: str) -> str:
-        """Return the Google OAuth2 authorization URL (Drive scope only)."""
+    def get_authorization_url(self, state: str) -> tuple:
+        """Return (authorization_url, code_verifier). Caller must store code_verifier for later exchange."""
         flow = self._build_flow()
         auth_url, _ = flow.authorization_url(
             state=state,
             access_type="offline",
             prompt="consent",
-            include_granted_scopes="true",
         )
-        return auth_url
+        return auth_url, getattr(flow, "code_verifier", None)
 
-    def exchange_code(self, code: str) -> Dict[str, Any]:
-        """Exchange authorization code for tokens."""
+    def exchange_code(self, code: str, code_verifier: Optional[str] = None) -> Dict[str, Any]:
+        """Exchange authorization code for tokens. Pass code_verifier if PKCE was used."""
         flow = self._build_flow()
-        flow.fetch_token(code=code)
+        fetch_kwargs = {"code": code}
+        if code_verifier:
+            fetch_kwargs["code_verifier"] = code_verifier
+        flow.fetch_token(**fetch_kwargs)
         creds = flow.credentials
         return {
             "access_token": creds.token,
@@ -112,17 +114,15 @@ class GoogleDriveClient:
         page_size: int = 100,
     ) -> List[Dict[str, Any]]:
         """
-        List files in Drive (or a specific folder).
-        Returns only supported MIME types.
+        List all files and folders in Drive (or a specific folder).
+        Does not filter by MIME type — returns everything including folders.
         """
-        supported = list(DRIVE_MIME_TYPES.keys())
-        mime_filter = " or ".join(f"mimeType='{m}'" for m in supported)
-        query = f"({mime_filter}) and trashed=false"
+        query = "trashed=false"
 
         if folder_id:
             query += f" and '{folder_id}' in parents"
 
-        fields = "files(id,name,mimeType,md5Checksum,size,modifiedTime,webViewLink)"
+        fields = "files(id,name,mimeType,size,modifiedTime,webViewLink,parents)"
         results = (
             service.files()
             .list(q=query, pageSize=page_size, fields=fields)
@@ -131,6 +131,80 @@ class GoogleDriveClient:
         files = results.get("files", [])
         logger.info(f"Listed {len(files)} files from Google Drive")
         return files
+
+    def upload_file(
+        self,
+        service,
+        file_bytes: bytes,
+        file_name: str,
+        mime_type: str,
+        folder_id: Optional[str] = None,
+    ) -> Dict[str, Any]:
+        """Upload a file to Google Drive. Optionally place it inside a folder."""
+        import io
+        from googleapiclient.http import MediaIoBaseUpload
+
+        metadata: Dict[str, Any] = {"name": file_name}
+        if folder_id:
+            metadata["parents"] = [folder_id]
+
+        media = MediaIoBaseUpload(io.BytesIO(file_bytes), mimetype=mime_type, resumable=False)
+        result = (
+            service.files()
+            .create(
+                body=metadata,
+                media_body=media,
+                fields="id,name,mimeType,webViewLink,parents",
+            )
+            .execute()
+        )
+        logger.info(f"Uploaded file '{file_name}' to Google Drive: {result.get('id')}")
+        return result
+
+    def create_folder(
+        self,
+        service,
+        name: str,
+        parent_id: Optional[str] = None,
+    ) -> Dict[str, Any]:
+        """Create a folder in Google Drive. Optionally nest it under a parent folder."""
+        metadata: Dict[str, Any] = {
+            "name": name,
+            "mimeType": "application/vnd.google-apps.folder",
+        }
+        if parent_id:
+            metadata["parents"] = [parent_id]
+
+        result = (
+            service.files()
+            .create(body=metadata, fields="id,name,mimeType,parents")
+            .execute()
+        )
+        logger.info(f"Created Drive folder '{name}': {result.get('id')}")
+        return result
+
+    def move_file(
+        self,
+        service,
+        file_id: str,
+        new_folder_id: str,
+    ) -> Dict[str, Any]:
+        """Move a file to a different folder by updating its parents."""
+        current = service.files().get(fileId=file_id, fields="parents").execute()
+        previous_parents = ",".join(current.get("parents", []))
+
+        result = (
+            service.files()
+            .update(
+                fileId=file_id,
+                addParents=new_folder_id,
+                removeParents=previous_parents,
+                fields="id,name,mimeType,parents",
+            )
+            .execute()
+        )
+        logger.info(f"Moved Drive file {file_id} to folder {new_folder_id}")
+        return result
 
     def get_file_metadata(self, service, file_id: str) -> Dict[str, Any]:
         """Get metadata for a single file."""

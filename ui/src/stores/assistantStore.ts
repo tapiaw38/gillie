@@ -26,6 +26,7 @@ export const useAssistantStore = (assistantService: IAssistantService) =>
       addFilesMutation,
       removeFileByIdMutation,
       addIntegrationMutation,
+      removeIntegrationByIdMutation,
     } = useAssistantQueries(assistantService)
 
     const addAssistantProfile = async (params: AssistantProfileParams) => {
@@ -116,6 +117,16 @@ export const useAssistantStore = (assistantService: IAssistantService) =>
       }
     }
 
+    const removeIntegrationById = async (integrationId: string) => {
+      try {
+        const data = await removeIntegrationByIdMutation.mutateAsync(integrationId)
+        assistantProfile.value!.integrations = [...data?.data]
+      } catch (error) {
+        console.error('Failed to remove integration:', error)
+        throw error
+      }
+    }
+
     return {
       assistantProfile,
       addAssistantProfile,
@@ -126,6 +137,7 @@ export const useAssistantStore = (assistantService: IAssistantService) =>
       addFiles,
       removeFileById,
       addIntegration,
+      removeIntegrationById,
 
       isAddAssistantProfilePending: addAssistantProfileMutation.isPending,
       isAddAssistantProfileSuccess: addAssistantProfileMutation.isSuccess,
@@ -166,5 +178,9 @@ export const useAssistantStore = (assistantService: IAssistantService) =>
       isAddIntegrationSuccess: addIntegrationMutation.isSuccess,
       isAddIntegrationError: addIntegrationMutation.isError,
       addIntegrationError: addIntegrationMutation.error,
+
+      isRemoveIntegrationByIdPending: removeIntegrationByIdMutation.isPending,
+      isRemoveIntegrationByIdError: removeIntegrationByIdMutation.isError,
+      removeIntegrationByIdError: removeIntegrationByIdMutation.error,
     }
   })

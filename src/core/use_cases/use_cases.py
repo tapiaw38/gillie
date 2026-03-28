@@ -19,9 +19,12 @@ from src.core.use_cases.profile import (
     AddFilesUseCase as ProfileAddFilesUseCase,
     DeleteFileByIdUseCase as ProfileDeleteFileByIdUseCase,
     AddIntegrationUseCase as ProfileAddIntegrationUseCase,
+    DeleteIntegrationUseCase as ProfileDeleteIntegrationUseCase,
     ListOptionsUseCase as ProfileListOptionsUseCase,
     FindByWhatsAppBusinessIdUseCase as ProfileFindByWhatsAppBusinessIdUseCase,
-    FindWithActiveWhatsAppIntegrationUseCase as ProfileFindWithActiveWhatsAppIntegrationUseCase
+    FindWithActiveWhatsAppIntegrationUseCase as ProfileFindWithActiveWhatsAppIntegrationUseCase,
+    FindWithActiveSlackIntegrationUseCase as ProfileFindWithActiveSlackIntegrationUseCase,
+    FindWithActiveTelegramIntegrationUseCase as ProfileFindWithActiveTelegramIntegrationUseCase,
 )
 from src.core.use_cases.memory import (
     GetFAQsUseCase,
@@ -43,18 +46,29 @@ from src.core.use_cases.calendar import (
     ListEventsUseCase,
     UpdateEventUseCase as CalendarUpdateEventUseCase,
     DeleteEventUseCase as CalendarDeleteEventUseCase,
-    SyncEventsUseCase,
+    SetCredentialsUseCase as CalendarSetCredentialsUseCase,
+    GetCredentialsUseCase as CalendarGetCredentialsUseCase,
 )
 from src.core.use_cases.drive import (
     GetAuthorizationUrlUseCase as DriveGetAuthorizationUrlUseCase,
     HandleOAuthCallbackUseCase as DriveHandleOAuthCallbackUseCase,
     CheckSessionStatusUseCase as DriveCheckSessionStatusUseCase,
     ListFilesUseCase,
-    IngestFileUseCase,
-    SyncDriveUseCase,
-    SearchDriveUseCase,
-    GetIndexStatusUseCase,
-    RemoveFileIndexUseCase,
+    DownloadFileUseCase,
+    UploadFileUseCase,
+    CreateFolderUseCase,
+    MoveFileUseCase,
+    SetCredentialsUseCase as DriveSetCredentialsUseCase,
+    GetCredentialsUseCase as DriveGetCredentialsUseCase,
+)
+from src.core.use_cases.slack import ProcessSlackMessageUseCase
+from src.core.use_cases.telegram import ProcessTelegramMessageUseCase
+from src.core.use_cases.job import (
+    CreateJobUseCase,
+    ListJobsUseCase,
+    GetJobUseCase,
+    DeleteJobUseCase,
+    RunJobUseCase,
 )
 from src.core.use_cases.whatsapp_device import (
     CreateDeviceUseCase as WhatsAppDeviceCreateUseCase,
@@ -80,9 +94,12 @@ class Profile:
     add_files_usecase: ProfileAddFilesUseCase
     delete_file_by_id_usecase: ProfileDeleteFileByIdUseCase
     add_integration_usecase: ProfileAddIntegrationUseCase
+    delete_integration_usecase: ProfileDeleteIntegrationUseCase
     list_options_usecase: ProfileListOptionsUseCase
     find_by_whatsapp_business_id_usecase: ProfileFindByWhatsAppBusinessIdUseCase
     find_with_active_whatsapp_integration_usecase: ProfileFindWithActiveWhatsAppIntegrationUseCase
+    find_with_active_slack_integration_usecase: ProfileFindWithActiveSlackIntegrationUseCase
+    find_with_active_telegram_integration_usecase: ProfileFindWithActiveTelegramIntegrationUseCase
 
 
 @dataclass
@@ -120,7 +137,8 @@ class Calendar:
     list_events_usecase: ListEventsUseCase
     update_event_usecase: CalendarUpdateEventUseCase
     delete_event_usecase: CalendarDeleteEventUseCase
-    sync_events_usecase: SyncEventsUseCase
+    set_credentials_usecase: CalendarSetCredentialsUseCase
+    get_credentials_usecase: CalendarGetCredentialsUseCase
 
 
 @dataclass
@@ -129,11 +147,12 @@ class Drive:
     handle_oauth_callback_usecase: DriveHandleOAuthCallbackUseCase
     check_session_status_usecase: DriveCheckSessionStatusUseCase
     list_files_usecase: ListFilesUseCase
-    ingest_file_usecase: IngestFileUseCase
-    sync_drive_usecase: SyncDriveUseCase
-    search_drive_usecase: SearchDriveUseCase
-    get_index_status_usecase: GetIndexStatusUseCase
-    remove_file_index_usecase: RemoveFileIndexUseCase
+    download_file_usecase: DownloadFileUseCase
+    upload_file_usecase: UploadFileUseCase
+    create_folder_usecase: CreateFolderUseCase
+    move_file_usecase: MoveFileUseCase
+    set_credentials_usecase: DriveSetCredentialsUseCase
+    get_credentials_usecase: DriveGetCredentialsUseCase
 
 
 @dataclass
@@ -149,6 +168,25 @@ class WhatsAppDevice:
 
 
 @dataclass
+class Jobs:
+    create_usecase: CreateJobUseCase
+    list_usecase: ListJobsUseCase
+    get_usecase: GetJobUseCase
+    delete_usecase: DeleteJobUseCase
+    run_usecase: RunJobUseCase
+
+
+@dataclass
+class Slack:
+    process_message_usecase: ProcessSlackMessageUseCase
+
+
+@dataclass
+class Telegram:
+    process_message_usecase: ProcessTelegramMessageUseCase
+
+
+@dataclass
 class Usecases:
     profile: Profile
     conversation: Conversation
@@ -157,6 +195,9 @@ class Usecases:
     calendar: Calendar
     drive: Drive
     whatsapp_device: WhatsAppDevice
+    jobs: Jobs
+    slack: Slack
+    telegram: Telegram
 
 
 def create_usecases(context_factory: Factory) -> Usecases:
@@ -172,9 +213,12 @@ def create_usecases(context_factory: Factory) -> Usecases:
             add_files_usecase=ProfileAddFilesUseCase(context_factory),
             delete_file_by_id_usecase=ProfileDeleteFileByIdUseCase(context_factory),
             add_integration_usecase=ProfileAddIntegrationUseCase(context_factory),
+            delete_integration_usecase=ProfileDeleteIntegrationUseCase(context_factory),
             list_options_usecase=ProfileListOptionsUseCase(context_factory),
             find_by_whatsapp_business_id_usecase=ProfileFindByWhatsAppBusinessIdUseCase(context_factory),
             find_with_active_whatsapp_integration_usecase=ProfileFindWithActiveWhatsAppIntegrationUseCase(context_factory),
+            find_with_active_slack_integration_usecase=ProfileFindWithActiveSlackIntegrationUseCase(context_factory),
+            find_with_active_telegram_integration_usecase=ProfileFindWithActiveTelegramIntegrationUseCase(context_factory),
         ),
         conversation=Conversation(
             create_usecase=ConversationCreateUseCase(context_factory),
@@ -204,18 +248,20 @@ def create_usecases(context_factory: Factory) -> Usecases:
             list_events_usecase=ListEventsUseCase(context_factory),
             update_event_usecase=CalendarUpdateEventUseCase(context_factory),
             delete_event_usecase=CalendarDeleteEventUseCase(context_factory),
-            sync_events_usecase=SyncEventsUseCase(context_factory),
+            set_credentials_usecase=CalendarSetCredentialsUseCase(context_factory),
+            get_credentials_usecase=CalendarGetCredentialsUseCase(context_factory),
         ),
         drive=Drive(
             get_authorization_url_usecase=DriveGetAuthorizationUrlUseCase(context_factory),
             handle_oauth_callback_usecase=DriveHandleOAuthCallbackUseCase(context_factory),
             check_session_status_usecase=DriveCheckSessionStatusUseCase(context_factory),
             list_files_usecase=ListFilesUseCase(context_factory),
-            ingest_file_usecase=IngestFileUseCase(context_factory),
-            sync_drive_usecase=SyncDriveUseCase(context_factory),
-            search_drive_usecase=SearchDriveUseCase(context_factory),
-            get_index_status_usecase=GetIndexStatusUseCase(context_factory),
-            remove_file_index_usecase=RemoveFileIndexUseCase(context_factory),
+            download_file_usecase=DownloadFileUseCase(context_factory),
+            upload_file_usecase=UploadFileUseCase(context_factory),
+            create_folder_usecase=CreateFolderUseCase(context_factory),
+            move_file_usecase=MoveFileUseCase(context_factory),
+            set_credentials_usecase=DriveSetCredentialsUseCase(context_factory),
+            get_credentials_usecase=DriveGetCredentialsUseCase(context_factory),
         ),
         whatsapp_device=WhatsAppDevice(
             create_usecase=WhatsAppDeviceCreateUseCase(context_factory),
@@ -226,5 +272,18 @@ def create_usecases(context_factory: Factory) -> Usecases:
             connect_usecase=WhatsAppDeviceConnectUseCase(context_factory),
             disconnect_usecase=WhatsAppDeviceDisconnectUseCase(context_factory),
             send_message_usecase=WhatsAppDeviceSendMessageUseCase(context_factory),
+        ),
+        jobs=Jobs(
+            create_usecase=CreateJobUseCase(context_factory),
+            list_usecase=ListJobsUseCase(context_factory),
+            get_usecase=GetJobUseCase(context_factory),
+            delete_usecase=DeleteJobUseCase(context_factory),
+            run_usecase=RunJobUseCase(context_factory),
+        ),
+        slack=Slack(
+            process_message_usecase=ProcessSlackMessageUseCase(context_factory),
+        ),
+        telegram=Telegram(
+            process_message_usecase=ProcessTelegramMessageUseCase(context_factory),
         ),
     )

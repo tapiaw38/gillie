@@ -1,4 +1,5 @@
 import os
+from pathlib import Path
 from dotenv import load_dotenv
 from enum import Enum
 from dataclasses import dataclass
@@ -26,8 +27,9 @@ class NoSQLConfig:
     profiles: Optional[NoSQLCollectionConfig] = None
     faqs: Optional[NoSQLCollectionConfig] = None
     calendar_sessions: Optional[NoSQLCollectionConfig] = None
-    calendar_events: Optional[NoSQLCollectionConfig] = None
+    drive_sessions: Optional[NoSQLCollectionConfig] = None
     whatsapp_devices: Optional[NoSQLCollectionConfig] = None
+    jobs: Optional[NoSQLCollectionConfig] = None
 
 @dataclass
 class ServerConfig:
@@ -37,12 +39,26 @@ class ServerConfig:
     jwt_secret: str
     encryption_algorithm: str
 
+_PROVIDER_PRESETS: dict = {
+    "deepseek":   {"base_url": "https://api.deepseek.com",                               "model": "deepseek-chat",                "auth_type": "api_key"},
+    "deepseek-chat": {"base_url": "https://openrouter.ai/api/v1",                        "model": "deepseek/deepseek-chat",       "auth_type": "api_key"},
+    "kimi-k2":    {"base_url": "https://openrouter.ai/api/v1",                           "model": "moonshotai/kimi-k2",           "auth_type": "api_key"},
+    "anthropic":  {"base_url": "https://api.anthropic.com/v1",                           "model": "claude-sonnet-4-6",            "auth_type": "api_key"},
+    "openai":     {"base_url": "https://api.openai.com/v1",                              "model": "gpt-4o",                       "auth_type": "api_key"},
+    "kimi":       {"base_url": "https://api.moonshot.cn/v1",                             "model": "kimi-k2",                      "auth_type": "api_key"},
+    "gemini":     {"base_url": "https://generativelanguage.googleapis.com/v1beta/openai/","model": "gemini-2.0-flash",             "auth_type": "api_key"},
+    "groq":       {"base_url": "https://api.groq.com/openai/v1",                         "model": "llama-3.3-70b-versatile",      "auth_type": "api_key"},
+    "claude":     {"base_url": "https://api.anthropic.com/v1",                           "model": "claude-haiku-4-5-20251001",    "auth_type": "bearer"},
+}
+
+
 @dataclass
 class OpenAIConfig:
     api_key: str
     base_url: str
     model: str
     role: str
+    auth_type: str = "api_key"  # "api_key" | "bearer"
 
 
 @dataclass
@@ -78,7 +94,6 @@ class LangChainConfig:
     enable_vectors: bool
     vector_store: str
     similarity_k: int
-    enable_fallback: bool
     log_level: str
 
 
@@ -132,6 +147,27 @@ class GoogleCalendarConfig:
 
 
 @dataclass
+class GoogleDriveConfig:
+    client_id: str = ""
+    client_secret: str = ""
+    redirect_uri: str = "http://localhost:8000/api/v1/drive/oauth/callback"
+
+
+@dataclass
+class StorageConfig:
+    backend: str = "local"  # "s3" | "local"
+    local_path: str = ""
+    local_base_url: str = "http://localhost:8000/api/storage"
+
+
+@dataclass
+class VisionConfig:
+    api_key: str = ""
+    base_url: str = ""
+    model: str = ""
+
+
+@dataclass
 class SingleUserConfig:
     """Configuration for single-user mode (set by CLI init)."""
     user_id: str
@@ -155,6 +191,9 @@ class ConfigurationService:
     logging_config: LoggingConfig
     single_user_config: Optional[SingleUserConfig] = None
     google_calendar_config: Optional[GoogleCalendarConfig] = None
+    google_drive_config: Optional[GoogleDriveConfig] = None
+    storage_config: Optional[StorageConfig] = None
+    vision_config: Optional[VisionConfig] = None
 
 
 _config_service: Optional[ConfigurationService] = None
@@ -175,6 +214,10 @@ def get_env(key: str, fallback: str) -> str:
 
 def read_config() -> ConfigurationService:
     load_dotenv()
+
+    # Allow OAuth2 over HTTP in local development
+    if os.getenv("OAUTHLIB_INSECURE_TRANSPORT") == "1":
+        os.environ["OAUTHLIB_INSECURE_TRANSPORT"] = "1"
 
     database_uri = get_env("DATABASE_URI", "mongodb://localhost:27017")
     server_config = ServerConfig(
@@ -211,23 +254,32 @@ def read_config() -> ConfigurationService:
             database=get_env("DB_NAME", "gillie-db"),
             collection=get_env("DB_COLLECTION_CALENDAR_SESSIONS", "calendar_sessions"),
         ),
-        calendar_events=NoSQLCollectionConfig(
+        drive_sessions=NoSQLCollectionConfig(
             database_uri=database_uri,
             database=get_env("DB_NAME", "gillie-db"),
-            collection=get_env("DB_COLLECTION_CALENDAR_EVENTS", "calendar_events"),
+            collection=get_env("DB_COLLECTION_DRIVE_SESSIONS", "drive_sessions"),
         ),
         whatsapp_devices=NoSQLCollectionConfig(
             database_uri=database_uri,
             database=get_env("DB_NAME", "gillie-db"),
             collection=get_env("DB_COLLECTION_WHATSAPP_DEVICES", "whatsapp_devices"),
         ),
+        jobs=NoSQLCollectionConfig(
+            database_uri=database_uri,
+            database=get_env("DB_NAME", "gillie-db"),
+            collection=get_env("DB_COLLECTION_JOBS", "jobs"),
+        ),
     )
 
+    provider = get_env("AI_PROVIDER", "")
+    preset = _PROVIDER_PRESETS.get(provider, {})
+
     openai_config = OpenAIConfig(
-        api_key=get_env("OPENAI_API_KEY", ""),
-        base_url=get_env("OPENAI_BASE_URL", "https://api.deepseek.com"),
-        model=get_env("OPENAI_MODEL", "deepseek-chat"),
+        api_key=get_env("AI_AUTH_TOKEN", get_env("OPENAI_API_KEY", "")),
+        base_url=get_env("OPENAI_BASE_URL", preset.get("base_url", "https://api.deepseek.com")),
+        model=get_env("OPENAI_MODEL", preset.get("model", "deepseek-chat")),
         role=get_env("OPENAI_ROLE", "user"),
+        auth_type=get_env("AI_AUTH_TYPE", preset.get("auth_type", "api_key")),
     )
 
     aws_config = AWSConfig(
@@ -259,7 +311,6 @@ def read_config() -> ConfigurationService:
         enable_vectors=get_env("LANGCHAIN_ENABLE_VECTORS", "true").lower() == "true",
         vector_store=get_env("LANGCHAIN_VECTOR_STORE", "qdrant"),
         similarity_k=int(get_env("LANGCHAIN_SIMILARITY_K", "5")),
-        enable_fallback=get_env("LANGCHAIN_ENABLE_FALLBACK", "true").lower() == "true",
         log_level=get_env("LANGCHAIN_LOG_LEVEL", "INFO"),
     )
 
@@ -300,6 +351,12 @@ def read_config() -> ConfigurationService:
         scope=get_env("SCOPE", ""),
     )
 
+    storage_config = StorageConfig(
+        backend=get_env("STORAGE_BACKEND", "local"),
+        local_path=get_env("STORAGE_LOCAL_PATH", str(Path.home() / ".local" / "share" / "gillie" / "storage")),
+        local_base_url=get_env("STORAGE_LOCAL_BASE_URL", "http://localhost:8000/api/storage"),
+    )
+
     # Single-user config from env (optional, set by CLI)
     single_user_id = get_env("SINGLE_USER_ID", "")
     single_user_config = None
@@ -318,6 +375,18 @@ def read_config() -> ConfigurationService:
         redirect_uri=get_env("GOOGLE_CALENDAR_REDIRECT_URI", "http://localhost:8000/api/v1/calendar/oauth/callback"),
     )
 
+    google_drive_config = GoogleDriveConfig(
+        client_id=get_env("GOOGLE_DRIVE_CLIENT_ID", ""),
+        client_secret=get_env("GOOGLE_DRIVE_CLIENT_SECRET", ""),
+        redirect_uri=get_env("GOOGLE_DRIVE_REDIRECT_URI", "http://localhost:8000/api/v1/drive/oauth/callback"),
+    )
+
+    vision_config = VisionConfig(
+        api_key=get_env("VISION_API_KEY", ""),
+        base_url=get_env("VISION_BASE_URL", ""),
+        model=get_env("VISION_MODEL", ""),
+    )
+
     return ConfigurationService(
         server_config=server_config,
         nosql_config=nosql_config,
@@ -332,6 +401,9 @@ def read_config() -> ConfigurationService:
         logging_config=logging_config,
         single_user_config=single_user_config,
         google_calendar_config=google_calendar_config,
+        google_drive_config=google_drive_config,
+        storage_config=storage_config,
+        vision_config=vision_config,
     )
 
 
@@ -372,15 +444,20 @@ def init_config_from_json(config_data: "AssistantConfig") -> None:
             database=db_name,
             collection="calendar_sessions",
         ),
-        calendar_events=NoSQLCollectionConfig(
+        drive_sessions=NoSQLCollectionConfig(
             database_uri=db_uri,
             database=db_name,
-            collection="calendar_events",
+            collection="drive_sessions",
         ),
         whatsapp_devices=NoSQLCollectionConfig(
             database_uri=db_uri,
             database=db_name,
             collection="whatsapp_devices",
+        ),
+        jobs=NoSQLCollectionConfig(
+            database_uri=db_uri,
+            database=db_name,
+            collection="jobs",
         ),
     )
 
@@ -398,6 +475,7 @@ def init_config_from_json(config_data: "AssistantConfig") -> None:
             base_url=s.openai.base_url,
             model=s.openai.model,
             role=s.openai.role,
+            auth_type=s.openai.auth_type,
         ),
         aws_config=AWSConfig(
             access_key_id=s.s3.access_key_id if s.s3.enabled else "",
@@ -425,7 +503,6 @@ def init_config_from_json(config_data: "AssistantConfig") -> None:
             enable_vectors=s.langchain.enable_vectors,
             vector_store=s.langchain.vector_store,
             similarity_k=s.langchain.similarity_k,
-            enable_fallback=s.langchain.enable_fallback,
             log_level="INFO",
         ),
         langsmith_config=LangSmithConfig(
@@ -472,6 +549,21 @@ def init_config_from_json(config_data: "AssistantConfig") -> None:
             client_id=s.google_calendar.client_id if hasattr(s, "google_calendar") else "",
             client_secret=s.google_calendar.client_secret if hasattr(s, "google_calendar") else "",
             redirect_uri=s.google_calendar.redirect_uri if hasattr(s, "google_calendar") else "http://localhost:8000/api/v1/calendar/oauth/callback",
+        ),
+        google_drive_config=GoogleDriveConfig(
+            client_id=s.google_drive.client_id if hasattr(s, "google_drive") else "",
+            client_secret=s.google_drive.client_secret if hasattr(s, "google_drive") else "",
+            redirect_uri=s.google_drive.redirect_uri if hasattr(s, "google_drive") else "http://localhost:8000/api/v1/drive/oauth/callback",
+        ),
+        storage_config=StorageConfig(
+            backend=s.storage.backend if hasattr(s, "storage") else "local",
+            local_path=s.storage.local_path if hasattr(s, "storage") else str(Path.home() / ".local" / "share" / "gillie" / "storage"),
+            local_base_url=s.storage.local_base_url if hasattr(s, "storage") else "http://localhost:8000/api/storage",
+        ),
+        vision_config=VisionConfig(
+            api_key=s.vision.api_key if hasattr(s, "vision") else "",
+            base_url=s.vision.base_url if hasattr(s, "vision") else "",
+            model=s.vision.model if hasattr(s, "vision") else "",
         ),
     )
 

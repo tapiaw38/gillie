@@ -14,6 +14,9 @@ from PyPDF2 import PdfReader
 import asyncio
 import aiohttp
 import tempfile
+import json
+import time
+from pathlib import Path
 
 
 class OpenAIIntegration:
@@ -25,13 +28,10 @@ class OpenAIIntegration:
         self.base_url = config.base_url
         self.model = config.model
         self.role = config.role
+        self.auth_type = getattr(config, "auth_type", "api_key")
 
-        self.client = AsyncOpenAI(
-            api_key=self.api_key,
-            base_url=self.base_url,
-            timeout=45.0,
-            max_retries=3,
-        )
+        self.client = self._build_client()
+        self._extra_headers: Dict[str, str] = {}
 
         self.image_processor = FileImageProcessor(config_service)
         self.excel_processor = ExcelImageProcessor(config_service)
@@ -42,6 +42,7 @@ class OpenAIIntegration:
         self.langchain_service = None
         self.skill_manager = None
         self.store_service = None
+        self.job_usecases = None
 
         langchain_config = config_service.langchain_config
         if langchain_config.service_enabled:
@@ -59,7 +60,20 @@ class OpenAIIntegration:
                 self.logger.error(f"Failed to initialize LangChain service: {e}")
                 self.langchain_service = None
 
-        self.logger.info(f"OpenAI integration initialized with model: {self.model}")
+        self.logger.info(f"OpenAI integration initialized with model: {self.model}, auth_type: {self.auth_type}")
+
+    # ------------------------------------------------------------------
+    # Client construction helpers
+    # ------------------------------------------------------------------
+
+    def _build_client(self) -> AsyncOpenAI:
+        """Construct an AsyncOpenAI client with the current credentials."""
+        return AsyncOpenAI(
+            api_key=self.api_key,
+            base_url=self.base_url,
+            timeout=45.0,
+            max_retries=3,
+        )
 
     def set_skill_manager(self, skill_manager) -> None:
         """Inject SkillManager after construction (avoids circular init order)."""
@@ -73,6 +87,13 @@ class OpenAIIntegration:
         if self.langchain_service is not None:
             self.langchain_service.store_service = store_service
 
+    def set_job_usecases(self, job_usecases) -> None:
+        """Inject job usecases after construction."""
+        self.job_usecases = job_usecases
+        if self.langchain_service is not None:
+            self.langchain_service.job_usecases = job_usecases
+
+
     @log_function_call
     async def ask(
         self,
@@ -81,6 +102,7 @@ class OpenAIIntegration:
         previous_messages: str,
         profile: Profile,
         conversation_id: Optional[str] = None,
+        client_workspace: str = "",
     ) -> str:
         self.logger.info(f"Processing question for profile: {profile.user_id}")
 
@@ -94,7 +116,46 @@ class OpenAIIntegration:
             profile=profile,
             conversation_id=conversation_id or profile.user_id,
             use_tools=True,
+            client_workspace=client_workspace,
         )
+
+    async def ask_stream(
+        self,
+        question: str,
+        context: Optional[str],
+        previous_messages: str,
+        profile: Profile,
+        conversation_id: Optional[str] = None,
+        shell_output_queue=None,
+        client_workspace: str = "",
+        plan_mode: bool = False,
+    ):
+        """Stream AI response tokens via LangChain. Yields str tokens and shell_output dicts.
+
+        Args:
+            shell_output_queue: Optional asyncio.Queue. When provided, run_shell tool output
+                is emitted line-by-line as {"type": "shell_output", "line": "..."} dicts
+                in real time rather than buffering until the command finishes.
+            client_workspace: Optional path sent by the CLI client via X-Gillie-Workspace.
+                When non-empty, overrides the GILLIE_WORKSPACE env var for all file tools.
+            plan_mode: When True, state-mutating tools return a description of the intended
+                change without applying it (sent via X-Gillie-Mode: plan header).
+        """
+        if self.langchain_service is None:
+            raise Exception("LangChain service not available for streaming")
+        messages_list = self._parse_previous_messages(previous_messages)
+        async for token in self.langchain_service.generate_response_stream(
+            question=question,
+            context=context,
+            previous_messages=messages_list,
+            profile=profile,
+            conversation_id=conversation_id or profile.user_id,
+            use_tools=True,
+            shell_output_queue=shell_output_queue,
+            client_workspace=client_workspace,
+            plan_mode=plan_mode,
+        ):
+            yield token
 
     @log_function_call
     async def search_images_in_files(
@@ -141,9 +202,9 @@ class OpenAIIntegration:
         return final_results
 
     @log_function_call
-    async def describe_image_from_base64(self, image_base64: str) -> str:
+    async def describe_image_from_base64(self, image_base64: str, prompt: str = None) -> str:
         self.logger.debug("Describing image from base64")
-        return await self.image_processor.describe_image(image_base64)
+        return await self.image_processor.describe_image(image_base64, prompt=prompt)
 
     @log_function_call
     async def analyze_excel_file(self, excel_url: str) -> dict:
@@ -497,6 +558,141 @@ class OpenAIIntegration:
         except Exception as e:
             self.logger.error(f"Error in hybrid text extraction: {e}")
             return f"Error extracting text: {str(e)}"
+
+    def _refresh_claude_code_token(self) -> Optional[str]:
+        """
+        Read the Claude Code OAuth credentials from ~/.claude/.credentials.json.
+
+        Returns the current accessToken if still valid, or attempts to refresh
+        it using the stored refreshToken.  Writes the updated credentials back
+        to disk so subsequent calls pick up the fresh token.
+
+        Returns the accessToken string, or None on failure.
+        """
+        creds_path = Path.home() / ".claude" / ".credentials.json"
+        if not creds_path.exists():
+            self.logger.warning(f"Claude Code credentials not found at {creds_path}")
+            return None
+
+        try:
+            creds = json.loads(creds_path.read_text())
+            oauth = creds.get("claudeAiOauth", {})
+            access_token = oauth.get("accessToken")
+            refresh_token = oauth.get("refreshToken")
+            expires_at_ms = oauth.get("expiresAt", 0)
+
+            if not access_token:
+                self.logger.warning("No accessToken in Claude Code credentials")
+                return None
+
+            # Use current token if still valid (with a 60-second buffer)
+            if time.time() * 1000 < expires_at_ms - 60_000:
+                self.logger.info("Claude Code token still valid; reusing existing accessToken")
+                return access_token
+
+            # Token is expired — try to refresh
+            if not refresh_token:
+                self.logger.warning("Token expired and no refreshToken available")
+                return None
+
+            self.logger.info("Claude Code token expired; refreshing via OAuth endpoint")
+            import urllib.request
+            payload = json.dumps({
+                "grant_type": "refresh_token",
+                "refresh_token": refresh_token,
+            }).encode()
+            req = urllib.request.Request(
+                "https://claude.ai/api/auth/oauth/token",
+                data=payload,
+                headers={"Content-Type": "application/json"},
+                method="POST",
+            )
+            with urllib.request.urlopen(req, timeout=10) as resp:
+                body = json.loads(resp.read())
+
+            new_access = body.get("access_token")
+            new_refresh = body.get("refresh_token", refresh_token)
+            new_expires = body.get("expires_in")  # seconds from now
+
+            if not new_access:
+                self.logger.warning(f"Token refresh response missing access_token: {body}")
+                return None
+
+            # Persist the refreshed credentials
+            oauth["accessToken"] = new_access
+            oauth["refreshToken"] = new_refresh
+            if new_expires:
+                oauth["expiresAt"] = int((time.time() + new_expires) * 1000)
+            creds["claudeAiOauth"] = oauth
+            creds_path.write_text(json.dumps(creds))
+
+            self.logger.info("Claude Code token refreshed and persisted successfully")
+            return new_access
+
+        except Exception as e:
+            self.logger.error(f"Failed to refresh Claude Code token: {e}")
+            return None
+
+    def _handle_bearer_401(self) -> bool:
+        """
+        Attempt to recover from a 401 by refreshing the Claude Code OAuth token.
+
+        Returns True if the token was refreshed successfully and the client was
+        rebuilt; False otherwise.  Only acts when auth_type == "bearer".
+        """
+        if self.auth_type != "bearer":
+            return False
+
+        self.logger.info("Received 401; attempting Claude Code token refresh")
+        new_token = self._refresh_claude_code_token()
+        if not new_token:
+            self.logger.warning("Token refresh returned empty; cannot retry")
+            return False
+
+        self.api_key = new_token
+        self.client = self._build_client()
+        self.logger.info("Token refreshed and client rebuilt successfully")
+        return True
+
+    async def simple_completion(self, system: str, user: str) -> str:
+        """
+        Performs a minimal, tool-free chat completion.
+
+        This is intentionally kept separate from `ask` / `ask_stream` because
+        those methods route through LangChain with tools enabled, which is
+        inappropriate for internal housekeeping calls such as conversation
+        compaction summarisation.
+
+        When auth_type == "bearer" a single transparent retry is attempted on
+        401 errors by refreshing the Claude Code OAuth token.
+
+        Args:
+            system: The system prompt content.
+            user: The user prompt content.
+
+        Returns:
+            The assistant reply text, or an empty string on failure.
+        """
+        messages = [
+            {"role": "system", "content": system},
+            {"role": "user", "content": user},
+        ]
+        for attempt in range(2):
+            try:
+                response = await self.client.chat.completions.create(
+                    model=self.model,
+                    messages=messages,
+                    temperature=0.3,
+                    max_tokens=1024,
+                )
+                return response.choices[0].message.content or ""
+            except Exception as e:
+                is_auth_error = "401" in str(e) or "authentication" in str(e).lower()
+                if attempt == 0 and is_auth_error and self._handle_bearer_401():
+                    continue  # retry with refreshed token
+                self.logger.error(f"simple_completion failed: {e}")
+                return ""
+        return ""
 
     def _parse_previous_messages(self, previous_messages: str) -> List[Dict[str, Any]]:
         """

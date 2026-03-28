@@ -488,6 +488,7 @@ CRITICAL OUTPUT RULES:
         execution_result: Dict[str, Any],
         params: Dict[str, str],
         user_message: str = "",
+        chat_history: List[str] = None,
     ) -> str:
         """Ask the LLM to turn a raw execution result into a user-friendly message."""
         try:
@@ -514,16 +515,27 @@ CRITICAL OUTPUT RULES:
                     f"Result: {json.dumps(result_data, indent=2, ensure_ascii=False)}"
                 )
 
+            history_str = ""
+            if chat_history:
+                recent = chat_history[-4:]
+                history_str = (
+                    f"\nRecent conversation (for tone/context):\n"
+                    + "\n".join(recent)
+                    + "\n"
+                )
+
             prompt = (
                 f"You are an assistant generating natural, friendly responses based on the "
                 f"results of technical operations.\n\n"
                 f"The user sent: \"{user_message}\"\n"
-                f"Respond in the SAME language the user used.\n\n"
+                f"Respond in the SAME language the user used.\n"
+                f"{history_str}\n"
                 f"Operation executed:\n{context_str}\n\n"
                 f"Instructions:\n"
                 f"1. If 'Error detected: YES' or no steps were executed, inform the user about the error clearly\n"
                 f"2. If successful, confirm success and include the most relevant details\n"
-                f"3. Be concise and conversational — avoid raw JSON or technical data\n\n"
+                f"3. Be concise and conversational — avoid raw JSON or technical data\n"
+                f"4. Keep your response coherent with the tone of the recent conversation\n\n"
                 f"Generate the response now:"
             )
 
@@ -634,7 +646,7 @@ CRITICAL OUTPUT RULES:
                     )
 
             response_text = await self._generate_friendly_response(
-                matched_name, matched_function.type, result, all_params, user_message
+                matched_name, matched_function.type, result, all_params, user_message, chat_history
             )
             return FunctionResult(
                 response=response_text,
@@ -720,7 +732,7 @@ CRITICAL OUTPUT RULES:
                             default_message=matched_function.response_default_message,
                         )
                 response_text = await self._generate_friendly_response(
-                    function_name, matched_function.type, result, all_params, trigger_message
+                    function_name, matched_function.type, result, all_params, trigger_message, chat_history
                 )
                 return FunctionResult(
                     response=response_text,

@@ -19,28 +19,23 @@ class GoogleCalendarClient:
         self.client_secret = client_secret
         self.redirect_uri = redirect_uri
 
-    def get_authorization_url(self, state: str) -> str:
-        """Return the Google OAuth2 authorization URL."""
-        from google_auth_oauthlib.flow import Flow
-
+    def get_authorization_url(self, state: str) -> tuple:
+        """Return (authorization_url, code_verifier). Caller must store code_verifier for later exchange."""
         flow = self._build_flow()
         auth_url, _ = flow.authorization_url(
             state=state,
             access_type="offline",
             prompt="consent",
-            include_granted_scopes="true",
         )
-        return auth_url
+        return auth_url, getattr(flow, "code_verifier", None)
 
-    def exchange_code(self, code: str) -> Dict[str, Any]:
-        """
-        Exchange authorization code for tokens.
-        Returns dict with: access_token, refresh_token, expiry, scopes
-        """
-        from google_auth_oauthlib.flow import Flow
-
+    def exchange_code(self, code: str, code_verifier: Optional[str] = None) -> Dict[str, Any]:
+        """Exchange authorization code for tokens. Pass code_verifier if PKCE was used."""
         flow = self._build_flow()
-        flow.fetch_token(code=code)
+        fetch_kwargs = {"code": code}
+        if code_verifier:
+            fetch_kwargs["code_verifier"] = code_verifier
+        flow.fetch_token(**fetch_kwargs)
         creds = flow.credentials
         return {
             "access_token": creds.token,
@@ -107,25 +102,29 @@ class GoogleCalendarClient:
         service.events().delete(calendarId="primary", eventId=google_id).execute()
         logger.info(f"Google Calendar event deleted: {google_id}")
 
+    def get_event(self, service, google_id: str) -> Dict[str, Any]:
+        """Fetch a single event by its Google Calendar ID."""
+        return service.events().get(calendarId="primary", eventId=google_id).execute()
+
     def list_events(
         self,
         service,
-        time_min: datetime,
-        time_max: datetime,
+        time_min: Optional[datetime] = None,
+        time_max: Optional[datetime] = None,
+        limit: int = 50,
     ) -> List[Dict[str, Any]]:
-        """List events in a date range for sync."""
-        result = (
-            service.events()
-            .list(
-                calendarId="primary",
-                timeMin=time_min.isoformat() + "Z",
-                timeMax=time_max.isoformat() + "Z",
-                singleEvents=True,
-                orderBy="startTime",
-                maxResults=500,
-            )
-            .execute()
-        )
+        """List upcoming events, optionally filtered by date range."""
+        now = datetime.utcnow()
+        kwargs: Dict[str, Any] = {
+            "calendarId": "primary",
+            "timeMin": (time_min or now).isoformat() + "Z",
+            "singleEvents": True,
+            "orderBy": "startTime",
+            "maxResults": min(limit, 2500),
+        }
+        if time_max:
+            kwargs["timeMax"] = time_max.isoformat() + "Z"
+        result = service.events().list(**kwargs).execute()
         return result.get("items", [])
 
     def _build_flow(self):
@@ -152,17 +151,27 @@ class GoogleCalendarClient:
         title: str,
         start_time: datetime,
         end_time: datetime,
-        time_zone: str = "UTC",
+        time_zone: Optional[str] = None,
         description: Optional[str] = None,
         location: Optional[str] = None,
         attendees: Optional[List[dict]] = None,
         reminders: Optional[List[dict]] = None,
     ) -> Dict[str, Any]:
-        """Build a Google Calendar event body dict."""
+        """Build a Google Calendar event body dict.
+
+        When time_zone is None the datetime strings already carry offset info
+        (tz-aware isoformat), so no timeZone field is added and Google Calendar
+        uses the embedded offset directly.
+        """
+        def _dt_field(dt: datetime, tz: Optional[str]) -> dict:
+            if tz:
+                return {"dateTime": dt.isoformat(), "timeZone": tz}
+            return {"dateTime": dt.isoformat()}
+
         body: Dict[str, Any] = {
             "summary": title,
-            "start": {"dateTime": start_time.isoformat(), "timeZone": time_zone},
-            "end": {"dateTime": end_time.isoformat(), "timeZone": time_zone},
+            "start": _dt_field(start_time, time_zone),
+            "end": _dt_field(end_time, time_zone),
         }
         if description:
             body["description"] = description

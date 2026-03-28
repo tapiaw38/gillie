@@ -1,5 +1,6 @@
 
 from fastapi import APIRouter, status, Depends, Request, Query, HTTPException, Form, File, UploadFile
+from fastapi.responses import StreamingResponse
 from src.schemas import (
     ConversationInput,
     MessageInput,
@@ -81,6 +82,8 @@ async def add_message(
     if auth_header and auth_header.startswith("Bearer "):
         auth_token = auth_header.replace("Bearer ", "")
 
+    client_workspace = request.headers.get("X-Gillie-Workspace", "")
+
     message = MessageInput(
         content=content,
         context=context,
@@ -94,9 +97,89 @@ async def add_message(
         user_id,
         has_image_processor,
         has_text_to_voice,
-        auth_token
+        auth_token,
+        client_workspace,
     )
     return messages
+
+@router.post("/{conversation_id}/message/stream")
+async def add_message_stream(
+    conversation_id: str,
+    request: Request,
+    usecases: Usecases = Depends(get_usecases),
+    content: Optional[str] = Form(default=None),
+):
+    """Stream AI response tokens as Server-Sent Events (SSE).
+
+    Accepts both form-encoded (CLI) and JSON body (UI) requests.
+    Each event is JSON-encoded so newlines inside tokens are safely escaped.
+    Client must json.loads() each data payload.
+    """
+    import json
+    # Support JSON body (UI) when form field is absent
+    if content is None:
+        try:
+            body = await request.json()
+            content = body.get("content", "")
+        except Exception:
+            content = ""
+
+    user_id = request.state.user.get("user_id")
+    client_workspace = request.headers.get("X-Gillie-Workspace", "")
+    plan_mode = request.headers.get("X-Gillie-Mode", "") == "plan"
+
+    async def event_generator():
+        try:
+            async for token in usecases.conversation.add_message_usecase.execute_stream(
+                conversation_id=conversation_id,
+                content=content,
+                user_id=user_id,
+                client_workspace=client_workspace,
+                plan_mode=plan_mode,
+            ):
+                yield f"data: {json.dumps(token)}\n\n"
+        except Exception as e:
+            yield f"data: {json.dumps('[ERROR] ' + str(e))}\n\n"
+        yield f"data: {json.dumps('[DONE]')}\n\n"
+
+    return StreamingResponse(event_generator(), media_type="text/event-stream")
+
+
+@router.post("/tool/approve", status_code=status.HTTP_200_OK)
+async def approve_tool(request: Request):
+    """Receive user approval or rejection for a pending tool call.
+
+    The CLI sends this request after the user responds to an approval_request
+    SSE event. The backend unblocks the waiting tool coroutine with the
+    user's decision.
+
+    Body:
+        request_id (str):  The UUID from the approval_request event.
+        approved   (bool): True to apply the change, False to skip it.
+        feedback   (str):  Optional rejection reason (only meaningful when
+                           approved is False). The LLM receives this so it
+                           can try a different approach.
+    """
+    from src.core.platform.ai.tools.approval_manager import submit_decision
+    body = await request.json()
+    request_id = body.get("request_id", "")
+    approved = bool(body.get("approved", False))
+    feedback = str(body.get("feedback", "") or "")
+    found = submit_decision(request_id, approved, feedback)
+    return {"ok": found}
+
+
+@router.post("/{conversation_id}/compact", status_code=status.HTTP_200_OK)
+async def compact_conversation(
+    conversation_id: str,
+    request: Request,
+    usecases: Usecases = Depends(get_usecases),
+):
+    """Force-compact a conversation immediately, regardless of message count."""
+    user_id = request.state.user.get("user_id")
+    result = await usecases.conversation.add_message_usecase.compact_now(conversation_id, user_id)
+    return result
+
 
 @router.delete("/{conversation_id}/message", status_code=status.HTTP_200_OK)
 async def delete_all_messages(

@@ -1,21 +1,19 @@
 <script setup lang="ts">
-import { ref, reactive, watch, computed, onMounted } from 'vue'
+import { ref, reactive, computed, onMounted } from 'vue'
+import ToggleSwitch from 'primevue/toggleswitch'
 import Card from 'primevue/card'
 import Button from 'primevue/button'
 import InputText from 'primevue/inputtext'
-import Textarea from 'primevue/textarea'
 import LoadingSpinner from '@/components/core/LoadingSpinner/LoadingSpinner.vue'
 import DefaultModal from '@/components/core/shared/DefaultModal/DefaultModal.vue'
-import ScrollPanel from 'primevue/scrollpanel'
 import Toast from 'primevue/toast'
-import type { AssistantProfileParams, AssistantProfileUpdateParams } from '@/types/assistant.ts'
+import type { AssistantProfileParams } from '@/types/assistant.ts'
 import { useToogle } from '@/composables/useToogle'
 import { useAssistant } from '@/composables/useAssistant'
 import { useConversation } from '@/composables/useConversation'
 import { useErrorToast } from '@/composables/useErrorToast'
 
 const { toogleValue: isVisible } = useToogle(false)
-const { toogleValue: isVisibleUpdate } = useToogle(false)
 
 const {
   conversations,
@@ -47,6 +45,21 @@ const {
 
   assistantProfile,
 } = useAssistant()
+
+const ttsEnabled = computed(() => assistantProfile.value?.tts_enabled ?? false)
+
+const toggleTts = async (value: boolean) => {
+  try {
+    await updateAssistantProfile({ tts_enabled: value })
+    toast.add({
+      severity: 'success',
+      summary: value ? 'Audio activado' : 'Audio desactivado',
+      life: 2000,
+    })
+  } catch {
+    toast.add({ severity: 'error', summary: 'Error al cambiar audio', life: 3000 })
+  }
+}
 
 const errorWatchers = [
   {
@@ -91,9 +104,7 @@ const changeVisible = (value: boolean) => {
 
 const assistantProfileParams = reactive<AssistantProfileParams>({
   assistant_name: '',
-  business_name: '',
   functions: '',
-  business_context: '',
 })
 
 const addAssistant = async () => {
@@ -110,45 +121,31 @@ const addAssistant = async () => {
   isVisible.value = false
 }
 
-const modalTitleUpdate = ref('Editar Asistente')
-const updateAssistantProfileParams = reactive<AssistantProfileUpdateParams>({
-  assistant_name: '',
-  business_name: '',
-  functions: '',
-  business_context: '',
-})
+const isEditingName = ref(false)
+const editingNameValue = ref('')
 
-const changeUpdateVisible = (value: boolean) => {
-  isVisibleUpdate.value = value
+const startEditName = () => {
+  editingNameValue.value = assistantProfile.value?.assistant_name || ''
+  isEditingName.value = true
 }
 
-const updateAssistan = async () => {
-  await updateAssistantProfile(updateAssistantProfileParams)
+const saveEditName = async () => {
+  const trimmed = editingNameValue.value.trim()
+  if (!trimmed || trimmed === assistantProfile.value?.assistant_name) {
+    isEditingName.value = false
+    return
+  }
+  await updateAssistantProfile({ assistant_name: trimmed })
   if (isUpdateAssistantProfileSuccess.value) {
     await getAssistantProfile()
-    toast.add({
-      severity: 'success',
-      summary: 'Asistente actualizado',
-      detail: 'El asistente se actualizó correctamente',
-      life: 3000,
-    })
+    toast.add({ severity: 'success', summary: 'Nombre actualizado', life: 2000 })
   }
-  isVisibleUpdate.value = false
+  isEditingName.value = false
 }
 
-watch(
-  isVisibleUpdate,
-  () => {
-    if (assistantProfile && isVisibleUpdate.value) {
-      updateAssistantProfileParams.assistant_name = assistantProfile?.value?.assistant_name || ''
-      updateAssistantProfileParams.business_name = assistantProfile?.value?.business_name || ''
-      updateAssistantProfileParams.functions = assistantProfile?.value?.functions || ''
-      updateAssistantProfileParams.business_context =
-        assistantProfile?.value?.business_context || ''
-    }
-  },
-  { immediate: true },
-)
+const cancelEditName = () => {
+  isEditingName.value = false
+}
 
 const totalMessagesInConversation = computed(() => {
   return conversations.value?.reduce((acc, curr) => {
@@ -182,14 +179,6 @@ const integrations = [
     enabled: true,
   },
   {
-    name: 'Mercado Libre',
-    description: 'Integración Mercado Libre, Contestar preguntas sin responder',
-    icon: 'pi pi-chat',
-    tone: 'warning',
-    to: 'meli-integration',
-    enabled: false,
-  },
-  {
     name: 'Google Calendar',
     description: 'Integración Google Calendar, gestiona eventos y sincronización',
     icon: 'pi pi-calendar',
@@ -214,11 +203,35 @@ const integrations = [
     enabled: true,
   },
   {
+    name: 'Slack',
+    description: 'Conecta el asistente a tu workspace de Slack para responder mensajes automáticamente',
+    icon: 'pi pi-slack',
+    tone: 'primary',
+    to: 'slack-integration',
+    enabled: true,
+  },
+  {
+    name: 'Telegram',
+    description: 'Conecta el asistente a tu bot de Telegram para responder mensajes automáticamente',
+    icon: 'pi pi-send',
+    tone: 'info',
+    to: 'telegram-integration',
+    enabled: true,
+  },
+  {
     name: 'Comandos del Sistema',
     description: 'Permite al asistente ejecutar comandos en el servidor Linux con confirmación y lista negra',
     icon: 'pi pi-server',
     tone: 'danger',
     to: 'system-commands',
+    enabled: true,
+  },
+  {
+    name: 'Cron Jobs',
+    description: 'Gestiona tareas programadas: envía datos por WhatsApp, Telegram o Slack con frecuencia configurable',
+    icon: 'pi pi-clock',
+    tone: 'warning',
+    to: 'cron-jobs',
     enabled: true,
   },
   {
@@ -235,6 +248,14 @@ const integrations = [
     icon: 'pi pi-code',
     tone: 'primary',
     to: 'functions',
+    enabled: true,
+  },
+  {
+    name: 'API Keys',
+    description: 'Gestiona las API keys para acceder al asistente desde aplicaciones externas',
+    icon: 'pi pi-key',
+    tone: 'warning',
+    to: 'my-account',
     enabled: true,
   },
 ]
@@ -299,37 +320,70 @@ const integrations = [
                   <i class="pi pi-sparkles"></i>
                 </div>
                 <div class="profile-details">
-                  <h3>{{ assistantProfile?.assistant_name }}</h3>
+                  <div v-if="isEditingName" class="name-edit">
+                    <InputText
+                      v-model="editingNameValue"
+                      size="small"
+                      autofocus
+                      @keyup.enter="saveEditName"
+                      @keyup.escape="cancelEditName"
+                      @blur="saveEditName"
+                    />
+                    <i
+                      v-if="isUpdateAssistantProfilePending"
+                      class="pi pi-spin pi-spinner name-edit-spinner"
+                    />
+                  </div>
+                  <h3 v-else class="name-clickable" @click="startEditName" title="Click para editar">
+                    {{ assistantProfile?.assistant_name }}
+                    <i class="pi pi-pencil name-pencil-icon" />
+                  </h3>
                   <p>Asistente Virtual</p>
                 </div>
               </div>
-              <Button
-                icon="pi pi-pencil"
-                class="edit-button"
-                size="small"
-                @click="isVisibleUpdate = true"
-                title="Editar asistente"
-              />
             </div>
           </template>
           <template #content>
             <div class="profile-content">
-              <div class="info-item">
-                <label>Empresa</label>
-                <span>{{ assistantProfile?.business_name }}</span>
+              <div class="tts-row">
+                <div class="tts-info">
+                  <i class="pi pi-volume-up tts-icon"></i>
+                  <span class="tts-label">Respuestas en Audio</span>
+                </div>
+                <ToggleSwitch :modelValue="ttsEnabled" @update:modelValue="toggleTts" />
               </div>
-              <div class="info-item">
-                <label>Contexto de Negocio</label>
-                <ScrollPanel class="context-scroll">
-                  <p>{{ assistantProfile?.business_context }}</p>
-                </ScrollPanel>
+
+            </div>
+          </template>
+        </Card>
+
+        <!-- Quick Access Card -->
+        <Card v-if="assistantProfile" class="quick-access-card">
+          <template #header>
+            <div class="quick-access-header">
+              <div class="quick-access-icon"><i class="pi pi-comments"></i></div>
+              <div>
+                <h3>Chat</h3>
+                <p>Chatea con tu asistente desde la interfaz web</p>
               </div>
-              <div class="profile-actions">
-                <RouterLink class="sandbox-button" :to="{ name: 'sandbox' }">
-                  <i class="pi pi-shield"></i>
-                  Sandbox Testing
-                </RouterLink>
-              </div>
+            </div>
+          </template>
+          <template #content>
+            <div class="quick-access-actions">
+              <RouterLink class="qa-btn qa-btn--primary" :to="{ name: 'sandbox' }">
+                <i class="pi pi-comment"></i>
+                <div>
+                  <span class="qa-btn-label">Chat UI</span>
+                  <span class="qa-btn-desc">Conversación con IA en tiempo real</span>
+                </div>
+              </RouterLink>
+              <RouterLink class="qa-btn qa-btn--secondary" :to="{ name: 'conversation' }">
+                <i class="pi pi-list"></i>
+                <div>
+                  <span class="qa-btn-label">Conversaciones</span>
+                  <span class="qa-btn-desc">Historial de todas las conversaciones</span>
+                </div>
+              </RouterLink>
             </div>
           </template>
         </Card>
@@ -436,27 +490,6 @@ const integrations = [
           />
         </div>
 
-        <div class="form-field">
-          <label for="business_name">Nombre de la Empresa</label>
-          <InputText
-            id="business_name"
-            v-model="assistantProfileParams.business_name"
-            placeholder="Ingresa el nombre de la empresa"
-            required
-          />
-        </div>
-
-        <div class="form-field">
-          <label for="business_context">Contexto del Negocio</label>
-          <Textarea
-            id="business_context"
-            v-model="assistantProfileParams.business_context"
-            placeholder="Describe el contexto de tu negocio"
-            rows="4"
-            required
-          />
-        </div>
-
         <div class="modal-actions">
           <Button
             type="button"
@@ -469,58 +502,6 @@ const integrations = [
       </form>
     </DefaultModal>
 
-    <DefaultModal
-      :isVisible="isVisibleUpdate"
-      :title="modalTitleUpdate"
-      @update:visible="changeUpdateVisible"
-    >
-      <form @submit.prevent="updateAssistan" class="modal-form">
-        <div class="form-field">
-          <label for="update_assistant_name">Nombre del Asistente</label>
-          <InputText
-            id="update_assistant_name"
-            v-model="updateAssistantProfileParams.assistant_name"
-            placeholder="Ingresa el nombre del asistente"
-            required
-          />
-        </div>
-
-        <div class="form-field">
-          <label for="update_business_name">Nombre de la Empresa</label>
-          <InputText
-            id="update_business_name"
-            v-model="updateAssistantProfileParams.business_name"
-            placeholder="Ingresa el nombre de la empresa"
-            required
-          />
-        </div>
-
-        <div class="form-field">
-          <label for="update_business_context">Contexto del Negocio</label>
-          <Textarea
-            id="update_business_context"
-            v-model="updateAssistantProfileParams.business_context"
-            placeholder="Describe el contexto de tu negocio"
-            rows="4"
-            required
-          />
-        </div>
-
-        <div class="modal-actions">
-          <Button
-            type="button"
-            label="Cancelar"
-            severity="secondary"
-            @click="() => changeUpdateVisible(false)"
-          />
-          <Button
-            type="submit"
-            label="Actualizar Asistente"
-            :loading="isUpdateAssistantProfilePending"
-          />
-        </div>
-      </form>
-    </DefaultModal>
   </div>
 
   <Toast />
@@ -540,11 +521,11 @@ const integrations = [
   display: flex;
   justify-content: space-between;
   align-items: center;
-  background: var(--do-bg-white);
+  background: rgba(255,255,255,0.03);
   padding: 0.85rem 1rem;
   border-radius: 0.75rem;
-  box-shadow: 0 1px 4px var(--shadow-light);
-  border: 1px solid var(--do-border-light);
+  box-shadow: none;
+  border: 1px solid rgba(255,255,255,0.07);
   margin-bottom: 1rem;
 }
 
@@ -583,7 +564,7 @@ const integrations = [
 
 .dashboard-subtitle {
   font-size: 0.85rem;
-  color: var(--do-text-muted);
+  color: var(--do-text-secondary);
   margin: 0;
   line-height: 1.5;
 }
@@ -599,13 +580,11 @@ const integrations = [
 /* Profile Section */
 .profile-section {
   display: flex;
-  flex-direction: row;
+  flex-direction: column;
   gap: 0.85rem;
-  align-items: flex-start;
 }
 
 .profile-section > * {
-  flex: 1;
   min-width: 0;
 }
 
@@ -623,7 +602,7 @@ const integrations = [
 
 .section-header p {
   font-size: 0.85rem;
-  color: var(--do-text-muted);
+  color: var(--do-text-secondary);
   line-height: 1.6;
 }
 
@@ -666,7 +645,7 @@ const integrations = [
 }
 
 .profile-details p {
-  color: var(--do-text-muted);
+  color: var(--do-text-secondary);
   margin: 0;
 }
 
@@ -703,10 +682,35 @@ const integrations = [
   line-height: 1.6;
 }
 
+.tts-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0.5rem 0;
+  border-top: 1px solid rgba(255,255,255,0.07);
+}
+
+.tts-info {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.tts-icon {
+  color: var(--do-blue);
+  font-size: 0.9rem;
+}
+
+.tts-label {
+  font-size: 0.875rem;
+  font-weight: 500;
+  color: var(--do-text);
+}
+
 .profile-actions {
   margin-top: 0.65rem;
   padding-top: 0.65rem;
-  border-top: 1px solid var(--do-border-light);
+  border-top: 1px solid rgba(255,255,255,0.07);
   display: flex;
   gap: 0.75rem;
   flex-wrap: wrap;
@@ -741,6 +745,98 @@ const integrations = [
 
 .sandbox-button i {
   font-size: 1.1rem;
+}
+
+/* Quick Access Card */
+.quick-access-card {
+  margin-top: 1rem;
+}
+
+.quick-access-header {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 1rem 1rem 0;
+}
+
+.quick-access-header h3 {
+  margin: 0;
+  font-size: 0.95rem;
+  font-weight: 600;
+  color: var(--do-text);
+}
+
+.quick-access-header p {
+  margin: 0;
+  font-size: 0.75rem;
+  color: var(--do-text-muted);
+}
+
+.quick-access-icon {
+  width: 2.2rem;
+  height: 2.2rem;
+  border-radius: 0.5rem;
+  background: linear-gradient(135deg, #3b82f6, #06b6d4);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  font-size: 1rem;
+  color: #fff;
+}
+
+.quick-access-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.qa-btn {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.65rem 0.85rem;
+  border-radius: 0.5rem;
+  text-decoration: none;
+  transition: background 0.15s, transform 0.15s;
+  border: 1px solid rgba(255,255,255,0.06);
+}
+
+.qa-btn i {
+  font-size: 1.1rem;
+  flex-shrink: 0;
+}
+
+.qa-btn-label {
+  display: block;
+  font-size: 0.85rem;
+  font-weight: 600;
+}
+
+.qa-btn-desc {
+  display: block;
+  font-size: 0.72rem;
+  opacity: 0.6;
+}
+
+.qa-btn--primary {
+  background: rgba(59,130,246,0.12);
+  color: #60a5fa;
+}
+
+.qa-btn--primary:hover {
+  background: rgba(59,130,246,0.22);
+  transform: translateX(3px);
+}
+
+.qa-btn--secondary {
+  background: rgba(255,255,255,0.04);
+  color: var(--do-text-secondary);
+}
+
+.qa-btn--secondary:hover {
+  background: rgba(255,255,255,0.08);
+  transform: translateX(3px);
 }
 
 /* Stats Card */
@@ -784,9 +880,9 @@ const integrations = [
 .stat-item {
   text-align: center;
   padding: 0.65rem;
-  background: var(--vt-c-gray-50);
+  background: rgba(255,255,255,0.04);
   border-radius: 0.5rem;
-  border: 1px solid var(--do-border-light);
+  border: 1px solid rgba(255,255,255,0.07);
   position: relative;
 }
 
@@ -799,7 +895,7 @@ const integrations = [
 
 .stat-label {
   font-size: 0.75rem;
-  color: var(--do-text-muted);
+  color: var(--do-text-secondary);
   font-weight: 500;
 }
 
@@ -839,8 +935,8 @@ const integrations = [
 /* Integration Buttons */
 .integration-button {
   position: relative;
-  border: 1px solid var(--do-border);
-  background: var(--do-bg-white);
+  border: 1px solid rgba(255,255,255,0.08);
+  background: rgba(255,255,255,0.03);
   width: 100%;
   text-align: left;
   padding: 0.55rem 0.7rem;
@@ -851,13 +947,15 @@ const integrations = [
   transition:
     border-color var(--transition-fast),
     box-shadow var(--transition-fast),
-    transform var(--transition-fast);
+    transform var(--transition-fast),
+    background var(--transition-fast);
 }
 
 .integration-button:not(.is-disabled):hover,
 .integration-button:not(.is-disabled):focus-visible {
-  border-color: var(--do-blue);
-  box-shadow: 0 3px 10px var(--shadow-light);
+  border-color: rgba(59,130,246,0.4);
+  background: rgba(59,130,246,0.06);
+  box-shadow: 0 0 0 1px rgba(59,130,246,0.2);
   outline: none;
 }
 
@@ -891,8 +989,8 @@ const integrations = [
   font-size: 0.72rem;
   font-weight: 600;
   color: var(--do-text-secondary);
-  border: 1px solid var(--do-border-light);
-  background: var(--vt-c-gray-50);
+  border: 1px solid rgba(255,255,255,0.1);
+  background: rgba(255,255,255,0.05);
   border-radius: 999px;
   padding: 0.15rem 0.45rem;
 }
@@ -1051,7 +1149,9 @@ const integrations = [
 
 :deep(.form-field .p-inputtext),
 :deep(.form-field .p-inputtextarea) {
-  border: 2px solid var(--do-border-light);
+  background: rgba(255,255,255,0.05);
+  border: 1.5px solid rgba(255,255,255,0.1);
+  color: var(--do-text);
   border-radius: 0.5rem;
   padding: 0.55rem;
   transition: all 0.3s ease;
@@ -1068,7 +1168,23 @@ const integrations = [
   justify-content: flex-end;
   gap: 0.6rem;
   padding-top: 0.65rem;
-  border-top: 1px solid var(--do-border-light);
+  border-top: 1px solid rgba(255,255,255,0.07);
+}
+
+/* PrimeVue Card Dark Overrides */
+:deep(.p-card) {
+  background: rgba(255,255,255,0.03);
+  border: 1px solid rgba(255,255,255,0.07);
+  color: var(--do-text);
+}
+
+:deep(.p-card-header) {
+  border-bottom: 1px solid rgba(255,255,255,0.07);
+  background: transparent;
+}
+
+:deep(.p-card-content) {
+  background: transparent;
 }
 
 /* Responsive Design */
@@ -1152,5 +1268,30 @@ const integrations = [
   :deep(.stats-card .p-card-header) {
     padding: 1rem 1.25rem;
   }
+}
+
+.name-clickable {
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+}
+.name-pencil-icon {
+  font-size: 0.75rem;
+  opacity: 0;
+  transition: opacity 0.15s;
+  color: var(--p-primary-color, #6366f1);
+}
+.name-clickable:hover .name-pencil-icon {
+  opacity: 1;
+}
+.name-edit {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+.name-edit-spinner {
+  font-size: 0.9rem;
+  color: var(--p-primary-color, #6366f1);
 }
 </style>

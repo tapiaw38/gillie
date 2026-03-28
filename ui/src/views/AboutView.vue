@@ -187,7 +187,7 @@ const scheduleDemo = () => {
   margin: 0 auto;
   padding: 2rem;
   min-height: 100vh;
-  background: linear-gradient(135deg, #f8fafc 0%, #e2e8f0 100%);
+  background: var(--do-bg);
 }
 
 /* Header Section */
@@ -220,19 +220,15 @@ const scheduleDemo = () => {
 }
 
 .page-title {
-  font-size: 2.5rem;
+  font-size: 1.6rem;
   font-weight: 700;
-  color: #1e293b;
   margin: 0 0 0.5rem 0;
-  background: linear-gradient(135deg, #1e293b 0%, #475569 100%);
-  -webkit-background-clip: text;
-  -webkit-text-fill-color: transparent;
-  background-clip: text;
+  color: var(--do-text);
 }
 
 .page-subtitle {
   font-size: 1.125rem;
-  color: #64748b;
+  color: var(--do-text-muted);
   margin: 0;
   font-weight: 400;
 }
@@ -292,7 +288,7 @@ const scheduleDemo = () => {
 }
 
 .about-text p {
-  color: #64748b;
+  color: var(--do-text-muted);
   line-height: 1.7;
   margin-bottom: 1.5rem;
 }
@@ -307,7 +303,7 @@ const scheduleDemo = () => {
   width: 100%;
   height: 250px;
   border-radius: 1rem;
-  background: linear-gradient(135deg, #e0e7ff 0%, #c7d2fe 100%);
+  background: rgba(99,102,241,0.1);
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -342,7 +338,7 @@ const scheduleDemo = () => {
 }
 
 :deep(.features-card .p-card-header) {
-  background: linear-gradient(135deg, #f0f9ff 0%, #e0f2fe 100%);
+  background: rgba(255,255,255,0.04);
   padding: 1.5rem 2rem;
   border-bottom: 1px solid #e2e8f0;
 }
@@ -392,14 +388,14 @@ const scheduleDemo = () => {
   display: flex;
   gap: 1rem;
   padding: 1.5rem;
-  background: #f8fafc;
+  background: rgba(255,255,255,0.04);
   border-radius: 0.75rem;
   border: 1px solid #e2e8f0;
   transition: all 0.3s ease;
 }
 
 .feature-item:hover {
-  background: white;
+  background: rgba(255,255,255,0.07);
   box-shadow: 0 4px 20px rgba(0, 0, 0, 0.08);
   transform: translateY(-2px);
 }
@@ -426,7 +422,7 @@ const scheduleDemo = () => {
 
 .feature-content p {
   margin: 0;
-  color: #64748b;
+  color: var(--do-text-muted);
   font-size: 0.875rem;
   line-height: 1.6;
 }
@@ -446,7 +442,7 @@ const scheduleDemo = () => {
 }
 
 :deep(.contact-card .p-card-header) {
-  background: linear-gradient(135deg, #f0fdf4 0%, #dcfce7 100%);
+  background: rgba(16,185,129,0.08);
   padding: 1.5rem 2rem;
   border-bottom: 1px solid #e2e8f0;
 }
@@ -464,7 +460,7 @@ const scheduleDemo = () => {
 }
 
 .contact-content p {
-  color: #64748b;
+  color: var(--do-text-muted);
   font-size: 1.125rem;
   margin: 0;
   line-height: 1.7;

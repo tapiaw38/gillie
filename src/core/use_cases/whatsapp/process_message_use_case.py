@@ -141,7 +141,14 @@ class ProcessWhatsAppMessageUseCase:
 
                 add_message_usecase = AddMessageUseCase(self.context_factory)
 
-                message_input = MessageInput(content=message_text, context=None)
+                message_input = MessageInput(
+                    content=message_text,
+                    context=(
+                        "[CANAL: whatsapp] El usuario está chateando por WhatsApp. "
+                        "Si el usuario pide una captura de pantalla o imagen de la pantalla, usa send_screenshot. "
+                        "Si el usuario pide recibir un archivo, usa send_file."
+                    ),
+                )
                 await add_message_usecase.execute(
                     conversation_id=conversation_id,
                     message=message_input,
@@ -156,7 +163,6 @@ class ProcessWhatsAppMessageUseCase:
 
                 all_messages = updated_conversation.messages
 
-                # Find the last user message and collect all assistant messages after it
                 last_user_idx = next(
                     (i for i in range(len(all_messages) - 1, -1, -1)
                      if all_messages[i].sender != SenderEnum.assistant),
@@ -183,6 +189,8 @@ class ProcessWhatsAppMessageUseCase:
                         for segment in parse_message_segments(assistant_msg.content):
                             if segment["type"] == "image":
                                 last_sent = wa_client.send_image(sender_phone, segment["content"])
+                            elif segment["type"] == "document":
+                                last_sent = wa_client.send_document(sender_phone, segment["content"])
                             elif segment["content"]:
                                 last_sent = wa_client.send_message(sender_phone, segment["content"])
                         if not last_sent:

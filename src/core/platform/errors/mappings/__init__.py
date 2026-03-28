@@ -11,6 +11,7 @@ from .memory import *
 from .calendar import *
 from .drive import *
 from .whatsapp_device import *
+from .job import *
 
 __all__ = [
     # Common errors
@@ -95,6 +96,7 @@ __all__ = [
     "DriveSearchError",
     "DriveSyncError",
     "DriveIndexNotFoundError",
+    "DriveCredentialsError",
 
     # WhatsApp Device errors
     "WhatsAppDeviceCreateError",
@@ -110,4 +112,17 @@ __all__ = [
     "WhatsAppDeviceSendError",
     "WhatsAppDeviceNotConnectedError",
     "WhatsAppDevicePhoneRequiredError",
+
+    # Job errors
+    "JobCreateError",
+    "JobGetNotFoundError",
+    "JobGetQueryError",
+    "JobListQueryError",
+    "JobUpdateError",
+    "JobDeleteError",
+    "JobRunError",
+    "JobNameRequiredError",
+    "JobCronExprRequiredError",
+    "JobInvalidSourceError",
+    "JobInvalidDestinationError",
 ]

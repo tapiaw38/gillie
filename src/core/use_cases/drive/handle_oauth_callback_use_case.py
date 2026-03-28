@@ -20,7 +20,7 @@ class HandleOAuthCallbackUseCase:
 
     def execute(self, user_id: str, code: str) -> dict:
         try:
-            token_config = self.context_factory.integrations.google_drive.exchange_code(code)
+            token_config = self.context_factory.integrations.google_drive.handle_oauth_callback(user_id, code)
 
             profile = self.context_factory.repositories.profile.find_by_user_id(user_id)
             if not profile:

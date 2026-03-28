@@ -81,7 +81,14 @@ async def _handle_incoming_message(device_id: str, sender_jid: str, text: str):
 
         await usecases.conversation.add_message_usecase.execute(
             conversation_id=conversation_id,
-            message=MessageInput(content=text, context=None),
+            message=MessageInput(
+                content=text,
+                context=(
+                    "[CANAL: whatsapp] El usuario está chateando por WhatsApp. "
+                    "Si el usuario pide una captura de pantalla o imagen de la pantalla, usa send_screenshot. "
+                    "Si el usuario pide recibir un archivo, usa send_file."
+                ),
+            ),
             sender=SenderEnum.user,
             user_id=user_id,
             auth_token=None,
@@ -108,6 +115,8 @@ async def _handle_incoming_message(device_id: str, sender_jid: str, text: str):
             for segment in parse_message_segments(msg.content):
                 if segment["type"] == "image":
                     await neonize.send_image(device_id, sender_jid, segment["content"])
+                elif segment["type"] == "document":
+                    await neonize.send_document(device_id, sender_jid, segment["content"])
                 elif segment["content"]:
                     await neonize.send_text(device_id, sender_jid, segment["content"])
             logger.info(f"[device:{device_id}] Replied to {sender_jid}")

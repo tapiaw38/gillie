@@ -5,10 +5,8 @@ from typing import Optional
 @dataclass
 class ProfileConfig:
     assistant_name: str
-    business_name: str
-    business_context: str = ""
+    business_name: str = ""
     functions: str = ""
-    role: str = "seller"
 
 
 @dataclass
@@ -35,6 +33,7 @@ class OpenAIServiceConfig:
     max_tokens: int = 2000
     timeout: float = 45.0
     max_retries: int = 3
+    auth_type: str = "api_key"  # "api_key" | "bearer"
 
 
 @dataclass
@@ -80,6 +79,20 @@ class S3ServiceConfig:
     secret_access_key: str = ""
     region: str = "us-east-1"
     bucket_name: str = ""
+
+
+@dataclass
+class StorageServiceConfig:
+    backend: str = "local"  # "s3" | "local"
+    local_path: str = ""
+    local_base_url: str = "http://localhost:8000/api/storage"
+
+
+@dataclass
+class VisionServiceConfig:
+    api_key: str = ""
+    base_url: str = ""
+    model: str = ""
 
 
 @dataclass
@@ -145,6 +158,7 @@ class ServicesConfig:
     langchain: LangChainServiceConfig = field(default_factory=LangChainServiceConfig)
     qdrant: QdrantServiceConfig = field(default_factory=QdrantServiceConfig)
     embeddings: EmbeddingsServiceConfig = field(default_factory=EmbeddingsServiceConfig)
+    storage: StorageServiceConfig = field(default_factory=StorageServiceConfig)
     s3: S3ServiceConfig = field(default_factory=S3ServiceConfig)
     tts: TTSServiceConfig = field(default_factory=TTSServiceConfig)
     stt: STTServiceConfig = field(default_factory=STTServiceConfig)
@@ -154,6 +168,7 @@ class ServicesConfig:
     google_drive: GoogleDriveServiceConfig = field(default_factory=GoogleDriveServiceConfig)
     langsmith: LangSmithServiceConfig = field(default_factory=LangSmithServiceConfig)
     llm: LLMExtendedServiceConfig = field(default_factory=LLMExtendedServiceConfig)
+    vision: VisionServiceConfig = field(default_factory=VisionServiceConfig)
 
 
 @dataclass
@@ -196,3 +211,4 @@ class AssistantConfig:
     logging: LoggingConfig = field(default_factory=LoggingConfig)
     tunnel: TunnelConfig = field(default_factory=TunnelConfig)
     expose: ExposeConfig = field(default_factory=ExposeConfig)
+    workspace: str = ""  # Base directory for file tools. Empty = auto-detect from cwd.

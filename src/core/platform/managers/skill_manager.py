@@ -34,6 +34,10 @@ _MEMORY_ROOT_TEMPLATE = """\
 
 Árbol de conocimiento del asistente. Cada sección puede referenciar skills específicas.
 
+## Reglas y comportamiento
+
+ver rules.skill.md
+
 ## Preguntas Frecuentes
 
 ver faqs.skill.md
@@ -45,6 +49,41 @@ ver general.skill.md
 ## Hechos Recordados
 
 ver facts.skill.md
+
+## Soluciones Registradas
+
+ver solutions.skill.md
+"""
+
+_RULES_SKILL_TEMPLATE = """\
+# Reglas del Asistente
+
+## Formato y lenguaje
+- Responde siempre en español, de forma clara y concisa.
+- Usa texto plano en las respuestas; no uses Markdown innecesario.
+- Las URLs deben ir limpias, sin paréntesis, comillas ni corchetes antes o después.
+
+## Archivos Office (Word, Excel, PowerPoint) — REGLA CRÍTICA
+NUNCA escribas sintaxis Markdown dentro de documentos .docx, .xlsx o .pptx.
+Estos formatos NO interpretan Markdown — `![alt](url)`, `**texto**`, `*texto*`, `# Título`, etc.
+se insertan como texto literal y rompen el documento.
+- Para imágenes: usa `insert_image_docx`, `insert_image_excel` o `insert_image_pptx`.
+- Para contenido: usa `write_docx`, `modify_docx` y herramientas equivalentes.
+- NUNCA escribas una URL de imagen como texto en el documento; eso inserta un enlace roto, no una imagen.
+
+## Automatización de browser — REGLA CRÍTICA
+Ante CUALQUIER tarea que involucre un navegador (abrir URL, hacer clic, llenar formularios,
+enviar mensajes, hacer scraping, etc.) DEBES llamar a `browser_connect` como PRIMER tool, siempre.
+- NUNCA uses `run_shell` ni ningún otro tool para abrir Chrome/Chromium/Firefox.
+- NUNCA ejecutes `google-chrome`, `xdg-open` ni ningún comando de navegador por shell.
+- `browser_connect` relanza Chrome con depuración remota usando el perfil real, preservando sesiones.
+- Flujo: `browser_connect` → `browser_switch_tab` → `browser_navigate` / `browser_evaluate` / `browser_click` / `browser_type`.
+- Nunca le pidas al usuario que haga algo manualmente en el navegador.
+
+## Comportamiento general
+- Actúa como asistente personal: empático, directo y eficiente.
+- Prefiere usar herramientas disponibles antes de pedir información al usuario.
+- Ante tareas de archivos, workspace o shell: actúa directamente sin pedir confirmación innecesaria.
 """
 
 
@@ -53,6 +92,7 @@ class SkillManager:
         self.memory_dir = memory_dir
         self.memory_dir.mkdir(parents=True, exist_ok=True)
         self._ensure_memory_root()
+        self._ensure_rules_skill()
 
     # ─── Generic skill operations ──────────────────────────────────────────────
 
@@ -101,6 +141,21 @@ class SkillManager:
         if not path.exists():
             path.write_text(_MEMORY_ROOT_TEMPLATE, encoding="utf-8")
             logger.info("Created default memory.md at %s", path)
+        self._ensure_solutions_skill()
+
+    def _ensure_solutions_skill(self) -> None:
+        """Create solutions.skill.md with a default header if it does not exist yet."""
+        path = self._skill_path("solutions")
+        if not path.exists():
+            path.write_text("# Soluciones Registradas\n", encoding="utf-8")
+            logger.info("Created default solutions.skill.md at %s", path)
+
+    def _ensure_rules_skill(self) -> None:
+        """Create rules.skill.md with default system rules if it does not exist yet."""
+        path = self._skill_path("rules")
+        if not path.exists():
+            path.write_text(_RULES_SKILL_TEMPLATE, encoding="utf-8")
+            logger.info("Created default rules.skill.md at %s", path)
 
     def _resolve_references(self, content: str) -> str:
         """
@@ -151,6 +206,128 @@ class SkillManager:
     def update_general_memory(self, content: str) -> None:
         self.save_skill("general", content)
 
+    def append_general_knowledge(self, content: str, category: str = "General") -> str:
+        """
+        Append a note to general.skill.md, skipping if a similar note already exists.
+        Returns the note ID (existing if duplicate, new if added).
+        """
+        from datetime import date
+
+        raw = self.load_skill("general")
+        if not raw.strip():
+            raw = "# Conocimiento General\n"
+
+        existing_id = self._find_similar_note(content, raw)
+        if existing_id:
+            logger.info("Skipped duplicate note — similar note %s already exists", existing_id)
+            return existing_id
+
+        note_id = uuid.uuid4().hex[:8]
+        today = date.today().isoformat()
+        section_header = "## Notas Importantes"
+        note_block = (
+            f"\n<!-- note: {note_id} -->\n"
+            f"**[{category} — {today}]** {content}\n"
+        )
+
+        if section_header in raw:
+            raw = raw.rstrip() + "\n" + note_block
+        else:
+            raw = raw.rstrip() + f"\n\n{section_header}\n" + note_block
+
+        self.save_skill("general", raw)
+        logger.info("Appended general knowledge note %s: %s", note_id, content[:80])
+        return note_id
+
+    def _find_similar_note(self, content: str, existing_raw: str, threshold: float = 0.45) -> Optional[str]:
+        """
+        Return the ID of an existing note that is semantically similar to content,
+        based on keyword overlap. Returns None if no similar note is found.
+        """
+        _STOP = {
+            "el", "la", "los", "las", "de", "en", "y", "a", "que", "es", "un",
+            "una", "su", "se", "lo", "por", "con", "me", "mi", "te", "si",
+            "the", "a", "an", "is", "are", "was", "were", "be", "been",
+            "i", "my", "me", "you", "your", "he", "she", "it", "we", "they",
+        }
+
+        def _keywords(text: str):
+            words = re.findall(r"[a-záéíóúñüA-ZÁÉÍÓÚÑÜ]{3,}", text.lower())
+            return set(words) - _STOP
+
+        new_kw = _keywords(content)
+        if len(new_kw) < 3:
+            return None
+
+        pattern = re.compile(
+            r"<!--\s*note:\s*([a-f0-9]+)\s*-->\n\*\*\[.+?\]\*\*\s*(.+?)(?=\n<!--\s*note:|\Z)",
+            re.DOTALL,
+        )
+        for m in pattern.finditer(existing_raw):
+            note_id, note_text = m.group(1), m.group(2)
+            note_kw = _keywords(note_text)
+            if not note_kw:
+                continue
+            overlap = len(new_kw & note_kw) / min(len(new_kw), len(note_kw))
+            if overlap >= threshold:
+                logger.info(
+                    "Found similar note %s (overlap=%.2f): %s", note_id, overlap, note_text[:60]
+                )
+                return note_id
+        return None
+
+    def overwrite_general_memory(self, content: str) -> None:
+        """Replace the entire general.skill.md with the given content."""
+        self.save_skill("general", content.strip() + "\n")
+        logger.info("general.skill.md overwritten (%d chars)", len(content))
+
+    # ─── Solutions memory (operates on solutions.skill.md) ────────────────────
+
+    def append_solution(
+        self,
+        problem: str,
+        solution: str,
+        context: Optional[str] = None,
+        effective: bool = True,
+    ) -> str:
+        """
+        Append a solution block to solutions.skill.md.
+
+        Returns the generated solution ID, or the ID of an existing duplicate
+        if a similar problem description was already recorded.
+        """
+        from datetime import date
+
+        raw = self.load_skill("solutions")
+        if not raw.strip():
+            raw = "# Soluciones Registradas\n"
+
+        existing_id = self._find_similar_note(problem, raw)
+        if existing_id:
+            logger.info("Skipped duplicate solution — similar entry %s already exists", existing_id)
+            return existing_id
+
+        solution_id = uuid.uuid4().hex[:8]
+        today = date.today().isoformat()
+        effective_label = "Sí" if effective else "No"
+
+        lines = [
+            f"\n<!-- solution: {solution_id} -->",
+            f"## [{today}] Problema: {problem}",
+            f"**Problema:** {problem}",
+            f"**Solución:** {solution}",
+        ]
+        if context:
+            lines.append(f"**Contexto:** {context}")
+        lines.append(f"**Efectiva:** {effective_label}")
+        lines.append("---")
+
+        block = "\n".join(lines)
+        raw = raw.rstrip() + "\n" + block + "\n"
+        self.save_skill("solutions", raw)
+        logger.info("Saved solution %s: %s", solution_id, problem[:80])
+        return solution_id
+
     # ─── Facts memory (operates on facts.skill.md) ────────────────────────────
 
     def save_memory_fact(self, content: str, category: str = "General") -> str:
@@ -192,6 +369,7 @@ class SkillManager:
             ("facts", "facts"),
             ("general", "general"),
             ("faqs", "faqs"),
+            ("solutions", "solutions"),
         ]
 
         all_sections: list[str] = []
@@ -210,7 +388,6 @@ class SkillManager:
             if not found_indices:
                 continue
 
-            # Merge overlapping windows
             merged_ranges: list[tuple[int, int]] = []
             start = max(0, found_indices[0] - window)
             end = min(len(lines) - 1, found_indices[0] + window)
@@ -305,7 +482,6 @@ class SkillManager:
             return False
 
         updated = re.sub(pattern, "", raw, flags=re.DOTALL)
-        # Clean up consecutive separators
         updated = re.sub(r"\n---\n\n---", "\n---", updated)
         updated = updated.strip() + "\n"
         self.save_skill("faqs", updated)
@@ -325,24 +501,19 @@ class SkillManager:
             return []
 
         results = []
-        # Split on id comments
         parts = re.split(r"<!--\s*id:\s*([a-f0-9]+)\s*-->", raw)
-        # parts[0] is header, then alternating: id, block_content
         i = 1
         while i < len(parts) - 1:
             faq_id = parts[i].strip()
             block = parts[i + 1]
             i += 2
 
-            # Extract category (## heading)
             cat_match = re.search(r"^##\s+(.+)$", block, re.MULTILINE)
             category = cat_match.group(1).strip() if cat_match else "General"
 
-            # Extract question
             q_match = re.search(r"\*\*P:\*\*\s*(.+)", block)
             question = q_match.group(1).strip() if q_match else ""
 
-            # Extract answer (may be multi-line until --- or next heading)
             a_match = re.search(r"\*\*R:\*\*\s*([\s\S]+?)(?=\n---|\Z)", block)
             answer = a_match.group(1).strip() if a_match else ""
 

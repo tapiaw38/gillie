@@ -294,7 +294,7 @@ watch(codeMethodsBlock, (newValue) => {
   margin: 0 auto;
   padding: 2rem;
   min-height: 100vh;
-  background: linear-gradient(135deg, #f8fafc 0%, #e2e8f0 100%);
+  background: var(--do-bg);
 }
 
 /* Header Section */
@@ -330,19 +330,15 @@ watch(codeMethodsBlock, (newValue) => {
 }
 
 .integration-title {
-  font-size: 2.5rem;
+  font-size: 1.6rem;
   font-weight: 700;
-  color: #1e293b;
   margin: 0 0 0.5rem 0;
-  background: linear-gradient(135deg, #1e293b 0%, #475569 100%);
-  -webkit-background-clip: text;
-  -webkit-text-fill-color: transparent;
-  background-clip: text;
+  color: var(--do-text);
 }
 
 .integration-subtitle {
   font-size: 1.125rem;
-  color: #64748b;
+  color: var(--do-text-muted);
   margin: 0;
   font-weight: 400;
 }
@@ -354,7 +350,7 @@ watch(codeMethodsBlock, (newValue) => {
   overflow: hidden;
   box-shadow: 0 4px 20px rgba(0, 0, 0, 0.08);
   border: 1px solid #e2e8f0;
-  background: linear-gradient(135deg, #dbeafe 0%, #bfdbfe 100%);
+  background: rgba(59,130,246,0.08);
 }
 
 :deep(.info-card .p-card-content) {
@@ -409,7 +405,7 @@ watch(codeMethodsBlock, (newValue) => {
 }
 
 :deep(.setup-card .p-card-header) {
-  background: linear-gradient(135deg, #f0fdf4 0%, #dcfce7 100%);
+  background: rgba(16,185,129,0.08);
   padding: 1.5rem 2rem;
   border-bottom: 1px solid #e2e8f0;
 }
@@ -445,7 +441,7 @@ watch(codeMethodsBlock, (newValue) => {
 .header-text p {
   margin: 0;
   font-size: 0.875rem;
-  color: #64748b;
+  color: var(--do-text-muted);
 }
 
 :deep(.setup-card .p-card-content) {
@@ -462,14 +458,14 @@ watch(codeMethodsBlock, (newValue) => {
   flex-direction: column;
   gap: 0.75rem;
   padding: 1.5rem;
-  background: #f8fafc;
+  background: rgba(255,255,255,0.04);
   border-radius: 0.75rem;
   border: 1px solid #e2e8f0;
   transition: all 0.3s ease;
 }
 
 .setup-item:hover {
-  background: white;
+  background: rgba(255,255,255,0.07);
   box-shadow: 0 4px 20px rgba(0, 0, 0, 0.08);
   transform: translateY(-1px);
 }
@@ -480,7 +476,7 @@ watch(codeMethodsBlock, (newValue) => {
   gap: 0.5rem;
   font-size: 0.875rem;
   font-weight: 600;
-  color: #64748b;
+  color: var(--do-text-muted);
 }
 
 .setup-label i {
@@ -494,7 +490,7 @@ watch(codeMethodsBlock, (newValue) => {
 }
 
 .setup-value code {
-  background: white;
+  background: rgba(255,255,255,0.06);
   padding: 0.5rem 0.75rem;
   border-radius: 0.5rem;
   border: 1px solid #e2e8f0;
@@ -509,7 +505,7 @@ watch(codeMethodsBlock, (newValue) => {
   align-items: center;
   gap: 0.5rem;
   padding: 0.5rem 0.75rem;
-  background: white;
+  background: rgba(255,255,255,0.04);
   border: 1px solid #e2e8f0;
   border-radius: 0.5rem;
   text-decoration: none;
@@ -588,7 +584,7 @@ watch(codeMethodsBlock, (newValue) => {
 .code-header-text p {
   margin: 0;
   font-size: 0.875rem;
-  color: #64748b;
+  color: var(--do-text-muted);
 }
 
 :deep(.code-card .p-card-content) {
