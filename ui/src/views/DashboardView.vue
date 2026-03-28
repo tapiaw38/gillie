@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, reactive, computed, onMounted } from 'vue'
+import { ref, reactive, computed, onMounted, watch } from 'vue'
 import ToggleSwitch from 'primevue/toggleswitch'
 import Card from 'primevue/card'
 import Button from 'primevue/button'
@@ -50,6 +50,15 @@ const {
 } = useAssistant()
 
 const ttsEnabled = computed(() => assistantProfile.value?.tts_enabled ?? false)
+const responseLang = ref<'en' | 'es'>('en')
+
+watch(
+  () => assistantProfile.value?.response_language,
+  (lang) => {
+    if (lang === 'en' || lang === 'es') responseLang.value = lang
+  },
+  { immediate: true },
+)
 
 const toggleTts = async (value: boolean) => {
   try {
@@ -60,6 +69,23 @@ const toggleTts = async (value: boolean) => {
       life: 2000,
     })
   } catch {
+    toast.add({ severity: 'error', summary: t('dashboard.errorAudio'), life: 3000 })
+  }
+}
+
+const setResponseLanguage = async (lang: 'en' | 'es') => {
+  const prev = responseLang.value
+  responseLang.value = lang
+  try {
+    await updateAssistantProfile({ response_language: lang })
+    toast.add({
+      severity: 'success',
+      summary: t('myAccount.configSaved'),
+      detail: lang === 'en' ? t('myAccount.langSetEn') : t('myAccount.langSetEs'),
+      life: 2000,
+    })
+  } catch {
+    responseLang.value = prev
     toast.add({ severity: 'error', summary: t('dashboard.errorAudio'), life: 3000 })
   }
 }
@@ -354,6 +380,27 @@ const integrations = computed(() => [
                   <span class="tts-label">{{ t('dashboard.audioResponses') }}</span>
                 </div>
                 <ToggleSwitch :modelValue="ttsEnabled" @update:modelValue="toggleTts" />
+              </div>
+
+              <div class="tts-row">
+                <div class="tts-info">
+                  <i class="pi pi-language tts-icon"></i>
+                  <span class="tts-label">{{ t('myAccount.responseLanguage') }}</span>
+                </div>
+                <div class="lang-toggle">
+                  <button
+                    class="lang-opt"
+                    :class="{ 'lang-opt--active': responseLang === 'en' }"
+                    :disabled="isUpdateAssistantProfilePending"
+                    @click="setResponseLanguage('en')"
+                  >EN</button>
+                  <button
+                    class="lang-opt"
+                    :class="{ 'lang-opt--active': responseLang === 'es' }"
+                    :disabled="isUpdateAssistantProfilePending"
+                    @click="setResponseLanguage('es')"
+                  >ES</button>
+                </div>
               </div>
 
             </div>
@@ -708,6 +755,39 @@ const integrations = computed(() => [
   font-size: 0.875rem;
   font-weight: 500;
   color: var(--do-text);
+}
+
+.lang-toggle {
+  display: flex;
+  border: 1px solid var(--do-border-light);
+  border-radius: 0.4rem;
+  overflow: hidden;
+}
+
+.lang-opt {
+  padding: 0.25rem 0.7rem;
+  font-size: 0.75rem;
+  font-weight: 600;
+  background: transparent;
+  color: var(--do-text-muted);
+  border: none;
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s;
+}
+
+.lang-opt:hover:not(:disabled) {
+  background: rgba(255, 255, 255, 0.06);
+  color: var(--do-text);
+}
+
+.lang-opt--active {
+  background: rgba(59, 130, 246, 0.18) !important;
+  color: var(--do-blue) !important;
+}
+
+.lang-opt:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
 }
 
 .profile-actions {

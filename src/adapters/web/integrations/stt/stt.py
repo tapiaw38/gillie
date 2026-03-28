@@ -13,7 +13,12 @@ class STTIntegration:
         self._executor = ThreadPoolExecutor(max_workers=2)
 
         self.default_settings = {
-            "language": "es-ES",
+            "language": "en-US",
+        }
+
+        self._lang_map = {
+            "en": "en-US",
+            "es": "es-ES",
         }
 
     async def audio_to_text(

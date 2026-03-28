@@ -83,12 +83,21 @@ watch(isRemoveApiKeySuccess, (value) => {
 })
 
 const ttsEnabled = ref(false)
+const responseLang = ref<'en' | 'es'>('en')
 
-watch(assistantProfile, (profile) => {
-  if (profile) {
-    ttsEnabled.value = profile.tts_enabled ?? false
-  }
-})
+watch(
+  () => assistantProfile.value?.tts_enabled,
+  (val) => { ttsEnabled.value = val ?? false },
+  { immediate: true },
+)
+
+watch(
+  () => assistantProfile.value?.response_language,
+  (lang) => {
+    if (lang === 'en' || lang === 'es') responseLang.value = lang
+  },
+  { immediate: true },
+)
 
 const toggleTts = async (value: boolean) => {
   try {
@@ -101,6 +110,28 @@ const toggleTts = async (value: boolean) => {
     })
   } catch {
     ttsEnabled.value = !value
+    toast.add({
+      severity: 'error',
+      summary: t('common.error'),
+      detail: t('myAccount.errorUpdateConfig'),
+      life: 3000,
+    })
+  }
+}
+
+const setResponseLanguage = async (lang: 'en' | 'es') => {
+  const prev = responseLang.value
+  responseLang.value = lang
+  try {
+    await updateAssistantProfile({ response_language: lang })
+    toast.add({
+      severity: 'success',
+      summary: t('myAccount.configSaved'),
+      detail: lang === 'en' ? t('myAccount.langSetEn') : t('myAccount.langSetEs'),
+      life: 3000,
+    })
+  } catch {
+    responseLang.value = prev
     toast.add({
       severity: 'error',
       summary: t('common.error'),
@@ -201,6 +232,37 @@ const removeApiKeyOpenModal = (apiKeyID: string) => {
               :disabled="isUpdateAssistantProfilePending"
               @change="toggleTts(ttsEnabled)"
             />
+          </div>
+        </template>
+      </Card>
+
+      <!-- Response Language Card -->
+      <Card class="tts-card">
+        <template #content>
+          <div class="tts-row">
+            <div class="tts-info">
+              <div class="tts-icon">
+                <i class="pi pi-language"></i>
+              </div>
+              <div class="tts-details">
+                <h3>{{ t('myAccount.responseLanguage') }}</h3>
+                <p>{{ t('myAccount.responseLanguageDesc') }}</p>
+              </div>
+            </div>
+            <div class="lang-toggle">
+              <button
+                class="lang-opt"
+                :class="{ 'lang-opt--active': responseLang === 'en' }"
+                :disabled="isUpdateAssistantProfilePending"
+                @click="setResponseLanguage('en')"
+              >EN</button>
+              <button
+                class="lang-opt"
+                :class="{ 'lang-opt--active': responseLang === 'es' }"
+                :disabled="isUpdateAssistantProfilePending"
+                @click="setResponseLanguage('es')"
+              >ES</button>
+            </div>
           </div>
         </template>
       </Card>
@@ -472,6 +534,41 @@ const removeApiKeyOpenModal = (apiKeyID: string) => {
   margin: 0;
   font-size: 0.875rem;
   color: var(--do-text-muted);
+}
+
+/* Language toggle */
+.lang-toggle {
+  display: flex;
+  border: 1px solid var(--do-border-light);
+  border-radius: 0.5rem;
+  overflow: hidden;
+  flex-shrink: 0;
+}
+
+.lang-opt {
+  padding: 0.35rem 0.85rem;
+  font-size: 0.8rem;
+  font-weight: 600;
+  background: transparent;
+  color: var(--do-text-muted);
+  border: none;
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s;
+}
+
+.lang-opt:hover:not(:disabled) {
+  background: rgba(255, 255, 255, 0.06);
+  color: var(--do-text);
+}
+
+.lang-opt--active {
+  background: rgba(59, 130, 246, 0.18) !important;
+  color: var(--do-blue) !important;
+}
+
+.lang-opt:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
 }
 
 /* API Keys Section */

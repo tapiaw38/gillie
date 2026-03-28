@@ -178,7 +178,11 @@
     "deleteKeyConfirm": "¿Eliminar clave API?",
     "deleteKeyWarning": "Esta acción no se puede deshacer. Las aplicaciones que usen esta clave dejarán de funcionar.",
     "errorAddKeyMsg": "Error al agregar la clave API",
-    "errorDeleteKeyMsg": "Error al eliminar la clave"
+    "errorDeleteKeyMsg": "Error al eliminar la clave",
+    "responseLanguage": "Idioma de respuesta",
+    "responseLanguageDesc": "Idioma que usa el asistente para responder los mensajes",
+    "langSetEn": "El asistente responderá en inglés",
+    "langSetEs": "El asistente responderá en español"
   },
   "conversations": {
     "title": "Conversaciones",

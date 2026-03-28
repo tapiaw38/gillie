@@ -7,6 +7,7 @@ class ProfileConfig:
     assistant_name: str
     business_name: str = ""
     functions: str = ""
+    response_language: str = "en"
 
 
 @dataclass

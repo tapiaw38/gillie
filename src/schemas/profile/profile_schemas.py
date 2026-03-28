@@ -14,6 +14,7 @@ class ProfileInput(BaseModel):
     tool_prompts: Optional[str] = None
     disabled_tools: Optional[List[str]] = None
     tts_enabled: Optional[bool] = None
+    response_language: Optional[str] = None
 
 
 class ProfileStatusInput(BaseModel):
@@ -30,6 +31,7 @@ class ProfileOutputData(BaseModel):
     disabled_tools: Optional[List[str]] = None
     is_active: bool
     tts_enabled: Optional[bool] = False
+    response_language: Optional[str] = "en"
     created_at: Optional[datetime]
     updated_at: Optional[datetime]
     api_keys: Optional[List[ApiKeyOutputData]]
@@ -53,6 +55,7 @@ class ProfileOutput(BaseModel):
                 disabled_tools=profile.disabled_tools,
                 is_active=profile.is_active,
                 tts_enabled=profile.tts_enabled or False,
+                response_language=profile.response_language or "en",
                 created_at=profile.created_at,
                 updated_at=profile.updated_at,
                 api_keys=(

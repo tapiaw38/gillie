@@ -43,7 +43,8 @@ class TextToSpeechService:
         text: str,
         user_id: str,
         conversation_id: str,
-        settings: Optional[Dict[str, Any]] = None
+        settings: Optional[Dict[str, Any]] = None,
+        language: str = "en",
     ) -> Optional[str]:
         """
         Generates audio from text and stores it in S3.
@@ -53,6 +54,7 @@ class TextToSpeechService:
             user_id: ID of the user
             conversation_id: ID of the conversation
             settings: Optional TTS settings (rate, volume, voice_id)
+            language: Language code for TTS (en or es)
 
         Returns:
             URL of the stored audio file or None if generation fails
@@ -63,6 +65,7 @@ class TextToSpeechService:
             # Use default settings if none provided
             if settings is None:
                 settings = self._get_default_settings()
+            settings["language"] = language
 
             # Generate audio
             audio_data = await self._generate_audio(text, settings)

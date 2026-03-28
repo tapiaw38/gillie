@@ -11,21 +11,21 @@ from typing import List
 logger = logging.getLogger(__name__)
 
 SUMMARIZE_PROMPT = (
-    "Eres un asistente experto en resumir conversaciones de soporte al cliente. "
-    "Resume la siguiente conversación en 2-3 párrafos breves en markdown, "
-    "destacando: temas tratados, preguntas frecuentes detectadas y aprendizajes clave. "
-    "Responde solo con el resumen en markdown, sin encabezados adicionales.\n\n"
-    "CONVERSACIÓN:\n{messages}"
+    "You are an expert assistant at summarizing customer support conversations. "
+    "Summarize the following conversation in 2-3 brief markdown paragraphs, "
+    "highlighting: topics discussed, frequently asked questions detected, and key learnings. "
+    "Reply only with the markdown summary, without additional headings.\n\n"
+    "CONVERSATION:\n{messages}"
 )
 
 CONSOLIDATE_PROMPT = (
-    "Eres un asistente de memoria. Tu tarea es consolidar conocimiento.\n\n"
-    "CONOCIMIENTO ACTUAL (general.skill.md):\n{existing}\n\n"
-    "NUEVOS RESÚMENES DE CONVERSACIONES:\n{new_summaries}\n\n"
-    "Genera un nuevo contenido para general.skill.md que integre el conocimiento "
-    "existente con los nuevos aprendizajes. Elimina redundancias. "
-    "Usa markdown con secciones claras (## Preferencias, ## Aprendizajes recientes, etc.). "
-    "Responde solo con el contenido markdown actualizado."
+    "You are a memory assistant. Your task is to consolidate knowledge.\n\n"
+    "CURRENT KNOWLEDGE (general.skill.md):\n{existing}\n\n"
+    "NEW CONVERSATION SUMMARIES:\n{new_summaries}\n\n"
+    "Generate new content for general.skill.md that integrates the existing knowledge "
+    "with the new learnings. Remove redundancies. "
+    "Use markdown with clear sections (## Preferences, ## Recent Learnings, etc.). "
+    "Reply only with the updated markdown content."
 )
 
 

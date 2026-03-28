@@ -20,7 +20,15 @@ ipcMain.handle('fs:readFile', async (_event, filePath: string): Promise<string> 
 
 // ── IPC: fs:listDir ────────────────────────────────────────────────────────────
 
-const SKIP_DIRS = new Set(['.git', 'node_modules', '__pycache__', '.venv', 'dist', '.next', 'build'])
+const SKIP_DIRS = new Set([
+  '.git',
+  'node_modules',
+  '__pycache__',
+  '.venv',
+  'dist',
+  '.next',
+  'build',
+])
 
 function listDirRecursive(dirPath: string, base: string, results: string[], limit: number): void {
   if (results.length >= limit) return
@@ -132,28 +140,50 @@ function stripHtml(html: string): string {
 ipcMain.handle('net:fetchUrl', async (_event, url: string): Promise<string> => {
   return new Promise((resolve, reject) => {
     const protocol = url.startsWith('https://') ? https : http
-    const req = protocol.get(url, { headers: { 'User-Agent': 'Mozilla/5.0 (gillie-ai)' } }, (res) => {
-      // Follow a single redirect
-      if (res.statusCode && res.statusCode >= 300 && res.statusCode < 400 && res.headers.location) {
-        protocol.get(res.headers.location, { headers: { 'User-Agent': 'Mozilla/5.0 (gillie-ai)' } }, (res2) => {
-          let body = ''
-          res2.on('data', (chunk: Buffer) => { body += chunk.toString() })
-          res2.on('end', () => {
-            const text = stripHtml(body)
-            resolve(text.length > 3000 ? text.slice(0, 3000) + '\n[... truncated]' : text)
-          })
-        }).on('error', reject)
-        return
-      }
-      let body = ''
-      res.on('data', (chunk: Buffer) => { body += chunk.toString() })
-      res.on('end', () => {
-        const text = stripHtml(body)
-        resolve(text.length > 3000 ? text.slice(0, 3000) + '\n[... truncated]' : text)
-      })
-    })
+    const req = protocol.get(
+      url,
+      { headers: { 'User-Agent': 'Mozilla/5.0 (gillie-ai)' } },
+      (res) => {
+        // Follow a single redirect
+        if (
+          res.statusCode &&
+          res.statusCode >= 300 &&
+          res.statusCode < 400 &&
+          res.headers.location
+        ) {
+          protocol
+            .get(
+              res.headers.location,
+              { headers: { 'User-Agent': 'Mozilla/5.0 (gillie-ai)' } },
+              (res2) => {
+                let body = ''
+                res2.on('data', (chunk: Buffer) => {
+                  body += chunk.toString()
+                })
+                res2.on('end', () => {
+                  const text = stripHtml(body)
+                  resolve(text.length > 3000 ? text.slice(0, 3000) + '\n[... truncated]' : text)
+                })
+              },
+            )
+            .on('error', reject)
+          return
+        }
+        let body = ''
+        res.on('data', (chunk: Buffer) => {
+          body += chunk.toString()
+        })
+        res.on('end', () => {
+          const text = stripHtml(body)
+          resolve(text.length > 3000 ? text.slice(0, 3000) + '\n[... truncated]' : text)
+        })
+      },
+    )
     req.on('error', reject)
-    req.setTimeout(10000, () => { req.destroy(); reject(new Error('Request timed out')) })
+    req.setTimeout(10000, () => {
+      req.destroy()
+      reject(new Error('Request timed out'))
+    })
   })
 })
 
@@ -208,6 +238,18 @@ app.whenReady().then(() => {
 
   app.on('browser-window-created', (_, window) => {
     optimizer.watchWindowShortcuts(window)
+  })
+
+  const { session } = require('electron')
+  session.defaultSession.webRequest.onHeadersReceived((details, callback) => {
+    callback({
+      responseHeaders: {
+        ...details.responseHeaders,
+        'Access-Control-Allow-Origin': ['*'],
+        'Access-Control-Allow-Methods': ['GET, POST, PUT, PATCH, DELETE, OPTIONS'],
+        'Access-Control-Allow-Headers': ['Content-Type, Authorization, x-api-key'],
+      },
+    })
   })
 
   createWindow()

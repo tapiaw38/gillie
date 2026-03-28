@@ -37,6 +37,7 @@ register_exception_handlers(app)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
+    allow_origin_regex=r"(file://.*|null|app://.*|http://localhost(:\d+)?|https://localhost(:\d+)?)",
     allow_credentials=False,
     allow_methods=["*"],
     allow_headers=["*"],

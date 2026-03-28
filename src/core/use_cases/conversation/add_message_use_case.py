@@ -169,8 +169,18 @@ class AddMessageUseCase:
         try:
             logger.info("Processing voice content...")
 
+            _stt_lang = "en-US"
+            try:
+                _profile = self.context_factory.repositories.profile.find_by_user_id(
+                    self.context_factory.user_id
+                ) if hasattr(self.context_factory, "user_id") else None
+                if _profile and getattr(_profile, "response_language", None) == "es":
+                    _stt_lang = "es-ES"
+            except Exception:
+                pass
             transcription = await self.context_factory.platform_managers.voice_transcription.transcribe_audio_file(
-                audio_file=message.voice_content
+                audio_file=message.voice_content,
+                language=_stt_lang,
             )
 
             if transcription:
@@ -447,7 +457,7 @@ class AddMessageUseCase:
                 search_results = skill_manager.search_memory(user_query)
                 no_results_msg = "No se encontraron resultados relevantes en la memoria"
                 if search_results and no_results_msg not in search_results:
-                    enhanced_context = f"{enhanced_context}\n\n=== CONTEXTO RELEVANTE PARA ESTA CONSULTA ===\n{search_results}"
+                    enhanced_context = f"{enhanced_context}\n\n=== RELEVANT CONTEXT FOR THIS QUERY ===\n{search_results}"
                     logger.info("Skill search results injected for query")
 
             logger.info("Skill context injected into message context")
@@ -583,10 +593,18 @@ class AddMessageUseCase:
         try:
             logger.info("Generating audio response...")
 
+            _tts_lang = "en"
+            try:
+                _tts_profile = self.context_factory.repositories.profile.find_by_user_id(user_id)
+                if _tts_profile and getattr(_tts_profile, "response_language", None):
+                    _tts_lang = _tts_profile.response_language
+            except Exception:
+                pass
             audio_url = await self.context_factory.platform_managers.text_to_speech.generate_and_store_audio(
                 text=text,
                 user_id=user_id,
-                conversation_id=conversation_id
+                conversation_id=conversation_id,
+                language=_tts_lang,
             )
 
             return audio_url
@@ -722,17 +740,17 @@ class AddMessageUseCase:
         history_text = "\n".join(history_lines)
 
         system_prompt = (
-            "Eres un asistente que resume conversaciones. Resume la siguiente "
-            "conversación de forma concisa pero completa, preservando:\n"
-            "- Decisiones importantes tomadas\n"
-            "- Problemas resueltos y sus soluciones\n"
-            "- Contexto del proyecto o tarea en curso\n"
-            "- Preferencias o configuraciones mencionadas\n"
-            "- Archivos o código modificado\n\n"
-            "Responde SOLO con el resumen en bullets concisos. Sin introducción ni cierre."
+            "You are an assistant that summarizes conversations. Summarize the following "
+            "conversation concisely but completely, preserving:\n"
+            "- Important decisions made\n"
+            "- Problems solved and their solutions\n"
+            "- Project or task context in progress\n"
+            "- Mentioned preferences or settings\n"
+            "- Modified files or code\n\n"
+            "Reply ONLY with the summary in concise bullet points. No introduction or closing."
         )
         user_prompt = (
-            "Resume esta conversación:\n\n"
+            "Summarize this conversation:\n\n"
             f"{history_text}"
         )
 

@@ -38,7 +38,7 @@ class VoiceTranscriptionService:
     async def transcribe_audio_file(
         self,
         audio_file: UploadFile,
-        language: str = "es-ES",
+        language: str = "en-US",
         model: str = "base"
     ) -> Optional[str]:
         """

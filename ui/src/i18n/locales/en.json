@@ -178,7 +178,11 @@
     "deleteKeyConfirm": "Delete API key?",
     "deleteKeyWarning": "This action cannot be undone. Applications using this key will stop working.",
     "errorAddKeyMsg": "Error adding API key",
-    "errorDeleteKeyMsg": "Error deleting key"
+    "errorDeleteKeyMsg": "Error deleting key",
+    "responseLanguage": "Response Language",
+    "responseLanguageDesc": "Language the assistant uses to reply to messages",
+    "langSetEn": "Assistant will respond in English",
+    "langSetEs": "Assistant will respond in Spanish"
   },
   "conversations": {
     "title": "Conversations",
