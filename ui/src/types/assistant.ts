@@ -110,6 +110,11 @@ export interface GoogleDriveIntegrationConfig {
   is_connected?: boolean
 }
 
+export interface GoogleGmailIntegrationConfig {
+  profile_id: string
+  is_connected?: boolean
+}
+
 export interface SQLDatabaseTableEntry {
   name: string
   description: string
@@ -131,6 +136,7 @@ export interface IntegrationParams {
     | WhatsappIntegrationConfig
     | GoogleCalendarIntegrationConfig
     | GoogleDriveIntegrationConfig
+    | GoogleGmailIntegrationConfig
     | SQLDatabaseIntegrationConfig
     | SystemCommandsIntegrationConfig
     | SlackIntegrationConfig

@@ -61,6 +61,20 @@ from src.core.use_cases.drive import (
     SetCredentialsUseCase as DriveSetCredentialsUseCase,
     GetCredentialsUseCase as DriveGetCredentialsUseCase,
 )
+from src.core.use_cases.gmail import (
+    GetAuthorizationUrlUseCase as GmailGetAuthorizationUrlUseCase,
+    HandleOAuthCallbackUseCase as GmailHandleOAuthCallbackUseCase,
+    CheckSessionStatusUseCase as GmailCheckSessionStatusUseCase,
+    SetCredentialsUseCase as GmailSetCredentialsUseCase,
+    GetCredentialsUseCase as GmailGetCredentialsUseCase,
+    ListEmailsUseCase as GmailListEmailsUseCase,
+    GetEmailUseCase as GmailGetEmailUseCase,
+    SendEmailUseCase as GmailSendEmailUseCase,
+    ReplyEmailUseCase as GmailReplyEmailUseCase,
+    DeleteEmailUseCase as GmailDeleteEmailUseCase,
+    MarkEmailReadUseCase as GmailMarkEmailReadUseCase,
+    MarkEmailUnreadUseCase as GmailMarkEmailUnreadUseCase,
+)
 from src.core.use_cases.slack import ProcessSlackMessageUseCase
 from src.core.use_cases.telegram import ProcessTelegramMessageUseCase
 from src.core.use_cases.job import (
@@ -156,6 +170,22 @@ class Drive:
 
 
 @dataclass
+class Gmail:
+    get_authorization_url_usecase: GmailGetAuthorizationUrlUseCase
+    handle_oauth_callback_usecase: GmailHandleOAuthCallbackUseCase
+    check_session_status_usecase: GmailCheckSessionStatusUseCase
+    set_credentials_usecase: GmailSetCredentialsUseCase
+    get_credentials_usecase: GmailGetCredentialsUseCase
+    list_emails_usecase: GmailListEmailsUseCase
+    get_email_usecase: GmailGetEmailUseCase
+    send_email_usecase: GmailSendEmailUseCase
+    reply_email_usecase: GmailReplyEmailUseCase
+    delete_email_usecase: GmailDeleteEmailUseCase
+    mark_email_read_usecase: GmailMarkEmailReadUseCase
+    mark_email_unread_usecase: GmailMarkEmailUnreadUseCase
+
+
+@dataclass
 class WhatsAppDevice:
     create_usecase: WhatsAppDeviceCreateUseCase
     list_usecase: WhatsAppDeviceListUseCase
@@ -194,6 +224,7 @@ class Usecases:
     whatsapp: WhatsApp
     calendar: Calendar
     drive: Drive
+    gmail: Gmail
     whatsapp_device: WhatsAppDevice
     jobs: Jobs
     slack: Slack
@@ -262,6 +293,20 @@ def create_usecases(context_factory: Factory) -> Usecases:
             move_file_usecase=MoveFileUseCase(context_factory),
             set_credentials_usecase=DriveSetCredentialsUseCase(context_factory),
             get_credentials_usecase=DriveGetCredentialsUseCase(context_factory),
+        ),
+        gmail=Gmail(
+            get_authorization_url_usecase=GmailGetAuthorizationUrlUseCase(context_factory),
+            handle_oauth_callback_usecase=GmailHandleOAuthCallbackUseCase(context_factory),
+            check_session_status_usecase=GmailCheckSessionStatusUseCase(context_factory),
+            set_credentials_usecase=GmailSetCredentialsUseCase(context_factory),
+            get_credentials_usecase=GmailGetCredentialsUseCase(context_factory),
+            list_emails_usecase=GmailListEmailsUseCase(context_factory),
+            get_email_usecase=GmailGetEmailUseCase(context_factory),
+            send_email_usecase=GmailSendEmailUseCase(context_factory),
+            reply_email_usecase=GmailReplyEmailUseCase(context_factory),
+            delete_email_usecase=GmailDeleteEmailUseCase(context_factory),
+            mark_email_read_usecase=GmailMarkEmailReadUseCase(context_factory),
+            mark_email_unread_usecase=GmailMarkEmailUnreadUseCase(context_factory),
         ),
         whatsapp_device=WhatsAppDevice(
             create_usecase=WhatsAppDeviceCreateUseCase(context_factory),

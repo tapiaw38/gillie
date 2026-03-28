@@ -12,6 +12,7 @@ from .calendar import *
 from .drive import *
 from .whatsapp_device import *
 from .job import *
+from .gmail import *
 
 __all__ = [
     # Common errors
@@ -125,4 +126,18 @@ __all__ = [
     "JobCronExprRequiredError",
     "JobInvalidSourceError",
     "JobInvalidDestinationError",
+
+    # Gmail errors
+    "GmailSessionNotFoundError",
+    "GmailSessionQueryError",
+    "GmailOAuthError",
+    "GmailTokenRefreshError",
+    "GmailEmailQueryError",
+    "GmailEmailNotFoundError",
+    "GmailEmailSendError",
+    "GmailEmailDeleteError",
+    "GmailEmailReplyError",
+    "GmailToRequiredError",
+    "GmailSubjectRequiredError",
+    "GmailBodyRequiredError",
 ]

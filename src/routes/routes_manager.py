@@ -3,6 +3,7 @@ from fastapi.staticfiles import StaticFiles
 from src.adapters.web.controllers import conversation, profile, whatsapp
 from src.adapters.web.controllers.nosql.controllers import router as nosql_router
 from src.adapters.web.controllers.calendar.calendar import router as calendar_router, set_usecases as set_calendar_usecases
+from src.adapters.web.controllers.gmail.gmail import router as gmail_router, set_usecases as set_gmail_usecases
 from src.adapters.web.controllers.drive.drive import router as drive_router, set_usecases as set_drive_usecases
 from src.adapters.web.controllers.memory.controllers import router as memory_router, set_usecases as set_memory_usecases
 from src.adapters.web.controllers.whatsapp.device_controllers import (
@@ -41,6 +42,7 @@ class RoutesManager:
         whatsapp.controllers.set_usecases(self.usecases)
         set_calendar_usecases(self.usecases)
         set_drive_usecases(self.usecases)
+        set_gmail_usecases(self.usecases)
         set_memory_usecases(self.usecases)
         set_whatsapp_device_usecases(self.usecases)
         if self.neonize_integration is not None:
@@ -71,6 +73,7 @@ class RoutesManager:
         self.app.include_router(whatsapp_device_router)
         self.app.include_router(calendar_router)
         self.app.include_router(drive_router)
+        self.app.include_router(gmail_router)
         self.app.include_router(memory_router)
         self.app.include_router(slack_router)
         self.app.include_router(telegram_router)

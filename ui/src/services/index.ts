@@ -4,6 +4,7 @@ import { sandboxService } from './sandbox'
 import { whatsappService } from './whatsapp'
 import { calendarService } from './calendar'
 import { driveService } from './drive'
+import { gmailService } from './gmail'
 
 class Services {
   assistantService: typeof assistantService
@@ -12,6 +13,7 @@ class Services {
   whatsappService: typeof whatsappService
   calendarService: typeof calendarService
   driveService: typeof driveService
+  gmailService: typeof gmailService
 
   constructor() {
     this.assistantService = assistantService
@@ -20,6 +22,7 @@ class Services {
     this.whatsappService = whatsappService
     this.calendarService = calendarService
     this.driveService = driveService
+    this.gmailService = gmailService
   }
 }
 

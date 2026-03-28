@@ -6,6 +6,7 @@ from src.adapters.datasources.repositories.calendar.repository import Repository
 from src.adapters.datasources.repositories.drive.repository import Repository as DriveRepository
 from src.adapters.datasources.repositories.whatsapp_device.repository import Repository as WhatsAppDeviceRepository
 from src.adapters.datasources.repositories.job.repository import Repository as JobRepository
+from src.adapters.datasources.repositories.gmail.repository import Repository as GmailRepository
 from src.adapters.datasources.repositories.inmemory.role_repository import RoleRepository, role_repository
 
 
@@ -19,6 +20,7 @@ class Repositories:
             drive: Optional[DriveRepository] = None,
             whatsapp_device: Optional[WhatsAppDeviceRepository] = None,
             job: Optional[JobRepository] = None,
+            gmail: Optional[GmailRepository] = None,
     ):
         self.conversation = conversation
         self.profile = profile
@@ -27,6 +29,7 @@ class Repositories:
         self.drive = drive
         self.whatsapp_device = whatsapp_device
         self.job = job
+        self.gmail = gmail
 
     @staticmethod
     def create_repositories(datasources: Datasources):
@@ -46,6 +49,10 @@ class Repositories:
         if datasources.no_sql_jobs_client is not None:
             job = JobRepository(datasources)
 
+        gmail = None
+        if datasources.no_sql_gmail_sessions_client is not None:
+            gmail = GmailRepository(datasources)
+
         return Repositories(
             conversation=ConversationRepository(datasources),
             profile=ProfileRepository(datasources),
@@ -54,4 +61,5 @@ class Repositories:
             drive=drive,
             whatsapp_device=whatsapp_device,
             job=job,
+            gmail=gmail,
         )

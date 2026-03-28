@@ -116,6 +116,14 @@ if config_service.nosql_config.drive_sessions:
         config_service.nosql_config.drive_sessions.collection,
     )
 
+gmail_sessions_client = None
+if config_service.nosql_config.gmail_sessions:
+    gmail_sessions_client = MongoDBClient(
+        config_service.nosql_config.gmail_sessions.database_uri,
+        config_service.nosql_config.gmail_sessions.database,
+        config_service.nosql_config.gmail_sessions.collection,
+    )
+
 profiles_client.run_migrations(migrations_client.get_collection(), execute_migrations())
 
 # ─── Storage ──────────────────────────────────────────────────────────────────
@@ -140,6 +148,7 @@ datasources = Datasources.create_datasources(
     no_sql_drive_sessions_client=drive_sessions_client,
     no_sql_whatsapp_devices_client=whatsapp_devices_client,
     no_sql_jobs_client=jobs_client,
+    no_sql_gmail_sessions_client=gmail_sessions_client,
 )
 
 from src.adapters.datasources.repositories.repositories import Repositories
@@ -148,7 +157,12 @@ repositories = Repositories.create_repositories(datasources)
 # ─── Integrations & Services ──────────────────────────────────────────────────
 skill_manager = SkillManager()
 
-integrations = create_integrations(config_service, calendar_repository=repositories.calendar, drive_repository=repositories.drive)
+integrations = create_integrations(
+    config_service,
+    calendar_repository=repositories.calendar,
+    drive_repository=repositories.drive,
+    gmail_repository=repositories.gmail,
+)
 
 integrations.openai.set_skill_manager(skill_manager)
 integrations.openai.set_store_service(store_service)
