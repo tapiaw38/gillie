@@ -102,366 +102,535 @@ onMounted(async () => {
 
 <template>
   <div class="integration-container">
-    <!-- Header -->
-    <div class="header-section">
-      <div class="integration-header">
+
+    <!-- Unified header row -->
+    <div class="page-header">
+      <div class="header-left">
         <div class="icon-wrapper slack-icon">
           <i class="pi pi-slack"></i>
         </div>
-        <div class="header-content">
-          <h1 class="integration-title">Slack</h1>
-          <p class="integration-subtitle">
-            Conecta el asistente a tu workspace de Slack para responder mensajes automáticamente
-          </p>
+        <div class="header-text">
+          <h1 class="page-title">Slack</h1>
+          <p class="page-subtitle">Conecta el asistente a tu workspace de Slack para responder mensajes automáticamente</p>
         </div>
       </div>
-
-      <div class="activation-toggle">
-        <div class="toggle-content">
-          <div class="toggle-info">
-            <span class="toggle-label">Estado de la integración</span>
-            <span class="toggle-status" :class="{ active: slackIntegration.activated }">
-              {{ slackIntegration.activated ? 'Activa' : 'Inactiva' }}
-            </span>
-          </div>
-          <InputSwitch v-model="slackIntegration.activated" class="modern-switch" />
-        </div>
+      <div class="header-toggle">
+        <span class="toggle-status" :class="{ active: slackIntegration.activated }">
+          {{ slackIntegration.activated ? 'Activa' : 'Inactiva' }}
+        </span>
+        <InputSwitch v-model="slackIntegration.activated" />
       </div>
     </div>
 
-    <!-- Config Card -->
-    <Card class="config-card" :class="{ 'card-disabled': !slackIntegration.activated }">
-      <template #content>
-        <form class="config-form" @submit.prevent="saveConfig">
-          <div class="form-grid">
-
-            <div class="field-group">
-              <label for="bot_token" class="field-label">
-                <i class="pi pi-key field-icon"></i>
-                Bot Token
-                <span class="required">*</span>
-              </label>
-              <div class="input-wrapper">
-                <InputText
-                  id="bot_token"
-                  v-model="(slackIntegration.config as SlackIntegrationConfig).bot_token"
-                  placeholder="xoxb-xxxxxxxxxxxx-xxxxxxxxxxxx-xxxxxxxxxxxxxxxxxxxxxxxx"
-                  :disabled="!slackIntegration.activated"
-                  :invalid="!!validationErrors.bot_token"
-                  class="w-full"
-                  type="password"
-                />
-              </div>
-              <Message v-if="validationErrors.bot_token" severity="error" class="field-error">
-                {{ validationErrors.bot_token }}
-              </Message>
-              <small class="field-help">
-                Token OAuth del bot. Lo encontrás en <strong>OAuth &amp; Permissions</strong> de tu Slack App.
-              </small>
-            </div>
-
-            <div class="field-group">
-              <label for="signing_secret" class="field-label">
-                <i class="pi pi-lock field-icon"></i>
-                Signing Secret
-              </label>
-              <div class="input-wrapper">
-                <InputText
-                  id="signing_secret"
-                  v-model="(slackIntegration.config as SlackIntegrationConfig).signing_secret"
-                  placeholder="xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
-                  :disabled="!slackIntegration.activated"
-                  class="w-full"
-                  type="password"
-                />
-              </div>
-              <small class="field-help">
-                Recomendado para verificar que los webhooks provienen de Slack. Lo encontrás en <strong>Basic Information</strong>.
-              </small>
-            </div>
-
-          </div>
-
-          <div class="form-actions">
-            <Button
-              type="submit"
-              label="Guardar Configuración"
-              icon="pi pi-save"
-              severity="primary"
-              :disabled="!slackIntegration.activated"
-            />
-          </div>
-        </form>
-      </template>
-    </Card>
-
-    <!-- Status / Info Card -->
-    <Card class="status-card">
-      <template #header>
-        <div class="status-header">
-          <i class="pi pi-cog status-icon"></i>
-          <span class="status-title">Configuración Actual</span>
+    <!-- Step 1 — Credentials -->
+    <div class="panel" :class="{ 'panel-disabled': !slackIntegration.activated }">
+      <div class="panel-header">
+        <span class="step-badge">1</span>
+        <div>
+          <p class="panel-title">Credenciales de Slack</p>
+          <p class="panel-subtitle">Obtenidas desde el panel de tu Slack App</p>
         </div>
-      </template>
-      <template #content>
-        <div class="status-grid">
+      </div>
 
-          <div class="status-item">
-            <div class="status-label"><i class="pi pi-link"></i> Webhook URL</div>
-            <div class="status-value webhook-url">{{ webhookUrl }}</div>
-            <small class="field-help">Configurá esta URL en <strong>Event Subscriptions</strong> de tu Slack App.</small>
+      <form class="panel-body" @submit.prevent="saveConfig">
+        <div class="field-group">
+          <label for="bot_token" class="field-label">
+            <i class="pi pi-key field-icon"></i>
+            Bot Token
+            <span class="required">*</span>
+          </label>
+          <InputText
+            id="bot_token"
+            v-model="(slackIntegration.config as SlackIntegrationConfig).bot_token"
+            placeholder="xoxb-xxxxxxxxxxxx-xxxxxxxxxxxx-xxxxxxxxxxxxxxxxxxxxxxxx"
+            :disabled="!slackIntegration.activated"
+            :invalid="!!validationErrors.bot_token"
+            class="w-full"
+            type="password"
+          />
+          <Message v-if="validationErrors.bot_token" severity="error" class="field-error">
+            {{ validationErrors.bot_token }}
+          </Message>
+          <small class="field-help">
+            Token OAuth del bot. Lo encontrás en <strong>OAuth &amp; Permissions</strong> de tu Slack App.
+          </small>
+        </div>
+
+        <div class="field-group">
+          <label for="signing_secret" class="field-label">
+            <i class="pi pi-lock field-icon"></i>
+            Signing Secret
+          </label>
+          <InputText
+            id="signing_secret"
+            v-model="(slackIntegration.config as SlackIntegrationConfig).signing_secret"
+            placeholder="xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+            :disabled="!slackIntegration.activated"
+            class="w-full"
+            type="password"
+          />
+          <small class="field-help">
+            Recomendado para verificar webhooks. Lo encontrás en <strong>Basic Information</strong>.
+          </small>
+        </div>
+
+        <div class="panel-footer">
+          <div></div>
+          <Button
+            type="submit"
+            label="Guardar Configuración"
+            icon="pi pi-save"
+            severity="primary"
+            :disabled="!slackIntegration.activated"
+          />
+        </div>
+      </form>
+    </div>
+
+    <!-- Step 2 — Current state -->
+    <div class="panel">
+      <div class="panel-header">
+        <span class="step-badge">2</span>
+        <div>
+          <p class="panel-title">Estado Actual</p>
+          <p class="panel-subtitle">Configuración guardada e información de integración</p>
+        </div>
+      </div>
+
+      <div class="panel-body">
+        <div class="status-row">
+          <div class="status-row-label">
+            <i class="pi pi-link"></i>
+            Webhook URL
           </div>
+          <div class="status-row-value">
+            <div class="webhook-url-wrap">
+              <code class="webhook-url-text">{{ webhookUrl }}</code>
+              <button
+                class="copy-btn"
+                type="button"
+                title="Copiar URL"
+                @click="navigator.clipboard.writeText(webhookUrl)"
+              >
+                <i class="pi pi-copy"></i>
+              </button>
+            </div>
+            <small class="field-help">
+              Configurá esta URL en <strong>Event Subscriptions</strong> de tu Slack App.
+            </small>
+          </div>
+        </div>
 
-          <div class="status-item">
-            <div class="status-label"><i class="pi pi-key"></i> Bot Token</div>
-            <div class="status-value">
+        <div class="status-row">
+          <div class="status-row-label">
+            <i class="pi pi-key"></i>
+            Bot Token
+          </div>
+          <div class="status-row-value">
+            <span class="status-value-text">
               {{ currentIntegration
                 ? (currentIntegration.config as unknown as SlackIntegrationConfig).bot_token
                   ? '•••••••••••••••••••'
                   : 'No configurado'
                 : 'No configurado' }}
-            </div>
+            </span>
           </div>
+        </div>
 
-          <div class="status-item">
-            <div class="status-label"><i class="pi pi-lock"></i> Signing Secret</div>
-            <div class="status-value">
+        <div class="status-row">
+          <div class="status-row-label">
+            <i class="pi pi-lock"></i>
+            Signing Secret
+          </div>
+          <div class="status-row-value">
+            <span class="status-value-text">
               {{ currentIntegration
                 ? (currentIntegration.config as unknown as SlackIntegrationConfig).signing_secret
                   ? '•••••••••••••••••••'
                   : 'No configurado'
                 : 'No configurado' }}
-            </div>
+            </span>
           </div>
-
         </div>
+      </div>
+    </div>
 
-        <div class="setup-steps">
-          <p class="steps-title"><i class="pi pi-info-circle"></i> Pasos de configuración</p>
-          <ol class="steps-list">
-            <li>Creá una Slack App en <strong>api.slack.com/apps</strong></li>
-            <li>En <strong>OAuth &amp; Permissions</strong>, agregá el scope <code>chat:write</code></li>
-            <li>Instalá la app en tu workspace y copiá el <strong>Bot Token</strong></li>
-            <li>En <strong>Event Subscriptions</strong>, activá y pegá la Webhook URL de arriba</li>
-            <li>Suscribite al evento <code>message.channels</code> o <code>message.im</code></li>
-            <li>Copiá el <strong>Signing Secret</strong> de Basic Information</li>
-          </ol>
+    <!-- Step 3 — Setup guide -->
+    <div class="panel">
+      <div class="panel-header">
+        <span class="step-badge">3</span>
+        <div>
+          <p class="panel-title">Guía de Configuración</p>
+          <p class="panel-subtitle">Pasos para conectar tu Slack App al asistente</p>
         </div>
-      </template>
-    </Card>
+      </div>
+
+      <ol class="steps-list">
+        <li class="step-item">
+          <span class="step-num">1</span>
+          <span>Creá una Slack App en <code>api.slack.com/apps</code></span>
+        </li>
+        <li class="step-item">
+          <span class="step-num">2</span>
+          <span>En <strong>OAuth &amp; Permissions</strong>, agregá el scope <code>chat:write</code></span>
+        </li>
+        <li class="step-item">
+          <span class="step-num">3</span>
+          <span>Instalá la app en tu workspace y copiá el <strong>Bot Token</strong></span>
+        </li>
+        <li class="step-item">
+          <span class="step-num">4</span>
+          <span>En <strong>Event Subscriptions</strong>, activá y pegá la Webhook URL del paso 2</span>
+        </li>
+        <li class="step-item">
+          <span class="step-num">5</span>
+          <span>Suscribite al evento <code>message.channels</code> o <code>message.im</code></span>
+        </li>
+        <li class="step-item">
+          <span class="step-num">6</span>
+          <span>Copiá el <strong>Signing Secret</strong> de Basic Information</span>
+        </li>
+      </ol>
+    </div>
 
     <Toast position="top-right" />
   </div>
 </template>
 
 <style scoped>
+/* ── Layout ─────────────────────────────────────────────── */
 .integration-container {
-  max-width: 1200px;
+  max-width: 860px;
   margin: 0 auto;
-  padding: 1rem 1.25rem;
-  min-height: 100vh;
+  padding: 1.25rem;
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
   background: var(--do-bg);
   box-sizing: border-box;
 }
 
-.header-section { margin-bottom: 1.25rem; }
+/* ── Page header ─────────────────────────────────────────── */
+.page-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 1rem 1.25rem;
+  border: 1px solid var(--do-border-light);
+  border-radius: 0.75rem;
+  background: rgba(255, 255, 255, 0.03);
+}
 
-.integration-header {
+.header-left {
   display: flex;
   align-items: center;
   gap: 1rem;
-  margin-bottom: 1rem;
+  min-width: 0;
 }
 
 .icon-wrapper {
-  width: 3.2rem;
-  height: 3.2rem;
+  flex-shrink: 0;
+  width: 3rem;
+  height: 3rem;
   border-radius: 0.75rem;
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 1.6rem;
-  color: white;
-  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.08);
+  font-size: 1.4rem;
+  color: #fff;
 }
 
-.slack-icon { background: linear-gradient(135deg, #4a154b 0%, #611f69 100%); }
+.slack-icon {
+  background: linear-gradient(135deg, #4a154b 0%, #611f69 100%);
+}
 
-.header-content { flex: 1; }
+.header-text {
+  min-width: 0;
+}
 
-.integration-title {
-  font-size: 1.6rem;
+.page-title {
+  font-size: 1.35rem;
   font-weight: 700;
-  margin: 0 0 0.25rem 0;
   color: var(--do-text);
+  margin: 0 0 0.2rem;
+  line-height: 1.2;
 }
 
-.integration-subtitle { font-size: 0.95rem; color: var(--do-text-muted); margin: 0; }
-
-.activation-toggle {
-  background: rgba(255,255,255,0.04);
-  border-radius: 0.75rem;
-  padding: 1rem;
-  box-shadow: 0 3px 14px rgba(0, 0, 0, 0.06);
-  border: 1px solid var(--vt-c-gray-200);
+.page-subtitle {
+  font-size: 0.875rem;
+  color: var(--do-text-muted);
+  margin: 0;
 }
 
-.toggle-content { display: flex; align-items: center; justify-content: space-between; }
-.toggle-info { display: flex; flex-direction: column; gap: 0.25rem; }
-.toggle-label { font-size: 0.95rem; font-weight: 600; color: var(--do-text); }
-.toggle-status { font-size: 0.85rem; font-weight: 500; color: var(--color-danger); transition: color 0.3s; }
-.toggle-status.active { color: var(--color-success); }
-:deep(.modern-switch) { transform: scale(1.1); }
+.header-toggle {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  flex-shrink: 0;
+}
 
-.config-card {
-  margin-bottom: 1.25rem;
+.toggle-status {
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: var(--color-danger);
+  transition: color 0.25s;
+  white-space: nowrap;
+}
+
+.toggle-status.active {
+  color: var(--color-success);
+}
+
+/* ── Panel ───────────────────────────────────────────────── */
+.panel {
+  border: 1px solid var(--do-border-light);
   border-radius: 0.75rem;
   overflow: hidden;
-  box-shadow: 0 8px 30px rgba(0, 0, 0, 0.08);
-  border: 1px solid var(--vt-c-gray-200);
-  transition: all 0.2s ease;
+  background: var(--do-bg);
 }
 
-.config-card:hover { box-shadow: 0 14px 40px rgba(0, 0, 0, 0.12); transform: translateY(-2px); }
+.panel-disabled {
+  opacity: 0.55;
+  filter: grayscale(0.4);
+  pointer-events: none;
+}
 
-.card-disabled { opacity: 0.6; filter: grayscale(0.5); pointer-events: none; }
+.panel-header {
+  display: flex;
+  align-items: center;
+  gap: 0.875rem;
+  padding: 0.875rem 1.25rem;
+  border-bottom: 1px solid var(--do-border-light);
+  background: rgba(255, 255, 255, 0.025);
+}
 
-:deep(.config-card .p-card-content) { padding: 1rem; }
+.step-badge {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.75rem;
+  height: 1.75rem;
+  border-radius: 50%;
+  background: var(--gradient-primary, var(--color-primary));
+  color: #fff;
+  font-size: 0.8rem;
+  font-weight: 700;
+  flex-shrink: 0;
+}
 
-.form-grid { display: grid; gap: 1rem; margin-bottom: 1rem; }
-.field-group { display: flex; flex-direction: column; gap: 0.5rem; }
+.panel-title {
+  font-size: 0.95rem;
+  font-weight: 600;
+  color: var(--do-text);
+  margin: 0 0 0.15rem;
+}
+
+.panel-subtitle {
+  font-size: 0.8rem;
+  color: var(--do-text-muted);
+  margin: 0;
+}
+
+.panel-body {
+  padding: 1.25rem;
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.panel-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  padding-top: 1rem;
+  border-top: 1px solid var(--do-border-light);
+  margin-top: 0.25rem;
+}
+
+/* ── Form fields ─────────────────────────────────────────── */
+.field-group {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+}
 
 .field-label {
   display: flex;
   align-items: center;
-  gap: 0.5rem;
-  font-size: 0.95rem;
+  gap: 0.4rem;
+  font-size: 0.875rem;
   font-weight: 600;
   color: var(--do-text);
 }
 
-.required { color: var(--color-danger); }
-.field-icon { color: var(--color-primary); font-size: 1rem; }
-.input-wrapper { position: relative; }
-.w-full { width: 100%; }
-.field-error { margin-top: 0.35rem; }
-.field-help { color: var(--do-text-muted); font-size: 0.85rem; font-style: italic; }
-
-.form-actions {
-  display: flex;
-  justify-content: flex-end;
-  padding-top: 0.75rem;
-  border-top: 1px solid var(--vt-c-gray-200);
+.field-icon {
+  color: var(--color-primary);
+  font-size: 0.875rem;
 }
 
-.status-card {
-  border-radius: 0.75rem;
-  overflow: hidden;
-  box-shadow: 0 8px 30px rgba(0, 0, 0, 0.08);
-  border: 1px solid var(--vt-c-gray-200);
+.required {
+  color: var(--color-danger);
 }
 
-:deep(.status-card .p-card-header) {
-  background: rgba(255,255,255,0.04);
-  padding: 1rem 1.25rem;
-  border-bottom: 1px solid var(--vt-c-gray-200);
+.field-help {
+  font-size: 0.8rem;
+  color: var(--do-text-muted);
+  font-style: italic;
 }
 
-.status-header { display: flex; align-items: center; gap: 0.5rem; }
-.status-icon { color: var(--color-primary); font-size: 1.125rem; }
-.status-title { font-size: 1.05rem; font-weight: 600; color: var(--do-text); }
+.field-error {
+  margin-top: 0.25rem;
+}
 
-:deep(.status-card .p-card-content) { padding: 1rem; }
+.w-full {
+  width: 100%;
+}
 
-.status-grid { display: grid; gap: 1rem; margin-bottom: 1.25rem; }
-
-.status-item {
+/* ── Status rows ─────────────────────────────────────────── */
+.status-row {
   display: flex;
   flex-direction: column;
-  gap: 0.35rem;
-  padding: 0.75rem;
-  background: rgba(255,255,255,0.04);
-  border-radius: 0.6rem;
-  border: 1px solid var(--vt-c-gray-200);
-}
-
-.status-label {
-  display: flex;
-  align-items: center;
   gap: 0.5rem;
-  font-size: 0.85rem;
-  font-weight: 600;
-  color: var(--do-text-muted);
-}
-
-.status-label i { color: var(--color-primary); }
-
-.status-value {
-  font-family: 'SF Mono', 'Monaco', 'Consolas', monospace;
-  font-size: 0.85rem;
-  color: var(--do-text);
-  background: rgba(255,255,255,0.04);
-  padding: 0.6rem;
-  border-radius: 0.4rem;
-  border: 1px solid var(--vt-c-gray-200);
-  word-break: break-all;
-}
-
-.webhook-url { color: #4a154b; font-weight: 600; }
-
-.setup-steps {
-  background: rgba(255,255,255,0.04);
+  padding: 0.75rem;
+  background: rgba(255, 255, 255, 0.025);
+  border: 1px solid var(--do-border-light);
   border-radius: 0.6rem;
-  border: 1px solid var(--vt-c-gray-200);
-  padding: 0.9rem;
 }
 
-.steps-title {
+.status-row-label {
   display: flex;
   align-items: center;
   gap: 0.4rem;
-  font-size: 0.9rem;
+  font-size: 0.78rem;
   font-weight: 600;
-  color: var(--do-text);
-  margin: 0 0 0.6rem;
+  color: var(--do-text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
 }
 
-.steps-title i { color: var(--color-primary); }
+.status-row-label i {
+  color: var(--color-primary);
+}
 
-.steps-list {
-  margin: 0;
-  padding-left: 1.25rem;
+.status-row-value {
   display: flex;
   flex-direction: column;
   gap: 0.35rem;
 }
 
-.steps-list li { font-size: 0.85rem; color: var(--do-text-muted); }
-
-.steps-list code {
-  background: rgba(255,255,255,0.08);
-  padding: 0.1rem 0.35rem;
-  border-radius: 0.25rem;
-  font-family: 'SF Mono', monospace;
-  font-size: 0.8rem;
+.status-value-text {
+  font-family: 'SF Mono', 'Monaco', 'Consolas', monospace;
+  font-size: 0.85rem;
   color: var(--do-text);
 }
 
-@media (max-width: 768px) {
-  .integration-container { padding: 0.75rem; }
-  .integration-header { flex-direction: column; text-align: center; gap: 0.75rem; }
-  .toggle-content { flex-direction: column; gap: 0.75rem; text-align: center; }
-  .form-actions { justify-content: stretch; }
+/* ── Webhook URL ─────────────────────────────────────────── */
+.webhook-url-wrap {
+  display: flex;
+  align-items: center;
+  border: 1px solid var(--do-border-light);
+  border-radius: 0.6rem;
+  overflow: hidden;
+  background: rgba(255, 255, 255, 0.04);
 }
 
-@media (min-width: 992px) {
+.webhook-url-text {
+  flex: 1;
+  padding: 0.5rem 0.75rem;
+  font-family: 'SF Mono', 'Monaco', 'Consolas', monospace;
+  font-size: 0.8rem;
+  color: #3fa7d6;
+  word-break: break-all;
+  background: transparent;
+  border: none;
+}
+
+.copy-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0 0.75rem;
+  min-height: 2.1rem;
+  background: rgba(255, 255, 255, 0.05);
+  border: none;
+  border-left: 1px solid var(--do-border-light);
+  color: var(--do-text-muted);
+  cursor: pointer;
+  transition: color 0.2s, background 0.2s;
+  font-size: 0.875rem;
+}
+
+.copy-btn:hover {
+  color: var(--color-primary);
+  background: rgba(255, 255, 255, 0.08);
+}
+
+/* ── Steps guide ─────────────────────────────────────────── */
+.steps-list {
+  list-style: none;
+  margin: 0;
+  padding: 1rem 1.25rem 1.25rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+}
+
+.step-item {
+  display: flex;
+  align-items: baseline;
+  gap: 0.75rem;
+  font-size: 0.875rem;
+  color: var(--do-text-muted);
+}
+
+.step-num {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.4rem;
+  height: 1.4rem;
+  border-radius: 50%;
+  border: 1px solid var(--do-border-light);
+  font-size: 0.7rem;
+  font-weight: 700;
+  color: var(--do-text-muted);
+  flex-shrink: 0;
+}
+
+.step-item code {
+  background: rgba(255, 255, 255, 0.07);
+  padding: 0.1rem 0.35rem;
+  border-radius: 0.3rem;
+  font-family: 'SF Mono', 'Monaco', 'Consolas', monospace;
+  font-size: 0.78rem;
+  color: var(--do-text);
+}
+
+/* ── Responsive ──────────────────────────────────────────── */
+@media (max-width: 600px) {
   .integration-container {
-    display: grid;
-    grid-template-columns: 1fr 400px;
-    gap: 1rem;
-    align-items: start;
+    padding: 0.75rem;
   }
-  .config-card { grid-column: 1 / 2; }
-  .status-card { grid-column: 2 / 3; position: sticky; top: 5.2rem; align-self: start; }
+
+  .page-header {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 0.875rem;
+  }
+
+  .header-toggle {
+    align-self: flex-end;
+  }
+
+  .panel-footer {
+    flex-direction: column-reverse;
+    align-items: stretch;
+  }
+
+  .panel-footer :deep(button) {
+    width: 100%;
+  }
 }
 </style>

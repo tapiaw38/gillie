@@ -376,110 +376,100 @@ onMounted(loadJobs)
     <div class="jobs-section">
 
       <!-- Loading -->
-      <div v-if="loading" class="state-card">
-        <Card>
-          <template #content>
-            <div class="centered-state">
-              <i class="pi pi-spin pi-spinner state-icon"></i>
-              <p>Cargando tareas programadas…</p>
-            </div>
-          </template>
-        </Card>
+      <div v-if="loading" class="panel state-panel">
+        <div class="centered-state">
+          <i class="pi pi-spin pi-spinner state-icon"></i>
+          <p>Cargando tareas programadas…</p>
+        </div>
       </div>
 
       <!-- Empty -->
-      <div v-else-if="jobs.length === 0" class="state-card">
-        <Card>
-          <template #content>
-            <div class="centered-state">
-              <i class="pi pi-calendar-times state-icon empty-icon"></i>
-              <h3>Sin tareas programadas</h3>
-              <p>Crea tu primera tarea para automatizar envíos periódicos</p>
-              <Button
-                label="Crear primera tarea"
-                icon="pi pi-plus"
-                severity="primary"
-                @click="showCreateForm = true"
-              />
-            </div>
-          </template>
-        </Card>
+      <div v-else-if="jobs.length === 0" class="panel state-panel">
+        <div class="centered-state">
+          <i class="pi pi-calendar-times state-icon empty-icon"></i>
+          <h3>Sin tareas programadas</h3>
+          <p>Crea tu primera tarea para automatizar envíos periódicos</p>
+          <Button
+            label="Crear primera tarea"
+            icon="pi pi-plus"
+            severity="primary"
+            @click="showCreateForm = true"
+          />
+        </div>
       </div>
 
       <!-- Job cards -->
       <div v-else class="jobs-grid">
-        <Card v-for="job in jobs" :key="job.id" class="job-card">
-          <template #content>
-            <div class="job-card-inner">
+        <div v-for="job in jobs" :key="job.id" class="job-card">
+          <div class="job-card-inner">
 
-              <div class="job-header-row">
-                <div class="job-title-block">
-                  <span class="job-name">{{ job.name }}</span>
-                  <span v-if="job.description" class="job-description">{{ job.description }}</span>
-                </div>
-                <div class="job-badges">
-                  <Tag
-                    :value="job.enabled ? 'Activo' : 'Inactivo'"
-                    :severity="job.enabled ? 'success' : 'secondary'"
-                    class="enabled-tag"
-                  />
-                  <Tag
-                    v-if="job.status"
-                    :value="job.status"
-                    :severity="statusSeverity(job.status)"
-                    class="status-tag"
-                  />
-                </div>
+            <div class="job-header-row">
+              <div class="job-title-block">
+                <span class="job-name">{{ job.name }}</span>
+                <span v-if="job.description" class="job-description">{{ job.description }}</span>
               </div>
-
-              <div class="job-meta-grid">
-                <div class="meta-item">
-                  <span class="meta-label"><i class="pi pi-clock"></i> Cron</span>
-                  <code class="meta-value cron-value">{{ job.cron_expr }}</code>
-                </div>
-                <div class="meta-item">
-                  <span class="meta-label"><i class="pi pi-arrow-right-arrow-left"></i> Flujo</span>
-                  <span class="meta-value flow-value">
-                    <span class="flow-badge source">{{ sourceTypeLabel(job.source_type) }}</span>
-                    <i class="pi pi-arrow-right flow-arrow"></i>
-                    <span class="flow-badge dest">{{ destinationTypeLabel(job.destination_type) }}</span>
-                  </span>
-                </div>
-                <div class="meta-item">
-                  <span class="meta-label"><i class="pi pi-history"></i> Última ejecución</span>
-                  <span class="meta-value">{{ formatDate(job.last_run_at) }}</span>
-                </div>
-                <div v-if="job.last_result" class="meta-item meta-item--full">
-                  <span class="meta-label"><i class="pi pi-info-circle"></i> Último resultado</span>
-                  <code class="meta-value result-value">{{ job.last_result }}</code>
-                </div>
-              </div>
-
-              <div class="job-actions">
-                <Button
-                  label="Ejecutar ahora"
-                  icon="pi pi-play"
-                  severity="success"
-                  size="small"
-                  :loading="runningJobId === job.id"
-                  :disabled="runningJobId !== null"
-                  @click="runJob(job)"
+              <div class="job-badges">
+                <Tag
+                  :value="job.enabled ? 'Activo' : 'Inactivo'"
+                  :severity="job.enabled ? 'success' : 'secondary'"
+                  class="enabled-tag"
                 />
-                <Button
-                  label="Eliminar"
-                  icon="pi pi-trash"
-                  severity="danger"
-                  size="small"
-                  outlined
-                  :loading="deletingJobId === job.id"
-                  :disabled="deletingJobId !== null"
-                  @click="confirmDelete(job)"
+                <Tag
+                  v-if="job.status"
+                  :value="job.status"
+                  :severity="statusSeverity(job.status)"
+                  class="status-tag"
                 />
               </div>
-
             </div>
-          </template>
-        </Card>
+
+            <div class="job-meta-grid">
+              <div class="meta-item">
+                <span class="meta-label"><i class="pi pi-clock"></i> Cron</span>
+                <code class="meta-value cron-value">{{ job.cron_expr }}</code>
+              </div>
+              <div class="meta-item">
+                <span class="meta-label"><i class="pi pi-arrow-right-arrow-left"></i> Flujo</span>
+                <span class="meta-value flow-value">
+                  <span class="flow-badge source">{{ sourceTypeLabel(job.source_type) }}</span>
+                  <i class="pi pi-arrow-right flow-arrow"></i>
+                  <span class="flow-badge dest">{{ destinationTypeLabel(job.destination_type) }}</span>
+                </span>
+              </div>
+              <div class="meta-item">
+                <span class="meta-label"><i class="pi pi-history"></i> Última ejecución</span>
+                <span class="meta-value">{{ formatDate(job.last_run_at) }}</span>
+              </div>
+              <div v-if="job.last_result" class="meta-item meta-item--full">
+                <span class="meta-label"><i class="pi pi-info-circle"></i> Último resultado</span>
+                <code class="meta-value result-value">{{ job.last_result }}</code>
+              </div>
+            </div>
+
+            <div class="job-actions">
+              <Button
+                label="Ejecutar ahora"
+                icon="pi pi-play"
+                severity="success"
+                size="small"
+                :loading="runningJobId === job.id"
+                :disabled="runningJobId !== null"
+                @click="runJob(job)"
+              />
+              <Button
+                label="Eliminar"
+                icon="pi pi-trash"
+                severity="danger"
+                size="small"
+                outlined
+                :loading="deletingJobId === job.id"
+                :disabled="deletingJobId !== null"
+                @click="confirmDelete(job)"
+              />
+            </div>
+
+          </div>
+        </div>
       </div>
     </div>
 
@@ -739,7 +729,7 @@ onMounted(loadJobs)
 
 <style scoped>
 .cronjobs-container {
-  max-width: 1200px;
+  max-width: 1100px;
   margin: 0 auto;
   padding: 1rem 1.25rem;
   min-height: 100vh;
@@ -768,7 +758,7 @@ onMounted(loadJobs)
   align-items: center;
   justify-content: center;
   font-size: 1.6rem;
-  color: white;
+  color: #fff;
   box-shadow: 0 6px 20px rgba(0, 0, 0, 0.08);
   flex-shrink: 0;
 }
@@ -800,9 +790,16 @@ onMounted(loadJobs)
   flex-shrink: 0;
 }
 
-/* ─── State cards ─────────────────────────────────────────────────────────── */
+/* ─── State panels ────────────────────────────────────────────────────────── */
 
-.state-card {
+.panel {
+  border: 1px solid var(--do-border-light);
+  border-radius: 0.75rem;
+  overflow: hidden;
+  background: var(--do-bg);
+}
+
+.state-panel {
   margin-bottom: 1rem;
 }
 
@@ -818,11 +815,11 @@ onMounted(loadJobs)
 
 .state-icon {
   font-size: 2.5rem;
-  color: var(--color-primary, #6366f1);
+  color: var(--color-primary);
 }
 
 .empty-icon {
-  color: var(--do-text-secondary);
+  color: var(--do-text-muted);
 }
 
 .centered-state h3 {
@@ -845,10 +842,10 @@ onMounted(loadJobs)
 }
 
 .job-card {
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid var(--do-border-light);
   border-radius: 0.75rem;
   overflow: hidden;
-  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.06);
-  border: 1px solid var(--vt-c-gray-200);
   transition: box-shadow 0.2s ease, transform 0.2s ease;
 }
 
@@ -857,14 +854,11 @@ onMounted(loadJobs)
   transform: translateY(-2px);
 }
 
-:deep(.job-card .p-card-content) {
-  padding: 1rem;
-}
-
 .job-card-inner {
   display: flex;
   flex-direction: column;
   gap: 0.85rem;
+  padding: 1rem;
 }
 
 .job-header-row {
@@ -918,8 +912,8 @@ onMounted(loadJobs)
   display: flex;
   flex-direction: column;
   gap: 0.25rem;
-  background: rgba(255,255,255,0.04);
-  border: 1px solid var(--vt-c-gray-200);
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid var(--do-border-light);
   border-radius: 0.5rem;
   padding: 0.5rem 0.65rem;
 }
@@ -940,7 +934,7 @@ onMounted(loadJobs)
 }
 
 .meta-label i {
-  color: var(--color-primary, #6366f1);
+  color: var(--color-primary);
 }
 
 .meta-value {
@@ -950,7 +944,7 @@ onMounted(loadJobs)
 
 .cron-value {
   font-family: 'SF Mono', 'Monaco', 'Consolas', monospace;
-  background: rgba(255,255,255,0.08);
+  background: rgba(255, 255, 255, 0.08);
   padding: 0.15rem 0.4rem;
   border-radius: 0.3rem;
   color: var(--do-text);
@@ -972,18 +966,18 @@ onMounted(loadJobs)
 }
 
 .flow-badge.source {
-  background: rgba(59,130,246,0.15);
+  background: rgba(59, 130, 246, 0.15);
   color: #93c5fd;
 }
 
 .flow-badge.dest {
-  background: rgba(16,185,129,0.15);
+  background: rgba(16, 185, 129, 0.15);
   color: #6ee7b7;
 }
 
 .flow-arrow {
   font-size: 0.7rem;
-  color: var(--do-text-secondary);
+  color: var(--do-text-muted);
 }
 
 .result-value {
@@ -1004,7 +998,7 @@ onMounted(loadJobs)
   display: flex;
   gap: 0.5rem;
   padding-top: 0.5rem;
-  border-top: 1px solid var(--vt-c-gray-200);
+  border-top: 1px solid var(--do-border-light);
 }
 
 /* ─── Create form ─────────────────────────────────────────────────────────── */
@@ -1023,7 +1017,7 @@ onMounted(loadJobs)
 
 .field-group--indented {
   padding-left: 1rem;
-  border-left: 3px solid var(--vt-c-gray-200);
+  border-left: 3px solid var(--do-border-light);
 }
 
 .field-group--row {
@@ -1042,17 +1036,17 @@ onMounted(loadJobs)
 }
 
 .required {
-  color: var(--color-danger, #ef4444);
+  color: var(--color-danger);
 }
 
 .optional {
   font-size: 0.8rem;
   font-weight: 400;
-  color: var(--do-text-secondary);
+  color: var(--do-text-muted);
 }
 
 .field-icon {
-  color: var(--color-primary, #6366f1);
+  color: var(--color-primary);
   font-size: 1rem;
 }
 
@@ -1067,7 +1061,7 @@ onMounted(loadJobs)
 }
 
 .field-help code {
-  background: rgba(255,255,255,0.08);
+  background: rgba(255, 255, 255, 0.08);
   padding: 0.1rem 0.3rem;
   border-radius: 0.25rem;
   font-family: 'SF Mono', monospace;
@@ -1100,8 +1094,8 @@ onMounted(loadJobs)
   display: inline-flex;
   align-items: center;
   gap: 0.3rem;
-  background: rgba(255,255,255,0.06);
-  border: 1px solid var(--vt-c-gray-200);
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid var(--do-border-light);
   border-radius: 999px;
   padding: 0.2rem 0.6rem;
   font-size: 0.78rem;
@@ -1111,17 +1105,57 @@ onMounted(loadJobs)
 }
 
 .cron-chip:hover {
-  background: rgba(255,255,255,0.1);
-  border-color: var(--do-text-secondary);
+  background: rgba(255, 255, 255, 0.1);
+  border-color: var(--do-border-light);
 }
 
 .cron-chip code {
   font-family: 'SF Mono', 'Monaco', 'Consolas', monospace;
   font-size: 0.75rem;
   color: #93c5fd;
-  background: rgba(59,130,246,0.15);
+  background: rgba(59, 130, 246, 0.15);
   padding: 0.05rem 0.3rem;
   border-radius: 0.25rem;
+}
+
+/* ─── Dialog dark theme ───────────────────────────────────────────────────── */
+
+:deep(.p-dialog) {
+  background: var(--do-bg);
+  border: 1px solid var(--do-border-light);
+}
+
+:deep(.p-dialog-header) {
+  background: var(--do-bg);
+  color: var(--do-text);
+  border-bottom: 1px solid var(--do-border-light);
+}
+
+:deep(.p-dialog-content) {
+  background: var(--do-bg);
+}
+
+:deep(.p-dialog-footer) {
+  background: var(--do-bg);
+  border-top: 1px solid var(--do-border-light);
+}
+
+:deep(.p-dropdown) {
+  background: var(--do-bg);
+  border-color: var(--do-border-light);
+}
+
+:deep(.p-dropdown-panel) {
+  background: var(--do-bg);
+  border-color: var(--do-border-light);
+}
+
+:deep(.p-inputtext) {
+  background: var(--do-bg);
+}
+
+:deep(.p-textarea) {
+  background: var(--do-bg);
 }
 
 /* ─── Dialog actions ──────────────────────────────────────────────────────── */
@@ -1131,7 +1165,7 @@ onMounted(loadJobs)
   justify-content: flex-end;
   gap: 0.5rem;
   padding-top: 1rem;
-  border-top: 1px solid var(--vt-c-gray-200);
+  border-top: 1px solid var(--do-border-light);
   margin-top: 0.5rem;
 }
 
@@ -1146,7 +1180,7 @@ onMounted(loadJobs)
 
 .confirm-icon {
   font-size: 2rem;
-  color: #f59e0b;
+  color: var(--color-warning);
   flex-shrink: 0;
   margin-top: 0.1rem;
 }
