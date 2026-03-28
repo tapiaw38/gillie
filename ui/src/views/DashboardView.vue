@@ -1159,6 +1159,11 @@ const integrations = computed(() => [
   background: var(--vt-c-gray-50);
 }
 
+.integration-icon.tone-danger {
+  color: var(--do-danger);
+  background: var(--vt-c-gray-50);
+}
+
 .integration-icon.disabled {
   color: var(--do-text-muted);
   background: var(--vt-c-gray-100);
