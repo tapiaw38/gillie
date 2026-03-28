@@ -29,9 +29,7 @@ export const useGmail = () => {
       savedClientId.value = data.client_id || ''
       savedRedirectUri.value = data.redirect_uri || ''
       hasSecret.value = data.has_secret ?? false
-    } catch {
-      // ignore — not configured yet
-    }
+    } catch {}
   }
 
   const saveCredentials = async (clientId: string, clientSecret: string, redirectUri?: string) => {
@@ -43,6 +41,7 @@ export const useGmail = () => {
     } catch (error: unknown) {
       isSaveCredentialsError.value = true
       saveCredentialsError.value =
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
         (error as any)?.response?.data?.message ||
         (error as Error)?.message ||
         'Error saving credentials'
@@ -63,6 +62,7 @@ export const useGmail = () => {
     } catch (error: unknown) {
       isGetAuthUrlError.value = true
       getAuthUrlError.value =
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
         (error as any)?.response?.data?.message ||
         (error as Error)?.message ||
         'Error getting authorization URL'
@@ -83,6 +83,7 @@ export const useGmail = () => {
     } catch (error: unknown) {
       isCheckStatusError.value = true
       checkStatusError.value =
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
         (error as any)?.response?.data?.message ||
         (error as Error)?.message ||
         'Error checking status'
