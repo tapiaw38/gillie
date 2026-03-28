@@ -211,6 +211,10 @@
     "reloaded": "Conversaciones recargadas",
     "reloadedDesc": "Las conversaciones se han recargado correctamente.",
     "errorLoadDesc": "Error al cargar conversaciones",
+    "delete": "Eliminar conversación",
+    "deleted": "Conversación eliminada",
+    "deletedDesc": "La conversación fue eliminada correctamente.",
+    "errorDelete": "Error al eliminar la conversación",
     "user": "Usuario",
     "assistant": "Asistente",
     "untitled": "Sin título"

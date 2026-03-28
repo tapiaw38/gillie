@@ -211,6 +211,10 @@
     "reloaded": "Conversations reloaded",
     "reloadedDesc": "Conversations reloaded successfully.",
     "errorLoadDesc": "Error loading conversations",
+    "delete": "Delete conversation",
+    "deleted": "Conversation deleted",
+    "deletedDesc": "The conversation was deleted successfully.",
+    "errorDelete": "Error deleting conversation",
     "user": "User",
     "assistant": "Assistant",
     "untitled": "Untitled"
