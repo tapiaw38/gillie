@@ -172,8 +172,6 @@ const saveFunctions = async () => {
 
     await updateAssistantProfile({
       assistant_name: assistantProfile.value?.assistant_name,
-      business_name: assistantProfile.value?.business_name,
-      business_context: assistantProfile.value?.business_context,
       functions: jsonContent.value,
     })
 

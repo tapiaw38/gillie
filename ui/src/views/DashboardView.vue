@@ -1,22 +1,19 @@
 <script setup lang="ts">
-import { ref, reactive, watch, computed, onMounted } from 'vue'
+import { ref, reactive, computed, onMounted } from 'vue'
 import ToggleSwitch from 'primevue/toggleswitch'
 import Card from 'primevue/card'
 import Button from 'primevue/button'
 import InputText from 'primevue/inputtext'
-import Textarea from 'primevue/textarea'
 import LoadingSpinner from '@/components/core/LoadingSpinner/LoadingSpinner.vue'
 import DefaultModal from '@/components/core/shared/DefaultModal/DefaultModal.vue'
-import ScrollPanel from 'primevue/scrollpanel'
 import Toast from 'primevue/toast'
-import type { AssistantProfileParams, AssistantProfileUpdateParams } from '@/types/assistant.ts'
+import type { AssistantProfileParams } from '@/types/assistant.ts'
 import { useToogle } from '@/composables/useToogle'
 import { useAssistant } from '@/composables/useAssistant'
 import { useConversation } from '@/composables/useConversation'
 import { useErrorToast } from '@/composables/useErrorToast'
 
 const { toogleValue: isVisible } = useToogle(false)
-const { toogleValue: isVisibleUpdate } = useToogle(false)
 
 const {
   conversations,
@@ -107,9 +104,7 @@ const changeVisible = (value: boolean) => {
 
 const assistantProfileParams = reactive<AssistantProfileParams>({
   assistant_name: '',
-  business_name: '',
   functions: '',
-  business_context: '',
 })
 
 const addAssistant = async () => {
@@ -126,45 +121,31 @@ const addAssistant = async () => {
   isVisible.value = false
 }
 
-const modalTitleUpdate = ref('Editar Asistente')
-const updateAssistantProfileParams = reactive<AssistantProfileUpdateParams>({
-  assistant_name: '',
-  business_name: '',
-  functions: '',
-  business_context: '',
-})
+const isEditingName = ref(false)
+const editingNameValue = ref('')
 
-const changeUpdateVisible = (value: boolean) => {
-  isVisibleUpdate.value = value
+const startEditName = () => {
+  editingNameValue.value = assistantProfile.value?.assistant_name || ''
+  isEditingName.value = true
 }
 
-const updateAssistan = async () => {
-  await updateAssistantProfile(updateAssistantProfileParams)
+const saveEditName = async () => {
+  const trimmed = editingNameValue.value.trim()
+  if (!trimmed || trimmed === assistantProfile.value?.assistant_name) {
+    isEditingName.value = false
+    return
+  }
+  await updateAssistantProfile({ assistant_name: trimmed })
   if (isUpdateAssistantProfileSuccess.value) {
     await getAssistantProfile()
-    toast.add({
-      severity: 'success',
-      summary: 'Asistente actualizado',
-      detail: 'El asistente se actualizó correctamente',
-      life: 3000,
-    })
+    toast.add({ severity: 'success', summary: 'Nombre actualizado', life: 2000 })
   }
-  isVisibleUpdate.value = false
+  isEditingName.value = false
 }
 
-watch(
-  isVisibleUpdate,
-  () => {
-    if (assistantProfile && isVisibleUpdate.value) {
-      updateAssistantProfileParams.assistant_name = assistantProfile?.value?.assistant_name || ''
-      updateAssistantProfileParams.business_name = assistantProfile?.value?.business_name || ''
-      updateAssistantProfileParams.functions = assistantProfile?.value?.functions || ''
-      updateAssistantProfileParams.business_context =
-        assistantProfile?.value?.business_context || ''
-    }
-  },
-  { immediate: true },
-)
+const cancelEditName = () => {
+  isEditingName.value = false
+}
 
 const totalMessagesInConversation = computed(() => {
   return conversations.value?.reduce((acc, curr) => {
@@ -339,31 +320,31 @@ const integrations = [
                   <i class="pi pi-sparkles"></i>
                 </div>
                 <div class="profile-details">
-                  <h3>{{ assistantProfile?.assistant_name }}</h3>
+                  <div v-if="isEditingName" class="name-edit">
+                    <InputText
+                      v-model="editingNameValue"
+                      size="small"
+                      autofocus
+                      @keyup.enter="saveEditName"
+                      @keyup.escape="cancelEditName"
+                      @blur="saveEditName"
+                    />
+                    <i
+                      v-if="isUpdateAssistantProfilePending"
+                      class="pi pi-spin pi-spinner name-edit-spinner"
+                    />
+                  </div>
+                  <h3 v-else class="name-clickable" @click="startEditName" title="Click para editar">
+                    {{ assistantProfile?.assistant_name }}
+                    <i class="pi pi-pencil name-pencil-icon" />
+                  </h3>
                   <p>Asistente Virtual</p>
                 </div>
               </div>
-              <Button
-                icon="pi pi-pencil"
-                class="edit-button"
-                size="small"
-                @click="isVisibleUpdate = true"
-                title="Editar asistente"
-              />
             </div>
           </template>
           <template #content>
             <div class="profile-content">
-              <div class="info-item">
-                <label>Empresa</label>
-                <span>{{ assistantProfile?.business_name }}</span>
-              </div>
-              <div class="info-item">
-                <label>Contexto de Negocio</label>
-                <ScrollPanel class="context-scroll">
-                  <p>{{ assistantProfile?.business_context }}</p>
-                </ScrollPanel>
-              </div>
               <div class="tts-row">
                 <div class="tts-info">
                   <i class="pi pi-volume-up tts-icon"></i>
@@ -509,27 +490,6 @@ const integrations = [
           />
         </div>
 
-        <div class="form-field">
-          <label for="business_name">Nombre de la Empresa</label>
-          <InputText
-            id="business_name"
-            v-model="assistantProfileParams.business_name"
-            placeholder="Ingresa el nombre de la empresa"
-            required
-          />
-        </div>
-
-        <div class="form-field">
-          <label for="business_context">Contexto del Negocio</label>
-          <Textarea
-            id="business_context"
-            v-model="assistantProfileParams.business_context"
-            placeholder="Describe el contexto de tu negocio"
-            rows="4"
-            required
-          />
-        </div>
-
         <div class="modal-actions">
           <Button
             type="button"
@@ -542,58 +502,6 @@ const integrations = [
       </form>
     </DefaultModal>
 
-    <DefaultModal
-      :isVisible="isVisibleUpdate"
-      :title="modalTitleUpdate"
-      @update:visible="changeUpdateVisible"
-    >
-      <form @submit.prevent="updateAssistan" class="modal-form">
-        <div class="form-field">
-          <label for="update_assistant_name">Nombre del Asistente</label>
-          <InputText
-            id="update_assistant_name"
-            v-model="updateAssistantProfileParams.assistant_name"
-            placeholder="Ingresa el nombre del asistente"
-            required
-          />
-        </div>
-
-        <div class="form-field">
-          <label for="update_business_name">Nombre de la Empresa</label>
-          <InputText
-            id="update_business_name"
-            v-model="updateAssistantProfileParams.business_name"
-            placeholder="Ingresa el nombre de la empresa"
-            required
-          />
-        </div>
-
-        <div class="form-field">
-          <label for="update_business_context">Contexto del Negocio</label>
-          <Textarea
-            id="update_business_context"
-            v-model="updateAssistantProfileParams.business_context"
-            placeholder="Describe el contexto de tu negocio"
-            rows="4"
-            required
-          />
-        </div>
-
-        <div class="modal-actions">
-          <Button
-            type="button"
-            label="Cancelar"
-            severity="secondary"
-            @click="() => changeUpdateVisible(false)"
-          />
-          <Button
-            type="submit"
-            label="Actualizar Asistente"
-            :loading="isUpdateAssistantProfilePending"
-          />
-        </div>
-      </form>
-    </DefaultModal>
   </div>
 
   <Toast />
@@ -1360,5 +1268,30 @@ const integrations = [
   :deep(.stats-card .p-card-header) {
     padding: 1rem 1.25rem;
   }
+}
+
+.name-clickable {
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+}
+.name-pencil-icon {
+  font-size: 0.75rem;
+  opacity: 0;
+  transition: opacity 0.15s;
+  color: var(--p-primary-color, #6366f1);
+}
+.name-clickable:hover .name-pencil-icon {
+  opacity: 1;
+}
+.name-edit {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+.name-edit-spinner {
+  font-size: 0.9rem;
+  color: var(--p-primary-color, #6366f1);
 }
 </style>
