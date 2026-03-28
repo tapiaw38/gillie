@@ -5,10 +5,8 @@ from typing import Optional
 @dataclass
 class ProfileConfig:
     assistant_name: str
-    business_name: str
-    business_context: str = ""
+    business_name: str = ""
     functions: str = ""
-    role: str = "seller"
 
 
 @dataclass

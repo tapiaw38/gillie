@@ -45,10 +45,8 @@ def show():
 
     table.add_row("User ID", soul.user_id)
     table.add_row("Assistant Name", p.assistant_name)
-    table.add_row("Business Name", p.business_name)
-    table.add_row("Business Context", p.business_context or "[dim]not set[/dim]")
+    table.add_row("Business Name", p.business_name or "[dim]not set[/dim]")
     table.add_row("Functions", p.functions or "[dim]not set[/dim]")
-    table.add_row("Role", p.role)
 
     console.print()
     console.print(table)
@@ -75,13 +73,8 @@ def edit():
     ).execute()
 
     business_name = inquirer.text(
-        message="Business name",
+        message="Business name (optional)",
         default=p.business_name,
-    ).execute()
-
-    business_context = inquirer.text(
-        message="Business context",
-        default=p.business_context,
     ).execute()
 
     functions = inquirer.text(
@@ -95,8 +88,7 @@ def edit():
     ).execute()
 
     config.profile.assistant_name = assistant_name or p.assistant_name
-    config.profile.business_name = business_name or p.business_name
-    config.profile.business_context = business_context
+    config.profile.business_name = business_name
     config.profile.functions = functions
 
     if regen:

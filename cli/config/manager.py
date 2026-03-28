@@ -91,9 +91,11 @@ def load_soul() -> SoulConfig:
         )
     with open(path, "r") as f:
         data = json.load(f)
+    known_fields = {f.name for f in ProfileConfig.__dataclass_fields__.values()}
+    profile_data = {k: v for k, v in data["profile"].items() if k in known_fields}
     return SoulConfig(
         user_id=data["user_id"],
-        profile=ProfileConfig(**data["profile"]),
+        profile=ProfileConfig(**profile_data),
     )
 
 

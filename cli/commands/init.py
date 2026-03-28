@@ -90,8 +90,7 @@ def init(
     console.print()
 
     assistant_name = _prompt_text("Assistant name", required=True)
-    business_name = _prompt_text("Business name", required=True)
-    business_context = _prompt_text("Business context (optional)", default="")
+    business_name = _prompt_text("Business name (optional)", default="")
     functions = _prompt_text("Functions / tools description (optional)", default="")
 
     console.print()
@@ -227,7 +226,6 @@ def init(
         profile=ProfileConfig(
             assistant_name=assistant_name,
             business_name=business_name,
-            business_context=business_context,
             functions=functions,
         ),
         server=ServerConfig(host=server_host, port=server_port),
@@ -274,7 +272,6 @@ def _print_summary(config: AssistantConfig) -> None:
 
     table.add_row("User ID", config.user_id)
     table.add_row("Assistant name", config.profile.assistant_name)
-    table.add_row("Business name", config.profile.business_name)
     table.add_row("MongoDB", config.services.mongodb.uri)
     table.add_row("AI model", f"{config.services.openai.model} ({config.services.openai.base_url})")
     table.add_row("LangChain", "✓ enabled" if config.services.langchain.enabled else "✗ disabled")
