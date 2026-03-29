@@ -69,3 +69,6 @@ webrtcvad==2.0.10
 duckduckgo-search==6.3.7
 prompt_toolkit>=3.0
 playwright>=1.44.0
+
+# Build tools
+nuitka>=2.0.0

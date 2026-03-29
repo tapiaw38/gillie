@@ -74,3 +74,5 @@ ui/.env.development
 # IA Files
 ui/QWEN.*
 ui/CLAUDE.*
+# Build output
+release/
