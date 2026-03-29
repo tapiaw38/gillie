@@ -311,11 +311,12 @@ _DEFAULT_TOOL_PROMPTS: Dict[str, str] = {
         "browser_connect, this only disconnects without closing the user's browser."
     ),
     "browser_connect": (
-        "Connect to an already-running Chrome, Chromium, or Firefox browser via CDP "
-        "(Chrome DevTools Protocol). Use this when the user wants the AI to control "
-        "their real browser with their existing session, cookies, and open tabs "
-        "(e.g. WhatsApp Web, Gmail, any logged-in site). "
-        "The user must start their browser with --remote-debugging-port=9222. "
+        "Connect to the user's Chrome or Chromium browser via CDP (Chrome DevTools Protocol). "
+        "If Chrome is not already running with --remote-debugging-port=9222, this tool "
+        "automatically relaunches Chrome with remote debugging enabled. "
+        "IMPORTANT: This tool only works with Chrome/Chromium. "
+        "If the user explicitly asks to control Firefox, do NOT use this tool — "
+        "use browser_enable_remote_debug first to configure Firefox, then ask the user to restart Firefox, then call browser_connect. "
         "After connecting, all browser_* tools operate on the real browser. "
         "Lists all open tabs so you can switch to the right one."
     ),
@@ -324,11 +325,11 @@ _DEFAULT_TOOL_PROMPTS: Dict[str, str] = {
         "Use after browser_connect lists the open tabs to select the right one."
     ),
     "browser_enable_remote_debug": (
-        "Enable Chrome DevTools Protocol (CDP) remote debugging in Firefox permanently "
-        "by writing user.js to the Firefox profile. After running this tool, the user "
-        "only needs to restart Firefox once — Firefox will restore the session automatically. "
-        "Use this when the user wants the AI to control their existing Firefox browser "
-        "but it was not started with --remote-debugging-port."
+        "Enable CDP remote debugging in Firefox permanently by writing user.js to the Firefox profile. "
+        "Use this FIRST when the user asks to control Firefox or take screenshots of Firefox. "
+        "After running this tool, ask the user to restart Firefox (it will restore the session). "
+        "Then call browser_connect to attach. "
+        "Do NOT use browser_connect before running this tool when the user mentions Firefox."
     ),
     "browser_evaluate": (
         "Execute JavaScript code in the current browser page and return the result. "
@@ -2182,15 +2183,12 @@ def create_langchain_tools(openai_integration, profile, skill_manager=None, stor
             return f"Failed to upload file: {e}"
 
     # ── Browser session (Playwright) ──────────────────────────────────────────
-    # _browser_state is module-level (defined above create_langchain_tools) so
-    # it persists across requests within the same process.
 
     async def _get_page():
         """Return the active browser page. Auto-connects to the real Chrome via CDP if needed."""
         page = _browser_state.get("page")
         if page and not page.is_closed():
             return page
-        # No active page — auto-connect to the real Chrome browser
         result = await browser_connect_tool()
         page = _browser_state.get("page")
         if not page or page.is_closed():
@@ -2213,7 +2211,6 @@ def create_langchain_tools(openai_integration, profile, skill_manager=None, stor
             await _browser_state["browser"].close()
         if _browser_state["playwright"] is None:
             _browser_state["playwright"] = await async_playwright().start()
-        # Always use 127.0.0.1 to avoid IPv6 resolution issues
         normalized = cdp_url.replace("localhost", "127.0.0.1")
         browser = await _browser_state["playwright"].chromium.connect_over_cdp(normalized)
         _browser_state["browser"] = browser
@@ -2227,13 +2224,11 @@ def create_langchain_tools(openai_integration, profile, skill_manager=None, stor
         return browser
 
     async def browser_connect_tool(cdp_url: str = "http://localhost:9222") -> str:
-        """Connect to the user's real Chrome browser via CDP.
+        """Connect to the user's real browser (Chrome or Firefox) via CDP.
 
-        If Chrome is not already listening on the CDP port, automatically:
-        1. Kills any running Chrome instance
-        2. Relaunches Chrome with --remote-debugging-port using the real user profile
-           so all existing sessions (WhatsApp Web, Gmail, etc.) are preserved
-        3. Connects via CDP
+        If no browser is listening on the CDP port, automatically detects whether
+        Firefox or Chrome is running and relaunches the appropriate one with
+        --remote-debugging-port so all existing sessions are preserved.
         """
         try:
             from playwright.async_api import async_playwright
@@ -2243,57 +2238,96 @@ def create_langchain_tools(openai_integration, profile, skill_manager=None, stor
         import shutil
         port = int(cdp_url.split(":")[-1]) if ":" in cdp_url else 9222
 
-        # Check if CDP is already available (Chrome running with --remote-debugging-port)
         if await _cdp_is_ready("127.0.0.1", port):
             try:
                 await _connect_cdp(cdp_url)
             except Exception as e:
                 return f"CDP endpoint responded but Playwright connection failed: {e}"
         else:
-            # CDP not available — relaunch Chrome with real user profile + remote debugging
-            logger.info("browser_connect: CDP not available, relaunching Chrome with remote debugging...")
-
-            # Find Chrome binary
-            chrome_bins = ["google-chrome-stable", "google-chrome", "chromium", "chromium-browser"]
-            chrome_bin = next((b for b in chrome_bins if shutil.which(b)), None)
-            if not chrome_bin:
-                return "Chrome is not installed. Install google-chrome-stable and try again."
-
-            # Kill ALL chrome processes (main + renderers + helpers)
-            for sig in ("TERM", "KILL"):
-                await asyncio.create_subprocess_exec(
-                    "pkill", f"-{sig}", "-f", "chrome",
-                    stdout=asyncio.subprocess.DEVNULL,
-                    stderr=asyncio.subprocess.DEVNULL,
-                )
-                await asyncio.sleep(1)
-
-            # Wait until every chrome process is fully gone (profile lock released)
-            for _ in range(10):
-                chk = await asyncio.create_subprocess_exec(
-                    "pgrep", "-f", "chrome",
-                    stdout=asyncio.subprocess.DEVNULL,
-                    stderr=asyncio.subprocess.DEVNULL,
-                )
-                await chk.wait()
-                if chk.returncode != 0:
-                    break  # no chrome processes left
-                await asyncio.sleep(1)
-
-            # Relaunch Chrome with real user profile so sessions are preserved
-            real_profile = os.path.expanduser("~/.config/google-chrome")
-            await asyncio.create_subprocess_exec(
-                chrome_bin,
-                f"--remote-debugging-port={port}",
-                f"--user-data-dir={real_profile}",
-                "--no-first-run",
-                "--no-default-browser-check",
-                "--disable-session-crashed-bubble",
+            _ff_proc = await asyncio.create_subprocess_exec(
+                "pgrep", "-f", "firefox",
                 stdout=asyncio.subprocess.DEVNULL,
                 stderr=asyncio.subprocess.DEVNULL,
             )
+            _ff_rc = await _ff_proc.wait()
+            firefox_running = shutil.which("firefox") and (_ff_rc == 0)
 
-            # Wait up to 30s for CDP HTTP endpoint to respond, then connect
+            if firefox_running:
+                logger.info("browser_connect: Firefox detected, relaunching with CDP remote debugging...")
+
+                for sig in ("TERM", "KILL"):
+                    await asyncio.create_subprocess_exec(
+                        "pkill", f"-{sig}", "-f", "firefox",
+                        stdout=asyncio.subprocess.DEVNULL,
+                        stderr=asyncio.subprocess.DEVNULL,
+                    )
+                    await asyncio.sleep(1.5)
+
+                for _ in range(10):
+                    chk = await asyncio.create_subprocess_exec(
+                        "pgrep", "-f", "firefox",
+                        stdout=asyncio.subprocess.DEVNULL,
+                        stderr=asyncio.subprocess.DEVNULL,
+                    )
+                    await chk.wait()
+                    if chk.returncode != 0:
+                        break
+                    await asyncio.sleep(1)
+
+                await asyncio.create_subprocess_exec(
+                    "firefox",
+                    f"--remote-debugging-port={port}",
+                    "--no-remote",
+                    stdout=asyncio.subprocess.DEVNULL,
+                    stderr=asyncio.subprocess.DEVNULL,
+                )
+
+                browser_name = "Firefox"
+            else:
+                logger.info("browser_connect: CDP not available, relaunching Chrome with remote debugging...")
+
+                chrome_bins = ["google-chrome-stable", "google-chrome", "chromium", "chromium-browser"]
+                chrome_bin = next((b for b in chrome_bins if shutil.which(b)), None)
+                if not chrome_bin:
+                    return (
+                        "No browser found running. Chrome is not installed either.\n"
+                        "Install google-chrome-stable, or start Firefox manually with:\n"
+                        f"  firefox --remote-debugging-port={port} --no-remote"
+                    )
+
+                for sig in ("TERM", "KILL"):
+                    await asyncio.create_subprocess_exec(
+                        "pkill", f"-{sig}", "-f", "chrome",
+                        stdout=asyncio.subprocess.DEVNULL,
+                        stderr=asyncio.subprocess.DEVNULL,
+                    )
+                    await asyncio.sleep(1)
+
+                for _ in range(10):
+                    chk = await asyncio.create_subprocess_exec(
+                        "pgrep", "-f", "chrome",
+                        stdout=asyncio.subprocess.DEVNULL,
+                        stderr=asyncio.subprocess.DEVNULL,
+                    )
+                    await chk.wait()
+                    if chk.returncode != 0:
+                        break
+                    await asyncio.sleep(1)
+
+                real_profile = os.path.expanduser("~/.config/google-chrome")
+                await asyncio.create_subprocess_exec(
+                    chrome_bin,
+                    f"--remote-debugging-port={port}",
+                    f"--user-data-dir={real_profile}",
+                    "--no-first-run",
+                    "--no-default-browser-check",
+                    "--disable-session-crashed-bubble",
+                    stdout=asyncio.subprocess.DEVNULL,
+                    stderr=asyncio.subprocess.DEVNULL,
+                )
+
+                browser_name = "Chrome"
+
             ready = False
             for _ in range(30):
                 await asyncio.sleep(1)
@@ -2303,9 +2337,9 @@ def create_langchain_tools(openai_integration, profile, skill_manager=None, stor
 
             if not ready:
                 return (
-                    f"Chrome was relaunched with --remote-debugging-port={port} but "
+                    f"{browser_name} was relaunched with --remote-debugging-port={port} but "
                     "the CDP endpoint is not responding after 30s. "
-                    "Chrome may have failed to start. Check that google-chrome-stable is installed."
+                    f"{browser_name} may have failed to start."
                 )
 
             try:
@@ -2316,8 +2350,9 @@ def create_langchain_tools(openai_integration, profile, skill_manager=None, stor
         # Build tab list
         all_pages = [p for ctx in _browser_state["browser"].contexts for p in ctx.pages]
         tab_list = "\n".join(f"  [{i}] {p.url[:80]}" for i, p in enumerate(all_pages))
+        browser_label = "Firefox" if "firefox" in _browser_state.get("browser", object()).__class__.__name__.lower() else "browser"
         return (
-            f"Connected to Chrome at {cdp_url}\n"
+            f"Connected to {browser_label} at {cdp_url}\n"
             f"Open tabs ({len(all_pages)}):\n{tab_list}\n\n"
             f"Active tab: {_browser_state['page'].url}"
         )
@@ -2499,7 +2534,6 @@ user_pref("devtools.debugger.force-local", true);
         browser_connect, this only disconnects — it does NOT close the user's browser."""
         try:
             if _browser_state["connected"]:
-                # Just disconnect — do not close the user's real browser
                 if _browser_state["browser"]:
                     await _browser_state["browser"].close()
                 msg = "Disconnected from browser (your browser remains open)."
@@ -2639,7 +2673,6 @@ user_pref("devtools.debugger.force-local", true);
         if _is_ignored(resolved, workspace):
             return {"error": f"Access denied: '{path}' is excluded by .gillierignore"}
 
-        # Plan mode: describe the change without executing it.
         if plan_mode:
             if resolved.exists() and resolved.is_file():
                 try:
@@ -2660,7 +2693,6 @@ user_pref("devtools.debugger.force-local", true);
             }
 
         if approval_callback:
-            # Build a unified diff so the user can review what will change.
             if resolved.exists() and resolved.is_file():
                 try:
                     current_lines = resolved.read_text(errors="replace").splitlines(keepends=True)
@@ -2715,7 +2747,6 @@ user_pref("devtools.debugger.force-local", true);
         except Exception as e:
             return f"Error reading file: {e}"
 
-        # Plan mode: describe the change without executing it.
         if plan_mode:
             old_lines = (old_string or "").splitlines(keepends=True)
             new_lines_p = (new_string or "").splitlines(keepends=True)
@@ -2749,7 +2780,6 @@ user_pref("devtools.debugger.force-local", true);
                     msg += f" Reason: {feedback}. Please try a different approach."
                 return {"skipped": True, "message": msg}
 
-        # Strategy 1: Exact match
         exact_count = original.count(old_string)
         if exact_count > 1:
             return (
@@ -2761,7 +2791,6 @@ user_pref("devtools.debugger.force-local", true);
             resolved.write_text(updated, encoding="utf-8")
             return f"Edited '{path}': replaced 1 occurrence (exact match)"
 
-        # Strategy 2: Normalized whitespace match
         def _normalize(text: str) -> str:
             return "\n".join(line.strip() for line in text.splitlines())
 
@@ -2769,10 +2798,7 @@ user_pref("devtools.debugger.force-local", true);
         norm_old = _normalize(old_string)
         norm_count = norm_original.count(norm_old)
         if norm_count == 1:
-            # Find the actual span in the original text using the normalized index
             norm_idx = norm_original.index(norm_old)
-            # Reconstruct original-text slice by mapping normalized position back
-            # We do a line-by-line replacement instead
             orig_lines = original.splitlines(keepends=True)
             old_lines = old_string.splitlines()
             new_lines = new_string.splitlines(keepends=True)
@@ -2783,16 +2809,12 @@ user_pref("devtools.debugger.force-local", true);
                     updated_lines = orig_lines[:i] + new_lines + orig_lines[i + len(old_lines):]
                     resolved.write_text("".join(updated_lines), encoding="utf-8")
                     return f"Edited '{path}': replaced 1 occurrence (normalized whitespace match)"
-            # Fallback: simple normalized replace on the normalized text is not safe to write back,
-            # so fall through to fuzzy
         elif norm_count > 1:
             return (
                 f"Error: found {norm_count} normalized occurrences of the search string. "
                 f"Provide more surrounding context to make the match unique."
             )
 
-        # Strategy 2.5: Indentation-flexible match
-        # Strip common leading whitespace from old_string, then find windows with same stripped content
         old_lines_raw = old_string.splitlines()
         if old_lines_raw:
             non_empty = [l for l in old_lines_raw if l.strip()]
@@ -2819,7 +2841,6 @@ user_pref("devtools.debugger.force-local", true);
                         resolved.write_text("".join(updated_lines), encoding="utf-8")
                         return f"Edited '{path}': replaced 1 occurrence (indentation-flexible match)"
 
-        # Strategy 3: Fuzzy match using difflib (threshold 0.8)
         orig_lines = original.splitlines()
         old_lines_stripped = old_string.splitlines()
         window_size = len(old_lines_stripped)
@@ -2848,7 +2869,6 @@ user_pref("devtools.debugger.force-local", true);
                 f"Replaced lines {best_start + 1}-{best_start + window_size}."
             )
 
-        # No match found — return nearby lines to help the caller correct their search string
         nearby_lines = "\n".join(
             f"{i + 1:>6}\t{line}"
             for i, line in enumerate(orig_lines[:30])
@@ -3107,7 +3127,6 @@ user_pref("devtools.debugger.force-local", true);
                     })
             summary = {"errors": sum(1 for d in diagnostics if d.get("severity") == "error")}
         else:
-            # tsc / eslint: return raw output
             diagnostics = [{"raw": (stdout + stderr)[:3000]}]
             summary = {}
 
@@ -3141,7 +3160,6 @@ user_pref("devtools.debugger.force-local", true);
                     "truncated": False,
                 }
 
-        # Plan mode: describe the command without running it.
         if plan_mode:
             return {
                 "plan_only": True,
@@ -3256,7 +3274,6 @@ user_pref("devtools.debugger.force-local", true);
         if not resolved.exists() or not resolved.is_dir():
             return {"found": 0, "results": [], "truncated": False, "error": f"Path not found or not a directory: '{path}'"}
 
-        # Try ripgrep first (much faster for large repos)
         if _shutil.which("rg"):
             try:
                 rg_cmd = [
@@ -3302,7 +3319,6 @@ user_pref("devtools.debugger.force-local", true);
             except Exception:
                 pass  # fall through to Python implementation
 
-        # Python fallback
         _SKIP_DIRS = {".git", "node_modules", "__pycache__", ".venv"}
         flags = _re.IGNORECASE if ignore_case else 0
         try:
@@ -3404,7 +3420,6 @@ user_pref("devtools.debugger.force-local", true);
         if not message or not message.strip():
             return {"success": False, "output": "Commit message cannot be empty"}
 
-        # Plan mode: describe what would be committed without doing it.
         if plan_mode:
             return {
                 "plan_only": True,
@@ -3415,7 +3430,6 @@ user_pref("devtools.debugger.force-local", true);
         files = files or []
 
         if files:
-            # Validate each path stays within workspace
             for f in files:
                 _, err = _resolve_safe_path(f)
                 if err:
@@ -3501,7 +3515,6 @@ user_pref("devtools.debugger.force-local", true);
         except ImportError:
             return {"error": "duckduckgo-search not installed. Run: pip install duckduckgo-search"}
 
-        # Try backends in order — "lite" is least rate-limited
         backends = ["lite", "html", "api"]
         last_error = None
 
