@@ -211,10 +211,10 @@ const conversationSelectedHandler = computed(() => {
                   <template #body="slotProps">
                     <div class="action-buttons">
                       <Button
-                        :label="t('common.view')"
                         icon="pi pi-eye"
                         class="view-button"
                         size="small"
+                        v-tooltip.top="t('common.view')"
                         @click="conversationSelectedHandler(slotProps.data.id)"
                       />
                       <Button
@@ -240,7 +240,7 @@ const conversationSelectedHandler = computed(() => {
         <div class="panel">
           <div class="panel-header">
             <div class="header-icon messages-icon">
-              <i class="pi pi-message"></i>
+              <i class="pi pi-comments"></i>
             </div>
             <div class="header-text">
               <h3>
@@ -278,7 +278,7 @@ const conversationSelectedHandler = computed(() => {
                     }"
                   >
                     <div class="message-avatar">
-                      <i :class="message.sender === 'user' ? 'pi pi-user' : 'pi pi-robot'"></i>
+                      <i :class="message.sender === 'user' ? 'pi pi-user' : 'pi pi-microchip-ai'"></i>
                     </div>
                     <div class="message-bubble">
                       <div class="message-header">

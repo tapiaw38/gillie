@@ -50,14 +50,12 @@ def _build_api(out: Path) -> bool:
 
     src_root = ROOT / "src"
 
-    # Collect source files (exclude tests / __pycache__)
     py_files = [
         f for f in src_root.rglob("*.py")
         if "__pycache__" not in f.parts and "test" not in f.parts
     ]
     console.print(f"[dim]Found {len(py_files)} Python files[/dim]")
 
-    # ── Step 1: compile all .py → .pyc (optimization level 2: strip docstrings + asserts)
     console.print("[dim]Compiling to optimised bytecode (-OO)...[/dim]")
     rc = _run(
         [sys.executable, "-OO", "-m", "compileall", "-b", "-q", str(src_root)],
@@ -70,7 +68,6 @@ def _build_api(out: Path) -> bool:
     compiled = list(src_root.rglob("*.pyc"))
     console.print(f"[green]✓ Compiled {len(compiled)} files[/green]")
 
-    # ── Step 2: copy .pyc files to release/api/ (without the .py sources)
     console.print("[dim]Copying bytecode to release/api/...[/dim]")
     for pyc in compiled:
         # pyc lands next to the .py when using -b flag
@@ -79,14 +76,12 @@ def _build_api(out: Path) -> bool:
         shutil.copy2(pyc, dest)
         pyc.unlink()  # remove .pyc from source tree
 
-    # ── Step 3: copy non-.py assets (templates, etc.)
     for f in src_root.rglob("*"):
         if f.is_file() and f.suffix not in (".py", ".pyc") and "__pycache__" not in f.parts:
             dest = out / f.relative_to(ROOT)
             dest.parent.mkdir(parents=True, exist_ok=True)
             shutil.copy2(f, dest)
 
-    # ── Step 4: copy root runtime files
     keep_as_is = [
         "main.py", "requirements.txt", "Dockerfile",
         "docker-compose.mongo.yml", "docker-compose.qdrant.yml",
@@ -111,7 +106,6 @@ def _build_cli(out: Path) -> bool:
 
     nuitka = shutil.which("nuitka") or shutil.which("python3.nuitka")
     if not nuitka:
-        # Try as a module
         check = subprocess.run(
             [sys.executable, "-m", "nuitka", "--version"],
             capture_output=True,
@@ -172,13 +166,10 @@ def _build_ui(out: Path) -> bool:
         console.print("[red]✗ Electron build failed.[/red]")
         return False
 
-    # electron-builder outputs to ui/release/
-    electron_release = ui_dir / "release"
-    if out.exists():
-        shutil.rmtree(out)
-    shutil.copytree(electron_release, out)
+    if not out.exists():
+        console.print("[red]✗ Build output not found.[/red]")
+        return False
 
-    # List generated installers
     installers = [
         f for f in out.rglob("*")
         if f.is_file() and f.suffix in (".AppImage", ".deb", ".dmg", ".exe", ".rpm")
@@ -216,7 +207,6 @@ def build_run(
         elif t == "ui":
             results["ui"] = _build_ui(RELEASE / "ui")
 
-    # Summary
     console.print()
     console.rule("[bold]Build summary[/bold]")
     all_ok = True
@@ -232,7 +222,6 @@ def build_run(
         raise typer.Exit(1)
 
 
-# Allow `gillie build api` without the `run` subcommand
 @app.callback(invoke_without_command=True)
 def build_callback(
     ctx: typer.Context,
