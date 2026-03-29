@@ -238,6 +238,29 @@ async def start_scheduler():
         logger.info("Scheduler started")
 
 
+# ─── Shutdown: close Playwright browser sessions ──────────────────────────────
+@app.on_event("shutdown")
+async def close_browser_sessions():
+    from src.core.platform.ai.tools.models import _browser_state
+    browser = _browser_state.get("browser")
+    pw = _browser_state.get("playwright")
+    if browser:
+        try:
+            await browser.close()
+        except Exception:
+            pass
+    if pw:
+        try:
+            await pw.stop()
+        except Exception:
+            pass
+    _browser_state["browser"] = None
+    _browser_state["page"] = None
+    _browser_state["playwright"] = None
+    _browser_state["connected"] = False
+    logger.info("Browser sessions closed")
+
+
 # ─── Startup: restore previously connected devices ────────────────────────────
 @app.on_event("startup")
 async def restore_neonize_sessions():

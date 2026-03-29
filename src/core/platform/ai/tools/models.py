@@ -981,6 +981,54 @@ _browser_state: Dict[str, Any] = {
 }
 
 
+def _browser_cleanup_sync() -> None:
+    """Synchronous cleanup called by atexit — stops Playwright and closes the browser."""
+    import asyncio as _asyncio
+    pw = _browser_state.get("playwright")
+    browser = _browser_state.get("browser")
+    if not pw and not browser:
+        return
+    try:
+        loop = _asyncio.get_event_loop()
+        if loop.is_running():
+            async def _cleanup():
+                try:
+                    if browser:
+                        await browser.close()
+                except Exception:
+                    pass
+                try:
+                    if pw:
+                        await pw.stop()
+                except Exception:
+                    pass
+            loop.create_task(_cleanup())
+        else:
+            async def _cleanup_blocking():
+                try:
+                    if browser:
+                        await browser.close()
+                except Exception:
+                    pass
+                try:
+                    if pw:
+                        await pw.stop()
+                except Exception:
+                    pass
+            loop.run_until_complete(_cleanup_blocking())
+    except Exception:
+        pass
+    finally:
+        _browser_state["playwright"] = None
+        _browser_state["browser"] = None
+        _browser_state["page"] = None
+        _browser_state["connected"] = False
+
+
+import atexit as _atexit
+_atexit.register(_browser_cleanup_sync)
+
+
 def create_langchain_tools(openai_integration, profile, skill_manager=None, store_service=None, job_usecases=None, shell_output_callback=None, client_workspace: str = "", approval_callback=None, plan_mode: bool = False) -> List[StructuredTool]:
     """
     Create LangChain StructuredTool instances with Pydantic validation.
