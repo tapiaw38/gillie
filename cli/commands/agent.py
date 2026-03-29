@@ -76,6 +76,7 @@ _SAFE_TOOLS = {
     "save_solution", "cron_list", "describe_image", "take_screenshot",
     "browser_navigate", "browser_get_content", "browser_screenshot", "browser_close",
     "browser_connect", "browser_switch_tab", "browser_enable_remote_debug", "browser_evaluate",
+    "browser_act", "browser_extract",
 }
 
 # High-risk: always ask, even in AUTO_EDIT.
@@ -435,17 +436,13 @@ def _stream_assistant(
                     if not r:
                         continue
                     ch = os.read(fd, 1)
-                    if ch == b"\x1b":
+                    if ch in (b"\x1b", b"\x03"):  # ESC or Ctrl+C → cancel running agent
                         _cancel_requested.set()
                         if _resp_holder[0] is not None:
                             try:
                                 _resp_holder[0].close()
                             except Exception:
                                 pass
-                        break
-                    elif ch == b"\x03":  # Ctrl+C → keep original behaviour
-                        import signal as _signal
-                        os.kill(os.getpid(), _signal.SIGINT)
                         break
             finally:
                 termios.tcsetattr(fd, termios.TCSADRAIN, old_settings)
@@ -1464,10 +1461,23 @@ def agent(
             return _pt_session.prompt(prompt_text).strip()
         return console.input(f"[bold cyan]{prompt_text}[/bold cyan]").strip()
 
+    _last_ctrl_c: float = 0.0  # timestamp of last Ctrl+C at the prompt
+
     while True:
         try:
             user_input = _read_input()
-        except (KeyboardInterrupt, EOFError):
+            _last_ctrl_c = 0.0  # reset on successful input
+        except KeyboardInterrupt:
+            import time as _t
+            now = _t.time()
+            if now - _last_ctrl_c < 2.0:
+                # Second Ctrl+C within 2s → exit
+                console.print("\n[dim]Goodbye 👋[/dim]")
+                break
+            _last_ctrl_c = now
+            console.print("\n[dim]Press Ctrl+C again to exit, or type a message to continue.[/dim]")
+            continue
+        except EOFError:
             console.print("\n[dim]Goodbye 👋[/dim]")
             break
 
@@ -1662,3 +1672,12 @@ def agent(
             always_rejected=always_rejected,
             session_local_files=session_local_files,
         )
+
+    # ── Cleanup on exit: close browser sessions to avoid orphan processes ────
+    try:
+        requests.post(
+            _base_url() + "/browser/close",
+            timeout=3,
+        )
+    except Exception:
+        pass

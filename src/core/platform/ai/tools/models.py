@@ -283,15 +283,28 @@ _DEFAULT_TOOL_PROMPTS: Dict[str, str] = {
         "what a specific application looks like, or anything about the visual state "
         "of the desktop. Optionally focus on a specific region or window."
     ),
+    "browser_act": (
+        "Perform one or more browser actions using natural language on the connected browser. "
+        "Uses an indexed DOM snapshot so the LLM can precisely target any element — no CSS selectors needed. "
+        "PREFER this over browser_click/browser_type for real user browser sessions. "
+        "Supports multi-step: 'search for cats then click the first result'. "
+        "Requires browser_connect first."
+    ),
+    "browser_extract": (
+        "Extract structured information from the current page using natural language. "
+        "Uses the indexed DOM to find and return specific data accurately. "
+        "Examples: 'list all video titles', 'get the product price', 'find all nav links'. "
+        "Requires browser_connect first."
+    ),
     "browser_navigate": (
-        "Open a URL in a headless browser and return the page title and visible text. "
+        "Open a URL in the connected browser and return the page title and visible text. "
         "Use to visit websites, web apps, or local URLs. The browser session persists "
         "across tool calls so you can navigate, interact, then read content."
     ),
     "browser_click": (
-        "Click an element in the current browser page by CSS selector or visible text. "
-        "Examples: 'button#submit', 'text=Login', '.nav-item:first-child'. "
-        "Use after browser_navigate to interact with the page."
+        "Click an element by CSS selector or visible text. "
+        "Use browser_act instead when you don't know the exact selector. "
+        "Examples: 'button#submit', 'text=Login'."
     ),
     "browser_type": (
         "Type text into an input field on the current browser page. "
@@ -311,12 +324,12 @@ _DEFAULT_TOOL_PROMPTS: Dict[str, str] = {
         "browser_connect, this only disconnects without closing the user's browser."
     ),
     "browser_connect": (
-        "Connect to the user's Chrome or Chromium browser via CDP (Chrome DevTools Protocol). "
-        "If Chrome is not already running with --remote-debugging-port=9222, this tool "
-        "automatically relaunches Chrome with remote debugging enabled. "
-        "IMPORTANT: This tool only works with Chrome/Chromium. "
-        "If the user explicitly asks to control Firefox, do NOT use this tool — "
-        "use browser_enable_remote_debug first to configure Firefox, then ask the user to restart Firefox, then call browser_connect. "
+        "Connect to the user's real browser (Firefox or Chrome). "
+        "Firefox: automatically detected by checking if 'firefox' binary exists. "
+        "Launches Firefox using the user's real profile via Playwright's native Firefox protocol — "
+        "no CDP setup needed. All tabs and sessions (WhatsApp Web, etc.) are preserved. "
+        "Chrome/Chromium: connects via CDP. If not already running with remote debugging, "
+        "relaunches Chrome automatically. "
         "After connecting, all browser_* tools operate on the real browser. "
         "Lists all open tabs so you can switch to the right one."
     ),
@@ -325,11 +338,9 @@ _DEFAULT_TOOL_PROMPTS: Dict[str, str] = {
         "Use after browser_connect lists the open tabs to select the right one."
     ),
     "browser_enable_remote_debug": (
-        "Enable CDP remote debugging in Firefox permanently by writing user.js to the Firefox profile. "
-        "Use this FIRST when the user asks to control Firefox or take screenshots of Firefox. "
-        "After running this tool, ask the user to restart Firefox (it will restore the session). "
-        "Then call browser_connect to attach. "
-        "Do NOT use browser_connect before running this tool when the user mentions Firefox."
+        "[DEPRECATED for Firefox — browser_connect now handles Firefox automatically.] "
+        "Only use this if you specifically need to enable CDP in Firefox for external tools. "
+        "Writes user.js to the Firefox profile to enable CDP remote debugging on the given port."
     ),
     "browser_evaluate": (
         "Execute JavaScript code in the current browser page and return the result. "
@@ -573,6 +584,12 @@ class BrowserNavigateArgs(BaseModel):
     url: str = Field(description="URL to navigate to (include https://)")
     wait_for: str = Field(default="load", description="Wait condition: 'load', 'domcontentloaded', or 'networkidle'")
 
+
+class BrowserActArgs(BaseModel):
+    instruction: str = Field(description="Natural language instruction: what to do in the browser. Examples: 'click the first video', 'type cats in the search box and press enter', 'click Subscribe button'")
+
+class BrowserExtractArgs(BaseModel):
+    instruction: str = Field(description="What to extract from the page. Examples: 'get all video titles', 'get the price', 'list all links in the nav'")
 
 class BrowserClickArgs(BaseModel):
     selector: str = Field(description="CSS selector or visible text to click (e.g. 'button#submit', 'text=Login')")
@@ -975,10 +992,97 @@ def _find_local_file(file_name: str, workspace: str) -> "Path | None":
 # ── Browser session state (module-level so it persists across requests) ──────
 _browser_state: Dict[str, Any] = {
     "playwright": None,
-    "browser": None,
+    "browser": None,      # CDP Browser object (Chrome) or None
+    "context": None,      # BrowserContext (Firefox launch_persistent_context) or None
     "page": None,
-    "connected": False,   # True when attached to a real browser via CDP
+    "connected": False,   # True when attached to a real browser
+    "prev_indices": set(),  # for new-element diffing
 }
+
+# ── DOM serializer JS (browser-use/Skyvern style) ─────────────────────────────
+# Injects sequential [index] markers on every interactive element.
+# Pure JS — no extra deps. MIT-compatible technique from browser-use.
+_JS_DOM_SERIALIZER = r"""
+() => {
+    const INTERACTIVE_TAGS = new Set(['a','button','input','select','textarea','details','summary']);
+    const INTERACTIVE_ROLES = new Set([
+        'button','link','checkbox','radio','tab','menuitem','option',
+        'combobox','listbox','switch','treeitem','searchbox','spinbutton'
+    ]);
+
+    // Reset previous markers
+    document.querySelectorAll('[data-ai-idx]').forEach(e => e.removeAttribute('data-ai-idx'));
+
+    let counter = 0;
+    const indices = [];
+
+    function isVisible(el) {
+        const r = el.getBoundingClientRect();
+        if (r.width === 0 || r.height === 0) return false;
+        const s = window.getComputedStyle(el);
+        return s.display !== 'none' && s.visibility !== 'hidden' && s.opacity !== '0';
+    }
+
+    function isInteractive(el) {
+        const tag = el.tagName.toLowerCase();
+        if (INTERACTIVE_TAGS.has(tag)) return true;
+        const role = (el.getAttribute('role') || '').toLowerCase();
+        if (role && INTERACTIVE_ROLES.has(role)) return true;
+        if (window.getComputedStyle(el).cursor === 'pointer') return true;
+        if (el.hasAttribute('onclick') || el.hasAttribute('ng-click') || el.hasAttribute('@click')) return true;
+        if (el.tabIndex >= 0 && !['div','span','p'].includes(tag)) return true;
+        return false;
+    }
+
+    function getAttrs(el) {
+        const attrs = [];
+        for (const a of ['type','placeholder','aria-label','name','value','href','role','for','title']) {
+            const v = el.getAttribute(a);
+            if (v) attrs.push(`${a}="${v.slice(0,80).replace(/"/g,"'")}"`);
+        }
+        return attrs.length ? ' ' + attrs.join(' ') : '';
+    }
+
+    function serialize(el, depth) {
+        if (!isVisible(el)) return '';
+        const tag = el.tagName.toLowerCase();
+        if (['script','style','head','meta','link','noscript','svg'].includes(tag)) return '';
+        const indent = '  '.repeat(depth);
+        const lines = [];
+
+        if (isInteractive(el)) {
+            const idx = ++counter;
+            el.setAttribute('data-ai-idx', String(idx));
+            indices.push(idx);
+            const attrStr = getAttrs(el);
+            const text = (el.innerText || el.value || '').trim().slice(0, 80);
+            lines.push(`${indent}[${idx}]<${tag}${attrStr} />`);
+            if (text) lines.push(`${indent}  ${text}`);
+        } else {
+            // Non-interactive: emit visible text if leaf node
+            const directText = [...el.childNodes]
+                .filter(n => n.nodeType === 3)
+                .map(n => n.textContent.trim())
+                .join(' ')
+                .trim()
+                .slice(0, 100);
+            if (directText && depth < 8) lines.push(`${indent}${directText}`);
+        }
+
+        for (const child of el.children) {
+            const s = serialize(child, depth + (isInteractive(el) ? 1 : 0));
+            if (s) lines.push(s);
+        }
+        return lines.join('\n');
+    }
+
+    const snapshot = serialize(document.body, 0);
+    return { snapshot, indices };
+}
+"""
+
+_JS_CLICK_BY_IDX = "([idx]) => { const el = document.querySelector(`[data-ai-idx='${idx}']`); if (!el) return false; el.click(); return true; }"
+_JS_FOCUS_BY_IDX = "([idx]) => { const el = document.querySelector(`[data-ai-idx='${idx}']`); if (!el) return false; el.focus(); return true; }"
 
 
 def _browser_cleanup_sync() -> None:
@@ -986,12 +1090,18 @@ def _browser_cleanup_sync() -> None:
     import asyncio as _asyncio
     pw = _browser_state.get("playwright")
     browser = _browser_state.get("browser")
-    if not pw and not browser:
+    context = _browser_state.get("context")
+    if not pw and not browser and not context:
         return
     try:
         loop = _asyncio.get_event_loop()
         if loop.is_running():
             async def _cleanup():
+                try:
+                    if context:
+                        await context.close()
+                except Exception:
+                    pass
                 try:
                     if browser:
                         await browser.close()
@@ -1005,6 +1115,11 @@ def _browser_cleanup_sync() -> None:
             loop.create_task(_cleanup())
         else:
             async def _cleanup_blocking():
+                try:
+                    if context:
+                        await context.close()
+                except Exception:
+                    pass
                 try:
                     if browser:
                         await browser.close()
@@ -1021,6 +1136,7 @@ def _browser_cleanup_sync() -> None:
     finally:
         _browser_state["playwright"] = None
         _browser_state["browser"] = None
+        _browser_state["context"] = None
         _browser_state["page"] = None
         _browser_state["connected"] = False
 
@@ -2272,11 +2388,13 @@ def create_langchain_tools(openai_integration, profile, skill_manager=None, stor
         return browser
 
     async def browser_connect_tool(cdp_url: str = "http://localhost:9222") -> str:
-        """Connect to the user's real browser (Chrome or Firefox) via CDP.
+        """Connect to the user's real browser.
 
-        If no browser is listening on the CDP port, automatically detects whether
-        Firefox or Chrome is running and relaunches the appropriate one with
-        --remote-debugging-port so all existing sessions are preserved.
+        Firefox: launches via Playwright's native Firefox protocol using the
+        user's real profile (~/.mozilla/firefox/*.default-release). No CDP needed.
+
+        Chrome/Chromium: connects via CDP. If not listening, relaunches with
+        --remote-debugging-port so existing sessions are preserved.
         """
         try:
             from playwright.async_api import async_playwright
@@ -2286,23 +2404,17 @@ def create_langchain_tools(openai_integration, profile, skill_manager=None, stor
         import shutil
         port = int(cdp_url.split(":")[-1]) if ":" in cdp_url else 9222
 
-        if await _cdp_is_ready("127.0.0.1", port):
-            try:
-                await _connect_cdp(cdp_url)
-            except Exception as e:
-                return f"CDP endpoint responded but Playwright connection failed: {e}"
-        else:
+        firefox_bin = shutil.which("firefox")
+        if firefox_bin:
+            logger.info("browser_connect: Firefox detected, using launch_persistent_context...")
+
             _ff_proc = await asyncio.create_subprocess_exec(
                 "pgrep", "-f", "firefox",
                 stdout=asyncio.subprocess.DEVNULL,
                 stderr=asyncio.subprocess.DEVNULL,
             )
             _ff_rc = await _ff_proc.wait()
-            firefox_running = shutil.which("firefox") and (_ff_rc == 0)
-
-            if firefox_running:
-                logger.info("browser_connect: Firefox detected, relaunching with CDP remote debugging...")
-
+            if _ff_rc == 0:
                 for sig in ("TERM", "KILL"):
                     await asyncio.create_subprocess_exec(
                         "pkill", f"-{sig}", "-f", "firefox",
@@ -2310,7 +2422,6 @@ def create_langchain_tools(openai_integration, profile, skill_manager=None, stor
                         stderr=asyncio.subprocess.DEVNULL,
                     )
                     await asyncio.sleep(1.5)
-
                 for _ in range(10):
                     chk = await asyncio.create_subprocess_exec(
                         "pgrep", "-f", "firefox",
@@ -2322,59 +2433,123 @@ def create_langchain_tools(openai_integration, profile, skill_manager=None, stor
                         break
                     await asyncio.sleep(1)
 
+            import glob as _glob
+            home = os.path.expanduser("~")
+            profile_dir = None
+            for pattern in [
+                f"{home}/.mozilla/firefox/*.default-release",
+                f"{home}/.mozilla/firefox/*.default",
+                f"{home}/.mozilla/firefox/*",
+            ]:
+                matches = [m for m in _glob.glob(pattern) if os.path.isdir(m)]
+                if matches:
+                    profile_dir = matches[0]
+                    break
+
+            if not profile_dir:
+                return (
+                    "Firefox is installed but no profile directory was found under ~/.mozilla/firefox/.\n"
+                    "Run Firefox manually once to create a profile, then try again."
+                )
+
+            for lock_file in ["lock", ".parentlock"]:
+                lf = os.path.join(profile_dir, lock_file)
+                if os.path.exists(lf):
+                    try:
+                        os.remove(lf)
+                    except OSError:
+                        pass
+
+            old_ctx = _browser_state.get("context")
+            old_browser = _browser_state.get("browser")
+            if old_ctx:
+                try:
+                    await old_ctx.close()
+                except Exception:
+                    pass
+            if old_browser:
+                try:
+                    await old_browser.close()
+                except Exception:
+                    pass
+
+            if _browser_state["playwright"] is None:
+                _browser_state["playwright"] = await async_playwright().start()
+
+            pw_instance = _browser_state["playwright"]
+            try:
+                context = await pw_instance.firefox.launch_persistent_context(
+                    user_data_dir=profile_dir,
+                    headless=False,
+                    args=["--no-remote"],
+                )
+            except Exception as e:
+                return f"Failed to launch Firefox with profile {profile_dir}: {e}"
+
+            _browser_state["context"] = context
+            _browser_state["browser"] = None
+            _browser_state["connected"] = True
+
+            await asyncio.sleep(1)  # let Firefox settle
+            pages = context.pages
+            if not pages:
+                pages = [await context.new_page()]
+            _browser_state["page"] = pages[0]
+
+            tab_list = "\n".join(f"  [{i}] {p.url[:80]}" for i, p in enumerate(pages))
+            return (
+                f"Connected to Firefox (profile: {os.path.basename(profile_dir)})\n"
+                f"Open tabs ({len(pages)}):\n{tab_list}\n\n"
+                f"Active tab: {_browser_state['page'].url}"
+            )
+
+        # ── Chrome / Chromium path (CDP) ─────────────────────────────────────
+        if await _cdp_is_ready("127.0.0.1", port):
+            try:
+                await _connect_cdp(cdp_url)
+            except Exception as e:
+                return f"CDP endpoint responded but Playwright connection failed: {e}"
+        else:
+            logger.info("browser_connect: CDP not available, relaunching Chrome with remote debugging...")
+
+            chrome_bins = ["google-chrome-stable", "google-chrome", "chromium", "chromium-browser"]
+            chrome_bin = next((b for b in chrome_bins if shutil.which(b)), None)
+            if not chrome_bin:
+                return (
+                    "No browser found. Firefox and Chrome are both unavailable.\n"
+                    "Install firefox or google-chrome-stable."
+                )
+
+            for sig in ("TERM", "KILL"):
                 await asyncio.create_subprocess_exec(
-                    "firefox",
-                    f"--remote-debugging-port={port}",
-                    "--no-remote",
+                    "pkill", f"-{sig}", "-f", "chrome",
                     stdout=asyncio.subprocess.DEVNULL,
                     stderr=asyncio.subprocess.DEVNULL,
                 )
+                await asyncio.sleep(1)
 
-                browser_name = "Firefox"
-            else:
-                logger.info("browser_connect: CDP not available, relaunching Chrome with remote debugging...")
-
-                chrome_bins = ["google-chrome-stable", "google-chrome", "chromium", "chromium-browser"]
-                chrome_bin = next((b for b in chrome_bins if shutil.which(b)), None)
-                if not chrome_bin:
-                    return (
-                        "No browser found running. Chrome is not installed either.\n"
-                        "Install google-chrome-stable, or start Firefox manually with:\n"
-                        f"  firefox --remote-debugging-port={port} --no-remote"
-                    )
-
-                for sig in ("TERM", "KILL"):
-                    await asyncio.create_subprocess_exec(
-                        "pkill", f"-{sig}", "-f", "chrome",
-                        stdout=asyncio.subprocess.DEVNULL,
-                        stderr=asyncio.subprocess.DEVNULL,
-                    )
-                    await asyncio.sleep(1)
-
-                for _ in range(10):
-                    chk = await asyncio.create_subprocess_exec(
-                        "pgrep", "-f", "chrome",
-                        stdout=asyncio.subprocess.DEVNULL,
-                        stderr=asyncio.subprocess.DEVNULL,
-                    )
-                    await chk.wait()
-                    if chk.returncode != 0:
-                        break
-                    await asyncio.sleep(1)
-
-                real_profile = os.path.expanduser("~/.config/google-chrome")
-                await asyncio.create_subprocess_exec(
-                    chrome_bin,
-                    f"--remote-debugging-port={port}",
-                    f"--user-data-dir={real_profile}",
-                    "--no-first-run",
-                    "--no-default-browser-check",
-                    "--disable-session-crashed-bubble",
+            for _ in range(10):
+                chk = await asyncio.create_subprocess_exec(
+                    "pgrep", "-f", "chrome",
                     stdout=asyncio.subprocess.DEVNULL,
                     stderr=asyncio.subprocess.DEVNULL,
                 )
+                await chk.wait()
+                if chk.returncode != 0:
+                    break
+                await asyncio.sleep(1)
 
-                browser_name = "Chrome"
+            real_profile = os.path.expanduser("~/.config/google-chrome")
+            await asyncio.create_subprocess_exec(
+                chrome_bin,
+                f"--remote-debugging-port={port}",
+                f"--user-data-dir={real_profile}",
+                "--no-first-run",
+                "--no-default-browser-check",
+                "--disable-session-crashed-bubble",
+                stdout=asyncio.subprocess.DEVNULL,
+                stderr=asyncio.subprocess.DEVNULL,
+            )
 
             ready = False
             for _ in range(30):
@@ -2385,9 +2560,9 @@ def create_langchain_tools(openai_integration, profile, skill_manager=None, stor
 
             if not ready:
                 return (
-                    f"{browser_name} was relaunched with --remote-debugging-port={port} but "
+                    f"Chrome was relaunched with --remote-debugging-port={port} but "
                     "the CDP endpoint is not responding after 30s. "
-                    f"{browser_name} may have failed to start."
+                    "Chrome may have failed to start."
                 )
 
             try:
@@ -2395,12 +2570,11 @@ def create_langchain_tools(openai_integration, profile, skill_manager=None, stor
             except Exception as e:
                 return f"CDP endpoint is up but Playwright connection failed: {e}"
 
-        # Build tab list
+        # Build tab list (Chrome CDP path)
         all_pages = [p for ctx in _browser_state["browser"].contexts for p in ctx.pages]
         tab_list = "\n".join(f"  [{i}] {p.url[:80]}" for i, p in enumerate(all_pages))
-        browser_label = "Firefox" if "firefox" in _browser_state.get("browser", object()).__class__.__name__.lower() else "browser"
         return (
-            f"Connected to {browser_label} at {cdp_url}\n"
+            f"Connected to Chrome at {cdp_url}\n"
             f"Open tabs ({len(all_pages)}):\n{tab_list}\n\n"
             f"Active tab: {_browser_state['page'].url}"
         )
@@ -2408,10 +2582,14 @@ def create_langchain_tools(openai_integration, profile, skill_manager=None, stor
     async def browser_switch_tab_tool(index: int) -> str:
         """Switch to a specific open tab by index (use browser_connect first to list tabs)."""
         try:
-            browser = _browser_state["browser"]
-            if not browser:
+            context = _browser_state.get("context")
+            browser = _browser_state.get("browser")
+            if context:
+                all_pages = list(context.pages)
+            elif browser:
+                all_pages = [p for ctx in browser.contexts for p in ctx.pages]
+            else:
                 return "No browser connected. Use browser_connect first."
-            all_pages = [p for ctx in browser.contexts for p in ctx.pages]
             if index < 0 or index >= len(all_pages):
                 return f"Invalid tab index {index}. Available: 0–{len(all_pages)-1}"
             _browser_state["page"] = all_pages[index]
@@ -2526,6 +2704,215 @@ user_pref("devtools.debugger.force-local", true);
         except Exception as e:
             return f"Type error: {e}"
 
+    # ── browser_act / browser_extract — DOM-indexed AI browser control ────────
+
+    async def _dom_snapshot(page) -> dict:
+        """Run JS DOM serializer, return {snapshot, indices, new_indices}."""
+        result = await page.evaluate(_JS_DOM_SERIALIZER)
+        snapshot: str = result["snapshot"]
+        indices: list = result["indices"]
+        prev: set = _browser_state["prev_indices"]
+        new_indices = set(indices) - prev
+        _browser_state["prev_indices"] = set(indices)
+        for idx in new_indices:
+            snapshot = snapshot.replace(f"[{idx}]", f"*[{idx}]")
+        return {"snapshot": snapshot, "indices": indices}
+
+    async def _execute_actions(page, actions: list[dict]) -> list[str]:
+        """Execute a list of LLM-produced actions sequentially."""
+        results = []
+        for action in actions[:6]:
+            atype = action.get("type", "")
+            idx   = action.get("index")
+            text  = action.get("text", "")
+            url   = action.get("url", "")
+            key   = action.get("key", "Enter")
+
+            try:
+                if atype == "click" and idx:
+                    clicked = await page.evaluate(_JS_CLICK_BY_IDX, [idx])
+                    if not clicked:
+                        await page.locator(f"[data-ai-idx='{idx}']").click(timeout=6000)
+                    results.append(f"clicked [{idx}]")
+
+                elif atype == "type" and idx:
+                    await page.locator(f"[data-ai-idx='{idx}']").fill(text, timeout=6000)
+                    results.append(f"typed '{text}' into [{idx}]")
+
+                elif atype == "press" and idx:
+                    await page.evaluate(_JS_FOCUS_BY_IDX, [idx])
+                    await page.keyboard.press(key)
+                    results.append(f"pressed {key} on [{idx}]")
+
+                elif atype == "press_key":
+                    await page.keyboard.press(key)
+                    results.append(f"pressed {key}")
+
+                elif atype == "go_to_url" and url:
+                    await page.goto(url, wait_until="domcontentloaded", timeout=20000)
+                    results.append(f"navigated to {url}")
+                    break  # re-snapshot after navigation
+
+                elif atype == "scroll":
+                    direction = action.get("direction", "down")
+                    amount    = action.get("amount", 300)
+                    if idx:
+                        await page.locator(f"[data-ai-idx='{idx}']").scroll_into_view_if_needed()
+                    else:
+                        dy = amount if direction == "down" else -amount
+                        await page.evaluate(f"window.scrollBy(0, {dy})")
+                    results.append(f"scrolled {direction}")
+
+                elif atype == "select" and idx:
+                    await page.locator(f"[data-ai-idx='{idx}']").select_option(text, timeout=6000)
+                    results.append(f"selected '{text}' in [{idx}]")
+
+                elif atype == "hover" and idx:
+                    await page.locator(f"[data-ai-idx='{idx}']").hover(timeout=6000)
+                    results.append(f"hovered [{idx}]")
+
+                else:
+                    results.append(f"skipped unknown action: {atype}")
+                    continue
+
+                try:
+                    await page.wait_for_load_state("domcontentloaded", timeout=3000)
+                except Exception:
+                    pass
+
+            except Exception as e:
+                results.append(f"error on {atype}[{idx}]: {e}")
+
+        return results
+
+    _ACT_SYSTEM_PROMPT = """You are a browser automation agent. You receive a snapshot of the current page where interactive elements are marked with [index] numbers.
+
+Elements marked with *[index] are NEW since the last action — pay attention to them.
+
+Your job: return a JSON object with an "actions" array (up to 6 actions) to fulfill the user instruction.
+
+Action types:
+- {"type": "click", "index": N}
+- {"type": "type", "index": N, "text": "..."}
+- {"type": "press", "index": N, "key": "Enter"}
+- {"type": "press_key", "key": "Enter"}
+- {"type": "select", "index": N, "text": "option value"}
+- {"type": "scroll", "direction": "down"|"up", "amount": 300}
+- {"type": "scroll", "index": N}  (scroll element into view)
+- {"type": "go_to_url", "url": "https://..."}
+- {"type": "hover", "index": N}
+
+Rules:
+- Reference elements ONLY by their [index] number
+- For search boxes: use "type" then "press_key" with key "Enter"
+- For dropdowns: use "click" to open, then "click" on the option (*[index] will show the new options)
+- Stop the actions array after go_to_url (page will reload)
+- If the task is already done, return {"actions": [], "done": true, "result": "..."}
+- Return ONLY valid JSON, no markdown"""
+
+    async def browser_act_tool(instruction: str) -> str:
+        """Perform browser actions using natural language and indexed DOM."""
+        import json as _json
+        try:
+            page = await _get_page()
+        except Exception as e:
+            return f"No browser connected: {e}"
+
+        # Snapshot
+        snap = await _dom_snapshot(page)
+        if not snap["snapshot"].strip():
+            return "Page appears empty or could not be indexed. Try browser_navigate first."
+
+        page_info = f"URL: {page.url}\nTitle: {await page.title()}"
+        user_msg  = f"{page_info}\n\nPage snapshot:\n{snap['snapshot'][:7000]}\n\nInstruction: {instruction}"
+
+        try:
+            resp = await openai_integration.client.chat.completions.create(
+                model=openai_integration.model,
+                messages=[
+                    {"role": "system", "content": _ACT_SYSTEM_PROMPT},
+                    {"role": "user",   "content": user_msg},
+                ],
+                temperature=0.1,
+                max_tokens=600,
+                response_format={"type": "json_object"},
+            )
+            raw = resp.choices[0].message.content.strip()
+            data = _json.loads(raw)
+        except Exception as e:
+            return f"LLM error: {e}"
+
+        if data.get("done"):
+            return data.get("result", "Task completed.")
+
+        actions = data.get("actions", [])
+        if not actions:
+            return "LLM found no applicable actions for that instruction."
+
+        executed = await _execute_actions(page, actions)
+
+        # Self-heal: if all actions errored, re-snapshot and retry once
+        if all("error" in r for r in executed):
+            snap2 = await _dom_snapshot(page)
+            user_msg2 = f"{page_info}\n\nPage snapshot (retry):\n{snap2['snapshot'][:7000]}\n\nInstruction: {instruction}"
+            try:
+                resp2 = await openai_integration.client.chat.completions.create(
+                    model=openai_integration.model,
+                    messages=[
+                        {"role": "system", "content": _ACT_SYSTEM_PROMPT},
+                        {"role": "user",   "content": user_msg2},
+                    ],
+                    temperature=0.3,
+                    max_tokens=600,
+                    response_format={"type": "json_object"},
+                )
+                data2 = _json.loads(resp2.choices[0].message.content.strip())
+                executed = await _execute_actions(page, data2.get("actions", []))
+            except Exception:
+                pass
+
+        summary = " → ".join(executed)
+        title   = await page.title()
+        return f"Done: {summary}\nPage: {title} ({page.url})"
+
+    async def browser_extract_tool(instruction: str) -> str:
+        """Extract structured data from the current page using natural language."""
+        import json as _json
+        try:
+            page = await _get_page()
+        except Exception as e:
+            return f"No browser connected: {e}"
+
+        snap = await _dom_snapshot(page)
+        snapshot_text = snap["snapshot"] or await page.inner_text("body")
+
+        prompt = f"""Extract information from this web page based on the instruction.
+
+URL: {page.url}
+Title: {await page.title()}
+
+Page elements (interactive elements have [index] markers, others show their text):
+{snapshot_text[:8000]}
+
+Instruction: {instruction}
+
+Return a clean, structured plain-text answer.
+For lists, use a numbered format.
+If data is not found, say so clearly."""
+
+        try:
+            resp = await openai_integration.client.chat.completions.create(
+                model=openai_integration.model,
+                messages=[{"role": "user", "content": prompt}],
+                temperature=0.1,
+                max_tokens=1200,
+            )
+            return resp.choices[0].message.content.strip()
+        except Exception as e:
+            return f"Extract error: {e}"
+
+    # ─────────────────────────────────────────────────────────────────────────
+
     async def browser_get_content_tool(selector: str = "", as_html: bool = False) -> str:
         """Extract text or HTML from the page or a specific element."""
         try:
@@ -2581,18 +2968,23 @@ user_pref("devtools.debugger.force-local", true);
         """Disconnect from the browser session. When connected to a real browser via
         browser_connect, this only disconnects — it does NOT close the user's browser."""
         try:
-            if _browser_state["connected"]:
-                if _browser_state["browser"]:
-                    await _browser_state["browser"].close()
+            context = _browser_state.get("context")
+            browser = _browser_state.get("browser")
+
+            if context:
+                await context.close()
+                msg = "Disconnected from Firefox (your browser session was closed)."
+            elif browser:
+                await browser.close()
                 msg = "Disconnected from browser (your browser remains open)."
             else:
-                if _browser_state["browser"]:
-                    await _browser_state["browser"].close()
-                msg = "Browser session closed."
+                msg = "No browser session active."
 
+            _browser_state["context"] = None
             _browser_state["browser"] = None
             _browser_state["page"] = None
             _browser_state["connected"] = False
+            _browser_state["prev_indices"] = set()
 
             if _browser_state["playwright"]:
                 await _browser_state["playwright"].stop()
@@ -3623,6 +4015,8 @@ user_pref("devtools.debugger.force-local", true);
         _tool("browser_switch_tab",           prompts.get("browser_switch_tab",          _DEFAULT_TOOL_PROMPTS["browser_switch_tab"]),          browser_switch_tab_tool,          BrowserSwitchTabArgs),
         _tool("browser_enable_remote_debug",  prompts.get("browser_enable_remote_debug", _DEFAULT_TOOL_PROMPTS["browser_enable_remote_debug"]), browser_enable_remote_debug_tool, BrowserEnableRemoteDebugArgs),
         _tool("browser_evaluate",             prompts.get("browser_evaluate",            _DEFAULT_TOOL_PROMPTS["browser_evaluate"]),            browser_evaluate_tool,            BrowserEvaluateArgs),
+        _tool("browser_act",            prompts.get("browser_act",        _DEFAULT_TOOL_PROMPTS["browser_act"]),        browser_act_tool,        BrowserActArgs),
+        _tool("browser_extract",        prompts.get("browser_extract",    _DEFAULT_TOOL_PROMPTS["browser_extract"]),    browser_extract_tool,    BrowserExtractArgs),
         _tool("browser_navigate",       prompts.get("browser_navigate",   _DEFAULT_TOOL_PROMPTS["browser_navigate"]),   browser_navigate_tool,   BrowserNavigateArgs),
         _tool("browser_click",          prompts.get("browser_click",      _DEFAULT_TOOL_PROMPTS["browser_click"]),      browser_click_tool,      BrowserClickArgs),
         _tool("browser_type",           prompts.get("browser_type",       _DEFAULT_TOOL_PROMPTS["browser_type"]),       browser_type_tool,       BrowserTypeArgs),

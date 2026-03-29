@@ -68,14 +68,26 @@ _SYSTEM_DEPS = [
         "check_bin": "grim",
     },
     {
-        "package": "playwright-browsers",
-        "purpose": "Browser automation for DOM access, button clicks, page scraping (browser tool)",
+        "package": "playwright-chromium",
+        "purpose": "Browser automation — Chrome/Chromium engine (browser tool)",
         "required": False,
-        "apt": None,   # installed via: playwright install chromium
+        "apt": None,
         "pacman": None,
         "brew": None,
         "check_bin": None,
         "post_install": "python -m playwright install chromium",
+        "_cache_glob": "chromium*",
+    },
+    {
+        "package": "playwright-firefox",
+        "purpose": "Browser automation — Firefox engine, uses your real Firefox profile (browser tool)",
+        "required": False,
+        "apt": None,
+        "pacman": None,
+        "brew": None,
+        "check_bin": None,
+        "post_install": "python -m playwright install firefox",
+        "_cache_glob": "firefox*",
     },
 ]
 
@@ -90,10 +102,9 @@ def _detect_package_manager() -> str | None:
 def _check_installed(dep: dict) -> bool:
     if dep.get("check_bin"):
         return shutil.which(dep["check_bin"]) is not None
-    if dep.get("post_install") and "playwright" in dep.get("post_install", ""):
-        # Check if playwright chromium cache exists
+    if dep.get("_cache_glob"):
         cache = Path.home() / ".cache" / "ms-playwright"
-        return any(cache.glob("chromium*")) if cache.exists() else False
+        return any(cache.glob(dep["_cache_glob"])) if cache.exists() else False
     return True  # can't check, assume ok
 
 
