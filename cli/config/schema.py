@@ -156,6 +156,7 @@ class LLMExtendedServiceConfig:
 class ServicesConfig:
     mongodb: MongoDBConfig = field(default_factory=MongoDBConfig)
     openai: OpenAIServiceConfig = field(default_factory=OpenAIServiceConfig)
+    provider_keys: dict = field(default_factory=dict)  # {base_url: api_key}
     langchain: LangChainServiceConfig = field(default_factory=LangChainServiceConfig)
     qdrant: QdrantServiceConfig = field(default_factory=QdrantServiceConfig)
     embeddings: EmbeddingsServiceConfig = field(default_factory=EmbeddingsServiceConfig)

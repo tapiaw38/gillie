@@ -185,15 +185,17 @@ def provider_use(
             cfg
         except NameError:
             cfg = load_config()
-        current_key = cfg.services.openai.api_key or ""
-        current_base_url = cfg.services.openai.base_url or ""
-        same_provider = current_base_url == preset["base_url"]
+        target_url = preset["base_url"]
+        saved_key = cfg.services.provider_keys.get(target_url) or cfg.services.openai.api_key or ""
+        active_url = cfg.services.openai.base_url or ""
+        saved_key_is_for_active = saved_key and active_url == target_url
 
-        if current_key and same_provider:
-            masked = current_key[:8] + "..." + current_key[-4:]
+        if saved_key:
+            masked = saved_key[:8] + "..." + saved_key[-4:]
+            label = "API key already configured" if saved_key_is_for_active else "Saved API key found for this provider"
             try:
                 action = _inquirer.select(
-                    message=f"API key already configured: {masked}",
+                    message=f"{label}: {masked}",
                     choices=[
                         {"name": "  Keep existing key", "value": "keep"},
                         {"name": "  Change to a new key", "value": "change"},
@@ -206,7 +208,7 @@ def provider_use(
             if action == "change":
                 resolved_key = typer.prompt(f"Enter new API key for {provider}", hide_input=True)
             else:
-                resolved_key = current_key
+                resolved_key = saved_key
         else:
             resolved_key = typer.prompt(f"Enter API key for {provider}", hide_input=True)
 
@@ -223,6 +225,7 @@ def provider_use(
     cfg.services.openai.base_url = preset["base_url"]
     cfg.services.openai.model = preset["model"]
     cfg.services.openai.auth_type = preset["auth_type"]
+    cfg.services.provider_keys[preset["base_url"]] = resolved_key
     save_config(cfg)
 
     console.print(f"[green]Provider switched to[/green] [bold cyan]{provider}[/bold cyan]")
