@@ -390,7 +390,8 @@ const conversationSelectedHandler = computed(() => {
   cursor: pointer;
   transition:
     transform 0.2s ease,
-    opacity 0.2s ease;
+    opacity 0.2s ease,
+    border-radius 0.3s ease;
   font-size: 1.1rem;
 }
 
@@ -400,6 +401,7 @@ const conversationSelectedHandler = computed(() => {
 }
 
 .spinner-effect {
+  border-radius: 50% !important;
   animation: spinner-border 2s linear forwards;
 }
 
