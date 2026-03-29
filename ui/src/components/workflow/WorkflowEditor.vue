@@ -286,34 +286,39 @@ watch(
           </div>
           <div v-if="!readonly" class="header-actions">
             <Button
-              label="Agregar HTTP"
+              v-tooltip.bottom="'Agregar HTTP'"
               icon="pi pi-plus"
               size="small"
               severity="success"
               @click="addHttpRequestNode"
             />
             <Button
-              label="Agregar Condición"
+              v-tooltip.bottom="'Agregar Condición'"
               icon="pi pi-question"
               size="small"
               severity="warning"
               @click="addConditionNode"
             />
             <Button
-              label="Recargar desde JSON"
+              v-tooltip.bottom="'Recargar desde JSON'"
               icon="pi pi-refresh"
               size="small"
               severity="secondary"
               @click="loadWorkflowFromJson(props.workflow!)"
             />
             <Button
-              label="Exportar a JSON"
+              v-tooltip.bottom="'Exportar a JSON'"
               icon="pi pi-download"
               size="small"
               severity="info"
               @click="handleExport"
             />
-            <Button label="Guardar Workflow" icon="pi pi-save" size="small" @click="handleSave" />
+            <Button
+              v-tooltip.bottom="'Guardar Workflow'"
+              icon="pi pi-save"
+              size="small"
+              @click="handleSave"
+            />
           </div>
         </div>
       </template>
