@@ -34,9 +34,12 @@ app = FastAPI(
 
 register_exception_handlers(app)
 
+_raw_origins = os.getenv("ALLOWED_ORIGINS", "*")
+_allow_origins = [o.strip() for o in _raw_origins.split(",")] if _raw_origins != "*" else ["*"]
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=_allow_origins,
     allow_origin_regex=r"(file://.*|null|app://.*|http://localhost(:\d+)?|https://localhost(:\d+)?)",
     allow_credentials=False,
     allow_methods=["*"],
@@ -116,6 +119,14 @@ if config_service.nosql_config.drive_sessions:
         config_service.nosql_config.drive_sessions.collection,
     )
 
+gmail_sessions_client = None
+if config_service.nosql_config.gmail_sessions:
+    gmail_sessions_client = MongoDBClient(
+        config_service.nosql_config.gmail_sessions.database_uri,
+        config_service.nosql_config.gmail_sessions.database,
+        config_service.nosql_config.gmail_sessions.collection,
+    )
+
 profiles_client.run_migrations(migrations_client.get_collection(), execute_migrations())
 
 # ─── Storage ──────────────────────────────────────────────────────────────────
@@ -140,6 +151,7 @@ datasources = Datasources.create_datasources(
     no_sql_drive_sessions_client=drive_sessions_client,
     no_sql_whatsapp_devices_client=whatsapp_devices_client,
     no_sql_jobs_client=jobs_client,
+    no_sql_gmail_sessions_client=gmail_sessions_client,
 )
 
 from src.adapters.datasources.repositories.repositories import Repositories
@@ -148,7 +160,12 @@ repositories = Repositories.create_repositories(datasources)
 # ─── Integrations & Services ──────────────────────────────────────────────────
 skill_manager = SkillManager()
 
-integrations = create_integrations(config_service, calendar_repository=repositories.calendar, drive_repository=repositories.drive)
+integrations = create_integrations(
+    config_service,
+    calendar_repository=repositories.calendar,
+    drive_repository=repositories.drive,
+    gmail_repository=repositories.gmail,
+)
 
 integrations.openai.set_skill_manager(skill_manager)
 integrations.openai.set_store_service(store_service)
@@ -210,7 +227,7 @@ neonize_integration = NeonizeIntegration(sessions_dir="./data/whatsapp", stt_int
 routes_manager = RoutesManager(app, usecases, config_service, neonize_integration=neonize_integration, scheduler=scheduler)
 routes_manager.include_routes()
 
-app.add_middleware(SingleUserMiddleware, user_id=user_id)
+app.add_middleware(SingleUserMiddleware, user_id=user_id, profile_client=profiles_client)
 
 
 # ─── Startup: start scheduler ─────────────────────────────────────────────────

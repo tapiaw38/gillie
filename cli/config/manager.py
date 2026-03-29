@@ -77,6 +77,7 @@ def _build_services(services_data: dict) -> ServicesConfig:
         mercadolibre=MercadoLibreServiceConfig(**services_data.get("mercadolibre", {})),
         langsmith=LangSmithServiceConfig(**services_data.get("langsmith", {})),
         llm=LLMExtendedServiceConfig(**services_data.get("llm", {})),
+        provider_keys=services_data.get("provider_keys", {}),
     )
 
 
@@ -145,9 +146,11 @@ def save_config(config: AssistantConfig) -> None:
 
     path = get_config_path()
     path.parent.mkdir(parents=True, exist_ok=True)
+    services_dict = asdict(config.services)
+    services_dict["provider_keys"] = config.services.provider_keys
     technical = {
         "server": asdict(config.server),
-        "services": asdict(config.services),
+        "services": services_dict,
         "logging": asdict(config.logging),
         "tunnel": asdict(config.tunnel),
         "expose": asdict(config.expose),

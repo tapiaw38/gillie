@@ -3,9 +3,7 @@ import { computed, ref, watch } from 'vue'
 import DataTable from 'primevue/datatable'
 import Column from 'primevue/column'
 import Button from 'primevue/button'
-import ScrollPanel from 'primevue/scrollpanel'
 import Toast from 'primevue/toast'
-import Card from 'primevue/card'
 import { useConversation } from '@/composables/useConversation'
 import { useDateFormat } from '@/composables/useDateFormat'
 import { useErrorToast } from '@/composables/useErrorToast'
@@ -19,19 +17,42 @@ const { t } = useI18n()
 const {
   conversations,
   getUserConversation,
+  deleteConversation,
   isGetUserConversationSuccess,
   isGetUserConversationError,
   isGetUserConversationPending,
   getUserConversationError,
+  isDeleteConversationError,
+  deleteConversationError,
 } = useConversation()
 
 const { dateFormat } = useDateFormat()
+
+const deleteConversationHandler = async (conversationId: string) => {
+  try {
+    await deleteConversation(conversationId)
+    if (conversationSelected.value?.id === conversationId) {
+      conversationSelected.value = undefined
+    }
+    toast.add({
+      severity: 'success',
+      summary: t('conversations.deleted'),
+      detail: t('conversations.deletedDesc'),
+      life: 3000,
+    })
+  } catch {}
+}
 
 const errorWatchers = [
   {
     flag: isGetUserConversationError,
     summary: t('conversations.errorLoadDesc'),
     detail: getUserConversationError,
+  },
+  {
+    flag: isDeleteConversationError,
+    summary: t('conversations.errorDelete'),
+    detail: deleteConversationError,
   },
 ]
 
@@ -159,14 +180,22 @@ const conversationSelectedHandler = computed(() => {
                     </div>
                   </template>
                 </Column>
-                <Column field="created_at" :header="t('conversations.date_col')" class="date-column">
+                <Column
+                  field="created_at"
+                  :header="t('conversations.date_col')"
+                  class="date-column"
+                >
                   <template #body="slotProps">
                     <div class="date-info">
                       <span class="date-text">{{ dateFormat(slotProps.data.created_at) }}</span>
                     </div>
                   </template>
                 </Column>
-                <Column field="messages" :header="t('conversations.messages_col')" class="messages-column">
+                <Column
+                  field="messages"
+                  :header="t('conversations.messages_col')"
+                  class="messages-column"
+                >
                   <template #body="slotProps">
                     <div class="message-count">
                       <i class="pi pi-envelope"></i>
@@ -174,15 +203,30 @@ const conversationSelectedHandler = computed(() => {
                     </div>
                   </template>
                 </Column>
-                <Column field="actions" :header="t('conversations.actions_col')" class="actions-column">
+                <Column
+                  field="actions"
+                  :header="t('conversations.actions_col')"
+                  class="actions-column"
+                >
                   <template #body="slotProps">
-                    <Button
-                      :label="t('common.view')"
-                      icon="pi pi-eye"
-                      class="view-button"
-                      size="small"
-                      @click="conversationSelectedHandler(slotProps.data.id)"
-                    />
+                    <div class="action-buttons">
+                      <Button
+                        :label="t('common.view')"
+                        icon="pi pi-eye"
+                        class="view-button"
+                        size="small"
+                        @click="conversationSelectedHandler(slotProps.data.id)"
+                      />
+                      <Button
+                        icon="pi pi-trash"
+                        class="delete-button"
+                        size="small"
+                        severity="danger"
+                        text
+                        v-tooltip.top="t('conversations.delete')"
+                        @click="deleteConversationHandler(slotProps.data.id)"
+                      />
+                    </div>
                   </template>
                 </Column>
               </DataTable>
@@ -201,7 +245,9 @@ const conversationSelectedHandler = computed(() => {
             <div class="header-text">
               <h3>
                 {{
-                  conversationSelected ? t('conversations.messageHistory') : t('conversations.selectConversation')
+                  conversationSelected
+                    ? t('conversations.messageHistory')
+                    : t('conversations.selectConversation')
                 }}
               </h3>
               <p v-if="conversationSelected">
@@ -237,7 +283,11 @@ const conversationSelectedHandler = computed(() => {
                     <div class="message-bubble">
                       <div class="message-header">
                         <span class="sender-name">
-                          {{ message.sender === 'user' ? t('conversations.user') : t('conversations.assistant') }}
+                          {{
+                            message.sender === 'user'
+                              ? t('conversations.user')
+                              : t('conversations.assistant')
+                          }}
                         </span>
                         <span class="message-time">
                           {{ dateFormat(message.created_at) }}
@@ -338,7 +388,9 @@ const conversationSelectedHandler = computed(() => {
   align-items: center;
   justify-content: center;
   cursor: pointer;
-  transition: transform 0.2s ease, opacity 0.2s ease;
+  transition:
+    transform 0.2s ease,
+    opacity 0.2s ease;
   font-size: 1.1rem;
 }
 
@@ -560,18 +612,37 @@ const conversationSelectedHandler = computed(() => {
   color: var(--color-warning);
 }
 
+.action-buttons {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+}
+
 :deep(.view-button) {
   background: var(--gradient-success);
   border: none;
   border-radius: 0.5rem;
   padding: 0.4rem 0.875rem;
   font-weight: 500;
-  transition: transform 0.2s ease, opacity 0.2s ease;
+  transition:
+    transform 0.2s ease,
+    opacity 0.2s ease;
 }
 
 :deep(.view-button:hover) {
   transform: translateY(-1px);
   opacity: 0.9;
+}
+
+:deep(.delete-button) {
+  border-radius: 0.5rem;
+  transition:
+    transform 0.2s ease,
+    opacity 0.2s ease;
+}
+
+:deep(.delete-button:hover) {
+  transform: translateY(-1px);
 }
 
 /* Messages Content */

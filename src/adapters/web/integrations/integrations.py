@@ -19,6 +19,7 @@ class Integrations:
         config_service: ConfigurationService,
         calendar_repository=None,
         drive_repository=None,
+        gmail_repository=None,
     ):
         if Integrations._instance is not None:
             raise Exception("This class is a singleton! Use `Integrations.get_instance()` to access it.")
@@ -63,6 +64,27 @@ class Integrations:
         )
         logger.info("Google Drive integration initialized (credentials loaded from DB or env)")
 
+        # Gmail integration
+        self.gmail = None
+        if gmail_repository is not None:
+            from src.services.gmail.client import GoogleGmailClient
+            from src.adapters.web.integrations.gmail.gmail import GmailIntegration
+            gm_cfg = config_service.google_gmail_config
+            fallback_client = None
+            if gm_cfg and gm_cfg.client_id:
+                fallback_client = GoogleGmailClient(
+                    client_id=gm_cfg.client_id,
+                    client_secret=gm_cfg.client_secret,
+                    redirect_uri=gm_cfg.redirect_uri,
+                )
+            self.gmail = GmailIntegration(
+                repository=gmail_repository,
+                fallback_client=fallback_client,
+            )
+            logger.info("Gmail integration initialized")
+        else:
+            logger.info("Gmail integration disabled (no repository)")
+
         # MCP — in-process DatetimeTools
         self.mcp = MCPClient()
         logger.info("MCPClient (in-process) initialized")
@@ -89,7 +111,13 @@ def create_integrations(
     cfg: ConfigurationService,
     calendar_repository=None,
     drive_repository=None,
+    gmail_repository=None,
 ) -> Integrations:
     if Integrations._instance is None:
-        return Integrations(cfg, calendar_repository=calendar_repository, drive_repository=drive_repository)
+        return Integrations(
+            cfg,
+            calendar_repository=calendar_repository,
+            drive_repository=drive_repository,
+            gmail_repository=gmail_repository,
+        )
     return Integrations.get_instance()

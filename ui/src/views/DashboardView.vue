@@ -224,6 +224,14 @@ const integrations = computed(() => [
     enabled: true,
   },
   {
+    name: t('dashboard.integrations.googleGmail.name'),
+    description: t('dashboard.integrations.googleGmail.description'),
+    icon: 'pi pi-envelope',
+    tone: 'danger',
+    to: 'google-gmail-integration',
+    enabled: true,
+  },
+  {
     name: t('dashboard.integrations.sqlDatabase.name'),
     description: t('dashboard.integrations.sqlDatabase.description'),
     icon: 'pi pi-database',
@@ -1148,6 +1156,11 @@ const integrations = computed(() => [
 
 .integration-icon.tone-info {
   color: var(--do-info);
+  background: var(--vt-c-gray-50);
+}
+
+.integration-icon.tone-danger {
+  color: var(--do-danger);
   background: var(--vt-c-gray-50);
 }
 

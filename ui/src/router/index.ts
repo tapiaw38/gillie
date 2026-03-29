@@ -65,6 +65,11 @@ const router = createRouter({
           component: () => import('../views/GoogleDriveIntegrationView.vue'),
         },
         {
+          path: '/app/google-gmail-integration',
+          name: 'google-gmail-integration',
+          component: () => import('../views/GoogleGmailIntegrationView.vue'),
+        },
+        {
           path: '/app/sqldatabase-integration',
           name: 'sqldatabase-integration',
           component: () => import('../views/SQLDatabaseIntegrationView.vue'),

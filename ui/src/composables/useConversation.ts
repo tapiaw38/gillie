@@ -18,9 +18,12 @@ export const useConversation = () => {
     isGetUserConversationSuccess,
     isGetUserConversationError,
     getUserConversationError,
+    isDeleteConversationPending,
+    isDeleteConversationError,
+    deleteConversationError,
   } = storeToRefs(conversationStore)
 
-  const { getUserConversation } = conversationStore
+  const { getUserConversation, deleteConversation } = conversationStore
 
   return {
     // Data
@@ -31,8 +34,13 @@ export const useConversation = () => {
     isGetUserConversationError,
     getUserConversationError,
 
+    isDeleteConversationPending,
+    isDeleteConversationError,
+    deleteConversationError,
+
     // Methods
     getUserConversation,
+    deleteConversation,
     reset: conversationStore.$reset,
   }
 }

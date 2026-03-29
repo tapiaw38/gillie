@@ -2,7 +2,6 @@
 import { ref, reactive, computed, onMounted } from 'vue'
 import { useToast } from 'primevue/usetoast'
 import { useI18n } from 'vue-i18n'
-import Card from 'primevue/card'
 import Button from 'primevue/button'
 import InputText from 'primevue/inputtext'
 import Textarea from 'primevue/textarea'
@@ -54,7 +53,10 @@ interface RunResult {
 // ─── API helpers ──────────────────────────────────────────────────────────────
 
 const baseUrl = computed(() =>
-  (import.meta.env.VITE_ASSISTANT_BASE_URL as string || 'http://localhost:8000').replace(/\/$/, '')
+  ((import.meta.env.VITE_ASSISTANT_BASE_URL as string) || 'http://localhost:8000').replace(
+    /\/$/,
+    '',
+  ),
 )
 
 const apiHeaders = computed<Record<string, string>>(() => {
@@ -208,12 +210,16 @@ const validateForm = (): boolean => {
   const sourceKey = sourceParamKey.value
   const sourceValue = sourceKey ? (form.source_params[sourceKey] ?? '') : ''
   validationErrors.source_params =
-    sourceKey && !sourceValue.trim() ? t('cronJobs.fieldRequired', { field: sourceParamLabel.value }) : ''
+    sourceKey && !sourceValue.trim()
+      ? t('cronJobs.fieldRequired', { field: sourceParamLabel.value })
+      : ''
 
   const destKey = destinationParamKey.value
   const destValue = destKey ? (form.destination_params[destKey] ?? '') : ''
   validationErrors.destination_params =
-    destKey && !destValue.trim() ? t('cronJobs.fieldRequired', { field: destinationParamLabel.value }) : ''
+    destKey && !destValue.trim()
+      ? t('cronJobs.fieldRequired', { field: destinationParamLabel.value })
+      : ''
 
   return !Object.values(validationErrors).some(Boolean)
 }
@@ -330,11 +336,11 @@ const formatDate = (iso: string | null): string => {
 }
 
 const sourceTypeLabel = (value: string): string => {
-  return sourceTypeOptions.find((o) => o.value === value)?.label ?? value
+  return sourceTypeOptions.value.find((o) => o.value === value)?.label ?? value
 }
 
 const destinationTypeLabel = (value: string): string => {
-  return destinationTypeOptions.find((o) => o.value === value)?.label ?? value
+  return destinationTypeOptions.value.find((o) => o.value === value)?.label ?? value
 }
 
 const statusSeverity = (status: string): 'success' | 'warn' | 'danger' | 'info' => {
@@ -351,7 +357,6 @@ onMounted(loadJobs)
 
 <template>
   <div class="cronjobs-container">
-
     <!-- Header -->
     <div class="header-section">
       <div class="integration-header">
@@ -374,7 +379,6 @@ onMounted(loadJobs)
 
     <!-- Job list -->
     <div class="jobs-section">
-
       <!-- Loading -->
       <div v-if="loading" class="panel state-panel">
         <div class="centered-state">
@@ -402,7 +406,6 @@ onMounted(loadJobs)
       <div v-else class="jobs-grid">
         <div v-for="job in jobs" :key="job.id" class="job-card">
           <div class="job-card-inner">
-
             <div class="job-header-row">
               <div class="job-title-block">
                 <span class="job-name">{{ job.name }}</span>
@@ -429,19 +432,27 @@ onMounted(loadJobs)
                 <code class="meta-value cron-value">{{ job.cron_expr }}</code>
               </div>
               <div class="meta-item">
-                <span class="meta-label"><i class="pi pi-arrow-right-arrow-left"></i> {{ t('cronJobs.flow') }}</span>
+                <span class="meta-label"
+                  ><i class="pi pi-arrow-right-arrow-left"></i> {{ t('cronJobs.flow') }}</span
+                >
                 <span class="meta-value flow-value">
                   <span class="flow-badge source">{{ sourceTypeLabel(job.source_type) }}</span>
                   <i class="pi pi-arrow-right flow-arrow"></i>
-                  <span class="flow-badge dest">{{ destinationTypeLabel(job.destination_type) }}</span>
+                  <span class="flow-badge dest">{{
+                    destinationTypeLabel(job.destination_type)
+                  }}</span>
                 </span>
               </div>
               <div class="meta-item">
-                <span class="meta-label"><i class="pi pi-history"></i> {{ t('cronJobs.lastRun') }}</span>
+                <span class="meta-label"
+                  ><i class="pi pi-history"></i> {{ t('cronJobs.lastRun') }}</span
+                >
                 <span class="meta-value">{{ formatDate(job.last_run_at) }}</span>
               </div>
               <div v-if="job.last_result" class="meta-item meta-item--full">
-                <span class="meta-label"><i class="pi pi-info-circle"></i> {{ t('cronJobs.lastResult') }}</span>
+                <span class="meta-label"
+                  ><i class="pi pi-info-circle"></i> {{ t('cronJobs.lastResult') }}</span
+                >
                 <code class="meta-value result-value">{{ job.last_result }}</code>
               </div>
             </div>
@@ -467,7 +478,6 @@ onMounted(loadJobs)
                 @click="confirmDelete(job)"
               />
             </div>
-
           </div>
         </div>
       </div>
@@ -483,7 +493,6 @@ onMounted(loadJobs)
       @hide="resetForm"
     >
       <form class="create-form" @submit.prevent="createJob">
-
         <!-- Name -->
         <div class="field-group">
           <label class="field-label">
@@ -662,7 +671,6 @@ onMounted(loadJobs)
             :loading="submitting"
           />
         </div>
-
       </form>
     </Dialog>
 
@@ -677,7 +685,8 @@ onMounted(loadJobs)
       <div class="confirm-body">
         <i class="pi pi-exclamation-triangle confirm-icon"></i>
         <p>
-          {{ t('cronJobs.confirmDeleteMsg') }} <strong>{{ jobToDelete?.name }}</strong>?
+          {{ t('cronJobs.confirmDeleteMsg') }} <strong>{{ jobToDelete?.name }}</strong
+          >?
         </p>
       </div>
       <div class="dialog-actions">
@@ -706,10 +715,7 @@ onMounted(loadJobs)
     >
       <div v-if="lastRunResult" class="run-result-body">
         <div class="result-status-row">
-          <Tag
-            :value="lastRunResult.status"
-            :severity="statusSeverity(lastRunResult.status)"
-          />
+          <Tag :value="lastRunResult.status" :severity="statusSeverity(lastRunResult.status)" />
         </div>
         <div class="result-output">
           <span class="meta-label">{{ t('cronJobs.runResult') }}</span>
@@ -844,7 +850,9 @@ onMounted(loadJobs)
   border: 1px solid var(--do-border-light);
   border-radius: 0.75rem;
   overflow: hidden;
-  transition: box-shadow 0.2s ease, transform 0.2s ease;
+  transition:
+    box-shadow 0.2s ease,
+    transform 0.2s ease;
 }
 
 .job-card:hover {
@@ -1099,7 +1107,9 @@ onMounted(loadJobs)
   font-size: 0.78rem;
   color: var(--do-text-muted);
   cursor: pointer;
-  transition: background 0.15s, border-color 0.15s;
+  transition:
+    background 0.15s,
+    border-color 0.15s;
 }
 
 .cron-chip:hover {
