@@ -113,7 +113,7 @@ class LangChainService:
             api_key=self.config.api_key,
             base_url=self.config.base_url if hasattr(self.config, 'base_url') and self.config.base_url else None,
             temperature=0.7,
-            max_tokens=2000,
+            max_tokens=8000,
             timeout=300.0,
             max_retries=2,
         )
@@ -476,6 +476,23 @@ class LangChainService:
                 tool_result = f"Tool {tool_name} not found"
                 for tool in tools or []:
                     if tool.name == tool_name:
+                        if hasattr(tool, 'args_schema') and tool.args_schema:
+                            try:
+                                validated = tool.args_schema(**tool_args)
+                                tool_args = validated.model_dump()
+                            except Exception as ve:
+                                missing = [
+                                    fname for fname, finfo in tool.args_schema.model_fields.items()
+                                    if finfo.is_required() and fname not in tool_args
+                                ]
+                                missing_str = ", ".join(missing) if missing else "unknown"
+                                tool_result = (
+                                    f"Tool call validation failed for '{tool_name}': missing required fields: {missing_str}. "
+                                    f"You MUST retry this tool call immediately with ALL required arguments included in a single call. "
+                                    f"Do not respond to the user until the tool succeeds."
+                                )
+                                logger.warning(f"Tool {tool_name} args validation failed — missing: {missing_str}")
+                                break
                         try:
                             if hasattr(tool, 'coroutine') and tool.coroutine:
                                 tool_result = await tool.coroutine(**tool_args)
