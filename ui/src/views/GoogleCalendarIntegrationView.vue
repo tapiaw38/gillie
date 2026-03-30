@@ -34,6 +34,7 @@ const {
   saveCredentials,
   getAuthorizationUrl,
   checkStatus,
+  disconnect,
   isConnected,
   isLoading,
   savedClientId,
@@ -46,6 +47,19 @@ const {
   isCheckStatusError,
   checkStatusError,
 } = useCalendar()
+
+const handleDisconnect = async () => {
+  await disconnect()
+  calendarIntegration.activated = false
+  const config = calendarIntegration.config as GoogleCalendarIntegrationConfig
+  config.is_connected = false
+  toast.add({
+    severity: 'info',
+    summary: t('integrations.googleCalendar.disconnected'),
+    detail: t('integrations.googleCalendar.disconnectedDesc'),
+    life: 3000,
+  })
+}
 
 const { openOAuthPopup } = useOAuthPopup()
 
@@ -411,6 +425,13 @@ onMounted(async () => {
                 icon="pi pi-refresh"
                 severity="secondary"
                 @click="checkConnectionStatus"
+              />
+              <Button
+                :label="t('integrations.disconnect')"
+                icon="pi pi-sign-out"
+                severity="danger"
+                :loading="isLoading"
+                @click="handleDisconnect"
               />
             </template>
           </div>

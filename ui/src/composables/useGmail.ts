@@ -93,6 +93,16 @@ export const useGmail = () => {
     }
   }
 
+  const disconnect = async () => {
+    isLoading.value = true
+    try {
+      await services.gmailService.disconnect()
+      statusData.value = null
+    } finally {
+      isLoading.value = false
+    }
+  }
+
   return {
     authorizationData,
     statusData,
@@ -112,5 +122,6 @@ export const useGmail = () => {
     saveCredentials,
     getAuthorizationUrl,
     checkStatus,
+    disconnect,
   }
 }

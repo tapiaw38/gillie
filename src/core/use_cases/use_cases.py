@@ -48,6 +48,7 @@ from src.core.use_cases.calendar import (
     DeleteEventUseCase as CalendarDeleteEventUseCase,
     SetCredentialsUseCase as CalendarSetCredentialsUseCase,
     GetCredentialsUseCase as CalendarGetCredentialsUseCase,
+    DisconnectUseCase as CalendarDisconnectUseCase,
 )
 from src.core.use_cases.drive import (
     GetAuthorizationUrlUseCase as DriveGetAuthorizationUrlUseCase,
@@ -60,6 +61,7 @@ from src.core.use_cases.drive import (
     MoveFileUseCase,
     SetCredentialsUseCase as DriveSetCredentialsUseCase,
     GetCredentialsUseCase as DriveGetCredentialsUseCase,
+    DisconnectUseCase as DriveDisconnectUseCase,
 )
 from src.core.use_cases.gmail import (
     GetAuthorizationUrlUseCase as GmailGetAuthorizationUrlUseCase,
@@ -74,6 +76,7 @@ from src.core.use_cases.gmail import (
     DeleteEmailUseCase as GmailDeleteEmailUseCase,
     MarkEmailReadUseCase as GmailMarkEmailReadUseCase,
     MarkEmailUnreadUseCase as GmailMarkEmailUnreadUseCase,
+    DisconnectUseCase as GmailDisconnectUseCase,
 )
 from src.core.use_cases.slack import ProcessSlackMessageUseCase
 from src.core.use_cases.telegram import ProcessTelegramMessageUseCase
@@ -153,6 +156,7 @@ class Calendar:
     delete_event_usecase: CalendarDeleteEventUseCase
     set_credentials_usecase: CalendarSetCredentialsUseCase
     get_credentials_usecase: CalendarGetCredentialsUseCase
+    disconnect_usecase: CalendarDisconnectUseCase
 
 
 @dataclass
@@ -167,6 +171,7 @@ class Drive:
     move_file_usecase: MoveFileUseCase
     set_credentials_usecase: DriveSetCredentialsUseCase
     get_credentials_usecase: DriveGetCredentialsUseCase
+    disconnect_usecase: DriveDisconnectUseCase
 
 
 @dataclass
@@ -183,6 +188,7 @@ class Gmail:
     delete_email_usecase: GmailDeleteEmailUseCase
     mark_email_read_usecase: GmailMarkEmailReadUseCase
     mark_email_unread_usecase: GmailMarkEmailUnreadUseCase
+    disconnect_usecase: GmailDisconnectUseCase
 
 
 @dataclass
@@ -281,6 +287,7 @@ def create_usecases(context_factory: Factory) -> Usecases:
             delete_event_usecase=CalendarDeleteEventUseCase(context_factory),
             set_credentials_usecase=CalendarSetCredentialsUseCase(context_factory),
             get_credentials_usecase=CalendarGetCredentialsUseCase(context_factory),
+            disconnect_usecase=CalendarDisconnectUseCase(context_factory),
         ),
         drive=Drive(
             get_authorization_url_usecase=DriveGetAuthorizationUrlUseCase(context_factory),
@@ -293,6 +300,7 @@ def create_usecases(context_factory: Factory) -> Usecases:
             move_file_usecase=MoveFileUseCase(context_factory),
             set_credentials_usecase=DriveSetCredentialsUseCase(context_factory),
             get_credentials_usecase=DriveGetCredentialsUseCase(context_factory),
+            disconnect_usecase=DriveDisconnectUseCase(context_factory),
         ),
         gmail=Gmail(
             get_authorization_url_usecase=GmailGetAuthorizationUrlUseCase(context_factory),
@@ -307,6 +315,7 @@ def create_usecases(context_factory: Factory) -> Usecases:
             delete_email_usecase=GmailDeleteEmailUseCase(context_factory),
             mark_email_read_usecase=GmailMarkEmailReadUseCase(context_factory),
             mark_email_unread_usecase=GmailMarkEmailUnreadUseCase(context_factory),
+            disconnect_usecase=GmailDisconnectUseCase(context_factory),
         ),
         whatsapp_device=WhatsAppDevice(
             create_usecase=WhatsAppDeviceCreateUseCase(context_factory),

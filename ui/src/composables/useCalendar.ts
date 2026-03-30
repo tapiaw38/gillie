@@ -120,6 +120,17 @@ export const useCalendar = () => {
     }
   }
 
+  const disconnect = async () => {
+    isLoading.value = true
+    try {
+      await services.calendarService.disconnect()
+      isConnected.value = false
+      statusData.value = null
+    } finally {
+      isLoading.value = false
+    }
+  }
+
   const createEvent = async (event: CalendarEventInput, profileId?: string) => {
     isLoading.value = true
     isCreateEventError.value = false
@@ -253,6 +264,7 @@ export const useCalendar = () => {
     saveCredentials,
     getAuthorizationUrl,
     checkStatus,
+    disconnect,
     createEvent,
     listEvents,
     updateEvent,

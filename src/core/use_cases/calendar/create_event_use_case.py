@@ -21,7 +21,7 @@ class CreateEventUseCase:
         location: Optional[str] = None,
         attendees: Optional[List[Dict]] = None,
         reminders: Optional[List[Dict]] = None,
-        time_zone: str = "UTC",
+        time_zone: Optional[str] = None,
         **kwargs,
     ) -> Dict:
         try:

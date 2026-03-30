@@ -12,6 +12,7 @@ export interface IGmailService {
   saveCredentials(clientId: string, clientSecret: string, redirectUri?: string): Promise<void>
   getAuthorizationUrl(profileId?: string): Promise<GmailAuthorizationResponse>
   checkStatus(profileId?: string): Promise<GmailStatusResponse>
+  disconnect(): Promise<void>
 }
 
 export class GmailService implements IGmailService {
@@ -40,5 +41,9 @@ export class GmailService implements IGmailService {
     const params = profileId ? { profile_id: profileId } : {}
     const { data } = await this.api.get<GmailStatusResponse>('/api/v1/gmail/status', { params })
     return data
+  }
+
+  async disconnect(): Promise<void> {
+    await this.api.delete('/api/v1/gmail/session')
   }
 }

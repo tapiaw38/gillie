@@ -9,6 +9,7 @@ from .send_email_use_case import SendEmailUseCase
 from .reply_email_use_case import ReplyEmailUseCase
 from .delete_email_use_case import DeleteEmailUseCase
 from .mark_email_use_case import MarkEmailReadUseCase, MarkEmailUnreadUseCase
+from .disconnect_use_case import DisconnectUseCase
 
 __all__ = [
     "GetAuthorizationUrlUseCase",
@@ -23,4 +24,5 @@ __all__ = [
     "DeleteEmailUseCase",
     "MarkEmailReadUseCase",
     "MarkEmailUnreadUseCase",
+    "DisconnectUseCase",
 ]

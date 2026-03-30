@@ -103,6 +103,16 @@ async def check_drive_status(
     return DriveStatusOutput(is_active=is_active, user_id=user_id)
 
 
+@router.delete("/session", status_code=status.HTTP_204_NO_CONTENT)
+async def disconnect_drive(
+    request: Request,
+    usecases: Usecases = Depends(get_usecases),
+):
+    """Disconnect (revoke) the Google Drive OAuth session."""
+    user_id = request.state.user.get("user_id")
+    usecases.drive.disconnect_usecase.execute(user_id)
+
+
 @router.get("/files", response_model=DriveFileListOutput, status_code=status.HTTP_200_OK)
 async def list_files(
     request: Request,

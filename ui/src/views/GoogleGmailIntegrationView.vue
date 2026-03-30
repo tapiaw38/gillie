@@ -32,6 +32,7 @@ const {
   saveCredentials,
   getAuthorizationUrl,
   checkStatus,
+  disconnect,
   isConnected,
   connectedEmail,
   isLoading,
@@ -45,6 +46,19 @@ const {
   isCheckStatusError,
   checkStatusError,
 } = useGmail()
+
+const handleDisconnect = async () => {
+  await disconnect()
+  gmailIntegration.activated = false
+  const config = gmailIntegration.config as GoogleGmailIntegrationConfig
+  config.is_connected = false
+  toast.add({
+    severity: 'info',
+    summary: t('integrations.googleGmail.disconnected'),
+    detail: t('integrations.googleGmail.disconnectedDesc'),
+    life: 3000,
+  })
+}
 
 const { openOAuthPopup } = useOAuthPopup()
 
@@ -410,6 +424,13 @@ onMounted(async () => {
                 icon="pi pi-refresh"
                 severity="secondary"
                 @click="checkConnectionStatus"
+              />
+              <Button
+                :label="t('integrations.disconnect')"
+                icon="pi pi-sign-out"
+                severity="danger"
+                :loading="isLoading"
+                @click="handleDisconnect"
               />
             </template>
           </div>
