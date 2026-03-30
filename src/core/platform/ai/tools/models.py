@@ -936,7 +936,7 @@ def _find_file_by_name(files, file_name: str):
     return None
 
 
-def _resolve_output_path(path: str, workspace: str) -> "Path":
+def _resolve_output_path(path: str, workspace: str):
     """Resolve an output path against workspace, avoiding double-directory issues.
 
     If the relative path starts with the workspace's own basename
@@ -957,7 +957,7 @@ def _resolve_output_path(path: str, workspace: str) -> "Path":
     return p
 
 
-def _find_local_file(file_name: str, workspace: str) -> "Path | None":
+def _find_local_file(file_name: str, workspace: str):
     """Resolve a file_name to an existing local Path.
 
     Resolution order:
@@ -979,7 +979,6 @@ def _find_local_file(file_name: str, workspace: str) -> "Path | None":
         if direct.exists():
             return direct
 
-        # Recursive search by filename (handles subdirectories like IEST/)
         target_name = _Path(file_name).name.lower()
         for root, _dirs, files in _os.walk(workspace):
             for fname in files:
