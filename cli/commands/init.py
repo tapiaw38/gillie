@@ -26,7 +26,7 @@ from cli.config.schema import (
     LLMExtendedServiceConfig,
     LoggingConfig,
 )
-from cli.config.manager import save_config, config_exists, get_config_path, get_soul_path
+from cli.config.manager import save_config, load_config, config_exists, get_config_path, get_soul_path
 
 console = Console()
 
@@ -75,13 +75,17 @@ def init(
     ))
     console.print()
 
-    # Check existing config
+    existing_user_id: str | None = None
     if config_exists() and not force:
         console.print(f"[yellow]Config already exists at {get_config_path()}[/yellow]")
         overwrite = _prompt_confirm("Overwrite existing configuration?", default=False)
         if not overwrite:
             console.print("[dim]Setup cancelled.[/dim]")
             raise typer.Exit(0)
+        try:
+            existing_user_id = load_config().user_id
+        except Exception:
+            pass
 
     console.print("[bold]Assistant Profile[/bold]")
     console.print("[dim]Configure your AI assistant's identity[/dim]")
@@ -202,9 +206,8 @@ def init(
     server_port = int(_prompt_text("Port", default="8000"))
     log_level = _prompt_select("Log level", choices=["INFO", "DEBUG", "WARNING", "ERROR"], default="INFO")
 
-    # Build config
     config = AssistantConfig(
-        user_id=str(uuid.uuid4()),
+        user_id=existing_user_id or str(uuid.uuid4()),
         profile=ProfileConfig(
             assistant_name=assistant_name,
             business_name=business_name,
