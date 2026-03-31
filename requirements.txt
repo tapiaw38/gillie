@@ -43,6 +43,7 @@ pydub==0.25.1
 langchain==1.2.12
 langchain-openai==1.1.11
 langchain-community==0.4.1
+langchain-huggingface==1.2.1
 langchain-qdrant==1.1.0
 langchain-unstructured==1.0.1
 langgraph==1.1.2
