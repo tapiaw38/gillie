@@ -206,9 +206,8 @@ if config_service.single_user_config:
             profile_input = ProfileInput(
                 assistant_name=_cli_config.profile.assistant_name,
                 business_name=_cli_config.profile.business_name,
-                business_context=_cli_config.profile.business_context,
                 functions=_cli_config.profile.functions,
-                role=_cli_config.profile.role,
+                response_language=_cli_config.profile.response_language,
             )
             usecases.profile.create_usecase.execute(profile_input, user_id)
             logger.info(f"Auto-created profile for user_id={user_id}")
