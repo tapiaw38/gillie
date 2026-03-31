@@ -17,13 +17,11 @@ from cli.config.schema import (
     OpenAIServiceConfig,
     LangChainServiceConfig,
     QdrantServiceConfig,
-    EmbeddingsServiceConfig,
     StorageServiceConfig,
     S3ServiceConfig,
     TTSServiceConfig,
     STTServiceConfig,
     WhatsAppServiceConfig,
-    MercadoLibreServiceConfig,
     LangSmithServiceConfig,
     LLMExtendedServiceConfig,
     LoggingConfig,
@@ -150,23 +148,6 @@ def init(
                 api_key=qdrant_api_key or None,
             )
 
-    embeddings_provider = "huggingface"
-    embeddings_cfg = EmbeddingsServiceConfig(provider="huggingface")
-    if enable_langchain:
-        console.print()
-        console.print("[bold]Embeddings[/bold]")
-        embeddings_provider = _prompt_select(
-            "Embeddings provider",
-            choices=["huggingface", "openai"],
-            default="huggingface",
-        )
-        embeddings_cfg = EmbeddingsServiceConfig(provider=embeddings_provider)
-        if embeddings_provider == "huggingface":
-            embeddings_cfg.hf_model = _prompt_text(
-                "HuggingFace model",
-                default="sentence-transformers/all-MiniLM-L6-v2",
-            )
-
     console.print()
     console.print("[bold]File Storage[/bold]")
     storage_backend = _prompt_select(
@@ -203,10 +184,6 @@ def init(
     if enable_whatsapp:
         verify_token = _prompt_text("WhatsApp verify token", required=True)
         whatsapp_cfg = WhatsAppServiceConfig(enabled=True, verify_token=verify_token)
-
-    console.print()
-    console.print("[bold]MercadoLibre Integration[/bold]")
-    enable_ml = _prompt_confirm("Enable MercadoLibre integration?", default=False)
 
     console.print()
     console.print("[bold]Observability (LangSmith)[/bold]")
@@ -246,13 +223,11 @@ def init(
             ),
             langchain=langchain_cfg,
             qdrant=qdrant_cfg,
-            embeddings=embeddings_cfg,
             storage=storage_cfg,
             s3=s3_cfg,
             tts=TTSServiceConfig(enabled=enable_tts),
             stt=STTServiceConfig(enabled=enable_stt),
             whatsapp=whatsapp_cfg,
-            mercadolibre=MercadoLibreServiceConfig(enabled=enable_ml),
             langsmith=langsmith_cfg,
             llm=LLMExtendedServiceConfig(),
         ),
@@ -291,7 +266,6 @@ def _print_summary(config: AssistantConfig) -> None:
     table.add_row("TTS", "✓ enabled" if config.services.tts.enabled else "✗ disabled")
     table.add_row("STT", "✓ enabled" if config.services.stt.enabled else "✗ disabled")
     table.add_row("WhatsApp", "✓ enabled" if config.services.whatsapp.enabled else "✗ disabled")
-    table.add_row("MercadoLibre", "✓ enabled" if config.services.mercadolibre.enabled else "✗ disabled")
     table.add_row("LangSmith", "✓ enabled" if config.services.langsmith.enabled else "✗ disabled")
     table.add_row("Server", f"{config.server.host}:{config.server.port}")
 
