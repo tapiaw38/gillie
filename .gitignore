@@ -37,6 +37,7 @@ data/whatsapp/*.db-shm
 # UI specific
 
 # Logs
+logs/
 ui/logs
 ui/*.log
 ui/npm-debug.log*
