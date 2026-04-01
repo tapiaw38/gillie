@@ -80,35 +80,52 @@ class ConversationMemoryManager:
     def optimize_message_history(
         self,
         messages: List[BaseMessage],
-        system_prompt: Optional[str] = None
+        system_prompt: Optional[str] = None,
+        max_chars: int = 24000,
     ) -> List[BaseMessage]:
         """
         Optimize message history by keeping recent messages and system prompt.
 
+        Applies two limits in order:
+        1. Message count: keeps at most max_messages recent messages.
+        2. Character budget: trims oldest messages until total content fits
+           within max_chars (≈ max_chars/4 tokens) to avoid provider 413 errors.
+
         Args:
             messages: List of messages
             system_prompt: Optional system prompt to prepend
+            max_chars: Maximum total characters for the history slice (default 24 000 ≈ 6 000 tokens)
 
         Returns:
             Optimized list of messages
         """
         optimized = []
 
-        # Always include system prompt if provided
         if system_prompt:
             optimized.append(SystemMessage(content=system_prompt))
 
-        # Keep only recent messages up to max_messages
-        if len(messages) > self.max_messages:
+        history = messages
+        if len(history) > self.max_messages:
             logger.info(
-                f"Optimizing message history: {len(messages)} -> {self.max_messages} messages"
+                f"Optimizing message history: {len(history)} -> {self.max_messages} messages"
             )
-            # Keep the most recent messages
-            recent_messages = messages[-self.max_messages:]
-            optimized.extend(recent_messages)
-        else:
-            optimized.extend(messages)
+            history = history[-self.max_messages:]
 
+        total_chars = sum(
+            len(m.content) if isinstance(m.content, str) else 0
+            for m in history
+        )
+        while total_chars > max_chars and len(history) > 2:
+            removed = history[0]
+            removed_chars = len(removed.content) if isinstance(removed.content, str) else 0
+            history = history[1:]
+            total_chars -= removed_chars
+            logger.info(
+                f"Token budget trim: removed oldest message ({removed_chars} chars), "
+                f"remaining total: {total_chars} chars (~{total_chars // 4} tokens)"
+            )
+
+        optimized.extend(history)
         return optimized
 
     def get_conversation_state(
@@ -185,8 +202,6 @@ class ConversationMemoryManager:
         """
         try:
             logger.info(f"Clearing memory for thread: {thread_id}")
-            # MemorySaver will automatically manage memory
-            # This is a placeholder for explicit memory clearing if needed
             return True
         except Exception as e:
             logger.error(f"Error clearing thread memory: {e}")

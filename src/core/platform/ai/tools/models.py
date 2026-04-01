@@ -111,19 +111,34 @@ _DEFAULT_TOOL_PROMPTS: Dict[str, str] = {
         "Image source can be a local file path, a URL, or a base64 data URI. "
         "Use position='end' to append at the end, 'start' for the beginning, "
         "or a text string to insert after the paragraph containing that text. "
-        "Optionally set width_cm and add a caption. Use re_upload=True to save back to storage."
+        "Optionally set width_cm and add a caption. Use re_upload=True to save back to storage. "
+        "IMPORTANT: For image URLs, only use sources that allow direct download without authentication. "
+        "Recommended free sources: "
+        "- Picsum Photos (random real photos): https://picsum.photos/{width}/{height} or https://picsum.photos/seed/{keyword}/{width}/{height} "
+        "- Placehold.co (placeholder with text): https://placehold.co/{width}x{height}/png or https://placehold.co/{width}x{height}/{bg}/{text_color}?text={label} "
+        "Do NOT use Unsplash URLs (they return 404 without API authentication)."
     ),
     "insert_image_excel": (
         "Insert an image into an existing Excel (.xlsx) file at a specific cell. "
         "Image source can be a local file path, a URL, or a base64 data URI. "
         "Specify the sheet name and anchor cell (e.g. 'B2'). "
-        "Optionally set width_cm and height_cm. Use re_upload=True to save back to storage."
+        "Optionally set width_cm and height_cm. Use re_upload=True to save back to storage. "
+        "IMPORTANT: For image URLs, only use sources that allow direct download without authentication. "
+        "Recommended free sources: "
+        "- Picsum Photos (random real photos): https://picsum.photos/{width}/{height} or https://picsum.photos/seed/{keyword}/{width}/{height} "
+        "- Placehold.co (placeholder with text): https://placehold.co/{width}x{height}/png or https://placehold.co/{width}x{height}/{bg}/{text_color}?text={label} "
+        "Do NOT use Unsplash URLs (they return 404 without API authentication)."
     ),
     "insert_image_pptx": (
         "Insert an image into a specific slide of an existing PowerPoint (.pptx) file. "
         "Image source can be a local file path, a URL, or a base64 data URI. "
         "Specify the slide number (1-based), position in cm (left_cm, top_cm), and optional size. "
-        "Use re_upload=True to save back to storage."
+        "Use re_upload=True to save back to storage. "
+        "IMPORTANT: For image URLs, only use sources that allow direct download without authentication. "
+        "Recommended free sources: "
+        "- Picsum Photos (random real photos): https://picsum.photos/{width}/{height} or https://picsum.photos/seed/{keyword}/{width}/{height} "
+        "- Placehold.co (placeholder with text): https://placehold.co/{width}x{height}/png or https://placehold.co/{width}x{height}/{bg}/{text_color}?text={label} "
+        "Do NOT use Unsplash URLs (they return 404 without API authentication)."
     ),
     "describe_image": (
         "Describe the visual content of an image using its URL. "
