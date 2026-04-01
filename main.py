@@ -52,8 +52,6 @@ async def redirect_to_docs():
     return RedirectResponse(url="/docs")
 
 
-# ─── Configuration ────────────────────────────────────────────────────────────
-# Priority: CLI config.json > .env
 _cli_config = None
 
 try:
@@ -71,7 +69,6 @@ except ImportError:
 
 config_service = get_config_service()
 
-# ─── Database ─────────────────────────────────────────────────────────────────
 migrations_client = MongoDBClient(
     config_service.nosql_config.migrations.database_uri,
     config_service.nosql_config.migrations.database,
@@ -129,7 +126,6 @@ if config_service.nosql_config.gmail_sessions:
 
 profiles_client.run_migrations(migrations_client.get_collection(), execute_migrations())
 
-# ─── Storage ──────────────────────────────────────────────────────────────────
 _storage_cfg = config_service.storage_config
 if _storage_cfg and _storage_cfg.backend == "local":
     store_service = LocalStoreService(
@@ -142,7 +138,6 @@ else:
     store_service = S3StoreService(session=s3_session, config=config_service)
     logger.info("Storage: S3")
 
-# ─── Repositories ─────────────────────────────────────────────────────────────
 datasources = Datasources.create_datasources(
     no_sql_conversations_client=conversations_client,
     no_sql_profiles_client=profiles_client,
@@ -157,7 +152,6 @@ datasources = Datasources.create_datasources(
 from src.adapters.datasources.repositories.repositories import Repositories
 repositories = Repositories.create_repositories(datasources)
 
-# ─── Integrations & Services ──────────────────────────────────────────────────
 skill_manager = SkillManager()
 
 integrations = create_integrations(
@@ -187,7 +181,6 @@ context_factory = new_factory(
 usecases = create_usecases(context_factory)
 integrations.openai.set_job_usecases(usecases.jobs)
 
-# ─── Scheduler ───────────────────────────────────────────────────────────────
 scheduler = None
 if repositories.job is not None:
     from src.core.platform.managers.scheduler_manager import SchedulerManager
@@ -196,7 +189,6 @@ if repositories.job is not None:
         context_factory=context_factory,
     )
 
-# ─── Auto-create profile for single-user mode ────────────────────────────────
 if config_service.single_user_config:
     user_id = config_service.single_user_config.user_id
     try:
@@ -218,18 +210,15 @@ if config_service.single_user_config:
 else:
     user_id = "default-user"
 
-# ─── Neonize (WhatsApp device integration) ────────────────────────────────────
 neonize_integration = NeonizeIntegration(sessions_dir="./data/whatsapp", stt_integration=integrations.stt)
 
 
-# ─── Routes & Middleware ──────────────────────────────────────────────────────
 routes_manager = RoutesManager(app, usecases, config_service, neonize_integration=neonize_integration, scheduler=scheduler)
 routes_manager.include_routes()
 
 app.add_middleware(SingleUserMiddleware, user_id=user_id, profile_client=profiles_client)
 
 
-# ─── Startup: start scheduler ─────────────────────────────────────────────────
 @app.on_event("startup")
 async def start_scheduler():
     if scheduler is not None:
@@ -237,7 +226,6 @@ async def start_scheduler():
         logger.info("Scheduler started")
 
 
-# ─── Shutdown: close Playwright browser sessions ──────────────────────────────
 @app.on_event("shutdown")
 async def close_browser_sessions():
     from src.core.platform.ai.tools.models import _browser_state
@@ -267,7 +255,6 @@ async def close_browser_sessions():
     logger.info("Browser sessions closed")
 
 
-# ─── Startup: restore previously connected devices ────────────────────────────
 @app.on_event("startup")
 async def restore_neonize_sessions():
     """On startup, reconnect all devices that were previously authenticated."""
