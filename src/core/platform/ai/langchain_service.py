@@ -293,6 +293,7 @@ class LangChainService:
         shell_output_queue: Optional[asyncio.Queue] = None,
         client_workspace: str = "",
         plan_mode: bool = False,
+        has_pty: bool = False,
     ):
         """
         Stream AI response tokens. Uses astream() for direct responses and
@@ -354,6 +355,46 @@ class LangChainService:
 
                     approval_callback = _approval_callback
 
+                pty_callback = None
+                if has_pty and shell_output_queue is not None:
+                    async def _pty_callback(command: str) -> dict:
+                        import uuid as _uuid
+                        from src.core.platform.ai.tools.pty_manager import (
+                            create_pending, get_result, cleanup,
+                        )
+                        request_id = str(_uuid.uuid4())
+                        await shell_output_queue.put({
+                            "type": "pty_command",
+                            "request_id": request_id,
+                            "command": command,
+                        })
+                        event = create_pending(request_id)
+                        try:
+                            await asyncio.wait_for(event.wait(), timeout=120)
+                            output = get_result(request_id)
+                            return {
+                                "exit_code": 0,
+                                "stdout": output,
+                                "stderr": "",
+                                "truncated": False,
+                                "via_pty": True,
+                            }
+                        except asyncio.TimeoutError:
+                            logger.warning(
+                                f"PTY command request {request_id} timed out after 120s"
+                            )
+                            return {
+                                "exit_code": -1,
+                                "stdout": "",
+                                "stderr": f"PTY command timed out after 120s: {command}",
+                                "truncated": False,
+                                "via_pty": True,
+                            }
+                        finally:
+                            cleanup(request_id)
+
+                    pty_callback = _pty_callback
+
                 tools = None
                 llm_with_tools = self.llm
                 if use_tools:
@@ -367,6 +408,7 @@ class LangChainService:
                         client_workspace=client_workspace,
                         approval_callback=approval_callback,
                         plan_mode=plan_mode,
+                        pty_callback=pty_callback,
                     )
                     llm_with_tools = self.llm.bind_tools(tools)
 

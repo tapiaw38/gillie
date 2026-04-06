@@ -355,6 +355,7 @@ class AddMessageUseCase:
         user_id: str,
         client_workspace: str = "",
         plan_mode: bool = False,
+        has_pty: bool = False,
     ):
         """
         Streaming variant for CLI use. Validates the conversation, saves the user
@@ -398,6 +399,7 @@ class AddMessageUseCase:
             shell_output_queue=shell_output_queue,
             client_workspace=client_workspace,
             plan_mode=plan_mode,
+            has_pty=has_pty,
         ):
             # dict tokens (shell_output, etc.) are forwarded as-is; only str
             # tokens contribute to the persisted assistant message text.
