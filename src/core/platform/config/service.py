@@ -336,7 +336,7 @@ def read_config() -> ConfigurationService:
     )
 
     embeddings_config = EmbeddingsConfig(
-        provider=get_env("EMBEDDING_PROVIDER", "huggingface"),
+        provider=get_env("EMBEDDING_PROVIDER", "openai"),
         batch_size=int(get_env("EMBEDDING_BATCH_SIZE", "32")),
         device=get_env("EMBEDDING_DEVICE", "cpu"),
         openai_model=get_env("OPENAI_EMBEDDING_MODEL", "text-embedding-3-small"),

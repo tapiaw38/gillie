@@ -43,57 +43,101 @@ def _section(title: str) -> None:
 
 # ─── API target ───────────────────────────────────────────────────────────────
 
+# Deps that are optional / incompatible with Python 3.14 or too heavy to bundle.
+# They use lazy imports in the codebase so excluding them only disables those
+# optional features (WhatsApp/neonize, local HuggingFace embeddings, OpenCV).
+_API_EXCLUDED_PACKAGES = [
+    "neonize",
+    "langchain_huggingface",
+    "sentence_transformers",
+    "torch",
+    "torchvision",
+    "torchaudio",
+    "cv2",
+    "sklearn",        # scikit-learn — optional, heavy
+    "skimage",        # scikit-image — optional, heavy
+    "matplotlib",
+    "seaborn",
+    "sounddevice",
+    "webrtcvad",
+    "playwright",
+    "debugpy",
+    "pytest",
+    "mongomock",
+]
+
 def _build_api(out: Path) -> bool:
-    _section("API — compile to optimized bytecode (.pyc)")
+    _section("API — Nuitka compilation")
 
     out.mkdir(parents=True, exist_ok=True)
 
-    src_root = ROOT / "src"
+    nuitka = shutil.which("nuitka")
+    if not nuitka:
+        check = subprocess.run(
+            [sys.executable, "-m", "nuitka", "--version"],
+            capture_output=True,
+        )
+        if check.returncode != 0:
+            console.print("[red]✗ Nuitka not found.[/red] Install: [cyan]pip install nuitka[/cyan]")
+            return False
+        nuitka_cmd = [sys.executable, "-m", "nuitka"]
+    else:
+        nuitka_cmd = [nuitka]
 
-    py_files = [
-        f for f in src_root.rglob("*.py")
-        if "__pycache__" not in f.parts and "test" not in f.parts
+    exclude_flags = [f"--nofollow-import-to={pkg}" for pkg in _API_EXCLUDED_PACKAGES]
+
+    cmd = [
+        *nuitka_cmd,
+        "--standalone",
+        "--onefile",
+        "--output-filename=gillie-api",
+        f"--output-dir={out}",
+        "--follow-imports",
+        # Core packages
+        "--include-package=src",
+        "--include-package=fastapi",
+        "--include-package=uvicorn",
+        "--include-package=pydantic",
+        "--include-package=pymongo",
+        "--include-package=openai",
+        "--include-package=langchain",
+        "--include-package=langchain_openai",
+        "--include-package=langchain_community",
+        "--include-package=langchain_qdrant",
+        "--include-package=langgraph",
+        "--include-package=boto3",
+        "--include-package=botocore",
+        "--include-package=dotenv",
+        "--include-package=jwt",
+        "--include-package=aiohttp",
+        "--include-package=aiofiles",
+        "--include-package=requests",
+        "--include-package=pymupdf",
+        "--include-package=pytesseract",
+        "--include-package=PIL",
+        "--include-package=qdrant_client",
+        "--include-package=apscheduler",
+        # Non-code data files needed at runtime
+        "--include-data-dir=src=src",
+        # Exclude heavy / optional / 3.14-incompatible deps
+        *exclude_flags,
+        "--python-flag=no_docstrings",
+        "--python-flag=no_asserts",
+        "main.py",
     ]
-    console.print(f"[dim]Found {len(py_files)} Python files[/dim]")
 
-    console.print("[dim]Compiling to optimised bytecode (-OO)...[/dim]")
-    rc = _run(
-        [sys.executable, "-OO", "-m", "compileall", "-b", "-q", str(src_root)],
-        cwd=ROOT,
-    )
+    console.print("[dim]Compiling API binary with Nuitka (this takes several minutes)...[/dim]")
+    console.print(f"[dim]Excluding optional packages: {', '.join(_API_EXCLUDED_PACKAGES)}[/dim]")
+    rc = _run(cmd, cwd=ROOT)
+
     if rc != 0:
-        console.print("[red]✗ compileall failed.[/red]")
+        console.print("[red]✗ Nuitka compilation failed.[/red]")
         return False
 
-    compiled = list(src_root.rglob("*.pyc"))
-    console.print(f"[green]✓ Compiled {len(compiled)} files[/green]")
-
-    console.print("[dim]Copying bytecode to release/api/...[/dim]")
-    for pyc in compiled:
-        # pyc lands next to the .py when using -b flag
-        dest = out / pyc.relative_to(ROOT)
-        dest.parent.mkdir(parents=True, exist_ok=True)
-        shutil.copy2(pyc, dest)
-        pyc.unlink()  # remove .pyc from source tree
-
-    for f in src_root.rglob("*"):
-        if f.is_file() and f.suffix not in (".py", ".pyc") and "__pycache__" not in f.parts:
-            dest = out / f.relative_to(ROOT)
-            dest.parent.mkdir(parents=True, exist_ok=True)
-            shutil.copy2(f, dest)
-
-    keep_as_is = [
-        "main.py", "requirements.txt", "Dockerfile",
-        "docker-compose.mongo.yml", "docker-compose.qdrant.yml",
-        "init-mongo.js",
-    ]
-    for name in keep_as_is:
-        src = ROOT / name
-        if src.exists():
-            shutil.copy2(src, out / name)
-
-    console.print(f"[green]✓ API ready →[/green] {out}")
-    console.print("[dim]  Distribute release/api/ — no .py source files included[/dim]")
+    binary = out / "gillie-api"
+    console.print(f"[green]✓ API binary compiled →[/green] {binary}")
+    console.print("[dim]  Note: WhatsApp/neonize and local HuggingFace embeddings not included.[/dim]")
+    console.print("[dim]  Requires: tesseract binary on PATH, MongoDB, Qdrant.[/dim]")
     return True
 
 
@@ -126,6 +170,7 @@ def _build_cli(out: Path) -> bool:
         f"--output-dir={out}",
         "--follow-imports",
         "--include-package=cli",
+        "--include-package=src.core.platform.config",
         "--include-package=rich",
         "--include-package=typer",
         "--include-package=InquirerPy",
