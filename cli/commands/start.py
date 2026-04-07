@@ -33,7 +33,7 @@ def start(
 
     console.print()
     console.print(Panel(
-        f"✨🐟 [bold cyan]Gillie[/bold cyan] — [bold]{config.profile.assistant_name}[/bold]\n"
+        f"✨🐙 [bold cyan]Gillie[/bold cyan] — [bold]{config.profile.assistant_name}[/bold]\n"
         f"[dim]{config.profile.business_name}[/dim]",
         border_style="cyan",
     ))

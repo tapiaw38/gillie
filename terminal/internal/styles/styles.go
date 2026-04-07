@@ -49,11 +49,19 @@ var (
 			Bold(true).
 			Padding(0, 1)
 
+	ModeTerminalTail = lipgloss.NewStyle().
+				Background(CBg).
+				Foreground(CGreen)
+
 	ModeAI = lipgloss.NewStyle().
 		Background(CAccent).
 		Foreground(lipgloss.Color("255")).
 		Bold(true).
 		Padding(0, 1)
+
+	ModeAITail = lipgloss.NewStyle().
+			Background(CBg).
+			Foreground(CAccent)
 
 	// ─── AI panel ─────────────────────────────────────────────────────────────
 	// No Background on panel content — lipgloss ends every Render() with

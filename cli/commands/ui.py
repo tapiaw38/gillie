@@ -80,7 +80,7 @@ def start(
 
     console.print()
     console.print(Panel(
-        "🐟 [bold cyan]Gillie UI[/bold cyan] — [bold]Starting app[/bold]\n"
+        "🐙 [bold cyan]Gillie UI[/bold cyan] — [bold]Starting app[/bold]\n"
         f"[dim]{UI_DIR}[/dim]",
         border_style="cyan",
     ))
@@ -127,7 +127,7 @@ def dev(
 
     console.print()
     console.print(Panel(
-        "🐟 [bold cyan]Gillie UI[/bold cyan] — [bold]Development mode[/bold]\n"
+        "🐙 [bold cyan]Gillie UI[/bold cyan] — [bold]Development mode[/bold]\n"
         f"[dim]{UI_DIR}[/dim]",
         border_style="cyan",
     ))
@@ -164,7 +164,7 @@ def build(
 
     console.print()
     console.print(Panel(
-        "🐟 [bold cyan]Gillie UI[/bold cyan] — [bold]Production build[/bold]\n"
+        "🐙 [bold cyan]Gillie UI[/bold cyan] — [bold]Production build[/bold]\n"
         f"[dim]{UI_DIR}[/dim]",
         border_style="cyan",
     ))
@@ -221,7 +221,7 @@ def install():
     pm = _detect_package_manager()
 
     console.print()
-    console.print(f"🐟 Installing dependencies with [bold cyan]{pm}[/bold cyan]...")
+    console.print(f"🐙 Installing dependencies with [bold cyan]{pm}[/bold cyan]...")
     console.print()
 
     _run([pm, "install"])

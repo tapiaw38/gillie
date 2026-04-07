@@ -110,7 +110,7 @@ def start(
     cmd.append(f"{t.user}@{t.host}")
 
     console.print()
-    console.print(f"✨🐟 Starting SSH tunnel...")
+    console.print(f"✨🐙 Starting SSH tunnel...")
     console.print(f"  [cyan]local:[/cyan]  localhost:[bold]{t.local_port}[/bold]")
     console.print(f"  [cyan]remote:[/cyan] {t.user}@{t.host}:{t.api_port}  (SSH :{t.ssh_port})")
     console.print()

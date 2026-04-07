@@ -69,7 +69,7 @@ def init(
     """Interactive setup wizard for Gillie."""
     console.print()
     console.print(Panel(
-        "✨🐟 [bold cyan]Gillie[/bold cyan] — Setup Wizard",
+        "✨🐙 [bold cyan]Gillie[/bold cyan] — Setup Wizard",
         subtitle="Single-user AI assistant",
         border_style="cyan",
     ))
@@ -242,7 +242,7 @@ def init(
     console.print()
     _print_summary(config)
     console.print()
-    console.print(f"✨🐟 [green]✓[/green] Soul saved to   [bold]{get_soul_path()}[/bold]")
+    console.print(f"✨🐙 [green]✓[/green] Soul saved to   [bold]{get_soul_path()}[/bold]")
     console.print(f"   [green]✓[/green] Config saved to [bold]{get_config_path()}[/bold]")
     console.print()
     console.print(f"Start the server with: [bold cyan]./gillie start[/bold cyan]")

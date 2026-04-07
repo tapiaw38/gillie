@@ -88,7 +88,7 @@ def install(
 
     unit_content = _generate_unit(system)
     unit_path.write_text(unit_content)
-    console.print(f"✨🐟 [green]✓[/green] Unit file written: [dim]{unit_path}[/dim]")
+    console.print(f"✨🐙 [green]✓[/green] Unit file written: [dim]{unit_path}[/dim]")
 
     _systemctl(["daemon-reload"], system)
 
@@ -115,7 +115,7 @@ def uninstall(
         console.print(f"[green]✓[/green] Unit file removed: [dim]{unit_path}[/dim]")
 
     _systemctl(["daemon-reload"], system)
-    console.print("✨🐟 [green]✓[/green] Service uninstalled.")
+    console.print("✨🐙 [green]✓[/green] Service uninstalled.")
 
 
 @app.command("start")
@@ -125,7 +125,7 @@ def start(
     """Start the Gillie service."""
     result = _systemctl(["start", SERVICE_NAME], system)
     if result.returncode == 0:
-        console.print("✨🐟 [green]✓[/green] Service started.")
+        console.print("✨🐙 [green]✓[/green] Service started.")
     else:
         console.print("[red]✗[/red] Failed to start service.")
         raise typer.Exit(result.returncode)
@@ -138,7 +138,7 @@ def stop(
     """Stop the Gillie service."""
     result = _systemctl(["stop", SERVICE_NAME], system)
     if result.returncode == 0:
-        console.print("✨🐟 [green]✓[/green] Service stopped.")
+        console.print("✨🐙 [green]✓[/green] Service stopped.")
     else:
         console.print("[red]✗[/red] Failed to stop service.")
         raise typer.Exit(result.returncode)
@@ -151,7 +151,7 @@ def restart(
     """Restart the Gillie service."""
     result = _systemctl(["restart", SERVICE_NAME], system)
     if result.returncode == 0:
-        console.print("✨🐟 [green]✓[/green] Service restarted.")
+        console.print("✨🐙 [green]✓[/green] Service restarted.")
     else:
         console.print("[red]✗[/red] Failed to restart service.")
         raise typer.Exit(result.returncode)

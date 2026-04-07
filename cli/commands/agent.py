@@ -366,7 +366,7 @@ def _print_header(assistant_name: str, conv_id: str, mode: str = _Mode.CONFIRM_R
     agent_md_line = "[dim]📋 agent.md loaded — workspace context active[/dim]\n" if agent_md else ""
     console.print()
     console.print(Panel(
-        f"✨🐟 [bold cyan]{assistant_name}[/bold cyan]\n"
+        f"✨🐙 [bold cyan]{assistant_name}[/bold cyan]\n"
         f"[dim]Conversation: {conv_id}[/dim]\n"
         f"[dim]Workspace:    {ws}[/dim]\n"
         f"[dim]Mode: {mode} | /mode to change[/dim]\n"
@@ -1143,7 +1143,7 @@ def listen(
 
     console.print()
     console.print(Panel(
-        f"✨🐟 [bold cyan]{assistant_name}[/bold cyan] — listen mode\n"
+        f"✨🐙 [bold cyan]{assistant_name}[/bold cyan] — listen mode\n"
         f"[dim]Speak when you see the mic. {silence}s of silence to send. Ctrl+C to quit.[/dim]\n"
         f"[dim]{vad_status}[/dim]",
         border_style="cyan",

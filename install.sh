@@ -6,7 +6,7 @@ SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 
 echo ""
 echo "╔══════════════════════════════════════╗"
-echo "║      Gillie ✨🐟 Install             ║"
+echo "║      Gillie ✨🐙 Install             ║"
 echo "╚══════════════════════════════════════╝"
 echo ""
 

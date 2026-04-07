@@ -25,7 +25,7 @@ def show():
     config = load_config()
     p = config.profile
 
-    table = Table(title="✨🐟 Assistant Profile", box=box.ROUNDED, border_style="cyan")
+    table = Table(title="✨🐙 Assistant Profile", box=box.ROUNDED, border_style="cyan")
     table.add_column("Field", style="bold")
     table.add_column("Value")
 
@@ -79,5 +79,5 @@ def edit():
 
     save_config(config)
     console.print()
-    console.print("✨🐟 [green]✓[/green] Profile updated.")
+    console.print("✨🐙 [green]✓[/green] Profile updated.")
     console.print()

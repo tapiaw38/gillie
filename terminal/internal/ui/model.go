@@ -110,7 +110,7 @@ type Model struct {
 
 func NewModel(cfg Config) *Model {
 	inp := textinput.New()
-	inp.Placeholder = "Ask Gillie…"
+	inp.Placeholder = "Ask…"
 	inp.Prompt = "▶ "
 	inp.PromptStyle = lipgloss.NewStyle().Foreground(styles.CAccent)
 	inp.PlaceholderStyle = lipgloss.NewStyle().Foreground(styles.CTextDim)
@@ -137,9 +137,7 @@ func NewModel(cfg Config) *Model {
 // ─── Init ─────────────────────────────────────────────────────────────────────
 
 func (m *Model) Init() tea.Cmd {
-	// Start with mouse disabled so the terminal emulator handles selection.
-	// Mouse is re-enabled when entering AI mode for viewport scrolling.
-	return tea.DisableMouse
+	return tea.EnableMouseCellMotion
 }
 
 // ─── Update ───────────────────────────────────────────────────────────────────
@@ -235,6 +233,15 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 
 	case tea.MouseMsg:
+		if m.mode == ModeTerminal {
+			switch msg.Button {
+			case tea.MouseButtonWheelUp:
+				m.pty.Write([]byte{0x1b, '[', 'A', 0x1b, '[', 'A', 0x1b, '[', 'A'})
+			case tea.MouseButtonWheelDown:
+				m.pty.Write([]byte{0x1b, '[', 'B', 0x1b, '[', 'B', 0x1b, '[', 'B'})
+			}
+			return m, nil
+		}
 		if m.mode == ModeAI {
 			// Left click: route keyboard focus based on which area was clicked.
 			// Row 0 = status bar, rows 1..termHeight = terminal, rest = AI panel.
@@ -317,13 +324,13 @@ func (m *Model) View() string {
 // ─── Status bar ───────────────────────────────────────────────────────────────
 
 func (m *Model) renderStatus() string {
-	modeLabel := styles.ModeTerminal.Render("TERMINAL")
+	modeLabel := styles.ModeTerminal.Render(">_") + styles.ModeTerminalTail.Render("▌")
 	if m.mode == ModeAI {
-		modeLabel = styles.ModeAI.Render("AI")
+		modeLabel = styles.ModeAI.Render("✦") + styles.ModeAITail.Render("▌")
 	}
 
 	sep := styles.StatusSep.Render(" │ ")
-	left := "  " + styles.StatusName.Render("✦ "+m.assistant) + sep + modeLabel
+	left := "  " + styles.StatusName.Render("✨🐙 "+m.assistant) + sep + modeLabel
 	if m.errMsg != "" {
 		left += "  " + styles.ErrorMsg.Render("⚠ "+m.errMsg)
 	}
@@ -357,7 +364,7 @@ func (m *Model) renderAIPanel() string {
 	innerWidth := m.width - 2
 
 	// Title row with right-aligned hint
-	titleLeft := styles.AIPanelTitle.Render("✦ " + m.assistant)
+	titleLeft := styles.AIPanelTitle.Render("✨🐙 " + m.assistant)
 	titleRight := styles.AIPanelHint.Render("Esc / Ctrl+G to close")
 	titleGap := max(1, innerWidth-lipgloss.Width(titleLeft)-lipgloss.Width(titleRight))
 	title := titleLeft + strings.Repeat(" ", titleGap) + titleRight
@@ -401,8 +408,7 @@ func (m *Model) toggleMode() tea.Cmd {
 	m.vtState.Resize(m.width, m.termHeight)
 	m.pty.Resize(m.width, m.termHeight)
 	m.aiInput.Blur()
-	// Disable mouse so the terminal emulator can handle selection/copy natively.
-	return tea.DisableMouse
+	return tea.EnableMouseCellMotion
 }
 
 func (m *Model) recalcTermHeight() {

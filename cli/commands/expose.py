@@ -178,7 +178,7 @@ def install(
             raise typer.Exit(1)
 
     console.print()
-    console.print(f"✨🐟 Setting up nginx for [bold cyan]{domain}[/bold cyan]")
+    console.print(f"✨🐙 Setting up nginx for [bold cyan]{domain}[/bold cyan]")
     console.print(f"  port : [bold]{port}[/bold]")
     console.print(f"  SSL  : [bold]{'yes' if ssl else 'no (HTTP only)'}[/bold]")
     console.print()

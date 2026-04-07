@@ -24,7 +24,7 @@ console = Console()
 
 app = typer.Typer(
     name="gillie",
-    help="✨🐟 [bold cyan]Gillie[/bold cyan] — Single-user AI assistant CLI",
+    help="✨🐙 [bold cyan]Gillie[/bold cyan] — Single-user AI assistant CLI",
     no_args_is_help=True,
     rich_markup_mode="rich",
 )
@@ -65,7 +65,7 @@ def status():
     s = config.services
 
     console.print()
-    console.print(f"✨🐟 [bold cyan]Gillie[/bold cyan] — {config.profile.assistant_name}")
+    console.print(f"✨🐙 [bold cyan]Gillie[/bold cyan] — {config.profile.assistant_name}")
     console.print(f"[dim]Soul:   {get_soul_path()}[/dim]")
     console.print(f"[dim]Config: {get_config_path()}[/dim]")
     console.print()

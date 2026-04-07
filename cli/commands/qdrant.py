@@ -72,7 +72,7 @@ def start():
         console.print(f"[red]✗[/red] {COMPOSE_FILE.name} not found.")
         raise typer.Exit(1)
 
-    console.print("✨🐟 Starting Qdrant...")
+    console.print("✨🐙 Starting Qdrant...")
     result = _compose(["up", "-d"])
     if result.returncode == 0:
         console.print("[green]✓[/green] Qdrant running at [bold]http://localhost:6333[/bold]")
@@ -88,7 +88,7 @@ def stop():
         raise typer.Exit(0)
     result = _compose(["down"])
     if result.returncode == 0:
-        console.print("✨🐟 [green]✓[/green] Qdrant stopped.")
+        console.print("✨🐙 [green]✓[/green] Qdrant stopped.")
 
 
 @app.command("restart")
@@ -98,7 +98,7 @@ def restart():
         raise typer.Exit(0)
     result = _compose(["restart"])
     if result.returncode == 0:
-        console.print("✨🐟 [green]✓[/green] Qdrant restarted.")
+        console.print("✨🐙 [green]✓[/green] Qdrant restarted.")
 
 
 @app.command("status")

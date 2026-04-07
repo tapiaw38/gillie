@@ -69,7 +69,7 @@ def start():
         console.print(f"[red]✗[/red] {COMPOSE_FILE.name} not found.")
         raise typer.Exit(1)
 
-    console.print("✨🐟 Starting MongoDB...")
+    console.print("✨🐙 Starting MongoDB...")
     result = _compose(["up", "-d"])
     if result.returncode == 0:
         console.print("[green]✓[/green] MongoDB running at [bold]mongodb://localhost:27017[/bold]")
@@ -85,7 +85,7 @@ def stop():
         raise typer.Exit(0)
     result = _compose(["down"])
     if result.returncode == 0:
-        console.print("✨🐟 [green]✓[/green] MongoDB stopped.")
+        console.print("✨🐙 [green]✓[/green] MongoDB stopped.")
 
 
 @app.command("restart")
@@ -95,7 +95,7 @@ def restart():
         raise typer.Exit(0)
     result = _compose(["restart"])
     if result.returncode == 0:
-        console.print("✨🐟 [green]✓[/green] MongoDB restarted.")
+        console.print("✨🐙 [green]✓[/green] MongoDB restarted.")
 
 
 @app.command("status")

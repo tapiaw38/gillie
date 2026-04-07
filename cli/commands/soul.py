@@ -35,7 +35,7 @@ def show():
     p = soul.profile
 
     table = Table(
-        title="✨🐟 Soul",
+        title="✨🐙 Soul",
         box=box.ROUNDED,
         border_style="cyan",
         caption=str(get_soul_path()),
@@ -63,7 +63,7 @@ def edit():
 
     console.print()
     console.print(Panel(
-        "✨🐟 [bold]Edit Soul[/bold] — press Enter to keep current value",
+        "✨🐙 [bold]Edit Soul[/bold] — press Enter to keep current value",
         border_style="cyan",
     ))
     console.print()
@@ -106,7 +106,7 @@ def edit():
 
     save_config(config)
     console.print()
-    console.print("✨🐟 [green]✓[/green] Soul updated.")
+    console.print("✨🐙 [green]✓[/green] Soul updated.")
     console.print()
 
 
@@ -131,5 +131,5 @@ def reset_id():
     soul.user_id = str(uuid.uuid4())
     save_soul(soul)
     console.print()
-    console.print(f"✨🐟 [green]✓[/green] New User ID: [bold]{soul.user_id}[/bold]")
+    console.print(f"✨🐙 [green]✓[/green] New User ID: [bold]{soul.user_id}[/bold]")
     console.print()
