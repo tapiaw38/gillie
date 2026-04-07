@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
+import gillieIcon from '@/assets/icons/gillie-logo.png'
 
 const router = useRouter()
 const { t } = useI18n()
@@ -14,7 +15,7 @@ function enter() {
   <div class="welcome">
     <div class="welcome-content">
       <h1 class="welcome-title">Gillie <span class="accent">AI</span></h1>
-      <img src="/assets/abyssal-fish.png" alt="Gillie" class="welcome-fish" />
+      <img :src="gillieIcon" alt="Gillie" class="welcome-fish" />
       <p class="welcome-subtitle">{{ t('welcome.subtitle') }}</p>
       <button class="welcome-btn" @click="enter">{{ t('welcome.start') }}</button>
     </div>
@@ -27,7 +28,7 @@ function enter() {
   display: flex;
   align-items: center;
   justify-content: center;
-  background: radial-gradient(ellipse at 60% 40%, var(--do-navy) 0%, var(--do-bg) 60%, #000 100%);
+  background: #000;
   padding: 2rem;
 }
 
@@ -41,11 +42,10 @@ function enter() {
 }
 
 .welcome-fish {
-  width: 180px;
-  height: 180px;
+  width: 440px;
+  height: 440px;
   object-fit: contain;
   margin: 3rem 0 1.5rem;
-  filter: drop-shadow(0 0 40px rgba(59, 130, 246, 0.5));
   animation: float 4s ease-in-out infinite;
 }
 
