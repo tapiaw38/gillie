@@ -1,8 +1,7 @@
 <script setup lang="ts">
 import { useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
-import gillieIcon from '@/assets/icons/gillie-logo.png'
-
+import abyssalFish from '@/assets/icons/abyssal-fish.png'
 const router = useRouter()
 const { t } = useI18n()
 
@@ -15,7 +14,7 @@ function enter() {
   <div class="welcome">
     <div class="welcome-content">
       <h1 class="welcome-title">Gillie <span class="accent">AI</span></h1>
-      <img :src="gillieIcon" alt="Gillie" class="welcome-fish" />
+      <img :src="abyssalFish" alt="Gillie" class="welcome-fish" />
       <p class="welcome-subtitle">{{ t('welcome.subtitle') }}</p>
       <button class="welcome-btn" @click="enter">{{ t('welcome.start') }}</button>
     </div>
