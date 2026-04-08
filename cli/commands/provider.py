@@ -34,7 +34,6 @@ _VISION_PRESETS: dict = {
     "gemini":   {"base_url": "https://generativelanguage.googleapis.com/v1beta/openai/", "model": "gemini-2.0-flash"},
     "groq":     {"base_url": "https://api.groq.com/openai/v1",                          "model": "meta-llama/llama-4-scout-17b-16e-instruct"},
     "openai":   {"base_url": "https://api.openai.com/v1",                               "model": "gpt-4o"},
-    "openrouter": {"base_url": "https://openrouter.ai/api/v1",                          "model": "google/gemini-2.0-flash-exp:free"},
 }
 
 

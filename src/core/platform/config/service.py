@@ -42,7 +42,6 @@ class ServerConfig:
 
 _PROVIDER_PRESETS: dict = {
     "deepseek":   {"base_url": "https://api.deepseek.com",                               "model": "deepseek-chat",                "auth_type": "api_key"},
-    "deepseek-chat": {"base_url": "https://openrouter.ai/api/v1",                        "model": "deepseek/deepseek-chat",       "auth_type": "api_key"},
     "kimi-k2":    {"base_url": "https://api.moonshot.ai/v1",                            "model": "kimi-k2-0905-preview",         "auth_type": "api_key"},
     "anthropic":  {"base_url": "https://api.anthropic.com/v1",                           "model": "claude-sonnet-4-6",            "auth_type": "api_key"},
     "openai":     {"base_url": "https://api.openai.com/v1",                              "model": "gpt-4o",                       "auth_type": "api_key"},
