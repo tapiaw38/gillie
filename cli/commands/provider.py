@@ -75,7 +75,9 @@ def provider_list():
     _has_claude_session = (_Path.home() / ".claude" / ".credentials.json").exists()
 
     for name, preset in _PROVIDER_PRESETS.items():
-        if preset.get("auth_type") == "bearer":
+        if preset.get("auth_type") == "none":
+            status = "[green]local (no key needed)[/green]"
+        elif preset.get("auth_type") == "bearer":
             status = "[green]session found[/green]" if _has_claude_session else "[yellow]no session[/yellow]"
         else:
             has_creds = bool(current_api_key)
@@ -152,7 +154,11 @@ def provider_use(
 
     preset = _PROVIDER_PRESETS[provider]
 
-    if preset.get("auth_type") == "bearer":
+    if preset.get("auth_type") == "none":
+        # Local providers (e.g. Ollama) don't require an API key.
+        resolved_key = "ollama"
+        console.print("[dim]No API key required for local provider.[/dim]")
+    elif preset.get("auth_type") == "bearer":
         # Bearer providers use a local OAuth token instead of an API key.
         # Read it from ~/.claude/.credentials.json (Claude Code session).
         import json

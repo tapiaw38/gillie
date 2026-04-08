@@ -50,6 +50,7 @@ _PROVIDER_PRESETS: dict = {
     "gemini":     {"base_url": "https://generativelanguage.googleapis.com/v1beta/openai/","model": "gemini-2.0-flash",             "auth_type": "api_key"},
     "groq":       {"base_url": "https://api.groq.com/openai/v1",                         "model": "llama-3.3-70b-versatile",      "auth_type": "api_key"},
     "claude":     {"base_url": "https://api.anthropic.com/v1",                           "model": "claude-haiku-4-5-20251001",    "auth_type": "bearer"},
+    "ollama":     {"base_url": "http://localhost:11434/v1",                              "model": "llama3.2",                     "auth_type": "none"},
 }
 
 
