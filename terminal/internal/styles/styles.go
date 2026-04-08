@@ -2,19 +2,19 @@ package styles
 
 import "github.com/charmbracelet/lipgloss"
 
-// Palette
+// Palette — Catppuccin Mocha
 const (
-	CBg       = lipgloss.Color("233")
-	CBgPanel  = lipgloss.Color("234")
-	CAccent   = lipgloss.Color("99")  // violet
-	CCyan     = lipgloss.Color("81")  // cyan
-	CGreen    = lipgloss.Color("82")  // green
-	CAmber    = lipgloss.Color("214") // amber
-	CRed      = lipgloss.Color("196") // red
-	CText     = lipgloss.Color("252") // light grey
-	CTextDim  = lipgloss.Color("242") // dim grey
-	CBorder   = lipgloss.Color("238") // subtle border
-	CBorderHL = lipgloss.Color("99")  // highlighted border (matches accent)
+	CBg       = lipgloss.Color("#1e1e2e") // Base
+	CBgPanel  = lipgloss.Color("#181825") // Mantle
+	CAccent   = lipgloss.Color("#cba6f7") // Mauve
+	CCyan     = lipgloss.Color("#89dceb") // Sky
+	CGreen    = lipgloss.Color("#a6e3a1") // Green
+	CAmber    = lipgloss.Color("#fab387") // Peach
+	CRed      = lipgloss.Color("#f38ba8") // Red
+	CText     = lipgloss.Color("#cdd6f4") // Text
+	CTextDim  = lipgloss.Color("#6c7086") // Overlay0
+	CBorder   = lipgloss.Color("#45475a") // Surface1
+	CBorderHL = lipgloss.Color("#cba6f7") // Mauve
 )
 
 var (
@@ -45,7 +45,7 @@ var (
 
 	ModeTerminal = lipgloss.NewStyle().
 			Background(CGreen).
-			Foreground(lipgloss.Color("0")).
+			Foreground(lipgloss.Color("#1e1e2e")).
 			Bold(true).
 			Padding(0, 1)
 
@@ -55,7 +55,7 @@ var (
 
 	ModeAI = lipgloss.NewStyle().
 		Background(CAccent).
-		Foreground(lipgloss.Color("255")).
+		Foreground(lipgloss.Color("#1e1e2e")).
 		Bold(true).
 		Padding(0, 1)
 

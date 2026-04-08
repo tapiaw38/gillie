@@ -20,15 +20,23 @@ type Conversation struct {
 // Client talks to the Gillie REST API.
 type Client struct {
 	baseURL    string
+	workspace  string
 	httpClient *http.Client
 }
 
-func NewClient(baseURL string) *Client {
+func NewClient(baseURL, workspace string) *Client {
 	return &Client{
-		baseURL: baseURL,
+		baseURL:   baseURL,
+		workspace: workspace,
 		httpClient: &http.Client{
 			Timeout: 10 * time.Second,
 		},
+	}
+}
+
+func (c *Client) addWorkspaceHeader(req *http.Request) {
+	if c.workspace != "" {
+		req.Header.Set("X-Gillie-Workspace", c.workspace)
 	}
 }
 
@@ -42,7 +50,12 @@ func (c *Client) FindOrCreateConversation(convID, title string) (*Conversation, 
 }
 
 func (c *Client) findOrCreate(title string) (*Conversation, error) {
-	resp, err := c.httpClient.Get(c.baseURL + "/conversation/user")
+	req, err := http.NewRequest("GET", c.baseURL+"/conversation/user", nil)
+	if err != nil {
+		return nil, err
+	}
+	c.addWorkspaceHeader(req)
+	resp, err := c.httpClient.Do(req)
 	if err != nil {
 		return nil, err
 	}
@@ -66,11 +79,13 @@ func (c *Client) findOrCreate(title string) (*Conversation, error) {
 
 func (c *Client) create(title string) (*Conversation, error) {
 	body, _ := json.Marshal(map[string]string{"title": title})
-	resp, err := c.httpClient.Post(
-		c.baseURL+"/conversation/",
-		"application/json",
-		strings.NewReader(string(body)),
-	)
+	req, err := http.NewRequest("POST", c.baseURL+"/conversation/", strings.NewReader(string(body)))
+	if err != nil {
+		return nil, err
+	}
+	req.Header.Set("Content-Type", "application/json")
+	c.addWorkspaceHeader(req)
+	resp, err := c.httpClient.Do(req)
 	if err != nil {
 		return nil, err
 	}
@@ -109,6 +124,7 @@ func (c *Client) StreamMessage(convID, content string) (<-chan StreamToken, erro
 	}
 	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 	req.Header.Set("X-GTerm-Session", "1")
+	c.addWorkspaceHeader(req)
 
 	client := &http.Client{Timeout: 900 * time.Second}
 	resp, err := client.Do(req)
@@ -178,11 +194,16 @@ func (c *Client) SubmitPtyResult(convID, requestID, output string) error {
 		"request_id": requestID,
 		"output":     output,
 	})
-	resp, err := c.httpClient.Post(
+	req, err := http.NewRequest("POST",
 		fmt.Sprintf("%s/conversation/%s/pty-result", c.baseURL, convID),
-		"application/json",
 		bytes.NewReader(body),
 	)
+	if err != nil {
+		return err
+	}
+	req.Header.Set("Content-Type", "application/json")
+	c.addWorkspaceHeader(req)
+	resp, err := c.httpClient.Do(req)
 	if err != nil {
 		return err
 	}

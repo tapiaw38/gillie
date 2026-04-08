@@ -223,7 +223,7 @@ class LangChainService:
 
         async with self.semaphore:
             try:
-                system_prompt = self._build_system_prompt(profile, context, client_workspace)
+                system_prompt = self._build_system_prompt(profile, context, client_workspace, has_pty=False)
 
                 messages = self._convert_messages_to_langchain(
                     previous_messages=previous_messages,
@@ -307,7 +307,7 @@ class LangChainService:
 
         async with self.semaphore:
             try:
-                system_prompt = self._build_system_prompt(profile, context, client_workspace)
+                system_prompt = self._build_system_prompt(profile, context, client_workspace, has_pty=has_pty)
                 messages = self._convert_messages_to_langchain(
                     previous_messages=previous_messages,
                     system_prompt=system_prompt,
@@ -699,6 +699,7 @@ class LangChainService:
         profile: Profile,
         context: Optional[str],
         client_workspace: str = "",
+        has_pty: bool = False,
     ) -> str:
         """
         Build system prompt from profile and context.
@@ -781,6 +782,21 @@ class LangChainService:
                 )
             except Exception as e:
                 logger.warning(f"Could not build workspace map: {e}")
+
+        if has_pty:
+            system_prompt += (
+                "\n\n## GTerm Session — Remote PTY Active\n"
+                "You are running inside GTerm. The user's terminal is connected to a "
+                "REMOTE machine (e.g. a VPS via SSH). The `run_command` tool routes "
+                "commands through that remote PTY.\n"
+                "CRITICAL RULES:\n"
+                "- NEVER use `read_file` to read system paths such as /proc, /sys, "
+                "/var/log, /run, /etc (these paths exist on the LOCAL machine, not the remote).\n"
+                "- To check RAM, CPU, disk, processes, or logs on the remote machine, "
+                "ALWAYS use `run_command` (e.g. `free -h`, `df -h`, `journalctl -n 50`, "
+                "`top -bn1`, `cat /proc/meminfo`).\n"
+                "- `read_file` is only safe for workspace project files.\n"
+            )
 
         return system_prompt
 

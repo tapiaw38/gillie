@@ -4,6 +4,7 @@ import (
 	"flag"
 	"fmt"
 	"os"
+	"path/filepath"
 
 	tea "github.com/charmbracelet/bubbletea"
 	"gillie-terminal/internal/api"
@@ -25,9 +26,14 @@ func main() {
 		}
 	}
 
+	workspace := os.Getenv("GILLIE_WORKSPACE")
+	if workspace == "" {
+		workspace, _ = filepath.Abs(".")
+	}
+
 	baseURL := fmt.Sprintf("http://%s:%d", *host, *port)
 
-	apiClient := api.NewClient(baseURL)
+	apiClient := api.NewClient(baseURL, workspace)
 
 	conv, err := apiClient.FindOrCreateConversation(*convID, "GTerm")
 	if err != nil {
