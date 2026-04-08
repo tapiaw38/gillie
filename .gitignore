@@ -77,15 +77,3 @@ ui/QWEN.*
 ui/CLAUDE.*
 # Build output
 release/
-
-# Go (terminal/)
-terminal/vendor/
-*.exe
-*.exe~
-*.dll
-*.so
-*.dylib
-*.test
-*.out
-go.work
-go.work.sum
