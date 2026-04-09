@@ -15,6 +15,7 @@ from .profile_schemas import (
 from .role_schemas import (
     RoleOutput,
     RoleOutputData,
+    ProviderOutputData,
     ListOptionsOutput,
     ListOptionsOutputData,
 )
@@ -32,6 +33,7 @@ __all__ = [
     "ProfileOutputData",
     "RoleOutput",
     "RoleOutputData",
+    "ProviderOutputData",
     "ListOptionsOutput",
     "ListOptionsOutputData",
 ]

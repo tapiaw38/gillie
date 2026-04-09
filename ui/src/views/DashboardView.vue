@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, reactive, computed, onMounted, watch } from 'vue'
+import { ref, reactive, computed, onMounted, watch, inject } from 'vue'
 import ToggleSwitch from 'primevue/toggleswitch'
 import Card from 'primevue/card'
 import Button from 'primevue/button'
@@ -7,12 +7,13 @@ import InputText from 'primevue/inputtext'
 import LoadingSpinner from '@/components/core/LoadingSpinner/LoadingSpinner.vue'
 import DefaultModal from '@/components/core/shared/DefaultModal/DefaultModal.vue'
 import Toast from 'primevue/toast'
-import type { AssistantProfileParams } from '@/types/assistant.ts'
+import type { AssistantProfileParams, ProviderOption } from '@/types/assistant.ts'
 import { useToogle } from '@/composables/useToogle'
 import { useAssistant } from '@/composables/useAssistant'
 import { useConversation } from '@/composables/useConversation'
 import { useErrorToast } from '@/composables/useErrorToast'
 import { useI18n } from 'vue-i18n'
+import type { IAssistantService } from '@/services/assistant/assistantService'
 
 const { t } = useI18n()
 
@@ -49,8 +50,26 @@ const {
   assistantProfile,
 } = useAssistant()
 
+const services = inject<{ assistantService: IAssistantService }>('services')
+
 const ttsEnabled = computed(() => assistantProfile.value?.tts_enabled ?? false)
 const responseLang = ref<'en' | 'es'>('en')
+
+const providerOptions = ref<ProviderOption[]>([])
+const aiProvider = ref<string>('')
+const pendingApiKey = ref<string>('')
+const showApiKeyInput = ref(false)
+const pendingProvider = ref<string>('')
+
+// New provider form
+const showAddProvider = ref(false)
+const newProvider = reactive({ name: '', base_url: '', model: '', auth_type: 'api_key', api_key: '' })
+
+const selectedProviderNeedsKey = computed(() => {
+  if (!pendingProvider.value) return false
+  const p = providerOptions.value.find(x => x.key === pendingProvider.value)
+  return p ? (p.auth_type !== 'none' && !p.api_key_set) : false
+})
 
 watch(
   () => assistantProfile.value?.response_language,
@@ -70,6 +89,65 @@ const toggleTts = async (value: boolean) => {
     })
   } catch {
     toast.add({ severity: 'error', summary: t('dashboard.errorAudio'), life: 3000 })
+  }
+}
+
+const onProviderSelect = (key: string) => {
+  if (!key) {
+    applyProvider(key)
+    return
+  }
+  const p = providerOptions.value.find(x => x.key === key)
+  if (p && p.auth_type !== 'none' && !p.api_key_set) {
+    pendingProvider.value = key
+    pendingApiKey.value = ''
+    showApiKeyInput.value = true
+  } else {
+    applyProvider(key)
+  }
+}
+
+const applyProvider = async (key: string, apiKey?: string) => {
+  const prev = aiProvider.value
+  aiProvider.value = key
+  showApiKeyInput.value = false
+  try {
+    await services!.assistantService.setProvider(key, apiKey)
+    // Update local api_key_set flag
+    if (apiKey) {
+      const p = providerOptions.value.find(x => x.key === key)
+      if (p) p.api_key_set = true
+    }
+    toast.add({ severity: 'success', summary: t('dashboard.aiModelUpdated'), life: 2000 })
+  } catch {
+    aiProvider.value = prev
+    toast.add({ severity: 'error', summary: t('dashboard.errorAiModel'), life: 3000 })
+  }
+}
+
+const submitApiKey = () => {
+  if (!pendingApiKey.value.trim()) return
+  applyProvider(pendingProvider.value, pendingApiKey.value.trim())
+}
+
+const cancelApiKey = () => {
+  showApiKeyInput.value = false
+  pendingProvider.value = ''
+  pendingApiKey.value = ''
+}
+
+const submitNewProvider = async () => {
+  if (!newProvider.name || !newProvider.base_url || !newProvider.model) return
+  try {
+    await services!.assistantService.addProvider({ ...newProvider })
+    // Reload options to show the new provider
+    const opts = await services!.assistantService.getOptions()
+    providerOptions.value = opts.data.providers ?? []
+    showAddProvider.value = false
+    Object.assign(newProvider, { name: '', base_url: '', model: '', auth_type: 'api_key', api_key: '' })
+    toast.add({ severity: 'success', summary: t('dashboard.providerAdded'), life: 2000 })
+  } catch {
+    toast.add({ severity: 'error', summary: t('dashboard.errorAiModel'), life: 3000 })
   }
 }
 
@@ -120,6 +198,11 @@ onMounted(async () => {
     await getAssistantProfile()
     if (isGetAssistantProfileSuccess.value) {
       await getUserConversation()
+    }
+    if (services?.assistantService) {
+      const opts = await services.assistantService.getOptions()
+      providerOptions.value = opts.data.providers ?? []
+      aiProvider.value = opts.data.active_provider ?? ''
     }
   } catch (error) {
     console.error('Error loading dashboard data:', error)
@@ -296,6 +379,44 @@ const integrations = computed(() => [
     enabled: true,
   },
 ])
+
+const openGroups = ref(new Set<string>())
+const toggleGroup = (id: string) => {
+  if (openGroups.value.has(id)) {
+    openGroups.value.delete(id)
+    openGroups.value = new Set(openGroups.value)
+  } else {
+    openGroups.value = new Set([...openGroups.value, id])
+  }
+}
+
+const MESSAGING_ROUTES = ['whatsapp-integration', 'whatsapp-devices', 'slack-integration', 'telegram-integration']
+const PRODUCTIVITY_ROUTES = ['google-calendar-integration', 'google-drive-integration', 'google-gmail-integration', 'store-integration', 'sqldatabase-integration']
+const AUTOMATION_ROUTES = ['system-commands', 'cron-jobs', 'tool-prompts', 'functions', 'my-account']
+
+const skillGroups = computed(() => [
+  {
+    id: 'messaging',
+    name: t('dashboard.skillGroups.messaging'),
+    icon: 'pi pi-comments',
+    tone: 'success',
+    items: integrations.value.filter(i => MESSAGING_ROUTES.includes(i.to)),
+  },
+  {
+    id: 'productivity',
+    name: t('dashboard.skillGroups.productivity'),
+    icon: 'pi pi-briefcase',
+    tone: 'info',
+    items: integrations.value.filter(i => PRODUCTIVITY_ROUTES.includes(i.to)),
+  },
+  {
+    id: 'automation',
+    name: t('dashboard.skillGroups.automation'),
+    icon: 'pi pi-cog',
+    tone: 'warning',
+    items: integrations.value.filter(i => AUTOMATION_ROUTES.includes(i.to)),
+  },
+])
 </script>
 
 <template>
@@ -411,6 +532,71 @@ const integrations = computed(() => [
                 </div>
               </div>
 
+              <div class="tts-row">
+                <div class="tts-info">
+                  <i class="pi pi-microchip-ai tts-icon"></i>
+                  <span class="tts-label">{{ t('dashboard.aiModel') }}</span>
+                </div>
+                <div class="provider-select-row">
+                  <select
+                    class="provider-select"
+                    :value="aiProvider"
+                    :disabled="isUpdateAssistantProfilePending"
+                    @change="onProviderSelect(($event.target as HTMLSelectElement).value)"
+                  >
+                    <option value="">{{ t('dashboard.aiModelDefault') }}</option>
+                    <option
+                      v-for="p in providerOptions"
+                      :key="p.key"
+                      :value="p.key"
+                    >{{ p.key }} — {{ p.model }}</option>
+                  </select>
+                  <button type="button" class="add-provider-toggle" :title="t('dashboard.addProvider')" @click="showAddProvider = !showAddProvider">
+                    <i :class="showAddProvider ? 'pi pi-times' : 'pi pi-plus-circle'"></i>
+                  </button>
+                </div>
+              </div>
+
+              <!-- API Key input (shown when selected provider has no key) -->
+              <div v-if="showApiKeyInput" class="tts-row provider-apikey-row">
+                <div class="tts-info">
+                  <i class="pi pi-key tts-icon"></i>
+                  <span class="tts-label">{{ t('dashboard.providerApiKey') }} ({{ pendingProvider }})</span>
+                </div>
+                <div class="provider-apikey-actions">
+                  <InputText
+                    v-model="pendingApiKey"
+                    size="small"
+                    :placeholder="t('dashboard.providerApiKeyPlaceholder')"
+                    type="password"
+                    @keyup.enter="submitApiKey"
+                    @keyup.escape="cancelApiKey"
+                  />
+                  <Button icon="pi pi-check" size="small" severity="success" :disabled="!pendingApiKey.trim()" @click="submitApiKey" />
+                  <Button icon="pi pi-times" size="small" severity="secondary" @click="cancelApiKey" />
+                </div>
+              </div>
+
+              <!-- Add custom provider form -->
+              <div v-if="showAddProvider" class="add-provider-form">
+                <div class="add-provider-fields">
+                  <InputText v-model="newProvider.name" size="small" :placeholder="t('dashboard.providerName')" />
+                  <InputText v-model="newProvider.base_url" size="small" :placeholder="t('dashboard.providerBaseUrl')" />
+                  <InputText v-model="newProvider.model" size="small" :placeholder="t('dashboard.providerModel')" />
+                  <InputText v-model="newProvider.api_key" size="small" :placeholder="t('dashboard.providerApiKeyPlaceholder')" type="password" />
+                </div>
+                <div class="add-provider-actions">
+                  <Button
+                    :label="t('dashboard.applyProvider')"
+                    size="small"
+                    :disabled="!newProvider.name || !newProvider.base_url || !newProvider.model"
+                    @click="submitNewProvider"
+                  />
+                  <Button :label="t('common.cancel')" size="small" severity="secondary" @click="showAddProvider = false" />
+                </div>
+              </div>
+
+
             </div>
           </template>
         </Card>
@@ -446,44 +632,66 @@ const integrations = computed(() => [
           </template>
         </Card>
 
-        <!-- Integrations (moved up) -->
-        <div class="integrations-section">
+        <!-- Skills Section -->
+        <div class="skills-section">
           <div class="section-header">
-            <h2>{{ t('dashboard.availableIntegrations') }}</h2>
-            <p>{{ t('dashboard.integrationsDesc') }}</p>
+            <h2>{{ t('dashboard.availableSkills') }}</h2>
+            <p>{{ t('dashboard.skillsDesc') }}</p>
           </div>
 
-          <div class="integrations-grid">
-            <button
-              v-for="integration in integrations"
-              :key="integration.name"
-              type="button"
-              class="integration-button"
-              :class="{ 'is-disabled': !integration.enabled }"
-              :disabled="!integration.enabled"
-              @click="integration.enabled && $router.push({ name: integration.to })"
-            >
-              <div class="integration-content">
-                <div class="integration-main">
-                  <div
-                    class="integration-icon"
-                    :class="integration.enabled ? `tone-${integration.tone}` : 'disabled'"
+          <div class="skill-groups">
+            <div v-for="group in skillGroups" :key="group.id" class="skill-group">
+              <button
+                type="button"
+                class="skill-group-header"
+                :class="{ 'is-open': openGroups.has(group.id) }"
+                @click="toggleGroup(group.id)"
+              >
+                <div class="skill-group-title">
+                  <div class="skill-group-icon" :class="`tone-${group.tone}`">
+                    <i :class="group.icon"></i>
+                  </div>
+                  <span class="skill-group-name">{{ group.name }}</span>
+                  <span class="skill-group-count">{{ group.items.length }}</span>
+                </div>
+                <i class="pi pi-chevron-down skill-chevron" :class="{ 'is-rotated': openGroups.has(group.id) }"></i>
+              </button>
+
+              <div v-show="openGroups.has(group.id)" class="skill-group-content">
+                <div class="integrations-grid">
+                  <button
+                    v-for="integration in group.items"
+                    :key="integration.name"
+                    type="button"
+                    class="integration-button"
+                    :class="{ 'is-disabled': !integration.enabled }"
+                    :disabled="!integration.enabled"
+                    @click="integration.enabled && $router.push({ name: integration.to })"
                   >
-                    <i :class="integration.icon"></i>
-                  </div>
-                  <div class="integration-info">
-                    <h3>{{ integration.name }}</h3>
-                  </div>
-                </div>
+                    <div class="integration-content">
+                      <div class="integration-main">
+                        <div
+                          class="integration-icon"
+                          :class="integration.enabled ? `tone-${integration.tone}` : 'disabled'"
+                        >
+                          <i :class="integration.icon"></i>
+                        </div>
+                        <div class="integration-info">
+                          <h3>{{ integration.name }}</h3>
+                        </div>
+                      </div>
 
-                <div class="integration-actions">
-                  <span v-if="integration.enabled" class="integration-action-label">{{ t('common.configure') }}</span>
-                  <span v-else class="integration-action-label">{{ t('common.comingSoon') }}</span>
-                </div>
+                      <div class="integration-actions">
+                        <span v-if="integration.enabled" class="integration-action-label">{{ t('common.configure') }}</span>
+                        <span v-else class="integration-action-label">{{ t('common.comingSoon') }}</span>
+                      </div>
 
-                <div class="integration-legend">{{ integration.description }}</div>
+                      <div class="integration-legend">{{ integration.description }}</div>
+                    </div>
+                  </button>
+                </div>
               </div>
-            </button>
+            </div>
           </div>
         </div>
       </div>
@@ -667,7 +875,107 @@ const integrations = computed(() => [
 .integrations-grid {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
-  gap: 1rem;
+  gap: 0.65rem;
+}
+
+/* Skills Section */
+.skill-groups {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.skill-group {
+  border: 1px solid rgba(255,255,255,0.08);
+  border-radius: 0.6rem;
+  overflow: hidden;
+  background: rgba(255,255,255,0.02);
+}
+
+.skill-group-header {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0.65rem 0.85rem;
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  font-family: inherit;
+  transition: background var(--transition-fast);
+  gap: 0.5rem;
+}
+
+.skill-group-header:hover {
+  background: rgba(255,255,255,0.04);
+}
+
+.skill-group-header.is-open {
+  background: rgba(255,255,255,0.04);
+  border-bottom: 1px solid rgba(255,255,255,0.07);
+}
+
+.skill-group-title {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+}
+
+.skill-group-icon {
+  width: 1.7rem;
+  height: 1.7rem;
+  border-radius: 0.4rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.8rem;
+  flex-shrink: 0;
+}
+
+.skill-group-icon.tone-success {
+  color: var(--do-success);
+  background: rgba(34,197,94,0.12);
+}
+
+.skill-group-icon.tone-info {
+  color: var(--do-info);
+  background: rgba(6,182,212,0.12);
+}
+
+.skill-group-icon.tone-warning {
+  color: var(--do-warning);
+  background: rgba(245,158,11,0.12);
+}
+
+.skill-group-name {
+  font-size: 0.88rem;
+  font-weight: 600;
+  color: var(--do-text);
+}
+
+.skill-group-count {
+  font-size: 0.72rem;
+  font-weight: 600;
+  color: var(--do-text-muted);
+  background: rgba(255,255,255,0.08);
+  border: 1px solid rgba(255,255,255,0.1);
+  border-radius: 999px;
+  padding: 0.1rem 0.45rem;
+}
+
+.skill-chevron {
+  font-size: 0.75rem;
+  color: var(--do-text-muted);
+  transition: transform 0.2s ease;
+  flex-shrink: 0;
+}
+
+.skill-chevron.is-rotated {
+  transform: rotate(180deg);
+}
+
+.skill-group-content {
+  padding: 0.65rem;
 }
 
 /* Profile Card */
@@ -796,6 +1104,100 @@ const integrations = computed(() => [
 .lang-opt:disabled {
   opacity: 0.5;
   cursor: not-allowed;
+}
+
+.provider-select {
+  background: rgba(255,255,255,0.05);
+  border: 1px solid var(--do-border-light);
+  border-radius: 0.4rem;
+  color: var(--do-text);
+  font-size: 0.78rem;
+  font-weight: 500;
+  padding: 0.25rem 0.5rem;
+  cursor: pointer;
+  max-width: 180px;
+  appearance: auto;
+}
+
+.provider-select:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.provider-select option {
+  background: var(--do-navy, #0d1117);
+  color: var(--do-text);
+}
+
+.provider-apikey-row {
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.5rem;
+  padding-top: 0.5rem;
+  border-top: 1px solid rgba(255,255,255,0.06);
+}
+
+.provider-apikey-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  width: 100%;
+}
+
+.provider-apikey-actions .p-inputtext {
+  flex: 1;
+  min-width: 0;
+}
+
+.add-provider-form {
+  background: rgba(255,255,255,0.03);
+  border: 1px solid rgba(255,255,255,0.08);
+  border-radius: 0.5rem;
+  padding: 0.75rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  margin-top: 0.25rem;
+}
+
+.add-provider-fields {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+}
+
+.add-provider-fields .p-inputtext {
+  width: 100%;
+}
+
+.add-provider-actions {
+  display: flex;
+  gap: 0.4rem;
+  justify-content: flex-end;
+}
+
+.provider-select-row {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+}
+
+.add-provider-toggle {
+  background: none;
+  border: none;
+  cursor: pointer;
+  color: var(--do-accent, #5b9cf6);
+  font-size: 0.85rem;
+  display: flex;
+  align-items: center;
+  padding: 0.2rem;
+  opacity: 0.7;
+  transition: opacity 0.2s;
+  flex-shrink: 0;
+}
+
+.add-provider-toggle:hover {
+  opacity: 1;
 }
 
 .profile-actions {
@@ -1321,7 +1723,7 @@ const integrations = computed(() => [
 
   .integrations-grid {
     grid-template-columns: 1fr;
-    gap: 1rem;
+    gap: 0.65rem;
   }
 
   .section-header h2 {

@@ -11,6 +11,7 @@ from .profile import (
     ProfileOutputData,
     RoleOutput,
     RoleOutputData,
+    ProviderOutputData,
     ListOptionsOutput,
     ListOptionsOutputData,
 )
@@ -80,6 +81,7 @@ __all__ = [
     "ProfileOutputData",
     "RoleOutput",
     "RoleOutputData",
+    "ProviderOutputData",
     "ListOptionsOutput",
     "ListOptionsOutputData",
     # Conversation schemas

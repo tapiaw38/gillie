@@ -3,7 +3,7 @@ from pathlib import Path
 from dotenv import load_dotenv
 from enum import Enum
 from dataclasses import dataclass
-from typing import Optional, TYPE_CHECKING
+from typing import Optional, TYPE_CHECKING, Dict, Any
 
 if TYPE_CHECKING:
     from cli.config.schema import AssistantConfig
@@ -49,7 +49,7 @@ _PROVIDER_PRESETS: dict = {
     "gemini":     {"base_url": "https://generativelanguage.googleapis.com/v1beta/openai/","model": "gemini-2.0-flash",             "auth_type": "api_key"},
     "groq":       {"base_url": "https://api.groq.com/openai/v1",                         "model": "llama-3.3-70b-versatile",      "auth_type": "api_key"},
     "claude":     {"base_url": "https://api.anthropic.com/v1",                           "model": "claude-haiku-4-5-20251001",    "auth_type": "bearer"},
-    "ollama":     {"base_url": "http://localhost:11434/v1",                              "model": "llama3.2",                     "auth_type": "none"},
+    "qwen3":      {"base_url": "http://localhost:11434/v1",                              "model": "qwen3:4b",                     "auth_type": "none"},
 }
 
 
@@ -59,7 +59,7 @@ class OpenAIConfig:
     base_url: str
     model: str
     role: str
-    auth_type: str = "api_key"  # "api_key" | "bearer"
+    auth_type: str = "api_key"  # "api_key" | "bearer" | "none"
 
 
 @dataclass
@@ -426,6 +426,43 @@ def read_config() -> ConfigurationService:
         storage_config=storage_config,
         vision_config=vision_config,
     )
+
+
+def get_available_providers(
+    provider_keys: Optional[Dict[str, str]] = None,
+    custom_providers: Optional[Dict[str, Any]] = None,
+) -> Dict[str, Any]:
+    """
+    Return the full provider map: built-in presets merged with profile data.
+    Each entry has base_url, model, auth_type, api_key (may be empty), is_builtin.
+    """
+    keys = provider_keys or {}
+    customs = custom_providers or {}
+
+    merged: Dict[str, Any] = {}
+    for name, preset in _PROVIDER_PRESETS.items():
+        merged[name] = {**preset, "api_key": keys.get(name, ""), "is_builtin": True}
+    for name, entry in customs.items():
+        if name not in merged:
+            merged[name] = {**entry, "api_key": keys.get(name, entry.get("api_key", "")), "is_builtin": False}
+    return merged
+
+
+def get_active_provider_name(active_provider: Optional[str] = None) -> str:
+    """Return stored active provider name, or detect from current config."""
+    if active_provider:
+        return active_provider
+    try:
+        config = get_config_service()
+        current_base = config.openai_config.base_url
+        current_model = config.openai_config.model
+        for name, preset in _PROVIDER_PRESETS.items():
+            if preset["base_url"] == current_base and preset["model"] == current_model:
+                return name
+        return "custom"
+    except Exception:
+        return "custom"
+
 
 
 def init_config() -> None:

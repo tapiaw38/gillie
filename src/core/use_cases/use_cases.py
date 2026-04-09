@@ -21,6 +21,7 @@ from src.core.use_cases.profile import (
     AddIntegrationUseCase as ProfileAddIntegrationUseCase,
     DeleteIntegrationUseCase as ProfileDeleteIntegrationUseCase,
     ListOptionsUseCase as ProfileListOptionsUseCase,
+    UpdateProviderUseCase as ProfileUpdateProviderUseCase,
     FindByWhatsAppBusinessIdUseCase as ProfileFindByWhatsAppBusinessIdUseCase,
     FindWithActiveWhatsAppIntegrationUseCase as ProfileFindWithActiveWhatsAppIntegrationUseCase,
     FindWithActiveSlackIntegrationUseCase as ProfileFindWithActiveSlackIntegrationUseCase,
@@ -117,6 +118,7 @@ class Profile:
     find_with_active_whatsapp_integration_usecase: ProfileFindWithActiveWhatsAppIntegrationUseCase
     find_with_active_slack_integration_usecase: ProfileFindWithActiveSlackIntegrationUseCase
     find_with_active_telegram_integration_usecase: ProfileFindWithActiveTelegramIntegrationUseCase
+    update_provider_usecase: ProfileUpdateProviderUseCase
 
 
 @dataclass
@@ -256,6 +258,7 @@ def create_usecases(context_factory: Factory) -> Usecases:
             find_with_active_whatsapp_integration_usecase=ProfileFindWithActiveWhatsAppIntegrationUseCase(context_factory),
             find_with_active_slack_integration_usecase=ProfileFindWithActiveSlackIntegrationUseCase(context_factory),
             find_with_active_telegram_integration_usecase=ProfileFindWithActiveTelegramIntegrationUseCase(context_factory),
+            update_provider_usecase=ProfileUpdateProviderUseCase(context_factory),
         ),
         conversation=Conversation(
             create_usecase=ConversationCreateUseCase(context_factory),

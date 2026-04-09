@@ -191,29 +191,20 @@ if repositories.job is not None:
 
 if config_service.single_user_config:
     user_id = config_service.single_user_config.user_id
-    try:
-        existing_profile = repositories.profile.find_by_user_id(user_id)
-        if not existing_profile and _cli_config:
-            from src.schemas import ProfileInput
-            profile_input = ProfileInput(
-                assistant_name=_cli_config.profile.assistant_name,
-                business_name=_cli_config.profile.business_name,
-                functions=_cli_config.profile.functions,
-                response_language=_cli_config.profile.response_language,
-            )
-            usecases.profile.create_usecase.execute(profile_input, user_id)
-            logger.info(f"Auto-created profile for user_id={user_id}")
-        elif existing_profile:
-            logger.info(f"Profile already exists for user_id={user_id}")
-    except Exception as e:
-        logger.warning(f"Could not auto-create profile: {e}")
+    from src.core.services.startup_service import StartupService
+    StartupService(
+        usecases=usecases,
+        config_service=config_service,
+        profile_repository=repositories.profile,
+        openai_integration=integrations.openai,
+    ).initialize(user_id=user_id, cli_config=_cli_config)
 else:
     user_id = "default-user"
 
 neonize_integration = NeonizeIntegration(sessions_dir="./data/whatsapp", stt_integration=integrations.stt)
 
 
-routes_manager = RoutesManager(app, usecases, config_service, neonize_integration=neonize_integration, scheduler=scheduler)
+routes_manager = RoutesManager(app, usecases, config_service, neonize_integration=neonize_integration, scheduler=scheduler, openai_integration=integrations.openai)
 routes_manager.include_routes()
 
 app.add_middleware(SingleUserMiddleware, user_id=user_id, profile_client=profiles_client)

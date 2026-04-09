@@ -1,5 +1,5 @@
 from pydantic import BaseModel
-from typing import Optional, List
+from typing import Optional, List, Dict, Any
 from datetime import datetime
 from src.core.domain import Profile
 from .api_key_schemas import ApiKeyOutput, ApiKeyOutputData
@@ -32,6 +32,9 @@ class ProfileOutputData(BaseModel):
     is_active: bool
     tts_enabled: Optional[bool] = False
     response_language: Optional[str] = "en"
+    active_provider: Optional[str] = None
+    provider_keys: Optional[Dict[str, str]] = None
+    custom_providers: Optional[Dict[str, Any]] = None
     created_at: Optional[datetime]
     updated_at: Optional[datetime]
     api_keys: Optional[List[ApiKeyOutputData]]
@@ -56,6 +59,9 @@ class ProfileOutput(BaseModel):
                 is_active=profile.is_active,
                 tts_enabled=profile.tts_enabled or False,
                 response_language=profile.response_language or "en",
+                active_provider=profile.active_provider,
+                provider_keys=profile.provider_keys,
+                custom_providers=profile.custom_providers,
                 created_at=profile.created_at,
                 updated_at=profile.updated_at,
                 api_keys=(

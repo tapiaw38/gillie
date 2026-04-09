@@ -14,7 +14,11 @@ from rich.console import Console
 from rich.table import Table
 from rich import box
 
-from src.core.platform.config.service import _PROVIDER_PRESETS
+from src.core.platform.config.service import (
+    _PROVIDER_PRESETS,
+    get_available_providers,
+)
+from cli.config.db import update_provider, save_custom_provider, get_provider_data
 
 app = typer.Typer(help="Manage AI provider (DeepSeek, OpenRouter, Anthropic, OpenAI, etc.)")
 vision_app = typer.Typer(help="Configure vision AI provider for image description")
@@ -52,50 +56,54 @@ def provider_list():
     """Show all available providers."""
     from cli.config.manager import config_exists, load_config
 
-    current_api_key = ""
     current_base_url = ""
     current_model = ""
     if config_exists():
         try:
             cfg = load_config()
-            current_api_key = cfg.services.openai.api_key
             current_base_url = cfg.services.openai.base_url
             current_model = cfg.services.openai.model
         except Exception:
             pass
 
+    profile_data = get_provider_data()
+    all_providers = get_available_providers(
+        provider_keys=profile_data.get("provider_keys"),
+        custom_providers=profile_data.get("custom_providers"),
+    )
+
     table = Table(box=box.ROUNDED, border_style="cyan", show_lines=False)
     table.add_column("Provider", style="bold")
-    table.add_column("Base URL", style="dim")
-    table.add_column("Default Model")
-    table.add_column("Status")
+    table.add_column("Model")
+    table.add_column("Key")
+    table.add_column("Type", style="dim")
 
     from pathlib import Path as _Path
     _has_claude_session = (_Path.home() / ".claude" / ".credentials.json").exists()
 
-    for name, preset in _PROVIDER_PRESETS.items():
-        if preset.get("auth_type") == "none":
-            status = "[green]local (no key needed)[/green]"
-        elif preset.get("auth_type") == "bearer":
-            status = "[green]session found[/green]" if _has_claude_session else "[yellow]no session[/yellow]"
+    for name, entry in all_providers.items():
+        auth = entry.get("auth_type", "api_key")
+        if auth == "none":
+            key_status = "[green]local[/green]"
+        elif auth == "bearer":
+            key_status = "[green]session[/green]" if _has_claude_session else "[yellow]no session[/yellow]"
         else:
-            has_creds = bool(current_api_key)
-            status = "[green]credentials found[/green]" if has_creds else "[yellow]no credentials[/yellow]"
-        # Match by both base_url AND model so shared-URL presets don't both get *
-        is_active = (current_base_url == preset["base_url"] and current_model == preset["model"])
+            key_status = "[green]set[/green]" if entry.get("api_key") else "[yellow]not set[/yellow]"
+
+        is_active = (current_base_url == entry.get("base_url") and current_model == entry.get("model"))
         active_marker = " [bold cyan]*[/bold cyan]" if is_active else ""
-        display = _provider_display_name(name, preset)
+        label = "[dim](custom)[/dim] " if not entry.get("is_builtin", True) else ""
         table.add_row(
-            f"{display}{active_marker}",
-            preset["base_url"],
-            preset["model"],
-            status,
+            f"{label}{name}{active_marker}",
+            entry.get("model", ""),
+            key_status,
+            auth,
         )
 
     console.print()
     console.print(table)
     console.print()
-    console.print("[dim]* = currently configured[/dim]")
+    console.print("[dim]* = currently active[/dim]")
     console.print()
 
 
@@ -118,17 +126,24 @@ def provider_use(
         _cfg = load_config()
         _current_base_url = _cfg.services.openai.base_url or ""
         _has_claude_session = (_Path.home() / ".claude" / ".credentials.json").exists()
+        _profile_data = get_provider_data()
+        _all = get_available_providers(
+            provider_keys=_profile_data.get("provider_keys"),
+            custom_providers=_profile_data.get("custom_providers"),
+        )
 
-        def _choice_label(name: str, preset: dict) -> str:
-            is_active = (preset["base_url"] == _current_base_url and
-                         preset["model"] == _cfg.services.openai.model)
+        def _choice_label(name: str, entry: dict) -> str:
+            is_active = (entry.get("base_url") == _current_base_url and
+                         entry.get("model") == _cfg.services.openai.model)
             active = " *" if is_active else "  "
-            display = _provider_display_name(name, preset)
-            return f"{active} {display:<26} {preset['model']}"
+            key_ok = entry.get("api_key") or entry.get("auth_type") in ("none", "bearer")
+            key_mark = "" if key_ok else " [no key]"
+            custom = " (custom)" if not entry.get("is_builtin", True) else ""
+            return f"{active} {name:<26}{custom} {entry.get('model','')}{key_mark}"
 
         choices = [
             {"name": _choice_label(n, p), "value": n}
-            for n, p in _PROVIDER_PRESETS.items()
+            for n, p in _all.items()
         ]
 
         try:
@@ -136,7 +151,7 @@ def provider_use(
                 message="Select provider:",
                 choices=choices,
                 default=next(
-                    (n for n, p in _PROVIDER_PRESETS.items() if p["base_url"] == _current_base_url),
+                    (n for n, p in _all.items() if p.get("base_url") == _current_base_url),
                     choices[0]["value"],
                 ),
                 pointer="❯",
@@ -145,13 +160,18 @@ def provider_use(
         except KeyboardInterrupt:
             raise typer.Exit(0)
 
-    if provider not in _PROVIDER_PRESETS:
-        valid = ", ".join(_PROVIDER_PRESETS.keys())
+    _pd = get_provider_data()
+    all_providers = get_available_providers(
+        provider_keys=_pd.get("provider_keys"),
+        custom_providers=_pd.get("custom_providers"),
+    )
+    if provider not in all_providers:
+        valid = ", ".join(all_providers.keys())
         console.print(f"[red]Unknown provider:[/red] {provider}")
         console.print(f"[dim]Valid providers: {valid}[/dim]")
         raise typer.Exit(1)
 
-    preset = _PROVIDER_PRESETS[provider]
+    preset = all_providers[provider]
 
     if preset.get("auth_type") == "none":
         # Local providers (e.g. Ollama) don't require an API key.
@@ -232,6 +252,7 @@ def provider_use(
     cfg.services.openai.auth_type = preset["auth_type"]
     cfg.services.provider_keys[preset["base_url"]] = resolved_key
     save_config(cfg)
+    update_provider(provider, resolved_key)
 
     console.print(f"[green]Provider switched to[/green] [bold cyan]{provider}[/bold cyan]")
     console.print(f"  Base URL : {preset['base_url']}")
@@ -239,6 +260,32 @@ def provider_use(
     console.print()
 
     _restart_service_if_running()
+
+
+@app.command("add")
+def provider_add(
+    name: str = typer.Argument(..., help="Unique provider name (e.g. my-ollama)"),
+    base_url: str = typer.Option(..., "--base-url", "-u", help="API base URL"),
+    model: str = typer.Option(..., "--model", "-m", help="Model name"),
+    auth_type: str = typer.Option("api_key", "--auth-type", "-a", help="none | api_key | bearer"),
+    api_key: Optional[str] = typer.Option(None, "--api-key", "-k", help="API key (optional)"),
+):
+    """Register a new custom provider."""
+    resolved_key = api_key or ""
+    if auth_type == "api_key" and not resolved_key:
+        try:
+            from InquirerPy import inquirer as _inquirer
+            resolved_key = _inquirer.secret(message=f"API key for {name} (leave empty to skip):").execute()
+        except Exception:
+            resolved_key = typer.prompt(f"API key for {name} (leave empty to skip)", default="", hide_input=True)
+
+    save_custom_provider(name=name, base_url=base_url, model=model, auth_type=auth_type, api_key=resolved_key)
+    console.print(f"[green]Provider[/green] [bold cyan]{name}[/bold cyan] [green]added[/green]")
+    console.print(f"  Base URL : {base_url}")
+    console.print(f"  Model    : {model}")
+    console.print()
+    console.print(f"[dim]Run [bold]gillie provider use {name}[/bold] to activate it.[/dim]")
+    console.print()
 
 
 @app.command("status")

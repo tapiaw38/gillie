@@ -120,9 +120,30 @@ def init(
 
     console.print()
     console.print("[bold]AI Provider[/bold]")
-    openai_key = _prompt_password("API key (OpenAI / DeepSeek / compatible)")
-    openai_base_url = _prompt_text("Base URL", default="https://api.deepseek.com")
-    openai_model = _prompt_text("Model name", default="deepseek-chat")
+
+    from src.core.platform.config.service import _PROVIDER_PRESETS
+    provider_choices = list(_PROVIDER_PRESETS.keys()) + ["other (custom)"]
+    selected_provider = _prompt_select("Provider", choices=provider_choices, default="deepseek")
+
+    if selected_provider == "other (custom)":
+        openai_base_url = _prompt_text("Base URL", required=True)
+        openai_model = _prompt_text("Model name", required=True)
+        openai_auth_type = _prompt_select("Auth type", choices=["api_key", "bearer", "none"], default="api_key")
+        active_provider = "custom"
+    else:
+        preset = _PROVIDER_PRESETS[selected_provider]
+        openai_base_url = preset["base_url"]
+        openai_model = preset["model"]
+        openai_auth_type = preset["auth_type"]
+        active_provider = selected_provider
+        console.print(f"  [dim]URL:   [bold]{openai_base_url}[/bold][/dim]")
+        console.print(f"  [dim]Model: [bold]{openai_model}[/bold][/dim]")
+
+    if openai_auth_type != "none":
+        openai_key = _prompt_password(f"API key for {selected_provider}")
+    else:
+        openai_key = ""
+
     openai_temperature = float(_prompt_text("Temperature", default="0.7"))
     openai_max_tokens = int(_prompt_text("Max tokens", default="2000"))
 
@@ -223,6 +244,8 @@ def init(
                 model=openai_model,
                 temperature=openai_temperature,
                 max_tokens=openai_max_tokens,
+                auth_type=openai_auth_type,
+                active_provider=active_provider,
             ),
             langchain=langchain_cfg,
             qdrant=qdrant_cfg,

@@ -75,6 +75,17 @@ class OpenAIIntegration:
             max_retries=3,
         )
 
+    def reload_provider(self, base_url: str, model: str, api_key: str, auth_type: str) -> None:
+        """Hot-reload provider without restarting. Updates client + LangChain LLM."""
+        self.api_key = api_key
+        self.base_url = base_url
+        self.model = model
+        self.auth_type = auth_type
+        self.client = self._build_client()
+        if self.langchain_service is not None:
+            self.langchain_service.reload_llm(model=model, base_url=base_url, api_key=api_key)
+        self.logger.info(f"Provider reloaded: model={model}, base_url={base_url}")
+
     def set_skill_manager(self, skill_manager) -> None:
         """Inject SkillManager after construction (avoids circular init order)."""
         self.skill_manager = skill_manager

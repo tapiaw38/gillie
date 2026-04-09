@@ -136,6 +136,19 @@ class LangChainService:
             f"langsmith={enable_langsmith}"
         )
 
+    def reload_llm(self, model: str, base_url: str, api_key: str) -> None:
+        """Rebuild the ChatOpenAI instance for a new provider (hot-reload)."""
+        self.llm = ChatOpenAI(
+            model=model,
+            api_key=api_key,
+            base_url=base_url if base_url else None,
+            temperature=0.7,
+            max_tokens=8000,
+            timeout=300.0,
+            max_retries=2,
+        )
+        logger.info(f"LangChainService LLM reloaded: model={model}")
+
     def _setup_langsmith(self):
         """Configure LangSmith tracing"""
         try:

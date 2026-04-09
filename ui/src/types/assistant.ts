@@ -12,6 +12,31 @@ export interface AssistantProfileUpdateParams {
   response_language?: string
 }
 
+export interface ProviderOption {
+  key: string
+  model: string
+  base_url: string
+  auth_type: string
+  api_key_set: boolean
+  is_builtin: boolean
+}
+
+export interface ProfileOptionsResponse {
+  data: {
+    roles: { code: string; name: string }[]
+    providers: ProviderOption[]
+    active_provider: string
+  }
+}
+
+export interface CustomProviderInput {
+  name: string
+  base_url: string
+  model: string
+  auth_type: string
+  api_key: string
+}
+
 export interface AssistantProfile {
   id: string
   assistant_name: string

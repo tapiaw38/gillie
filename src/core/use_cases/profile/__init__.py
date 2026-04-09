@@ -7,6 +7,7 @@ from .api_key_use_cases import AddApiKeyUseCase, DeleteApiKeyUseCase
 from .file_use_cases import AddFilesUseCase, DeleteFileByIdUseCase
 from .integration_use_cases import AddIntegrationUseCase, DeleteIntegrationUseCase
 from .list_options_use_case import ListOptionsUseCase
+from .update_provider_use_case import UpdateProviderUseCase
 from .find_by_whatsapp_business_id_use_case import FindByWhatsAppBusinessIdUseCase
 from .find_with_active_whatsapp_integration_use_case import FindWithActiveWhatsAppIntegrationUseCase
 from .find_with_active_slack_integration_use_case import FindWithActiveSlackIntegrationUseCase
@@ -25,6 +26,7 @@ __all__ = [
     "AddIntegrationUseCase",
     "DeleteIntegrationUseCase",
     "ListOptionsUseCase",
+    "UpdateProviderUseCase",
     "FindByWhatsAppBusinessIdUseCase",
     "FindWithActiveWhatsAppIntegrationUseCase",
     "FindWithActiveSlackIntegrationUseCase",
