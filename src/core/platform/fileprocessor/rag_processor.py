@@ -43,14 +43,12 @@ class RAGDocumentProcessor:
             separators=["\n\n", "\n", " ", ""],
         )
 
-        # Initialize Qdrant adapter if enabled
         if self.use_qdrant and self.embeddings:
             try:
                 self.qdrant_adapter = QdrantVectorStoreAdapter(
                     config_service=config_service,
                     embeddings=self.embeddings
                 )
-                # Test connection
                 if self.qdrant_adapter.health_check():
                     logger.info("Qdrant adapter initialized successfully")
                 else:
@@ -63,7 +61,6 @@ class RAGDocumentProcessor:
         else:
             self.use_qdrant = False
 
-        # FAISS fallback storage
         self.vector_store_path = Path("./vector_stores")
         self.vector_store_path.mkdir(exist_ok=True)
 
@@ -80,7 +77,6 @@ class RAGDocumentProcessor:
         try:
             document_id = self._get_document_id(file_url)
 
-            # Use profile-based collection name if profile_id provided
             if profile_id:
                 collection_name = f"profile_{profile_id}"
             else:
@@ -88,9 +84,7 @@ class RAGDocumentProcessor:
 
             logger.info(f"Processing document for RAG: {file_url}")
 
-            # Check if using Qdrant
             if self.use_qdrant:
-                # Check if document already exists in Qdrant
                 existing_info = self.qdrant_adapter.get_collection_info(collection_name)
                 if existing_info and existing_info.get("points_count", 0) > 0:
                     logger.info(f"Document already processed in Qdrant: {document_id}")
@@ -102,7 +96,6 @@ class RAGDocumentProcessor:
                         "storage": "qdrant"
                     }
             else:
-                # Check FAISS cache
                 if document_id in self.vectorstore_cache:
                     logger.info(f"Document already processed in cache: {document_id}")
                     vectorstore = self.vectorstore_cache[document_id]
@@ -121,7 +114,6 @@ class RAGDocumentProcessor:
                         "storage": "faiss"
                     }
 
-            # Process document
             if file_type.lower() == "pdf":
                 documents = await self._process_pdf(file_url)
             elif file_type.lower() in ["xlsx", "xls"]:
@@ -134,7 +126,6 @@ class RAGDocumentProcessor:
 
             chunks = self.text_splitter.split_documents(documents)
 
-            # Add metadata to chunks
             for chunk in chunks:
                 chunk.metadata.update({
                     "document_id": document_id,
@@ -144,9 +135,7 @@ class RAGDocumentProcessor:
                 if profile_id:
                     chunk.metadata["profile_id"] = profile_id
 
-            # Store in Qdrant or FAISS
             if self.use_qdrant:
-                # Store in Qdrant
                 success = self.qdrant_adapter.add_documents(
                     collection_name=collection_name,
                     documents=chunks
@@ -155,7 +144,6 @@ class RAGDocumentProcessor:
                 if not success:
                     logger.error("Failed to store in Qdrant, falling back to FAISS")
                     self.use_qdrant = False
-                    # Continue to FAISS storage below
                 else:
                     result = {
                         "document_id": document_id,
@@ -174,7 +162,6 @@ class RAGDocumentProcessor:
                     )
                     return result
 
-            # FAISS fallback
             if self.embeddings:
                 vectorstore = FAISS.from_documents(
                     documents=chunks, embedding=self.embeddings
@@ -411,7 +398,6 @@ class RAGDocumentProcessor:
         try:
             all_results = []
 
-            # If using Qdrant and profile_id provided, search in profile collection
             if self.use_qdrant and profile_id:
                 collection_name = f"profile_{profile_id}"
                 try:

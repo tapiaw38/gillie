@@ -82,7 +82,6 @@ class FileImageProcessor(BaseFileProcessor):
 
     def __init__(self, config_service: ConfigurationService):
         super().__init__(config_service)
-        # Enable fast processing to reduce API calls
         self.enable_fast_processing = True
 
     async def analyze_pdf_content(self, pdf_url: str) -> PDFAnalysisResult:
@@ -91,28 +90,23 @@ class FileImageProcessor(BaseFileProcessor):
         and extract text from images if necessary
         """
         try:
-            # Download PDF
             response = requests.get(pdf_url)
             response.raise_for_status()
             pdf_data = response.content
 
-            # Check if PDF has text
             has_text, text_pages, total_pages = self._check_pdf_has_text(pdf_data)
 
             text_extraction_results = []
 
             if has_text:
-                # If it has text, extract normal PDF text
                 text_extraction_results = await self._extract_text_from_pdf(pdf_data)
                 logger.info("Text extracted from PDF successfully.")
                 processing_method = "pdf_text_extraction"
             else:
-                # If no text, use OCR on images
                 text_extraction_results = await self._extract_text_with_ocr(pdf_data)
                 logger.info("Text extracted using OCR.")
                 processing_method = "ocr_extraction"
 
-            # Identify pages with images
             image_pages = await self._identify_image_pages(pdf_data)
 
             return PDFAnalysisResult(
@@ -168,7 +162,6 @@ class FileImageProcessor(BaseFileProcessor):
                 text = page.get_text().strip()
 
                 if len(text) > 10:  # Only process pages with significant text
-                    # Find related images on the same page
                     related_images = await self._find_related_images_in_page(
                         pdf_data, page_num + 1, text
                     )
@@ -198,11 +191,9 @@ class FileImageProcessor(BaseFileProcessor):
         try:
             results = []
 
-            # First try with embedded images
             embedded_results = await self._extract_text_from_embedded_images(pdf_data)
             results.extend(embedded_results)
 
-            # If not enough text from embedded images, convert full pages
             if (
                 len(embedded_results) == 0
                 or sum(len(r.extracted_text) for r in embedded_results) < 100
@@ -232,7 +223,6 @@ class FileImageProcessor(BaseFileProcessor):
 
                 for img_index, img in enumerate(image_list):
                     try:
-                        # Extract image
                         xref = img[0]
                         pix = fitz.Pixmap(pdf_document, xref)
 
@@ -240,7 +230,6 @@ class FileImageProcessor(BaseFileProcessor):
                             img_data = pix.tobytes("png")
                             pil_image = Image.open(io.BytesIO(img_data))
 
-                            # Apply OCR
                             extracted_text = self._extract_text_with_tesseract(
                                 pil_image
                             )
@@ -255,14 +244,12 @@ class FileImageProcessor(BaseFileProcessor):
                                     buffered.getvalue()
                                 ).decode()
 
-                                # Find related images
                                 related_images = (
                                     await self._find_related_images_in_page(
                                         pdf_data, page_num + 1, extracted_text
                                     )
                                 )
 
-                                # Add current image as related
                                 current_image = ImageSearchResult(
                                     page_number=page_num + 1,
                                     sheet_name=None,
@@ -305,7 +292,6 @@ class FileImageProcessor(BaseFileProcessor):
         Extracts text by converting full PDF pages to images and applying OCR
         """
         try:
-            # Convert pages to images
             images = convert_from_bytes(
                 pdf_data, dpi=300
             )  # High resolution for better OCR
@@ -313,7 +299,6 @@ class FileImageProcessor(BaseFileProcessor):
 
             for page_num, image in enumerate(images):
                 try:
-                    # Apply OCR to the full page
                     extracted_text = self._extract_text_with_tesseract(image)
 
                     if (
@@ -324,12 +309,10 @@ class FileImageProcessor(BaseFileProcessor):
                         image.save(buffered, format="PNG")
                         img_base64 = base64.b64encode(buffered.getvalue()).decode()
 
-                        # Find related images on the page
                         related_images = await self._find_related_images_in_page(
                             pdf_data, page_num + 1, extracted_text
                         )
 
-                        # Add the full page as a related image
                         page_image = ImageSearchResult(
                             page_number=page_num + 1,
                             sheet_name=None,
@@ -365,23 +348,18 @@ class FileImageProcessor(BaseFileProcessor):
         Extracts text from an image using Tesseract OCR
         """
         try:
-            # Preprocess image to improve OCR
             processed_image = self._preprocess_image_for_ocr(image)
 
-            # Tesseract configuration for Spanish and English
             custom_config = r"--oem 3 --psm 6 -l spa+eng"
 
-            # Extract text
             text = pytesseract.image_to_string(processed_image, config=custom_config)
 
-            # Clean text
             cleaned_text = self._clean_extracted_text(text)
 
             return cleaned_text
 
         except Exception as e:
             logger.error(f"Error with Tesseract OCR: {e}")
-            # Fallback without specific configuration
             try:
                 text = pytesseract.image_to_string(image)
                 return self._clean_extracted_text(text)
@@ -393,19 +371,15 @@ class FileImageProcessor(BaseFileProcessor):
         Preprocesses image to improve OCR accuracy
         """
         try:
-            # Convert to grayscale if necessary
             if image.mode != "L":
                 image = image.convert("L")
 
-            # Increase contrast
             enhancer = ImageEnhance.Contrast(image)
             image = enhancer.enhance(2.0)
 
-            # Increase sharpness
             enhancer = ImageEnhance.Sharpness(image)
             image = enhancer.enhance(1.5)
 
-            # Resize if too small (minimum 300px width)
             width, height = image.size
             if width < 300:
                 ratio = 300 / width
@@ -423,15 +397,12 @@ class FileImageProcessor(BaseFileProcessor):
         Cleans the OCR extracted text
         """
         try:
-            # Remove strange characters and excessive spaces
             cleaned = re.sub(
                 r"[^\w\s\.\,\!\?\;\:\-\(\)\[\]\"\'\/\@\#\$\%\&\*\+\=]", " ", text
             )
 
-            # Remove multiple spaces
             cleaned = re.sub(r"\s+", " ", cleaned)
 
-            # Remove multiple empty lines
             lines = cleaned.split("\n")
             cleaned_lines = [line.strip() for line in lines if line.strip()]
 
@@ -451,25 +422,21 @@ class FileImageProcessor(BaseFileProcessor):
 
             confidence = 0.5  # Base confidence
 
-            # Bonus for reasonable length
             if 50 <= len(text) <= 5000:
                 confidence += 0.2
             elif len(text) > 20:
                 confidence += 0.1
 
-            # Bonus for presence of complete words
             words = text.split()
             if len(words) > 5:
                 confidence += 0.1
 
-            # Bonus for common characters in Spanish/English
             common_chars = sum(
                 1 for c in text.lower() if c in "abcdefghijklmnopqrstuvwxyzáéíóúñü"
             )
             char_ratio = common_chars / len(text) if text else 0
             confidence += char_ratio * 0.2
 
-            # Penalty for many weird characters
             weird_chars = sum(
                 1 for c in text if ord(c) > 127 and c not in "áéíóúñüÁÉÍÓÚÑÜ"
             )
@@ -492,12 +459,10 @@ class FileImageProcessor(BaseFileProcessor):
             page = pdf_document[page_number - 1]  # page_number is 1-indexed
             related_images = []
 
-            # Extract all images from the page
             image_list = page.get_images()
 
             for img_index, img in enumerate(image_list):
                 try:
-                    # Extract image
                     xref = img[0]
                     pix = fitz.Pixmap(pdf_document, xref)
 
@@ -505,21 +470,17 @@ class FileImageProcessor(BaseFileProcessor):
                         img_data = pix.tobytes("png")
                         pil_image = Image.open(io.BytesIO(img_data))
 
-                        # Convert to base64
                         buffered = io.BytesIO()
                         pil_image.save(buffered, format="PNG")
                         img_base64 = base64.b64encode(buffered.getvalue()).decode()
 
-                        # Analyze image relevance to text
                         if getattr(self, "enable_fast_processing", True):
-                            # Use optimized method (no API calls)
                             relevance_score = (
                                 await self._calculate_image_text_relevance_optimized(
                                     img_base64, text
                                 )
                             )
                         else:
-                            # Use full method (with API calls)
                             relevance_score = (
                                 await self._calculate_image_text_relevance(
                                     img_base64, text
@@ -570,29 +531,23 @@ class FileImageProcessor(BaseFileProcessor):
         Calculates the relevance of an image relative to extracted text
         """
         try:
-            # Technical analysis of the image
             technical_analysis = self._analyze_image_with_python_tools(image_base64)
 
             base_relevance = 0.4  # Base relevance
 
-            # Keywords from text for contextual analysis
             text_keywords = self._extract_keywords_from_text(text)
 
-            # Bonus for image quality
             quality_score = technical_analysis.get("quality_score", 0.0)
             if quality_score > 0.7:
                 base_relevance += 0.2
 
-            # Bonus for detected objects
             objects_detected = technical_analysis.get("objects_detected", 0)
             if objects_detected > 0:
                 base_relevance += 0.2
 
-            # Bonus if there's text in the image
             if technical_analysis.get("text_detected", False):
                 base_relevance += 0.3
 
-            # Basic semantic analysis with AI
             semantic_relevance = await self._analyze_semantic_relevance(
                 technical_analysis, text_keywords
             )
@@ -611,13 +566,10 @@ class FileImageProcessor(BaseFileProcessor):
         Optimized calculation of image relevance relative to extracted text (no API calls)
         """
         try:
-            # Extract keywords from text
             text_keywords = self._extract_keywords_from_text(text)
 
-            # Analyze image with Python tools only
             technical_analysis = self._analyze_image_with_python_tools(image_base64)
 
-            # Use optimized relevance calculation
             relevance_score = self._calculate_relevance_score_optimized(
                 technical_analysis, " ".join(text_keywords[:5])  # Use top 5 keywords
             )
@@ -633,72 +585,7 @@ class FileImageProcessor(BaseFileProcessor):
         Extracts keywords from text
         """
         try:
-            # Common words to filter out
-            stopwords = {
-                "el",
-                "la",
-                "de",
-                "que",
-                "y",
-                "en",
-                "un",
-                "es",
-                "se",
-                "no",
-                "te",
-                "lo",
-                "le",
-                "da",
-                "su",
-                "por",
-                "son",
-                "con",
-                "para",
-                "al",
-                "del",
-                "las",
-                "los",
-                "una",
-                "pero",
-                "sus",
-                "como",
-                "si",
-                "ya",
-                "me",
-                "mi",
-                "the",
-                "a",
-                "an",
-                "and",
-                "or",
-                "but",
-                "in",
-                "on",
-                "at",
-                "to",
-                "for",
-                "of",
-                "with",
-                "by",
-                "is",
-                "are",
-            }
-
-            # Extract words
-            words = re.findall(r"\b[a-zA-ZáéíóúñüÁÉÍÓÚÑÜ]{3,}\b", text.lower())
-
-            # Filter stopwords and very common words
-            keywords = [
-                word for word in words if word not in stopwords and len(word) > 3
-            ]
-
-            # Count frequencies and take the most common
-            from collections import Counter
-
-            word_counts = Counter(keywords)
-
-            # Return the 10 most frequent words
-            return [word for word, count in word_counts.most_common(10)]
+            return self._extract_keywords_from_text_common(text)
 
         except Exception as e:
             logger.error(f"Error extracting keywords: {e}")
@@ -740,7 +627,6 @@ class FileImageProcessor(BaseFileProcessor):
 
             content = response.choices[0].message.content.strip()
 
-            # Extract number from response
             try:
                 relevance = float(re.findall(r"0\.\d+|1\.0", content)[0])
                 return min(max(relevance, 0.0), 1.0)
@@ -758,14 +644,11 @@ class FileImageProcessor(BaseFileProcessor):
         Generates image description considering text context
         """
         try:
-            # Technical analysis
             technical_analysis = self._analyze_image_with_python_tools(image_base64)
 
-            # Extract keywords from context
             keywords = self._extract_keywords_from_text(context_text)
             keywords_str = ", ".join(keywords[:5])
 
-            # Create enhanced description
             base_description = self._create_detailed_description(technical_analysis)
 
             prompt = f"""
@@ -842,10 +725,8 @@ class FileImageProcessor(BaseFileProcessor):
             Dictionary with extracted text, related images and metadata
         """
         try:
-            # Complete PDF analysis
             analysis_result = await self.analyze_pdf_content(pdf_url)
 
-            # Process results
             all_extracted_text = []
             all_related_images = []
 
@@ -860,7 +741,6 @@ class FileImageProcessor(BaseFileProcessor):
                     }
                 )
 
-                # Add related images
                 for img in text_result.related_images:
                     all_related_images.append(
                         {
@@ -872,19 +752,16 @@ class FileImageProcessor(BaseFileProcessor):
                         }
                     )
 
-            # If search term provided, filter relevant images
             filtered_images = all_related_images
             if search_term:
                 filtered_images = await self._filter_images_by_search_term(
                     all_related_images, search_term
                 )
 
-                # If no images found but search term exists, try forced extraction
                 if len(filtered_images) == 0:
                     logger.info(
                         f"No images found for '{search_term}', trying forced extraction..."
                     )
-                    # Download PDF data for fallback methods
                     try:
                         response = requests.get(pdf_url)
                         response.raise_for_status()
@@ -915,7 +792,6 @@ class FileImageProcessor(BaseFileProcessor):
                                     "All extraction methods failed to find images"
                                 )
 
-                                # Last resort: capture page screenshots if has_image_processor is activate
                                 if has_image_processor == "activate":
                                     logger.info(
                                         f"Trying page screenshot capture for '{search_term}'..."
@@ -1009,7 +885,6 @@ class FileImageProcessor(BaseFileProcessor):
                 relevance_score = 0.0
                 match_reasons = []
 
-                # Check in description (direct text match)
                 description_lower = img["description"].lower()
                 if search_term_lower in description_lower:
                     relevance_score += 0.4
@@ -1020,7 +895,6 @@ class FileImageProcessor(BaseFileProcessor):
                     relevance_score += 0.3
                     match_reasons.append("description_partial")
 
-                # Check in related text (context from OCR or PDF text)
                 related_text_lower = img["related_to_text"].lower()
                 if search_term_lower in related_text_lower:
                     relevance_score += 0.5  # Higher weight for direct context
@@ -1031,7 +905,6 @@ class FileImageProcessor(BaseFileProcessor):
                     relevance_score += 0.35
                     match_reasons.append("context_partial")
 
-                # Check for similar/related words (plurals, variations)
                 if self._contains_similar_words(search_term_lower, description_lower):
                     relevance_score += 0.25
                     match_reasons.append("description_similar")
@@ -1040,7 +913,6 @@ class FileImageProcessor(BaseFileProcessor):
                     relevance_score += 0.30
                     match_reasons.append("context_similar")
 
-                # Additional semantic analysis for stronger confidence
                 if relevance_score > 0.1:  # Lowered threshold for semantic analysis
                     semantic_score = await self._calculate_search_relevance(
                         img["description"], search_term
@@ -1052,23 +924,18 @@ class FileImageProcessor(BaseFileProcessor):
                     elif semantic_score > 0.5:
                         match_reasons.append("semantic_moderate")
 
-                # Boost confidence based on match quality
                 if relevance_score > 0.0:
-                    # Calculate final confidence
                     base_confidence = img.get("confidence", 0.0)
 
-                    # Boost confidence based on relevance
                     confidence_boost = min(relevance_score, 0.4)  # Increased boost
                     final_confidence = min(base_confidence + confidence_boost, 1.0)
 
-                    # Debug output for each image
                     logger.info(
                         f"  Image {img_idx + 1} (Page {img.get('page', '?')}): Base conf: {base_confidence:.3f}, "
                         f"Relevance: {relevance_score:.3f}, Final: {final_confidence:.3f}, "
                         f"Reasons: {match_reasons}"
                     )
 
-                    # Very permissive filtering to maximize recall for product catalogs
                     if (
                         final_confidence > 0.3 and relevance_score > 0.05
                     ):  # Much lower thresholds for better recall
@@ -1077,7 +944,6 @@ class FileImageProcessor(BaseFileProcessor):
                         img_copy["search_relevance"] = relevance_score
                         img_copy["match_reasons"] = match_reasons
 
-                        # Update description to include match information
                         match_info = f" (matched: {', '.join(match_reasons[:2])})"
                         img_copy["description"] = img["description"] + match_info
 
@@ -1092,13 +958,11 @@ class FileImageProcessor(BaseFileProcessor):
                         f"  Image {img_idx + 1}: No relevance found (score: {relevance_score:.3f})"
                     )
 
-            # Sort by search relevance first, then confidence
             filtered.sort(
                 key=lambda x: (x.get("search_relevance", 0), x["confidence"]),
                 reverse=True,
             )
 
-            # Debug information
             logger.info(
                 f"RESULT: Filtered {len(filtered)} images from {len(images)} total for search term '{search_term}'"
             )
@@ -1149,28 +1013,22 @@ class FileImageProcessor(BaseFileProcessor):
             if len(search_word) < 3:
                 return False
 
-            # Split text into words
             text_words = re.findall(r"\b\w+\b", text.lower())
 
             for word in text_words:
-                # Exact match
                 if search_word == word:
                     return True
 
-                # Check for plural/singular variations (more comprehensive)
                 if len(search_word) >= 3 and len(word) >= 3:
-                    # Remove common Spanish endings
                     search_root = re.sub(r"(s|es|as|a|o|os)$", "", search_word)
                     word_root = re.sub(r"(s|es|as|a|o|os)$", "", word)
 
                     if search_root == word_root and len(search_root) >= 3:
                         return True
 
-                # Check for partial matches in longer words (more permissive)
                 if len(search_word) >= 3 and search_word in word:
                     return True
 
-                # Reverse check - check if word is contained in search term
                 if len(word) >= 3 and word in search_word:
                     return True
 
@@ -1309,7 +1167,6 @@ class FileImageProcessor(BaseFileProcessor):
             logger.error(f"Error generating recommendations: {e}")
             return ["Processing completed. Manual review recommended."]
 
-    # Convenience method for compatibility with existing code
     async def search_images_in_pdf_with_text_analysis(
         self,
         pdf_url: str,
@@ -1323,16 +1180,13 @@ class FileImageProcessor(BaseFileProcessor):
         try:
             logger.info(f"Starting enhanced PDF search for term: '{search_term}'")
 
-            # Download PDF to get data for position analysis
             response = requests.get(pdf_url)
             response.raise_for_status()
             pdf_data = response.content
 
-            # Extract text and image positions for proximity analysis
             logger.info("Extracting text and image positions...")
             positions_data = await self._extract_text_and_image_positions_pdf(pdf_data)
 
-            # Use the main method to extract text and images
             logger.info("Analyzing PDF content and extracting images...")
             result = await self.extract_text_and_images(
                 pdf_url, search_term, has_image_processor
@@ -1342,17 +1196,13 @@ class FileImageProcessor(BaseFileProcessor):
                 logger.info(
                     "No images found in initial analysis. Trying direct image search..."
                 )
-                # Fallback: try to find images directly from PDF
                 direct_images = await self._search_images_directly_in_pdf(
                     pdf_data, search_term
                 )
                 if direct_images:
-                    # Convert to expected format
                     return direct_images[:max_results]
 
-                # Last resort: force search for images on pages with matching text
                 logger.info("Direct search also failed. Trying force search...")
-                # Create mock extracted text data for force search
                 mock_extracted_text = [
                     {"page": i + 1, "text": ""} for i in range(10)
                 ]  # Assume up to 10 pages
@@ -1362,13 +1212,11 @@ class FileImageProcessor(BaseFileProcessor):
                 if force_images:
                     return force_images[:max_results]
 
-                # Even more aggressive: extract ALL images
                 logger.info("Force search also failed. Trying aggressive extraction...")
                 aggressive_images = await self._extract_all_images_aggressive(
                     pdf_data, search_term
                 )
                 if aggressive_images:
-                    # Convert to expected format and return
                     converted_images = []
                     for img_data in aggressive_images[:max_results]:
                         img_result = ImageSearchResult(
@@ -1380,7 +1228,6 @@ class FileImageProcessor(BaseFileProcessor):
                         converted_images.append(img_result)
                     return converted_images
 
-                # Final fallback: capture page screenshots if enabled
                 if has_image_processor == "activate":
                     logger.info(
                         "Aggressive extraction also failed. Trying page screenshot capture..."
@@ -1389,7 +1236,6 @@ class FileImageProcessor(BaseFileProcessor):
                         pdf_data, search_term, mock_extracted_text, has_image_processor
                     )
                     if page_screenshots:
-                        # Convert to expected format
                         screenshot_results = []
                         for img_data in page_screenshots[:max_results]:
                             screenshot_result = ImageSearchResult(
@@ -1401,13 +1247,11 @@ class FileImageProcessor(BaseFileProcessor):
                             screenshot_results.append(screenshot_result)
                         return screenshot_results
 
-            # Enhance confidence scores with proximity analysis
             enhanced_images = []
             images_found = result.get("related_images", {}).get("images", [])
             logger.info(f"Found {len(images_found)} images to analyze for proximity...")
 
             for img_data in images_found:
-                # Calculate proximity bonus based on spatial closeness to search term
                 proximity_bonus = self._calculate_pdf_text_proximity(
                     search_term, img_data, positions_data
                 )
@@ -1416,10 +1260,8 @@ class FileImageProcessor(BaseFileProcessor):
                     f"Image on page {img_data.get('page', '?')} - Original confidence: {img_data.get('confidence', 0):.3f}, Proximity bonus: {proximity_bonus:.3f}"
                 )
 
-                # Adjust confidence with proximity bonus
                 enhanced_confidence = min(img_data["confidence"] + proximity_bonus, 1.0)
 
-                # Update description to include proximity information
                 proximity_desc = ""
                 if proximity_bonus > 0.2:
                     proximity_desc = " (very close to matching text)"
@@ -1437,10 +1279,8 @@ class FileImageProcessor(BaseFileProcessor):
                     }
                 )
 
-            # Sort by enhanced confidence
             enhanced_images.sort(key=lambda x: x["confidence"], reverse=True)
 
-            # Convert to expected format
             image_results = []
             for i, img_data in enumerate(enhanced_images[:max_results]):
                 logger.info(
@@ -1460,7 +1300,6 @@ class FileImageProcessor(BaseFileProcessor):
 
         except Exception as e:
             logger.error(f"Error in enhanced image search: {e}")
-            # Fallback to original method
             return await self.search_images_in_pdf(pdf_url, search_term, max_results)
 
     async def smart_search_with_text_analysis(
@@ -1471,31 +1310,29 @@ class FileImageProcessor(BaseFileProcessor):
         max_results: int = 10,
     ) -> SmartSearchResult:
         """
-        Búsqueda inteligente que:
-        1. Procesa el término de búsqueda (puede ser una frase) usando regex
-        2. Extrae todo el texto del archivo (PDF o XLSX)
-        3. Busca coincidencias de palabras clave en el texto
-        4. Devuelve las imágenes relacionadas basándose en las coincidencias
+        Smart search that:
+        1. Processes the search term (which may be a phrase) using regex
+        2. Extracts all text from the file (PDF or XLSX)
+        3. Finds keyword matches in the text
+        4. Returns related images based on the matches
 
         Args:
-            file_url: URL del archivo (PDF o XLSX)
-            search_phrase: Término o frase de búsqueda
-            file_type: Tipo de archivo ("pdf" o "xlsx")
-            max_results: Número máximo de imágenes a devolver
+            file_url: File URL (PDF or XLSX)
+            search_phrase: Search term or phrase
+            file_type: File type ("pdf" or "xlsx")
+            max_results: Maximum number of images to return
 
         Returns:
-            SmartSearchResult con análisis de texto y imágenes relacionadas
+            SmartSearchResult with text analysis and related images
         """
         try:
             logger.info(
-                f"🔍 Iniciando búsqueda inteligente para: '{search_phrase}' en archivo {file_type.upper()}"
+                f"🔍 Starting smart search for: '{search_phrase}' in {file_type.upper()} file"
             )
 
-            # 1. Procesar el término de búsqueda con regex para extraer palabras clave
             keywords = self._extract_keywords_from_phrase(search_phrase)
-            logger.info(f"📝 Palabras clave extraídas: {keywords}")
+            logger.info(f"📝 Extracted keywords: {keywords}")
 
-            # 2. Extraer texto del archivo según el tipo
             if file_type.lower() == "pdf":
                 extracted_text, extraction_method = (
                     await self._extract_all_text_from_pdf(file_url)
@@ -1505,25 +1342,22 @@ class FileImageProcessor(BaseFileProcessor):
                     await self._extract_all_text_from_xlsx(file_url)
                 )
             else:
-                raise ValueError(f"Tipo de archivo no soportado: {file_type}")
+                raise ValueError(f"Unsupported file type: {file_type}")
 
             logger.info(
-                f"📄 Texto extraído: {len(extracted_text)} caracteres usando método: {extraction_method}"
+                f"📄 Extracted text: {len(extracted_text)} characters using method: {extraction_method}"
             )
 
-            # 3. Buscar coincidencias en el texto usando regex
             text_matches = self._find_text_matches_with_regex(
                 extracted_text, keywords, search_phrase
             )
-            logger.info(f"🎯 Encontradas {len(text_matches)} coincidencias de texto")
+            logger.info(f"🎯 Found {len(text_matches)} text matches")
 
-            # 4. Buscar imágenes relacionadas basándose en las coincidencias
             related_images = await self._find_images_for_text_matches(
                 file_url, text_matches, search_phrase, file_type, max_results
             )
-            logger.info(f"🖼️ Encontradas {len(related_images)} imágenes relacionadas")
+            logger.info(f"🖼️ Found {len(related_images)} related images")
 
-            # 5. Construir resultado final
             result = SmartSearchResult(
                 search_term=search_phrase,
                 processed_keywords=keywords,
@@ -1536,8 +1370,7 @@ class FileImageProcessor(BaseFileProcessor):
             return result
 
         except Exception as e:
-            logger.error(f"❌ Error en búsqueda inteligente: {str(e)}")
-            # Retornar resultado vacío en caso de error
+            logger.error(f"❌ Error in smart search: {str(e)}")
             return SmartSearchResult(
                 search_term=search_phrase,
                 processed_keywords=[],
@@ -1552,112 +1385,7 @@ class FileImageProcessor(BaseFileProcessor):
         Extract keywords from a phrase using regex
         """
         try:
-            # Clean and normalize the phrase
-            cleaned_phrase = search_phrase.lower().strip()
-
-            # Use regex to extract words (letters, numbers and some special characters only)
-            # Exclude very short words and common articles/prepositions
-            stopwords = {
-                "the",
-                "a",
-                "an",
-                "and",
-                "or",
-                "but",
-                "in",
-                "on",
-                "at",
-                "to",
-                "for",
-                "of",
-                "with",
-                "by",
-                "from",
-                "up",
-                "about",
-                "into",
-                "through",
-                "during",
-                "before",
-                "after",
-                "above",
-                "below",
-                "between",
-                "among",
-                "is",
-                "are",
-                "was",
-                "were",
-                "be",
-                "been",
-                "being",
-                "have",
-                "has",
-                "had",
-                "do",
-                "does",
-                "did",
-                "will",
-                "would",
-                "should",
-                "could",
-                "can",
-                "may",
-                "might",
-                "must",
-                "shall",
-                "this",
-                "that",
-                "these",
-                "those",
-                "i",
-                "you",
-                "he",
-                "she",
-                "it",
-                "we",
-                "they",
-                "me",
-                "him",
-                "her",
-                "us",
-                "them",
-                "my",
-                "your",
-                "his",
-                "its",
-                "our",
-                "their",
-                "if",
-                "so",
-                "as",
-                "no",
-                "not",
-                "more",
-                "most",
-                "less",
-                "like",
-                "than",
-            }
-
-            # Extract words using regex (minimum 2 characters)
-            words = re.findall(r"\b[a-z0-9]{2,}\b", cleaned_phrase, re.IGNORECASE)
-
-            # Filter stopwords and duplicates
-            keywords = []
-            seen = set()
-
-            for word in words:
-                word_lower = word.lower()
-                if word_lower not in stopwords and word_lower not in seen:
-                    keywords.append(word)
-                    seen.add(word_lower)
-
-            # If no valid words found, use the complete phrase
-            if not keywords:
-                keywords = [search_phrase.strip()]
-
-            return keywords
+            return self._extract_keywords_from_phrase_common(search_phrase)
 
         except Exception as e:
             logger.error(f"Error extracting keywords: {e}")
@@ -1665,15 +1393,13 @@ class FileImageProcessor(BaseFileProcessor):
 
     async def _extract_all_text_from_pdf(self, pdf_url: str) -> Tuple[str, str]:
         """
-        Extrae todo el texto de un PDF usando múltiples métodos
+        Extract all text from a PDF using multiple methods
         """
         try:
-            # Descargar PDF
             response = requests.get(pdf_url)
             response.raise_for_status()
             pdf_data = response.content
 
-            # Primero intentar extracción nativa de PDF
             pdf_document = fitz.open(stream=pdf_data, filetype="pdf")
             native_text = ""
 
@@ -1681,16 +1407,14 @@ class FileImageProcessor(BaseFileProcessor):
                 page = pdf_document[page_num]
                 page_text = page.get_text().strip()
                 if page_text:
-                    native_text += f"\n[PÁGINA {page_num + 1}]\n{page_text}\n"
+                    native_text += f"\n[PAGE {page_num + 1}]\n{page_text}\n"
 
             pdf_document.close()
 
-            # Si hay texto nativo suficiente, usarlo
             if len(native_text.strip()) > 50:
                 return native_text, "pdf_native_text"
 
-            # Si no hay texto nativo, usar OCR
-            logger.info("📖 Texto nativo insuficiente, usando OCR...")
+            logger.info("📖 Native text is insufficient, using OCR...")
             ocr_text = await self._extract_text_with_ocr_comprehensive(pdf_data)
 
             if ocr_text:
@@ -1699,26 +1423,24 @@ class FileImageProcessor(BaseFileProcessor):
                 return native_text, "pdf_native_text_limited"
 
         except Exception as e:
-            logger.error(f"Error extrayendo texto de PDF: {e}")
+            logger.error(f"Error extracting text from PDF: {e}")
             return "", "error"
 
     async def _extract_all_text_from_xlsx(self, xlsx_url: str) -> Tuple[str, str]:
         """
-        Extrae todo el texto de un archivo XLSX
+        Extract all text from an XLSX file
         """
         try:
             try:
                 import pandas as pd
             except ImportError:
-                logger.error("Pandas no disponible para procesar XLSX")
+                logger.error("Pandas is not available to process XLSX")
                 return "", "error_no_pandas"
 
-            # Descargar archivo Excel
             response = requests.get(xlsx_url)
             response.raise_for_status()
             excel_data = response.content
 
-            # Leer todas las hojas
             excel_file = pd.ExcelFile(BytesIO(excel_data))
             all_text = ""
 
@@ -1727,11 +1449,10 @@ class FileImageProcessor(BaseFileProcessor):
                     df = pd.read_excel(BytesIO(excel_data), sheet_name=sheet_name)
 
                     if not df.empty:
-                        all_text += f"\n[HOJA: {sheet_name}]\n"
+                        all_text += f"\n[SHEET: {sheet_name}]\n"
 
-                        # Extraer texto de todas las celdas
                         for column in df.columns:
-                            all_text += f"\n[COLUMNA: {column}]\n"
+                            all_text += f"\n[COLUMN: {column}]\n"
                             for value in df[column].dropna():
                                 if isinstance(value, (str, int, float)):
                                     all_text += f"{str(value)}\n"
@@ -1739,34 +1460,32 @@ class FileImageProcessor(BaseFileProcessor):
                         all_text += "\n"
 
                 except Exception as e:
-                    logger.error(f"Error procesando hoja {sheet_name}: {e}")
+                    logger.error(f"Error processing sheet {sheet_name}: {e}")
                     continue
 
             return all_text, "xlsx_pandas_extraction"
 
         except Exception as e:
-            logger.error(f"Error extrayendo texto de XLSX: {e}")
+            logger.error(f"Error extracting text from XLSX: {e}")
             return "", "error"
 
     def _find_text_matches_with_regex(
         self, text: str, keywords: List[str], original_phrase: str
     ) -> List[TextSearchMatch]:
         """
-        Busca coincidencias en el texto usando regex para las palabras clave
+        Find matches in text using regex for the keywords
         """
         try:
             matches = []
             text_lower = text.lower()
 
-            # Dividir texto en páginas para obtener números de página
-            pages = text.split("[PÁGINA")
+            pages = text.split("[PAGE")
 
             for page_idx, page_content in enumerate(pages):
-                if page_idx == 0 and not page_content.strip().startswith("[PÁGINA"):
-                    page_number = 1  # Primera página sin marcador
+                if page_idx == 0 and not page_content.strip().startswith("[PAGE"):
+                    page_number = 1
                     page_text = page_content
                 elif page_content.strip():
-                    # Extraer número de página
                     page_match = re.match(r"\s*(\d+)\]", page_content)
                     page_number = int(page_match.group(1)) if page_match else page_idx
                     page_text = (
@@ -1779,7 +1498,6 @@ class FileImageProcessor(BaseFileProcessor):
 
                 page_text_lower = page_text.lower()
 
-                # Buscar frase completa primero
                 phrase_pattern = re.escape(original_phrase.lower())
                 for match in re.finditer(phrase_pattern, page_text_lower):
                     context_start = max(0, match.start() - 100)
@@ -1791,24 +1509,20 @@ class FileImageProcessor(BaseFileProcessor):
                             page_number=page_number,
                             matched_text=original_phrase,
                             match_context=context,
-                            confidence=1.0,  # Coincidencia exacta de frase
+                            confidence=1.0,
                             start_position=match.start(),
                             end_position=match.end(),
                         )
                     )
 
-                # Buscar palabras clave individuales
                 for keyword in keywords:
-                    # Crear patrón regex para buscar la palabra completa
                     pattern = r"\b" + re.escape(keyword.lower()) + r"\b"
 
                     for match in re.finditer(pattern, page_text_lower):
-                        # Extraer contexto alrededor de la coincidencia
                         context_start = max(0, match.start() - 100)
                         context_end = min(len(page_text), match.end() + 100)
                         context = page_text[context_start:context_end].strip()
 
-                        # Calcular confianza basada en la longitud de la palabra
                         confidence = min(0.8, 0.4 + (len(keyword) * 0.1))
 
                         matches.append(
@@ -1822,7 +1536,6 @@ class FileImageProcessor(BaseFileProcessor):
                             )
                         )
 
-            # Ordenar por confianza y eliminar duplicados
             unique_matches = []
             seen_contexts = set()
 
@@ -1836,10 +1549,10 @@ class FileImageProcessor(BaseFileProcessor):
                     unique_matches.append(match)
                     seen_contexts.add(context_key)
 
-            return unique_matches[:20]  # Limitar a 20 coincidencias máximo
+            return unique_matches[:20]
 
         except Exception as e:
-            logger.error(f"Error buscando coincidencias de texto: {e}")
+            logger.error(f"Error searching for text matches: {e}")
             return []
 
     async def _find_images_for_text_matches(
@@ -1851,7 +1564,7 @@ class FileImageProcessor(BaseFileProcessor):
         max_results: int,
     ) -> List[ImageSearchResult]:
         """
-        Encuentra imágenes relacionadas basándose en las coincidencias de texto
+        Find related images based on text matches
         """
         try:
             if file_type.lower() == "pdf":
@@ -1866,7 +1579,7 @@ class FileImageProcessor(BaseFileProcessor):
                 return []
 
         except Exception as e:
-            logger.error(f"Error buscando imágenes para coincidencias: {e}")
+            logger.error(f"Error searching images for matches: {e}")
             return []
 
     async def _find_pdf_images_for_matches(
@@ -1877,16 +1590,14 @@ class FileImageProcessor(BaseFileProcessor):
         max_results: int,
     ) -> List[ImageSearchResult]:
         """
-        Busca imágenes en PDF basándose en coincidencias de texto
+        Search PDF images based on text matches
         """
         try:
-            # Obtener páginas con coincidencias
             match_pages = list(set(match.page_number for match in text_matches))
             logger.info(
-                f"🔍 Buscando imágenes en páginas con coincidencias: {match_pages}"
+                f"🔍 Searching for images on pages with matches: {match_pages}"
             )
 
-            # Usar método existente de búsqueda con término
             result = await self.extract_text_and_images(
                 pdf_url, search_phrase, "activate"
             )
@@ -1898,24 +1609,20 @@ class FileImageProcessor(BaseFileProcessor):
             ):
                 all_images = result["related_images"]["images"]
 
-                # Priorizar imágenes en páginas con coincidencias de texto
                 prioritized_images = []
                 other_images = []
 
                 for img in all_images:
                     img_page = img.get("page", 0)
                     if img_page in match_pages:
-                        # Aumentar confianza para imágenes en páginas con coincidencias
                         img["confidence"] = min(1.0, img.get("confidence", 0.5) + 0.3)
-                        img["description"] += f" [En página con coincidencia de texto]"
+                        img["description"] += " [On page with text match]"
                         prioritized_images.append(img)
                     else:
                         other_images.append(img)
 
-                # Combinar imágenes priorizadas primero
                 final_images = prioritized_images + other_images
 
-                # Convertir a ImageSearchResult
                 image_results = []
                 for img in final_images[:max_results]:
                     image_results.append(
@@ -1933,7 +1640,7 @@ class FileImageProcessor(BaseFileProcessor):
             return []
 
         except Exception as e:
-            logger.error(f"Error buscando imágenes en PDF: {e}")
+            logger.error(f"Error searching for images in PDF: {e}")
             return []
 
     async def _find_xlsx_images_for_matches(
@@ -1944,59 +1651,52 @@ class FileImageProcessor(BaseFileProcessor):
         max_results: int,
     ) -> List[ImageSearchResult]:
         """
-        Busca imágenes en XLSX basándose en coincidencias de texto
+        Search XLSX images based on text matches
         """
         try:
-            # Importar procesador de Excel
             from src.core.platform.fileprocessor.xlsx_processor import (
                 ExcelImageProcessor,
             )
 
             excel_processor = ExcelImageProcessor(self.config_service)
 
-            # Buscar imágenes usando el procesador de Excel
             excel_images = await excel_processor.search_images_in_excel(
                 xlsx_url, search_phrase, max_results
             )
 
-            # Aumentar confianza si hay coincidencias de texto
             if text_matches:
                 for img in excel_images:
                     img.confidence = min(1.0, img.confidence + 0.2)
-                    img.description += (
-                        f" [Archivo con {len(text_matches)} coincidencias de texto]"
-                    )
+                    img.description += f" [File with {len(text_matches)} text matches]"
 
             return excel_images
 
         except Exception as e:
-            logger.error(f"Error buscando imágenes en XLSX: {e}")
+            logger.error(f"Error searching for images in XLSX: {e}")
             return []
 
     async def _extract_text_with_ocr_comprehensive(self, pdf_data: bytes) -> str:
         """
-        Extrae texto usando OCR de manera comprehensiva
+        Extract text using OCR in a comprehensive way
         """
         try:
             all_text = ""
 
-            # Intentar OCR en imágenes embebidas primero
             embedded_results = await self._extract_text_from_embedded_images(pdf_data)
 
             for result in embedded_results:
-                all_text += f"\n[PÁGINA {result.page_number} - OCR EMBEBIDO]\n{result.extracted_text}\n"
+                all_text += f"\n[PAGE {result.page_number} - EMBEDDED OCR]\n{result.extracted_text}\n"
 
-            # Si no hay suficiente texto, usar OCR en páginas completas
             if len(all_text.strip()) < 100:
                 page_results = await self._extract_text_from_full_pages(pdf_data)
 
                 for result in page_results:
-                    all_text += f"\n[PÁGINA {result.page_number} - OCR PÁGINA]\n{result.extracted_text}\n"
+                    all_text += f"\n[PAGE {result.page_number} - PAGE OCR]\n{result.extracted_text}\n"
 
             return all_text
 
         except Exception as e:
-            logger.error(f"Error en OCR comprehensivo: {e}")
+            logger.error(f"Error in comprehensive OCR: {e}")
             return ""
 
     async def _extract_text_and_image_positions_pdf(
@@ -2056,7 +1756,6 @@ class FileImageProcessor(BaseFileProcessor):
 
                 for img_index, img in enumerate(image_list):
                     try:
-                        # Extract image
                         xref = img[0]
                         pix = fitz.Pixmap(pdf_document, xref)
 
@@ -2064,7 +1763,6 @@ class FileImageProcessor(BaseFileProcessor):
                             img_data = pix.tobytes("png")
                             pil_image = Image.open(io.BytesIO(img_data))
 
-                            # Very permissive size filter - only skip tiny images
                             if pil_image.width < 30 or pil_image.height < 30:
                                 logger.info(
                                     f"    SKIPPED tiny image: {pil_image.width}x{pil_image.height}"
@@ -2072,15 +1770,12 @@ class FileImageProcessor(BaseFileProcessor):
                                 pix = None
                                 continue
 
-                            # Convert to base64
                             buffered = io.BytesIO()
                             pil_image.save(buffered, format="PNG")
                             img_base64 = base64.b64encode(buffered.getvalue()).decode()
 
-                            # Generate basic description without AI calls for speed
                             basic_description = f"Image {img_index + 1} from page {page_num + 1} ({pil_image.width}x{pil_image.height})"
 
-                            # If search term provided, check for basic text match
                             relevance_score = 0.4  # Default relevance
                             match_reasons = ["aggressive_extraction"]
 
@@ -2088,7 +1783,6 @@ class FileImageProcessor(BaseFileProcessor):
                                 search_lower = search_term.lower()
                                 page_text_lower = page_text.lower()
 
-                                # Check if page contains search term
                                 if search_lower in page_text_lower:
                                     relevance_score = 0.8
                                     match_reasons.append("page_contains_term")
@@ -2096,7 +1790,6 @@ class FileImageProcessor(BaseFileProcessor):
                                         f" [Page contains '{search_term}']"
                                     )
 
-                                # Check for similar words
                                 search_words = search_lower.split()
                                 for word in search_words:
                                     if len(word) > 2 and word in page_text_lower:
@@ -2134,7 +1827,6 @@ class FileImageProcessor(BaseFileProcessor):
 
             pdf_document.close()
 
-            # Sort by relevance if search term provided
             if search_term:
                 all_images.sort(key=lambda x: x["search_relevance"], reverse=True)
 
@@ -2150,7 +1842,6 @@ class FileImageProcessor(BaseFileProcessor):
         Debug method to get basic info about PDF images without any filtering
         """
         try:
-            # Download PDF
             response = requests.get(pdf_url)
             response.raise_for_status()
             pdf_data = response.content
@@ -2175,7 +1866,6 @@ class FileImageProcessor(BaseFileProcessor):
                     debug_info["images_by_page"][page_num + 1] = len(image_list)
                     debug_info["total_images"] += len(image_list)
 
-                # Sample some text from each page
                 if page_text and len(page_text.strip()) > 10:
                     debug_info["sample_texts"].append(
                         {
@@ -2196,12 +1886,12 @@ class FileImageProcessor(BaseFileProcessor):
         self, pdf_data: bytes, search_term: str
     ) -> Dict[str, Any]:
         """
-        Extrae TODO el texto del PDF y analiza las coincidencias con el término de búsqueda usando regex.
-        Devuelve información detallada sobre dónde se encontraron las palabras.
+        Extract ALL text from the PDF and analyze matches with the search term using regex.
+        Return detailed information about where the words were found.
         """
         try:
             logger.info(
-                f"DEBUG: Extrayendo texto completo del PDF para buscar '{search_term}'"
+                f"DEBUG: Extracting full PDF text to search for '{search_term}'"
             )
 
             pdf_document = fitz.open(stream=pdf_data, filetype="pdf")
@@ -2214,27 +1904,22 @@ class FileImageProcessor(BaseFileProcessor):
                 "match_positions": [],
             }
 
-            # Preparar las palabras de búsqueda y patrones regex
             search_term_clean = search_term.strip()
 
-            # Extraer palabras individuales del término de búsqueda
             words = re.findall(r"\b\w+\b", search_term_clean.lower())
             text_analysis["search_words"] = words
 
-            # Crear patrones regex flexibles para cada palabra
             regex_patterns = []
             for word in words:
-                if len(word) >= 3:  # Solo palabras de 3+ caracteres
-                    # Patrón que incluye variaciones (plurales, géneros, acentos)
+                if len(word) >= 3:
                     word_pattern = self._create_flexible_word_pattern(word)
                     regex_patterns.append(word_pattern)
 
             text_analysis["regex_patterns"] = regex_patterns
 
-            logger.info(f"  Palabras de búsqueda: {words}")
-            logger.info(f"  Patrones regex creados: {len(regex_patterns)}")
+            logger.info(f"  Search words: {words}")
+            logger.info(f"  Created regex patterns: {len(regex_patterns)}")
 
-            # Extraer texto de cada página y buscar coincidencias
             all_page_texts = []
 
             for page_num in range(len(pdf_document)):
@@ -2246,7 +1931,6 @@ class FileImageProcessor(BaseFileProcessor):
                         {"page": page_num + 1, "text": page_text, "matches": []}
                     )
 
-                    # Buscar coincidencias usando regex en esta página
                     page_matches = self._find_regex_matches_in_text(
                         page_text, regex_patterns, words
                     )
@@ -2268,10 +1952,9 @@ class FileImageProcessor(BaseFileProcessor):
                         text_analysis["match_positions"].extend(page_matches)
 
                         logger.info(
-                            f"  Página {page_num + 1}: {len(page_matches)} coincidencias encontradas"
+                            f"  Page {page_num + 1}: {len(page_matches)} matches found"
                         )
 
-            # Combinar todo el texto
             text_analysis["full_text"] = "\n\n".join(
                 [p["text"] for p in all_page_texts]
             )
@@ -2279,13 +1962,13 @@ class FileImageProcessor(BaseFileProcessor):
             pdf_document.close()
 
             logger.info(
-                f"DEBUG: Análisis completado - {text_analysis['total_matches']} coincidencias en {len(text_analysis['pages_with_matches'])} páginas"
+                f"DEBUG: Analysis completed - {text_analysis['total_matches']} matches across {len(text_analysis['pages_with_matches'])} pages"
             )
 
             return text_analysis
 
         except Exception as e:
-            logger.error(f"Error en análisis de texto: {e}")
+            logger.error(f"Error in text analysis: {e}")
             return {
                 "full_text": "",
                 "pages_with_matches": [],
@@ -2297,16 +1980,13 @@ class FileImageProcessor(BaseFileProcessor):
 
     def _create_flexible_word_pattern(self, word: str) -> str:
         """
-        Crea un patrón regex flexible para una palabra que incluye variaciones comunes
+        Create a flexible regex pattern for a word that includes common variations
         """
         try:
-            # Escapar caracteres especiales
             escaped_word = re.escape(word.lower())
 
-            # Crear patrón base
             base_pattern = escaped_word
 
-            # Agregar variaciones para acentos comunes en español
             accent_map = {
                 "a": "[aáàä]",
                 "e": "[eéèë]",
@@ -2316,27 +1996,22 @@ class FileImageProcessor(BaseFileProcessor):
                 "n": "[nñ]",
             }
 
-            # Aplicar mapeo de acentos
             for base_char, pattern in accent_map.items():
                 base_pattern = base_pattern.replace(base_char, pattern)
 
-            # Crear patrón final que incluye:
-            # - La palabra exacta
-            # - Variaciones de plural/singular (s, es, as, os)
-            # - Variaciones de género (a/o al final)
             flexible_pattern = rf"\b({base_pattern}[aeos]?s?)\b"
 
             return flexible_pattern
 
         except Exception as e:
-            logger.error(f"Error creando patrón para '{word}': {e}")
+            logger.error(f"Error creating pattern for '{word}': {e}")
             return rf"\b{re.escape(word)}\b"
 
     def _find_regex_matches_in_text(
         self, text: str, regex_patterns: List[str], original_words: List[str]
     ) -> List[Dict[str, Any]]:
         """
-        Encuentra todas las coincidencias usando patrones regex en el texto
+        Find all matches using regex patterns in the text
         """
         try:
             matches = []
@@ -2348,7 +2023,6 @@ class FileImageProcessor(BaseFileProcessor):
                 )
 
                 try:
-                    # Buscar todas las coincidencias del patrón
                     pattern_matches = re.finditer(pattern, text_lower, re.IGNORECASE)
 
                     for match in pattern_matches:
@@ -2366,8 +2040,7 @@ class FileImageProcessor(BaseFileProcessor):
                         matches.append(match_info)
 
                 except re.error as regex_error:
-                    logger.error(f"Error en patrón regex '{pattern}': {regex_error}")
-                    # Fallback a búsqueda simple
+                    logger.error(f"Error in regex pattern '{pattern}': {regex_error}")
                     if original_word.lower() in text_lower:
                         simple_matches = []
                         start = 0
@@ -2397,70 +2070,65 @@ class FileImageProcessor(BaseFileProcessor):
             return matches
 
         except Exception as e:
-            logger.error(f"Error buscando coincidencias regex: {e}")
+            logger.error(f"Error searching regex matches: {e}")
             return []
 
     async def _search_images_based_on_text_matches(
         self, pdf_data: bytes, text_analysis: Dict[str, Any], search_term: str
     ) -> List[Dict[str, Any]]:
         """
-        Busca imágenes basadas en las coincidencias de texto encontradas con regex
+        Search for images based on text matches found with regex
         """
         try:
             logger.info(
-                f"DEBUG: Buscando imágenes basadas en {text_analysis['total_matches']} coincidencias de texto"
+                f"DEBUG: Searching for images based on {text_analysis['total_matches']} text matches"
             )
 
             if text_analysis["total_matches"] == 0:
                 logger.info(
-                    "  No se encontraron coincidencias de texto, no se pueden buscar imágenes relacionadas"
+                    "  No text matches were found, so related images cannot be searched"
                 )
                 return []
 
             pdf_document = fitz.open(stream=pdf_data, filetype="pdf")
             related_images = []
 
-            # Procesar cada página que tiene coincidencias
             for page_info in text_analysis["pages_with_matches"]:
                 page_num = page_info["page"]
 
                 page_matches = page_info["matches"]
 
                 logger.info(
-                    f"  Procesando página {page_num} con {len(page_matches)} coincidencias..."
+                    f"  Processing page {page_num} with {len(page_matches)} matches..."
                 )
 
                 try:
-                    page = pdf_document[page_num - 1]  # Convertir a índice 0
+                    page = pdf_document[page_num - 1]  # Convert to 0-based index
                     image_list = page.get_images()
 
                     logger.info(
-                        f"    Encontradas {len(image_list)} imágenes en página {page_num}"
+                        f"    Found {len(image_list)} images on page {page_num}"
                     )
 
                     for img_index, img in enumerate(image_list):
                         try:
-                            # Extraer imagen
                             xref = img[0]
                             pix = fitz.Pixmap(pdf_document, xref)
 
-                            if pix.n - pix.alpha < 4:  # GRAY o RGB
+                            if pix.n - pix.alpha < 4:  # GRAY or RGB
                                 img_data = pix.tobytes("png")
                                 pil_image = Image.open(io.BytesIO(img_data))
 
-                                # Filtrar imágenes muy pequeñas
                                 if pil_image.width < 50 or pil_image.height < 50:
                                     pix = None
                                     continue
 
-                                # Convertir a base64
                                 buffered = io.BytesIO()
                                 pil_image.save(buffered, format="PNG")
                                 img_base64 = base64.b64encode(
                                     buffered.getvalue()
                                 ).decode()
 
-                                # Crear descripción contextual basada en las coincidencias
                                 contextual_description = (
                                     self._create_contextual_description(
                                         page_matches,
@@ -2469,7 +2137,6 @@ class FileImageProcessor(BaseFileProcessor):
                                     )
                                 )
 
-                                # Calcular relevancia basada en proximidad a coincidencias de texto
                                 relevance_score = self._calculate_text_match_relevance(
                                     page_matches,
                                     len(page_matches),
@@ -2482,7 +2149,7 @@ class FileImageProcessor(BaseFileProcessor):
                                     "description": f"[REGEX MATCH] {contextual_description}",
                                     "confidence": min(
                                         0.8 + relevance_score, 1.0
-                                    ),  # Alta confianza porque hay coincidencias de texto
+                                    ),  # High confidence because there are text matches
                                     "related_to_text": f"Page contains {len(page_matches)} matches for '{search_term}': {page_info.get('text_snippet', '')[:150]}...",
                                     "search_relevance": relevance_score,
                                     "match_reasons": ["regex_text_match", "same_page"],
@@ -2492,43 +2159,42 @@ class FileImageProcessor(BaseFileProcessor):
 
                                 related_images.append(image_data)
                                 logger.info(
-                                    f"      Imagen {img_index + 1}: Relevancia {relevance_score:.3f}, Confianza {image_data['confidence']:.3f}"
+                                    f"      Image {img_index + 1}: Relevance {relevance_score:.3f}, Confidence {image_data['confidence']:.3f}"
                                 )
 
                             pix = None
 
                         except Exception as e:
                             logger.error(
-                                f"      Error procesando imagen {img_index + 1}: {e}"
+                                f"      Error processing image {img_index + 1}: {e}"
                             )
                             continue
 
                 except Exception as e:
-                    logger.error(f"    Error procesando página {page_num}: {e}")
+                    logger.error(f"    Error processing page {page_num}: {e}")
                     continue
 
             pdf_document.close()
 
-            # Ordenar por relevancia (más coincidencias = mayor relevancia)
             related_images.sort(
                 key=lambda x: (x.get("match_count", 0), x.get("confidence", 0)),
                 reverse=True,
             )
 
             logger.info(
-                f"DEBUG: Búsqueda basada en texto completada. {len(related_images)} imágenes encontradas"
+                f"DEBUG: Text-based search completed. {len(related_images)} images found"
             )
             return related_images
 
         except Exception as e:
-            logger.error(f"Error en búsqueda basada en coincidencias de texto: {e}")
+            logger.error(f"Error in text-match-based search: {e}")
             return []
 
     def _create_contextual_description(
         self, page_matches: List[Dict], search_term: str, page_text: str
     ) -> str:
         """
-        Crea una descripción contextual basada en las coincidencias encontradas
+        Create a contextual description based on the matches found
         """
         try:
             matched_words = [match["matched_text"] for match in page_matches]
@@ -2548,20 +2214,17 @@ class FileImageProcessor(BaseFileProcessor):
         self, page_matches: List[Dict], page_match_count: int, total_matches: int
     ) -> float:
         """
-        Calcula la relevancia basada en la cantidad y calidad de coincidencias de texto
+        Calculate relevance based on the quantity and quality of text matches
         """
         try:
             if total_matches == 0:
                 return 0.0
 
-            # Relevancia base por tener coincidencias en la página
             base_relevance = 0.3
 
-            # Bonus por cantidad de coincidencias en la página
             match_density = min(page_match_count / max(total_matches, 1), 1.0)
             density_bonus = match_density * 0.4
 
-            # Bonus por múltiples coincidencias en la misma página
             if page_match_count > 1:
                 multiple_bonus = min(page_match_count * 0.1, 0.3)
             else:
@@ -2574,25 +2237,23 @@ class FileImageProcessor(BaseFileProcessor):
         except Exception:
             return 0.5
 
-    # Ejemplo de uso de la nueva funcionalidad
     async def demo_smart_search(self, file_url: str, file_type: str = "pdf"):
         """
-        Función de demostración para mostrar cómo usar la búsqueda inteligente
+        Demonstration function showing how to use smart search
         """
-        logger.info("🚀 DEMO: Búsqueda Inteligente con Análisis de Texto y Regex")
+        logger.info("🚀 DEMO: Smart Search with Text Analysis and Regex")
         logger.info("=" * 60)
 
-        # Ejemplos de frases de búsqueda
         search_phrases = [
-            "productos lácteos",
-            "teléfonos celular smartphone",
-            "computadora laptop notebook",
-            "zapatos deportivos",
-            "medicamentos pastillas",
+            "dairy products",
+            "cell phones smartphone",
+            "computer laptop notebook",
+            "sports shoes",
+            "medications pills",
         ]
 
         for phrase in search_phrases:
-            logger.info(f"\n🔍 Buscando: '{phrase}'")
+            logger.info(f"\n🔍 Searching for: '{phrase}'")
             logger.info("-" * 40)
 
             result = await self.smart_search_with_text_analysis(
@@ -2602,35 +2263,33 @@ class FileImageProcessor(BaseFileProcessor):
                 max_results=5,
             )
 
-            logger.info(f"📝 Palabras clave extraídas: {result.processed_keywords}")
+            logger.info(f"📝 Extracted keywords: {result.processed_keywords}")
             logger.info(
-                f"🎯 Coincidencias de texto encontradas: {result.total_matches}"
+                f"🎯 Text matches found: {result.total_matches}"
             )
-            logger.info(f"📄 Método de extracción: {result.extraction_method}")
-            logger.info(f"🖼️ Imágenes relacionadas: {len(result.related_images)}")
+            logger.info(f"📄 Extraction method: {result.extraction_method}")
+            logger.info(f"🖼️ Related images: {len(result.related_images)}")
 
-            # Mostrar algunas coincidencias de texto
             if result.text_matches:
-                logger.info("\n📋 Primeras coincidencias de texto:")
+                logger.info("\n📋 First text matches:")
                 for i, match in enumerate(result.text_matches[:3]):
                     logger.info(
-                        f"  {i+1}. Página {match.page_number}: '{match.matched_text}' "
-                        f"(confianza: {match.confidence:.2f})"
+                        f"  {i+1}. Page {match.page_number}: '{match.matched_text}' "
+                        f"(confidence: {match.confidence:.2f})"
                     )
-                    logger.info(f"     Contexto: {match.match_context[:100]}...")
+                    logger.info(f"     Context: {match.match_context[:100]}...")
 
-            # Mostrar información de imágenes
             if result.related_images:
-                logger.info("\n🖼️ Imágenes encontradas:")
+                logger.info("\n🖼️ Images found:")
                 for i, img in enumerate(result.related_images[:3]):
                     logger.info(
-                        f"  {i+1}. Página {img.page_number}: {img.description[:100]}... "
-                        f"(confianza: {img.confidence:.2f})"
+                        f"  {i+1}. Page {img.page_number}: {img.description[:100]}... "
+                        f"(confidence: {img.confidence:.2f})"
                     )
 
             logger.info("\n" + "=" * 60)
 
-        return "Demo completada"
+        return "Demo completed"
 
     async def search_images_in_pdf(
         self, pdf_url: str, search_term: str, max_results: int = 5
@@ -2641,7 +2300,6 @@ class FileImageProcessor(BaseFileProcessor):
         """
         result = await self.extract_text_and_images(pdf_url, search_term)
         images = result.get("related_images", {}).get("images", [])
-        # If images are dicts, convert to ImageSearchResult
         image_results = []
         for img in images:
             if isinstance(img, dict):
@@ -2679,7 +2337,6 @@ class FileImageProcessor(BaseFileProcessor):
         try:
             logger.info(f"Starting forced image search for term: '{search_term}'")
 
-            # Extract all images from the PDF aggressively
             all_images = await self._extract_all_images_aggressive(
                 pdf_data, search_term
             )
@@ -2688,7 +2345,6 @@ class FileImageProcessor(BaseFileProcessor):
                 logger.warning("No images found in the PDF")
                 return []
 
-            # Strategy 1: Search by expanded keywords
             expanded_keywords = self._expand_search_keywords(search_term)
             keyword_matches = []
 
@@ -2701,7 +2357,6 @@ class FileImageProcessor(BaseFileProcessor):
                     image["match_strategy"] = "expanded_keywords"
                     keyword_matches.append(image)
 
-            # Strategy 2: Page context analysis
             context_matches = []
             for image in all_images:
                 if image not in keyword_matches:
@@ -2713,7 +2368,6 @@ class FileImageProcessor(BaseFileProcessor):
                         image["match_strategy"] = "page_context"
                         context_matches.append(image)
 
-            # Strategy 3: Visual content analysis (OCR on images)
             visual_matches = []
             remaining_images = [
                 img
@@ -2730,13 +2384,10 @@ class FileImageProcessor(BaseFileProcessor):
                     image["match_strategy"] = "visual_content"
                     visual_matches.append(image)
 
-            # Combine all results
             all_matches = keyword_matches + context_matches + visual_matches
 
-            # Sort by relevance
             all_matches.sort(key=lambda x: x.get("relevance_score", 0), reverse=True)
 
-            # Enhance descriptions with search term context
             enhanced_matches = []
             for match in all_matches[:10]:  # Max 10 results
                 enhanced_description = await self._enhance_description_with_search_term(
@@ -2761,15 +2412,12 @@ class FileImageProcessor(BaseFileProcessor):
         try:
             keywords = [search_term.lower()]
 
-            # Add variations
             if len(search_term) > 3:
-                # Add plural/singular variations
                 if search_term.endswith("s"):
                     keywords.append(search_term[:-1])  # Remove 's'
                 else:
                     keywords.append(search_term + "s")  # Add 's'
 
-                # Add common variations
                 keywords.extend(
                     [
                         search_term.replace(" ", ""),  # Remove spaces
@@ -2780,7 +2428,6 @@ class FileImageProcessor(BaseFileProcessor):
                     ]
                 )
 
-            # Remove duplicates and empty strings
             keywords = list(set([k for k in keywords if k.strip()]))
 
             logger.info(f"Expanded keywords for '{search_term}': {keywords}")
@@ -2808,7 +2455,6 @@ class FileImageProcessor(BaseFileProcessor):
 
                 for img_index, img in enumerate(image_list):
                     try:
-                        # Extract image
                         xref = img[0]
                         pix = fitz.Pixmap(pdf_document, xref)
 
@@ -2816,12 +2462,10 @@ class FileImageProcessor(BaseFileProcessor):
                             img_data = pix.tobytes("png")
                             pil_image = Image.open(io.BytesIO(img_data))
 
-                            # Convert to base64
                             buffered = io.BytesIO()
                             pil_image.save(buffered, format="PNG")
                             img_base64 = base64.b64encode(buffered.getvalue()).decode()
 
-                            # Simple relevance check based on image characteristics
                             relevance_score = (
                                 await self._calculate_direct_image_relevance(
                                     img_base64, search_term
@@ -2848,7 +2492,6 @@ class FileImageProcessor(BaseFileProcessor):
 
             pdf_document.close()
 
-            # Sort by confidence
             found_images.sort(key=lambda x: x.get("confidence", 0), reverse=True)
 
             logger.info(f"Direct search found {len(found_images)} images")
@@ -2865,22 +2508,18 @@ class FileImageProcessor(BaseFileProcessor):
         Calculates relevance of an image to a search term using basic analysis
         """
         try:
-            # Use technical analysis
             technical_analysis = self._analyze_image_with_python_tools(image_base64)
 
             base_score = 0.4  # Base relevance
 
-            # Bonus for image quality
             quality_score = technical_analysis.get("quality_score", 0.0)
             if quality_score > 0.7:
                 base_score += 0.2
 
-            # Bonus for detected objects
             objects_detected = technical_analysis.get("objects_detected", 0)
             if objects_detected > 0:
                 base_score += 0.2
 
-            # Bonus if there's text in the image
             if technical_analysis.get("text_detected", False):
                 base_score += 0.3
 

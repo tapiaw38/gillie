@@ -23,8 +23,6 @@ import logging
 logger = logging.getLogger(__name__)
 logging.basicConfig(level=logging.INFO)
 
-# Remove os import and environment variable usage
-# Set module-level constants
 IMAGE_CONFIDENCE_THRESHOLD = 0.3
 MAX_IMAGES_TO_SHOW = 10
 
@@ -80,15 +78,12 @@ class ExcelImageProcessor(BaseFileProcessor):
             Images closer to matching text (especially on the same X-axis/row) receive higher confidence scores
         """
         try:
-            # Download Excel file
             response = requests.get(excel_url)
             response.raise_for_status()
             excel_data = response.content
 
-            # Extract images from Excel (charts/graphs)
             images_data = await self._extract_images_from_excel(excel_data, excel_url)
 
-            # Search for relevant images
             results = await self._search_relevant_images(
                 images_data, search_term, max_results
             )
@@ -105,28 +100,22 @@ class ExcelImageProcessor(BaseFileProcessor):
         images_data = []
 
         try:
-            # Extract positions data for proximity analysis
             self.positions_data = await self._extract_text_and_image_positions(
                 excel_data
             )
 
-            # First, extract embedded images directly from the Excel file
             embedded_images = await self._extract_all_embedded_images(excel_data)
             images_data.extend(embedded_images)
 
-            # Then, read Excel file with all sheets for data-driven charts
             excel_file = pd.ExcelFile(BytesIO(excel_data))
 
             for sheet_index, sheet_name in enumerate(excel_file.sheet_names):
                 try:
-                    # Read sheet data
                     df = pd.read_excel(BytesIO(excel_data), sheet_name=sheet_name)
 
-                    # Skip empty sheets
                     if df.empty:
                         continue
 
-                    # Generate visualizations from data
                     sheet_images = await self._generate_charts_from_sheet(
                         df, sheet_name, sheet_index
                     )
@@ -148,11 +137,9 @@ class ExcelImageProcessor(BaseFileProcessor):
         embedded_images = []
 
         try:
-            # Excel files are ZIP archives
             with zipfile.ZipFile(BytesIO(excel_data), "r") as zip_file:
                 file_list = zip_file.namelist()
 
-                # Extract images from media folder
                 media_files = [f for f in file_list if f.startswith("xl/media/")]
 
                 for media_file in media_files:
@@ -162,7 +149,6 @@ class ExcelImageProcessor(BaseFileProcessor):
                         if self._is_valid_image(image_data):
                             image_base64 = base64.b64encode(image_data).decode()
 
-                            # Try to determine the sheet association
                             sheet_info = await self._get_image_sheet_association(
                                 zip_file, media_file
                             )
@@ -195,11 +181,6 @@ class ExcelImageProcessor(BaseFileProcessor):
     ) -> Dict[str, Any]:
         """Try to determine which sheet an image belongs to"""
         try:
-            # This is a simplified approach
-            # In a full implementation, we'd parse the relationships XML files
-            # to properly map images to sheets
-
-            # For now, we'll return default values
             return {"sheet_index": 1, "sheet_name": "Sheet1"}
 
         except Exception as e:
@@ -213,13 +194,11 @@ class ExcelImageProcessor(BaseFileProcessor):
         charts_data = []
 
         try:
-            # Identify numeric columns for charting
             numeric_cols = df.select_dtypes(include=[np.number]).columns.tolist()
 
             if len(numeric_cols) == 0:
                 return charts_data
 
-            # Generate different types of charts
             chart_types = [
                 ("bar", self._create_bar_chart),
                 ("line", self._create_line_chart),
@@ -259,16 +238,13 @@ class ExcelImageProcessor(BaseFileProcessor):
         try:
             plt.figure(figsize=(10, 6))
 
-            # Use first few numeric columns
             cols_to_plot = numeric_cols[:3]
 
             if len(df) > 20:
-                # Sample data if too large
                 sample_df = df.head(20)
             else:
                 sample_df = df
 
-            # Create bar chart
             if len(cols_to_plot) == 1:
                 sample_df[cols_to_plot[0]].plot(kind="bar")
             else:
@@ -278,7 +254,6 @@ class ExcelImageProcessor(BaseFileProcessor):
             plt.xticks(rotation=45)
             plt.tight_layout()
 
-            # Convert to base64
             buffer = BytesIO()
             plt.savefig(buffer, format="png", dpi=150, bbox_inches="tight")
             buffer.seek(0)
@@ -306,7 +281,6 @@ class ExcelImageProcessor(BaseFileProcessor):
             else:
                 sample_df = df
 
-            # Create line chart
             for col in cols_to_plot:
                 plt.plot(sample_df.index, sample_df[col], label=col, marker="o")
 
@@ -317,7 +291,6 @@ class ExcelImageProcessor(BaseFileProcessor):
             plt.grid(True, alpha=0.3)
             plt.tight_layout()
 
-            # Convert to base64
             buffer = BytesIO()
             plt.savefig(buffer, format="png", dpi=150, bbox_inches="tight")
             buffer.seek(0)
@@ -344,7 +317,6 @@ class ExcelImageProcessor(BaseFileProcessor):
             x_col = numeric_cols[0]
             y_col = numeric_cols[1]
 
-            # Sample data if too large
             if len(df) > 1000:
                 sample_df = df.sample(n=1000)
             else:
@@ -396,7 +368,6 @@ class ExcelImageProcessor(BaseFileProcessor):
             plt.title("Correlation Heatmap")
             plt.tight_layout()
 
-            # Convert to base64
             buffer = BytesIO()
             plt.savefig(buffer, format="png", dpi=150, bbox_inches="tight")
             buffer.seek(0)
@@ -417,27 +388,18 @@ class ExcelImageProcessor(BaseFileProcessor):
         embedded_images = []
 
         try:
-            # Excel files are essentially ZIP files, so we can extract them
             with zipfile.ZipFile(BytesIO(excel_data), "r") as zip_file:
-                # Get list of all files in the Excel archive
                 file_list = zip_file.namelist()
 
-                # Look for media files (images)
                 media_files = [f for f in file_list if f.startswith("xl/media/")]
 
                 for media_file in media_files:
                     try:
-                        # Extract the image file
                         image_data = zip_file.read(media_file)
 
-                        # Check if it's a valid image
                         if self._is_valid_image(image_data):
-                            # Convert to base64
                             image_base64 = base64.b64encode(image_data).decode()
 
-                            # Try to determine which sheet this image belongs to
-                            # This is a simplified approach - in reality, we'd need to parse
-                            # the relationships and drawing XML files
                             embedded_images.append(
                                 {
                                     "page_number": sheet_index + 1,
@@ -453,11 +415,9 @@ class ExcelImageProcessor(BaseFileProcessor):
                         logger.error(f"Error extracting media file {media_file}: {e}")
                         continue
 
-                # Also look for chart images in drawings
                 drawing_files = [f for f in file_list if f.startswith("xl/drawings/")]
                 for drawing_file in drawing_files:
                     try:
-                        # Parse drawing XML to find chart relationships
                         drawing_data = zip_file.read(drawing_file)
                         chart_images = await self._extract_chart_images_from_drawing(
                             drawing_data, zip_file, sheet_name, sheet_index
@@ -492,7 +452,6 @@ class ExcelImageProcessor(BaseFileProcessor):
                 if image_data.startswith(signature):
                     return True
 
-            # Also try to open with PIL as a final check
             try:
                 Image.open(BytesIO(image_data))
                 return True
@@ -513,20 +472,11 @@ class ExcelImageProcessor(BaseFileProcessor):
         chart_images = []
 
         try:
-            # Parse the drawing XML
             root = ET.fromstring(drawing_data)
 
-            # Look for chart references in the XML
-            # This is a simplified approach - real implementation would need
-            # to handle all the XML namespaces and relationships properly
-
-            # For now, we'll look for any embedded images in the drawing
             for elem in root.iter():
-                # Look for image references
                 if "embed" in elem.attrib:
                     embed_id = elem.attrib["embed"]
-                    # This would normally require parsing the relationships
-                    # to map embed IDs to actual files
 
         except Exception as e:
             logger.error(f"Error parsing drawing XML: {e}")
@@ -541,35 +491,26 @@ class ExcelImageProcessor(BaseFileProcessor):
         if not images_data:
             return []
 
-        # Extract text and image positions for proximity analysis
         logger.info(f"Extracting text and image positions for proximity analysis...")
-        # We need the original Excel data for position analysis
-        # For now, we'll use a simplified approach and enhance it later
 
-        # Create tasks to process images in parallel
         semaphore = asyncio.Semaphore(3)
         tasks = []
 
-        # Check if we should use optimized processing (check for global constant)
         use_optimized = getattr(self, "enable_fast_processing", True)
 
         for img_data in images_data:
             if use_optimized:
-                # Use optimized method with no API calls
                 task = self._analyze_image_relevance_optimized(
                     semaphore, img_data, search_term
                 )
             else:
-                # Use full method with API calls
                 task = self._analyze_image_relevance_with_proximity(
                     semaphore, img_data, search_term
                 )
             tasks.append(task)
 
-        # Execute analysis in parallel
         analysis_results = await asyncio.gather(*tasks, return_exceptions=True)
 
-        # Filter and sort results with improved logic - only images with >75% confidence
         valid_results = []
         for i, result in enumerate(analysis_results):
             if isinstance(result, Exception):
@@ -581,7 +522,6 @@ class ExcelImageProcessor(BaseFileProcessor):
             ):  # Increased threshold to 75% for better precision
                 valid_results.append(result)
 
-        # Sort by confidence (descending), then by image type (embedded first), then by page number
         valid_results.sort(
             key=lambda x: (
                 -x.confidence,  # Higher confidence first
@@ -595,7 +535,6 @@ class ExcelImageProcessor(BaseFileProcessor):
             )
         )
 
-        # Log the ranking for debugging
         logger.info(
             f"Excel Images ranked by relevance for '{search_term}' (confidence >{IMAGE_CONFIDENCE_THRESHOLD}, including proximity analysis):"
         )
@@ -614,18 +553,15 @@ class ExcelImageProcessor(BaseFileProcessor):
 
         async with semaphore:
             try:
-                # Analyze image with Python tools
                 python_analysis = self._analyze_image_with_python_tools(
                     img_data["image_base64"]
                 )
 
-                # Calculate relevance for Excel charts
                 relevance_score = self._calculate_excel_relevance_score(
                     python_analysis, search_term, img_data
                 )
 
                 if relevance_score > 0.3:
-                    # Create description for Excel chart
                     description = self._create_excel_description(
                         python_analysis, search_term, img_data
                     )
@@ -651,26 +587,21 @@ class ExcelImageProcessor(BaseFileProcessor):
 
         async with semaphore:
             try:
-                # Analyze image with Python tools
                 python_analysis = self._analyze_image_with_python_tools(
                     img_data["image_base64"]
                 )
 
-                # Calculate base relevance for Excel charts
                 base_relevance_score = self._calculate_excel_relevance_score(
                     python_analysis, search_term, img_data
                 )
 
-                # Calculate proximity bonus using advanced analysis when available
                 proximity_bonus = self._calculate_advanced_proximity_bonus(
                     search_term, img_data
                 )
 
-                # Combine base score with proximity bonus
                 final_relevance_score = min(base_relevance_score + proximity_bonus, 1.0)
 
                 if final_relevance_score > 0.3:
-                    # Create description for Excel chart
                     description = self._create_excel_description_with_proximity(
                         python_analysis, search_term, img_data, proximity_bonus
                     )
@@ -696,26 +627,21 @@ class ExcelImageProcessor(BaseFileProcessor):
 
         async with semaphore:
             try:
-                # Analyze image with Python tools only (no API calls)
                 python_analysis = self._analyze_image_with_python_tools(
                     img_data["image_base64"]
                 )
 
-                # Use Excel-specific relevance calculation (same strategy as PDF)
                 relevance_score = self._calculate_excel_relevance_score(
                     python_analysis, search_term, img_data
                 )
 
-                # Add simple proximity bonus
                 proximity_bonus = self._calculate_simplified_proximity_bonus(
                     search_term, img_data
                 )
 
-                # Combine scores
                 final_relevance_score = min(relevance_score + proximity_bonus, 1.0)
 
                 if final_relevance_score > IMAGE_CONFIDENCE_THRESHOLD:
-                    # Create optimized description (no API calls)
                     description = self._create_optimized_description(
                         python_analysis, search_term, img_data
                     )
@@ -741,13 +667,11 @@ class ExcelImageProcessor(BaseFileProcessor):
         try:
             proximity_bonus = 0.0
 
-            # Use detailed position analysis if available
             if hasattr(self, "positions_data") and self.positions_data:
                 proximity_bonus = self._calculate_text_image_proximity(
                     search_term, img_data, self.positions_data
                 )
 
-            # If no detailed position data, use simplified approach
             if proximity_bonus == 0.0:
                 proximity_bonus = self._calculate_simplified_proximity_bonus(
                     search_term, img_data
@@ -767,41 +691,34 @@ class ExcelImageProcessor(BaseFileProcessor):
             proximity_bonus = 0.0
             search_term_lower = search_term.lower()
 
-            # Check if this is a specific product search
-            is_specific_search = self._is_specific_product_search(search_term_lower)
+            is_specific_search = self._is_specific_search(search_term_lower)
 
-            # Bonus based on sheet name relevance (text likely to be in same sheet)
             sheet_name = img_data.get("sheet_name", "").lower()
             if search_term_lower in sheet_name:
                 proximity_bonus += (
                     0.20 if is_specific_search else 0.15
                 )  # Higher bonus for specific searches
 
-            # Check for partial matches in sheet name for multi-word searches
             if is_specific_search and len(search_term_lower.split()) > 1:
                 search_words = search_term_lower.split()
                 words_in_sheet = sum(1 for word in search_words if word in sheet_name)
                 if words_in_sheet > 0:
                     proximity_bonus += 0.10 * (words_in_sheet / len(search_words))
 
-            # Bonus for embedded images (more likely to be near text)
             image_type = img_data.get("image_type", "")
             if image_type == "embedded":
                 proximity_bonus += (
                     0.12 if is_specific_search else 0.10
                 )  # Higher bonus for specific searches
 
-            # Bonus based on extraction method
             extraction_method = img_data.get("extraction_method", "")
             if "embedded" in extraction_method:
                 proximity_bonus += 0.08
 
-            # Bonus for images that appear earlier in the sheet (first page proximity)
             page_number = img_data.get("page_number", 1)
             if page_number == 1:
                 proximity_bonus += 0.05  # First sheet often has relevant content
 
-            # Additional bonuses for specific search terms that suggest proximity
             proximity_keywords = [
                 "diagram",
                 "illustration",
@@ -818,7 +735,6 @@ class ExcelImageProcessor(BaseFileProcessor):
             if any(keyword in search_term_lower for keyword in proximity_keywords):
                 proximity_bonus += 0.12  # These terms suggest text-image relationship
 
-            # For specific product searches, reduce bonus if no strong indicators
             if is_specific_search and proximity_bonus < 0.15:
                 proximity_bonus *= 0.7  # Reduce bonus for weak proximity indicators
 
@@ -855,7 +771,6 @@ class ExcelImageProcessor(BaseFileProcessor):
                         }
                     )
 
-            # Sort by match score (best matches first)
             matches.sort(key=lambda x: x["match_score"], reverse=True)
             return matches
 
@@ -869,13 +784,10 @@ class ExcelImageProcessor(BaseFileProcessor):
             text_lower = text.lower()
             search_lower = search_term.lower()
 
-            # For multi-word searches (like "coca cola"), require stricter matching
             if len(search_lower.split()) > 1:
-                # Exact phrase match gets highest score
                 if search_lower in text_lower:
                     return 1.0
 
-                # Check if all words are present
                 search_words = search_lower.split()
                 text_words = text_lower.split()
                 words_found = sum(
@@ -891,24 +803,18 @@ class ExcelImageProcessor(BaseFileProcessor):
                 else:
                     return 0.3  # Few words found
 
-            # Single word searches
-            # Exact match gets highest score
             if search_lower == text_lower:
                 return 1.0
 
-            # Word boundary match
             if f" {search_lower} " in f" {text_lower} ":
                 return 0.9
 
-            # Starts with search term
             if text_lower.startswith(search_lower):
                 return 0.8
 
-            # Contains search term
             if search_lower in text_lower:
                 return 0.7
 
-            # Partial word match
             words = text_lower.split()
             for word in words:
                 if search_lower in word or word in search_lower:
@@ -1009,22 +915,17 @@ class ExcelImageProcessor(BaseFileProcessor):
                     )
                     continue
 
-            # Extract image positions (simplified approach)
-            # In a full implementation, we would parse the drawing XML files
-            # to get exact coordinates, but for now we'll use sheet-based approximation
             with zipfile.ZipFile(BytesIO(excel_data), "r") as zip_file:
                 file_list = zip_file.namelist()
                 media_files = [f for f in file_list if f.startswith("xl/media/")]
 
                 for idx, media_file in enumerate(media_files):
                     try:
-                        # Approximate position based on order and sheet
                         sheet_association = await self._get_image_sheet_association(
                             zip_file, media_file
                         )
                         sheet_name = sheet_association.get("sheet_name", "Sheet1")
 
-                        # Estimate position (this would be more accurate with XML parsing)
                         estimated_position = {
                             "x_position": (idx % 3) * 300
                             + 200,  # Distribute across columns
@@ -1062,7 +963,6 @@ class ExcelImageProcessor(BaseFileProcessor):
             sheet_name = img_data.get("sheet_name", "")
             media_file = img_data.get("media_file", "")
 
-            # Get image position
             image_position = positions_data["image_positions"].get(media_file)
             if not image_position:
                 return proximity_bonus
@@ -1070,12 +970,10 @@ class ExcelImageProcessor(BaseFileProcessor):
             img_x = image_position.get("x_position", 0)
             img_y = image_position.get("y_position", 0)
 
-            # Get text content for the same sheet
             sheet_text = positions_data["sheets_text_content"].get(sheet_name, [])
             if not sheet_text:
                 return proximity_bonus
 
-            # Find text that matches search term
             matching_texts = []
             for text_item in sheet_text:
                 if search_term_lower in text_item["text"].lower():
@@ -1084,7 +982,6 @@ class ExcelImageProcessor(BaseFileProcessor):
             if not matching_texts:
                 return proximity_bonus
 
-            # Calculate proximity for each matching text
             min_distance = float("inf")
             closest_text = None
 
@@ -1092,20 +989,16 @@ class ExcelImageProcessor(BaseFileProcessor):
                 text_x = text_item.get("x_position", 0)
                 text_y = text_item.get("y_position", 0)
 
-                # Calculate distance (emphasizing X-axis proximity as requested)
                 x_distance = abs(img_x - text_x)
                 y_distance = abs(img_y - text_y)
 
-                # Weight X-axis distance more heavily (factor of 2)
                 weighted_distance = (x_distance * 2) + y_distance
 
                 if weighted_distance < min_distance:
                     min_distance = weighted_distance
                     closest_text = text_item
 
-            # Convert distance to proximity bonus
             if min_distance < float("inf"):
-                # Maximum bonus for very close proximity (same row/column area)
                 if min_distance <= 150:  # Very close
                     proximity_bonus = 0.25
                 elif min_distance <= 300:  # Close
@@ -1117,14 +1010,11 @@ class ExcelImageProcessor(BaseFileProcessor):
                 elif min_distance <= 1200:  # Same general area
                     proximity_bonus = 0.05
 
-                # Additional bonus for same row (Y-axis alignment)
                 if (
                     closest_text
                     and abs(img_y - closest_text.get("y_position", 0)) <= 30
                 ):
                     proximity_bonus += 0.10  # Bonus for same horizontal line
-
-                # Additional bonus for same column area (X-axis alignment)
                 if (
                     closest_text
                     and abs(img_x - closest_text.get("x_position", 0)) <= 120
@@ -1142,32 +1032,25 @@ class ExcelImageProcessor(BaseFileProcessor):
     ) -> float:
         """Calculate relevance score for Excel charts and images with improved algorithm"""
         try:
-            # Start with base score from parent class (improved algorithm)
             base_score = self._calculate_relevance_score(analysis, search_term)
 
-            # Excel-specific bonuses
             chart_type = img_data.get("chart_type", "")
             image_type = img_data.get("image_type", "")
             search_term_lower = search_term.lower()
 
-            # Check for specific product/brand searches that need higher precision
-            is_specific_search = self._is_specific_product_search(search_term_lower)
+            is_specific_search = self._is_specific_search(search_term_lower)
 
-            # For specific searches, require stronger evidence
             if is_specific_search:
-                # Check if the media file name contains the search term
                 media_file = img_data.get("media_file", "").lower()
                 file_name_match = search_term_lower in media_file or any(
                     word in media_file for word in search_term_lower.split()
                 )
 
-                # Check sheet name for exact matches
                 sheet_name = img_data.get("sheet_name", "").lower()
                 sheet_name_match = search_term_lower in sheet_name or any(
                     word in sheet_name for word in search_term_lower.split()
                 )
 
-                # For specific searches, penalize if no direct evidence
                 if not file_name_match and not sheet_name_match:
                     base_score *= 0.4  # Significant penalty for lack of direct evidence
                 elif file_name_match:
@@ -1175,12 +1058,9 @@ class ExcelImageProcessor(BaseFileProcessor):
                 elif sheet_name_match:
                     base_score += 0.20  # Good bonus for sheet name match
 
-            # Different scoring for embedded images vs generated charts
             if image_type == "embedded":
-                # For embedded images, add bonus for being actual content
                 base_score += 0.15  # Embedded images are often more relevant
 
-                # Bonus for specific search terms
                 if search_term_lower in [
                     "image",
                     "picture",
@@ -1193,13 +1073,11 @@ class ExcelImageProcessor(BaseFileProcessor):
                 elif search_term_lower in ["content", "visual", "graphic"]:
                     base_score += 0.20
 
-                # Media file name relevance (enhanced for specific searches)
                 media_file = img_data.get("media_file", "").lower()
                 if search_term_lower in media_file:
                     base_score += 0.25 if is_specific_search else 0.15
 
             else:
-                # For generated charts, add chart-specific bonuses
                 if search_term_lower in [
                     "chart",
                     "graph",
@@ -1211,7 +1089,6 @@ class ExcelImageProcessor(BaseFileProcessor):
                 elif search_term_lower in ["report", "summary", "statistics"]:
                     base_score += 0.25
 
-                # Specific chart type bonuses
                 chart_bonus = 0.0
                 if "bar" in search_term_lower and chart_type == "bar":
                     chart_bonus = 0.20
@@ -1226,22 +1103,18 @@ class ExcelImageProcessor(BaseFileProcessor):
 
                 base_score += chart_bonus
 
-                # Generated charts generally have good quality
                 if analysis.get("quality_score", 0.0) > 0.7:
                     base_score += 0.10
 
-                # For specific product searches, charts are less likely to be relevant
                 if is_specific_search and not any(
                     word in search_term_lower for word in ["chart", "graph", "data"]
                 ):
                     base_score *= 0.6  # Reduce score for charts when searching for specific products
 
-            # Sheet name relevance (applies to both types)
             sheet_name = img_data.get("sheet_name", "").lower()
             if search_term_lower in sheet_name:
                 base_score += 0.20 if is_specific_search else 0.15
 
-            # Bonus for sheets with meaningful names
             meaningful_sheet_names = [
                 "data",
                 "analysis",
@@ -1253,54 +1126,110 @@ class ExcelImageProcessor(BaseFileProcessor):
             if any(name in sheet_name for name in meaningful_sheet_names):
                 base_score += 0.05
 
-            # Ensure score is between 0 and 1
             return min(max(base_score, 0.0), 1.0)
 
         except Exception as e:
             logger.error(f"Error calculating Excel relevance: {e}")
             return 0.0
 
-    def _is_specific_product_search(self, search_term_lower: str) -> bool:
-        """Determine if this is a specific product/brand search that needs higher precision"""
-        # Common indicators of specific searches
-        specific_indicators = [
-            # Brands/Products
-            "coca cola",
-            "cocacola",
-            "pepsi",
-            "sprite",
-            "fanta",
-            "nike",
-            "adidas",
-            "apple",
-            "samsung",
-            "iphone",
-            "cerveza",
-            "beer",
-            "wine",
-            "vino",
-            # Specific items
-            "laptop",
-            "computadora",
-            "telefono",
-            "celular",
-            "camiseta",
-            "pantalon",
-            "zapatos",
-            # Food items
-            "pizza",
-            "hamburguesa",
-            "sandwich",
-            "cafe",
-            "coffee",
+    def _is_specific_search(self, search_term_lower: str) -> bool:
+        """Determine whether the search targets a concrete item instead of generic visual content."""
+        normalized_term = search_term_lower.strip()
+        if not normalized_term:
+            return False
+
+        generic_visual_terms = {
+            "image",
+            "images",
+            "picture",
+            "pictures",
+            "photo",
+            "photos",
+            "logo",
+            "logos",
+            "graphic",
+            "graphics",
+            "visual",
+            "visuals",
+            "illustration",
+            "illustrations",
+            "content",
+        }
+        generic_analytics_terms = {
+            "chart",
+            "charts",
+            "graph",
+            "graphs",
+            "visualization",
+            "visualizations",
+            "report",
+            "reports",
+            "summary",
+            "summaries",
+            "analysis",
+            "analytics",
+            "statistics",
+            "statistical",
+            "data",
+            "dashboard",
+            "table",
+            "tables",
+        }
+        stopwords = {
+            "a",
+            "an",
+            "and",
+            "the",
+            "of",
+            "for",
+            "to",
+            "in",
+            "on",
+            "de",
+            "del",
+            "la",
+            "el",
+            "los",
+            "las",
+            "y",
+            "con",
+            "para",
+        }
+
+        tokens = re.findall(r"[a-z0-9]+", normalized_term)
+        meaningful_tokens = [
+            token
+            for token in tokens
+            if len(token) > 2 and token not in stopwords
         ]
 
-        # Check if it's a multi-word specific term
-        if len(search_term_lower.split()) > 1:
+        if not meaningful_tokens:
+            return False
+
+        generic_term_count = sum(
+            1
+            for token in meaningful_tokens
+            if token in generic_visual_terms or token in generic_analytics_terms
+        )
+        generic_ratio = generic_term_count / len(meaningful_tokens)
+
+        has_model_like_token = any(
+            re.search(r"[a-z]+\d+|\d+[a-z]+", token) for token in meaningful_tokens
+        )
+        has_numeric_reference = any(
+            token.isdigit() and len(token) >= 2 for token in meaningful_tokens
+        )
+
+        if has_model_like_token or has_numeric_reference:
             return True
 
-        # Check against known specific terms
-        return any(indicator in search_term_lower for indicator in specific_indicators)
+        if len(meaningful_tokens) >= 2 and generic_ratio < 0.5:
+            return True
+
+        if len(meaningful_tokens) == 1 and generic_ratio == 0:
+            return True
+
+        return False
 
     def _create_excel_description(
         self, analysis: Dict[str, Any], search_term: str, img_data: Dict[str, Any]
@@ -1595,72 +1524,7 @@ class ExcelImageProcessor(BaseFileProcessor):
         Extracts keywords from a phrase using regex for Excel
         """
         try:
-            # Clean and normalize the phrase
-            cleaned_phrase = search_phrase.lower().strip()
-
-            # Common stopwords in Spanish
-            stopwords = {
-                "el",
-                "la",
-                "los",
-                "las",
-                "un",
-                "una",
-                "de",
-                "en",
-                "y",
-                "a",
-                "que",
-                "es",
-                "se",
-                "no",
-                "te",
-                "lo",
-                "le",
-                "da",
-                "su",
-                "por",
-                "son",
-                "con",
-                "para",
-                "del",
-                "al",
-                "me",
-                "mi",
-                "tu",
-                "si",
-                "o",
-                "pero",
-                "más",
-                "como",
-                "esta",
-                "este",
-                "estos",
-                "estas",
-                "todo",
-                "todos",
-                "toda",
-                "todas",
-            }
-
-            # Extract words using regex (minimum 2 characters)
-            words = re.findall(r"\b[a-záéíóúñ0-9]{2,}\b", cleaned_phrase, re.IGNORECASE)
-
-            # Filter stopwords and duplicates
-            keywords = []
-            seen = set()
-
-            for word in words:
-                word_lower = word.lower()
-                if word_lower not in stopwords and word_lower not in seen:
-                    keywords.append(word)
-                    seen.add(word_lower)
-
-            # If no valid words were found, use the full phrase
-            if not keywords:
-                keywords = [search_phrase.strip()]
-
-            return keywords
+            return self._extract_keywords_from_phrase_common(search_phrase)
 
         except Exception as e:
             logger.error(f"Error extracting keywords from Excel: {e}")
@@ -1673,12 +1537,10 @@ class ExcelImageProcessor(BaseFileProcessor):
         Extracts all text from an Excel file comprehensively
         """
         try:
-            # Download Excel file
             response = requests.get(excel_url)
             response.raise_for_status()
             excel_data = response.content
 
-            # Read all sheets
             excel_file = pd.ExcelFile(BytesIO(excel_data))
             all_text = ""
             sheets_analyzed = []
@@ -1691,13 +1553,11 @@ class ExcelImageProcessor(BaseFileProcessor):
                     if not df.empty:
                         all_text += f"\n[SHEET: {sheet_name}]\n"
 
-                        # Extract column names
                         column_text = " ".join(
                             [str(col) for col in df.columns if pd.notna(col)]
                         )
                         all_text += f"[COLUMNS: {column_text}]\n"
 
-                        # Extract text from all cells with position reference
                         for row_idx, row in df.iterrows():
                             row_text = ""
                             for col_name, value in row.items():
@@ -1734,14 +1594,12 @@ class ExcelImageProcessor(BaseFileProcessor):
             matches = []
             text_lower = text.lower()
 
-            # Split text by sheets
             sheets = text.split("[SHEET:")
 
             for sheet_idx, sheet_content in enumerate(sheets):
                 if sheet_idx == 0:
                     continue  # Skip the part before any sheet
 
-                # Extract sheet name
                 sheet_lines = sheet_content.split("\n")
                 if not sheet_lines:
                     continue
@@ -1750,15 +1608,12 @@ class ExcelImageProcessor(BaseFileProcessor):
                 sheet_text = "\n".join(sheet_lines[1:])
                 sheet_text_lower = sheet_text.lower()
 
-                # Search for full phrase first
                 phrase_pattern = re.escape(original_phrase.lower())
                 for match in re.finditer(phrase_pattern, sheet_text_lower):
-                    # Extract context and cell reference
                     context_start = max(0, match.start() - 100)
                     context_end = min(len(sheet_text), match.end() + 100)
                     context = sheet_text[context_start:context_end].strip()
 
-                    # Attempt to extract cell reference from context
                     cell_ref, row_num, col_name = (
                         self._extract_cell_reference_from_context(context)
                     )
@@ -1775,23 +1630,18 @@ class ExcelImageProcessor(BaseFileProcessor):
                         )
                     )
 
-                # Search for individual keywords
                 for keyword in keywords:
-                    # Create regex pattern to search for the full keyword
                     pattern = r"\b" + re.escape(keyword.lower()) + r"\b"
 
                     for match in re.finditer(pattern, sheet_text_lower):
-                        # Extract context around the match
                         context_start = max(0, match.start() - 100)
                         context_end = min(len(sheet_text), match.end() + 100)
                         context = sheet_text[context_start:context_end].strip()
 
-                        # Attempt to extract cell reference from context
                         cell_ref, row_num, col_name = (
                             self._extract_cell_reference_from_context(context)
                         )
 
-                        # Calculate confidence based on keyword length
                         confidence = min(0.8, 0.4 + (len(keyword) * 0.1))
 
                         matches.append(
@@ -1806,7 +1656,6 @@ class ExcelImageProcessor(BaseFileProcessor):
                             )
                         )
 
-            # Sort by confidence and remove duplicates
             unique_matches = []
             seen_contexts = set()
 
@@ -1833,7 +1682,6 @@ class ExcelImageProcessor(BaseFileProcessor):
         Extracts the cell reference from the context
         """
         try:
-            # Search for patterns like [COLUMN_ROW:value] or ROW_X:
             cell_pattern = r"\[([^:]+)_(\d+):[^\]]+\]"
             cell_match = re.search(cell_pattern, context)
 
@@ -1843,7 +1691,6 @@ class ExcelImageProcessor(BaseFileProcessor):
                 cell_ref = f"{column_name}{row_number}"
                 return cell_ref, row_number, column_name
 
-            # Search for ROW_X: pattern
             row_pattern = r"ROW_(\d+):"
             row_match = re.search(row_pattern, context)
 
@@ -1851,7 +1698,6 @@ class ExcelImageProcessor(BaseFileProcessor):
                 row_number = int(row_match.group(1))
                 return f"ROW_{row_number}", row_number, "MULTIPLE"
 
-            # If no specific pattern found
             return "UNKNOWN", 0, "UNKNOWN"
 
         except Exception as e:
@@ -1869,27 +1715,21 @@ class ExcelImageProcessor(BaseFileProcessor):
         Searches for images in Excel based on text matches
         """
         try:
-            # Get sheets with matches
             match_sheets = list(set(match.sheet_name for match in text_matches))
             logger.info(
                 f"🔍 Searching for images in sheets with matches: {match_sheets}"
             )
 
-            # Use existing search method with term
             excel_images = await self.search_images_in_excel(
                 excel_url, search_phrase, max_results
             )
 
-            # Prioritize images if there are text matches
             if text_matches:
                 for img in excel_images:
-                    # Increase confidence for images when there are text matches
                     img.confidence = min(1.0, img.confidence + 0.3)
 
-                    # Add match information
                     img.description += f" [File with {len(text_matches)} matches in {len(match_sheets)} sheets]"
 
-                    # If the image is in a sheet with matches, increase confidence further
                     for match in text_matches:
                         if match.sheet_name in img.description or str(
                             img.page_number
@@ -1904,7 +1744,6 @@ class ExcelImageProcessor(BaseFileProcessor):
             logger.error(f"Error searching for images in Excel: {e}")
             return []
 
-    # Demo function for Excel
     async def demo_smart_search_excel(self, excel_url: str):
         """
         Demo function to show how to use smart search in Excel
@@ -1912,7 +1751,6 @@ class ExcelImageProcessor(BaseFileProcessor):
         logger.info("🚀 DEMO: Smart Excel Search with Text Analysis and Regex")
         logger.info("=" * 60)
 
-        # Example search phrases for Excel
         search_phrases = [
             "monthly sales",
             "product inventory stock",
@@ -1929,7 +1767,6 @@ class ExcelImageProcessor(BaseFileProcessor):
                 excel_url=excel_url, search_phrase=phrase, max_results=5
             )
 
-            # Display some text matches
             if result.text_matches:
                 logger.info("\n📋 First text matches:")
                 for i, match in enumerate(result.text_matches[:3]):
@@ -1939,7 +1776,6 @@ class ExcelImageProcessor(BaseFileProcessor):
                     )
                     logger.info(f"     Context: {match.match_context[:100]}...")
 
-            # Display image information
             if result.related_images:
                 logger.info("\n🖼️ Found images:")
                 for i, img in enumerate(result.related_images[:3]):

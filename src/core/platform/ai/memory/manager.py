@@ -142,8 +142,6 @@ class ConversationMemoryManager:
             Conversation state dictionary or None if not found
         """
         try:
-            # LangGraph MemorySaver stores state internally
-            # This is a placeholder for state retrieval
             logger.debug(f"Retrieving state for thread: {thread_id}")
             return {
                 "thread_id": thread_id,
@@ -180,9 +178,6 @@ class ConversationMemoryManager:
             logger.debug(
                 f"Saving checkpoint for thread {thread_id}: {len(messages)} messages"
             )
-
-            # MemorySaver handles checkpoint storage automatically
-            # This method provides explicit checkpoint control if needed
 
             return True
 
