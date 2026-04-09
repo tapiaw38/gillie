@@ -25,7 +25,6 @@ NGINX_SITES_AVAILABLE = "/etc/nginx/sites-available/gillie"
 NGINX_SITES_ENABLED   = "/etc/nginx/sites-enabled/gillie"
 
 
-# ── Helpers ──────────────────────────────────────────────────────────────────
 
 def _require_config():
     if not config_exists():
@@ -111,7 +110,6 @@ def _write_nginx_config(content: str):
     with open(NGINX_SITES_AVAILABLE, "w") as f:
         f.write(content)
 
-    # Enable site via symlink
     if os.path.exists(NGINX_SITES_ENABLED):
         os.remove(NGINX_SITES_ENABLED)
     os.symlink(NGINX_SITES_AVAILABLE, NGINX_SITES_ENABLED)
@@ -130,7 +128,6 @@ def _nginx_reload():
     subprocess.run(["systemctl", "reload", "nginx"], check=True)
 
 
-# ── Commands ─────────────────────────────────────────────────────────────────
 
 @app.command("install")
 def install(
@@ -157,7 +154,6 @@ def install(
 
     config = load_config()
 
-    # Resolve domain interactively if not provided
     if not domain:
         saved = config.expose.domain
         domain = typer.prompt("Domain or public IP", default=saved or "")
@@ -165,11 +161,9 @@ def install(
             console.print("[red]✗[/red] Domain is required.")
             raise typer.Exit(1)
 
-    # Resolve port
     if port is None:
         port = config.expose.port or config.server.port or 8000
 
-    # Resolve SSL email
     if ssl and not email:
         saved_email = config.expose.email
         email = typer.prompt("Email for Let's Encrypt", default=saved_email or "")
@@ -183,7 +177,6 @@ def install(
     console.print(f"  SSL  : [bold]{'yes' if ssl else 'no (HTTP only)'}[/bold]")
     console.print()
 
-    # Step 1: Write HTTP config (needed for certbot challenge even in SSL mode)
     console.print("[dim]→ Writing nginx config...[/dim]")
     _write_nginx_config(_nginx_config_http(domain, port))
 
@@ -192,7 +185,6 @@ def install(
     _nginx_reload()
     console.print("[green]✓[/green] nginx config installed and reloaded (HTTP)")
 
-    # Step 2: SSL via certbot
     if ssl:
         if not shutil.which("certbot"):
             console.print("[yellow]⚠[/yellow]  certbot not found. Installing...")
@@ -212,7 +204,6 @@ def install(
             console.print("[red]✗[/red] certbot failed. Make sure DNS for the domain points to this server.")
             raise typer.Exit(1)
 
-        # Step 3: Replace config with full HTTPS version
         console.print("[dim]→ Writing HTTPS nginx config...[/dim]")
         _write_nginx_config(_nginx_config_https(domain, port))
 
@@ -221,7 +212,6 @@ def install(
         _nginx_reload()
         console.print("[green]✓[/green] SSL configured. nginx reloaded.")
 
-    # Save expose config
     config.expose.domain = domain
     config.expose.port = port
     config.expose.ssl = ssl

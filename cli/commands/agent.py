@@ -48,8 +48,6 @@ app = typer.Typer()
 
 _CLI_CONV_TITLE = "CLI Agent"
 
-# ─── Session-level config cache ────────────────────────────────────────────────
-# Loaded once at session start to avoid repeated disk reads per request.
 _config_cache = None
 
 def _get_config():
@@ -59,7 +57,6 @@ def _get_config():
     return _config_cache
 
 
-# ─── Session token / cost tracker ─────────────────────────────────────────────
 
 _session_tokens_in  = 0   # estimated input tokens sent this session
 _session_tokens_out = 0   # estimated output tokens received this session
@@ -81,7 +78,6 @@ def _print_session_cost() -> None:
     total = _session_tokens_in + _session_tokens_out
     if total == 0:
         return
-    # Rough pricing: $0.27 / 1M input + $1.10 / 1M output (DeepSeek-chat defaults)
     cost_usd = (_session_tokens_in * 0.27 + _session_tokens_out * 1.10) / 1_000_000
     console.print(
         f"\n[dim]Session: ~{_session_tokens_in:,} in · ~{_session_tokens_out:,} out "
@@ -89,7 +85,6 @@ def _print_session_cost() -> None:
     )
 
 
-# ─── agent.md workspace context ────────────────────────────────────────────────
 
 _AGENT_MD_NAMES = ("agent.md", "AGENT.md", ".agent.md")
 
@@ -108,7 +103,6 @@ def _load_agent_md(workspace: "Path") -> str | None:
     return None
 
 
-# ─── Approval modes ────────────────────────────────────────────────────────────
 
 class _Mode:
     PLAN          = "plan"       # read-only: describes changes but never applies them
@@ -126,7 +120,6 @@ _MODES_CYCLE = [
     _Mode.YOLO,
 ]
 
-# Pure read tools — always auto-accept in every mode.
 _SAFE_TOOLS = {
     "read_file", "list_directory", "find_files", "grep_files", "repo_map",
     "git_status", "git_diff", "git_log",
@@ -138,10 +131,8 @@ _SAFE_TOOLS = {
     "browser_act", "browser_extract",
 }
 
-# High-risk: always ask, even in AUTO_EDIT.
 _ALWAYS_ASK_TOOLS = {"run_shell", "git_commit"}
 
-# File / state mutations: ask in DEFAULT and CONFIRM_RISKY, auto-accept in AUTO_EDIT+YOLO.
 _EDIT_TOOLS = {
     "edit_file", "write_file", "cron_create", "cron_delete", "cron_run",
     "system_propose", "system_confirm",
@@ -158,12 +149,9 @@ def _should_ask(tool_name: str, mode: str, always_approved: set) -> bool:
     if mode == _Mode.YOLO:
         return False
     if mode == _Mode.PLAN:
-        # Plan mode never executes — the tool itself returns a plan_only dict.
         return False
     if mode == _Mode.AUTO_EDIT and tool_name in _EDIT_TOOLS:
         return False
-    # CONFIRM_RISKY: ask for _EDIT_TOOLS and _ALWAYS_ASK_TOOLS.
-    # DEFAULT: ask for everything that isn't in _SAFE_TOOLS.
     return True
 
 
@@ -179,7 +167,6 @@ def _build_prompt(mode: str) -> str:
     return indicators.get(mode, "You › ")
 
 
-# ─── HTTP helpers ─────────────────────────────────────────────────────────────
 
 def _base_url() -> str:
     config = _get_config()
@@ -310,7 +297,6 @@ def _is_file_path(text: str) -> Path | None:
     return None
 
 
-# ─── Conversation helpers ──────────────────────────────────────────────────────
 
 def _find_cli_conversation() -> dict | None:
     """Return the existing CLI Agent conversation, or None."""
@@ -334,7 +320,6 @@ def _send_message(conv_id: str, content: str) -> str:
     messages = result.get("data", [])
     if not messages:
         return "(no reply)"
-    # Last message is the assistant's reply
     last = messages[-1]
     return last.get("content", "(no reply)")
 
@@ -343,7 +328,6 @@ def _clear_messages(conv_id: str) -> None:
     _delete(f"/conversation/{conv_id}/message")
 
 
-# ─── Display helpers ───────────────────────────────────────────────────────────
 
 _AUTO_COMPACT_THRESHOLD = 30  # auto-compact when message count exceeds this
 
@@ -478,10 +462,8 @@ def _stream_assistant(
     if always_rejected is None:
         always_rejected = set()
 
-    # --yolo flag maps to YOLO mode for backward compatibility.
     effective_mode = _Mode.YOLO if auto_approve else mode
 
-    # ── Escape-to-cancel ──────────────────────────────────────────────────────
     _cancel_requested = threading.Event()
     _stream_done      = threading.Event()
     _prompt_active    = threading.Event()   # pauses watcher during approval prompts
@@ -496,12 +478,9 @@ def _stream_assistant(
             fd = sys.stdin.fileno()
             old_settings = termios.tcgetattr(fd)
             try:
-                # setcbreak instead of setraw: keeps OPOST so \n → \r\n works correctly,
-                # avoiding right-drift when console.print() is called during approval.
                 tty.setcbreak(fd)
                 while not _stream_done.is_set():
                     if _prompt_active.is_set():
-                        # Restore normal terminal settings while an interactive prompt runs
                         termios.tcsetattr(fd, termios.TCSANOW, old_settings)
                         while _prompt_active.is_set() and not _stream_done.is_set():
                             import time as _t; _t.sleep(0.02)
@@ -530,11 +509,9 @@ def _stream_assistant(
     if sys.stdin.isatty():
         _escape_thread = threading.Thread(target=_escape_watcher, daemon=True)
         _escape_thread.start()
-    # ─────────────────────────────────────────────────────────────────────────
 
     import time as _time
 
-    # ── State ─────────────────────────────────────────────────────────────────
     full_text = ""
     _had_error = False
     _last_spinner_update = 0.0
@@ -553,12 +530,10 @@ def _stream_assistant(
         """Erase the raw streamed text and re-render as Markdown — called once at end."""
         if not text:
             return
-        # Write a newline to exit any "pending wrap" state, then move up past all lines
         n = _terminal_lines(text) + 1  # +1 for the \n we're about to write
         sys.stdout.write(f"\n\x1b[{n}A\r\x1b[J")
         sys.stdout.flush()
         console.print(Markdown(text))
-    # ── Spinner (Rich Live — transient, auto_refresh for animation) ───────────
 
     _SPIN_COLORS = ["bold cyan", "bold blue", "bold magenta", "bold green", "bold yellow"]
     _spin_state = {"idx": 0, "label": "Thinking...", "active": False, "stop": threading.Event()}
@@ -716,7 +691,6 @@ def _stream_assistant(
                             else:
                                 console.print(f"[dim]{diff_line}[/dim]")
 
-                    # Determine whether to prompt or auto-decide.
                     ask = _should_ask(tool_name, effective_mode, always_approved)
 
                     if tool_name in always_rejected:
@@ -728,8 +702,6 @@ def _stream_assistant(
                         feedback = ""
                         console.print("[dim]  Auto-accepted[/dim]")
                     else:
-                        # Pause escape watcher so it restores normal terminal settings
-                        # before InquirerPy runs — prevents CPR warnings and ^[[ garbage.
                         _prompt_active.set()
                         import time as _pt; _pt.sleep(0.06)  # let watcher restore settings
 
@@ -789,14 +761,12 @@ def _stream_assistant(
                     except Exception:
                         pass  # best-effort; the backend will timeout after 120s
 
-                    # Restart spinner while the backend continues processing.
                     _start_live_spinner("Thinking...")
                 continue
             if isinstance(token, str) and token.startswith("[ERROR]"):
                 _stop_live()
                 console.print(f"\n[red]✗[/red] {token[7:].strip()}")
                 break
-            # Content token — write directly to terminal as it arrives
             if not _streaming_text:
                 _stop_live()          # stop spinner, transient=True erases it cleanly
                 _streaming_text = True
@@ -872,14 +842,12 @@ def _print_history(messages: list, assistant_name: str) -> None:
     console.print()
 
 
-# ─── @ reference resolution ───────────────────────────────────────────────────
 
 _AT_URL_RE  = re.compile(r'@(https?://[^\s]+)')
 _AT_GLOB_RE = re.compile(r'@@([^\s]+)')
 _AT_DIR_RE  = re.compile(r'@([^\s@]+/)')
 _AT_FILE_RE = re.compile(r'@([^\s@]+\.[^\s@/]*)')  # path (abs or rel) ending with .extension
 
-# Extensions treated as local binary documents (inject context, don't read as text)
 _LOCAL_DOC_EXTS = {".xlsx", ".xls", ".docx", ".doc", ".csv", ".pdf"}
 
 _URL_CAP        = 3_000
@@ -941,7 +909,6 @@ def _expand_glob(pattern: str) -> tuple[str, str | None]:
     matched = sorted(_glob.glob(str(base / pattern), recursive=True))
     if not matched:
         return "", f"@@{pattern} matched no files"
-    # Make paths relative to the workspace for readability
     rel_paths = []
     for p in matched:
         try:
@@ -965,7 +932,6 @@ def _expand_dir(directory: str) -> tuple[str, str | None]:
     file_count = 0
 
     for root, dirs, files in os.walk(dir_path):
-        # Prune directories we should skip
         dirs[:] = [d for d in dirs if d not in _SKIP_DIRS]
         for fname in sorted(files):
             fpath = Path(root) / fname
@@ -1012,7 +978,6 @@ def _expand_file(filepath: str) -> tuple[str, str | None]:
 
     ext = fpath.suffix.lower()
     if ext in _LOCAL_DOC_EXTS:
-        # Binary document — tell the AI where it lives so it can use file tools
         block = (
             f"[Local file on disk: {fpath} (name: {fpath.name})]\n"
             f"This is a local binary document. Do NOT try to read its raw content.\n"
@@ -1055,29 +1020,22 @@ def _resolve_at_references(text: str) -> tuple[str, list[str]]:
             return match_obj.group(0)  # leave original token unchanged
         return content
 
-    # Process in specificity order: URL → glob (@@) → directory → file.
-    # Each pass operates on the already-substituted text so overlapping
-    # patterns don't re-process expanded blocks.
 
-    # 1. URLs — @http:// or @https://
     text = _AT_URL_RE.sub(
         lambda m: _replace(m, lambda u: _expand_url(u), m.group(0)),
         text,
     )
 
-    # 2. Glob — @@pattern (must run before single-@ patterns)
     text = _AT_GLOB_RE.sub(
         lambda m: _replace(m, lambda p: _expand_glob(p), m.group(0)),
         text,
     )
 
-    # 3. Directory — @path/ending/with/slash/
     text = _AT_DIR_RE.sub(
         lambda m: _replace(m, lambda d: _expand_dir(d), m.group(0)),
         text,
     )
 
-    # 4. File — @path/with/extension.ext
     text = _AT_FILE_RE.sub(
         lambda m: _replace(m, lambda f: _expand_file(f), m.group(0)),
         text,
@@ -1086,7 +1044,6 @@ def _resolve_at_references(text: str) -> tuple[str, list[str]]:
     return text, warnings
 
 
-# ─── Main command ──────────────────────────────────────────────────────────────
 
 @app.command("listen")
 def listen(
@@ -1114,7 +1071,6 @@ def listen(
     config = load_config()
     assistant_name = config.profile.assistant_name
 
-    # ── resolve conversation ──────────────────────────────────────────────────
     if conv_id:
         result = _get(f"/conversation/{conv_id}")
         conversation = result.get("data", result)
@@ -1132,7 +1088,6 @@ def listen(
     CHUNK = int(SAMPLE_RATE * 0.1)  # 100ms chunks
     silence_chunks_needed = int(silence / 0.1)
 
-    # WebRTC VAD for human voice detection (optional)
     _vad = None
     try:
         import webrtcvad as _webrtcvad
@@ -1156,7 +1111,6 @@ def listen(
     def _is_voice(chunk_float: "np.ndarray") -> bool:
         """True if chunk contains human voice (falls back to RMS if VAD unavailable)."""
         rms = float(np.sqrt(np.mean(chunk_float ** 2)))
-        # Pre-filter: must have minimum energy regardless of VAD
         if rms <= threshold:
             return False
         if _vad is None:
@@ -1202,7 +1156,6 @@ def listen(
                     if not started:
                         pre_buffer.append(chunk.copy())
                         if voice_streak >= _VOICE_STREAK_NEEDED:
-                            # Confirmed speech: flush pre-buffer into recording
                             started = True
                             audio_chunks.extend(pre_buffer)
                             pre_buffer.clear()
@@ -1211,13 +1164,11 @@ def listen(
                 else:
                     voice_streak = 0
                     if not started:
-                        # Discard pre-buffer older than the streak window
                         pre_buffer = pre_buffer[-(  _VOICE_STREAK_NEEDED - 1):]
                     elif started:
                         silence_count += 1
                         audio_chunks.append(chunk.copy())
 
-                # Real-time level bar
                 bar = _level_bar(rms, started)
                 print(f"\r{' ' * 50}\r", end="", flush=True)
                 console.print(bar + "  ", end="\r")
@@ -1265,7 +1216,6 @@ def listen(
             console.print(f"\n[red]✗[/red] API error {e.response.status_code}: {e.response.text}")
         return "(no reply)", None
 
-    # ── main loop ────────────────────────────────────────────────────────────
     while True:
         try:
             console.print("[dim]🎙  Ready — speak whenever you like...[/dim]")
@@ -1375,7 +1325,6 @@ def agent(
         console.print("[red]✗[/red] Not initialized. Run [bold cyan]gillie init[/bold cyan] first.")
         raise typer.Exit(1)
 
-    # --yolo is a backward-compatible alias for --mode yolo.
     initial_mode = _Mode.YOLO if yolo else mode_flag
     if initial_mode not in _MODES_CYCLE:
         console.print(
@@ -1384,7 +1333,6 @@ def agent(
         )
         raise typer.Exit(1)
 
-    # Apply --workspace flag for this session
     if workspace:
         ws_path = Path(workspace).resolve()
         if not ws_path.is_dir():
@@ -1392,13 +1340,11 @@ def agent(
             raise typer.Exit(1)
         os.environ["GILLIE_WORKSPACE"] = str(ws_path)
 
-    # --resume is an alias for --id
     effective_conv_id = conv_id or resume
 
     config = _get_config()
     assistant_name = config.profile.assistant_name
 
-    # ── resolve conversation ──────────────────────────────────────────────────
     if effective_conv_id:
         result = _get(f"/conversation/{effective_conv_id}")
         conversation = result.get("data", result)
@@ -1416,42 +1362,32 @@ def agent(
         console.print("[red]✗[/red] Could not retrieve conversation ID.")
         raise typer.Exit(1)
 
-    # Mutable mode container — allows /mode command to update it in-place.
     mode = [initial_mode]
 
-    # Per-session tool approval overrides.
     always_approved: set = set()
     always_rejected: set = set()
 
-    # Files uploaded during this conversation session.
     session_files: list = []
-    # Local files accessed or modified by AI tools during this session.
     session_local_files: list = []
 
-    # ── Load agent.md workspace context ──────────────────────────────────────
     ws = _workspace()
     agent_md_content = _load_agent_md(ws)
 
     _print_header(assistant_name, current_id, mode[0], agent_md=agent_md_content is not None)
 
-    # Show workspace contents if available
     if ws.exists():
         _print_workspace_summary(ws)
 
-    # Show recent history if resuming
     messages = conversation.get("messages", [])
     if messages:
         _maybe_auto_compact(current_id, messages)
         _print_history(messages, assistant_name)
 
-    # Track whether agent.md has been injected into this session already
     _agent_md_injected = bool(messages)  # if resuming, skip re-injection
 
-    # ── REPL ─────────────────────────────────────────────────────────────────
     console.print(f"[dim]Type your message and press Enter. /exit to quit.[/dim]")
     console.print()
 
-    # Build prompt_toolkit session with @ file completer
     _pt_session = None
     if _PT_AVAILABLE:
         _KNOWN_SLASH_CMDS = {
@@ -1493,13 +1429,11 @@ def agent(
 
             def get_completions(self, document, complete_event):
                 text = document.text_before_cursor
-                # Slash command completion
                 if text.startswith("/"):
                     for cmd in self._SLASH_CMDS:
                         if cmd.startswith(text):
                             yield Completion(cmd[len(text):], display=cmd)
                     return
-                # @ reference completion
                 at_match = re.search(r'@@?([^\s@]*)$', text)
                 if not at_match:
                     return
@@ -1508,7 +1442,6 @@ def agent(
                 is_glob = prefix.startswith("@@")
                 base = _workspace()
                 search_path = base / typed
-                # If typed ends with partial filename, search in parent dir
                 if not search_path.is_dir():
                     parent = search_path.parent
                     stub   = search_path.name
@@ -1560,7 +1493,6 @@ def agent(
             import time as _t
             now = _t.time()
             if now - _last_ctrl_c < 2.0:
-                # Second Ctrl+C within 2s → exit
                 _print_session_cost()
                 console.print("\n[dim]Goodbye 👋[/dim]")
                 break
@@ -1575,7 +1507,6 @@ def agent(
         if not user_input:
             continue
 
-        # ── in-chat commands ────────────────────────────────────────────────
         cmd = user_input.lower()
 
         if cmd in ("/exit", "/quit", "/q"):
@@ -1731,14 +1662,12 @@ def agent(
                         f"Modes: {' | '.join(_MODES_CYCLE)}[/dim]"
                     )
             else:
-                # Cycle to the next mode.
                 current_idx = _MODES_CYCLE.index(mode[0]) if mode[0] in _MODES_CYCLE else 1
                 mode[0] = _MODES_CYCLE[(current_idx + 1) % len(_MODES_CYCLE)]
                 console.print(f"[green]✓[/green] Mode: [bold]{mode[0]}[/bold]")
             console.print()
             continue
 
-        # ── expand @ references ──────────────────────────────────────────
         expanded, ref_warnings = _resolve_at_references(user_input)
         for w in ref_warnings:
             console.print(f"[yellow]Warning:[/yellow] {w}")
@@ -1752,7 +1681,6 @@ def agent(
                 )
         user_input = expanded
 
-        # ── inject agent.md on first message of the session ──────────────
         if not _agent_md_injected and agent_md_content:
             user_input = (
                 f"<workspace_context>\n{agent_md_content}\n</workspace_context>\n\n"
@@ -1760,7 +1688,6 @@ def agent(
             )
             _agent_md_injected = True
 
-        # ── send message (streaming) ─────────────────────────────────────
         _print_user(user_input)
         _stream_assistant(
             current_id,
@@ -1773,7 +1700,6 @@ def agent(
             session_local_files=session_local_files,
         )
 
-    # ── Cleanup on exit: close browser sessions to avoid orphan processes ────
     try:
         requests.post(
             _base_url() + "/browser/close",

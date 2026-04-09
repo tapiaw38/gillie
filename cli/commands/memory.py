@@ -109,7 +109,6 @@ def _api_delete(path: str):
         raise typer.Exit(1)
 
 
-# ─── FAQs commands ────────────────────────────────────────────────────────────
 
 @faqs_app.command("list")
 def faqs_list():
@@ -174,7 +173,6 @@ def faqs_delete(faq_id: str = typer.Argument(..., help="FAQ ID to delete")):
         console.print(f"[red]✗[/red] FAQ [bold]{faq_id}[/bold] not found.")
 
 
-# ─── Skills commands ──────────────────────────────────────────────────────────
 
 @skills_app.command("list")
 def skills_list():
@@ -248,7 +246,6 @@ def skills_edit(name: str = typer.Argument(..., help="Skill name (without .skill
     action = "updated" if current_content else "created"
     console.print(f"[green]✓[/green] {name}.skill.md {action}.")
 
-    # If new skill, remind user to reference it in memory.md
     if not current_content:
         console.print(
             f"[dim]Tip: add [bold]ver {name}.skill.md[/bold] in memory.md to include it in the AI context.[/dim]"
@@ -285,7 +282,6 @@ def skills_delete(
     skill_path.unlink()
     console.print(f"[green]✓[/green] {name}.skill.md deleted.")
 
-    # Remove reference from memory.md if present
     memory_path = MEMORY_DIR / "memory.md"
     if memory_path.exists():
         content = memory_path.read_text(encoding="utf-8")
@@ -318,7 +314,6 @@ def skills_rename(
     old_path.rename(new_path)
     console.print(f"[green]✓[/green] Renamed [bold]{old_name}.skill.md[/bold] → [bold]{new_name}.skill.md[/bold]")
 
-    # Update references in memory.md
     memory_path = MEMORY_DIR / "memory.md"
     if memory_path.exists():
         content = memory_path.read_text(encoding="utf-8")
@@ -330,7 +325,6 @@ def skills_rename(
             console.print(f"[green]✓[/green] Updated reference in memory.md")
 
 
-# ─── Extract command ──────────────────────────────────────────────────────────
 
 @app.command("extract")
 def extract():
@@ -348,7 +342,6 @@ def extract():
         console.print(f"[dim]general.skill.md has been updated.[/dim]")
 
 
-# ─── Show / Edit memory.md ────────────────────────────────────────────────────
 
 @app.command("show")
 def show():
@@ -365,7 +358,6 @@ def show():
 
     console.print(Panel(content, title="[bold cyan]memory.md[/bold cyan]", border_style="cyan"))
 
-    # List skills referenced in memory.md
     import re
     refs = re.findall(r"^ver\s+([\w\-]+)\.skill\.md\s*$", content, re.MULTILINE)
     if refs:
@@ -386,7 +378,6 @@ def edit():
     """Open memory.md in $EDITOR (or nano) for interactive editing."""
     _require_config()
 
-    # Fetch current content
     result = _api_get("/api/v1/memory/root")
     current_content = result.get("content", "")
 

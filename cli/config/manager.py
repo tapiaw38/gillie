@@ -33,7 +33,6 @@ SOUL_FILE = CONFIG_DIR / "soul.json"
 CONFIG_FILE = CONFIG_DIR / "config.json"
 
 
-# ── Path helpers ─────────────────────────────────────────────────────────────
 
 def get_config_path() -> Path:
     """Return the technical config path (env override or default)."""
@@ -48,7 +47,6 @@ def get_soul_path() -> Path:
     return SOUL_FILE
 
 
-# ── Existence checks ─────────────────────────────────────────────────────────
 
 def soul_exists() -> bool:
     """Return True if soul.json has been created."""
@@ -60,7 +58,6 @@ def config_exists() -> bool:
     return soul_exists() and get_config_path().exists()
 
 
-# ── Serialization helpers ─────────────────────────────────────────────────────
 
 def _build_services(services_data: dict) -> ServicesConfig:
     return ServicesConfig(
@@ -81,7 +78,6 @@ def _build_services(services_data: dict) -> ServicesConfig:
     )
 
 
-# ── Soul I/O ─────────────────────────────────────────────────────────────────
 
 def load_soul() -> SoulConfig:
     """Load soul.json (user_id + profile)."""
@@ -108,7 +104,6 @@ def save_soul(soul: SoulConfig) -> None:
         json.dump(asdict(soul), f, indent=2)
 
 
-# ── Config I/O ────────────────────────────────────────────────────────────────
 
 def load_config() -> AssistantConfig:
     """
@@ -160,7 +155,6 @@ def save_config(config: AssistantConfig) -> None:
         json.dump(technical, f, indent=2)
 
 
-# ── Shortcuts ─────────────────────────────────────────────────────────────────
 
 def get_user_id() -> Optional[str]:
     """Return the configured user_id, or None if not initialised."""

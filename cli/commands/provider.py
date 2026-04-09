@@ -120,7 +120,6 @@ def provider_use(
         console.print("[red]Not initialized.[/red] Run [bold cyan]gillie init[/bold cyan] first.")
         raise typer.Exit(1)
 
-    # Interactive provider selection when no argument given
     if provider is None:
         from pathlib import Path as _Path
         _cfg = load_config()
@@ -174,12 +173,9 @@ def provider_use(
     preset = all_providers[provider]
 
     if preset.get("auth_type") == "none":
-        # Local providers (e.g. Ollama) don't require an API key.
         resolved_key = "ollama"
         console.print("[dim]No API key required for local provider.[/dim]")
     elif preset.get("auth_type") == "bearer":
-        # Bearer providers use a local OAuth token instead of an API key.
-        # Read it from ~/.claude/.credentials.json (Claude Code session).
         import json
         from pathlib import Path
         creds_path = Path.home() / ".claude" / ".credentials.json"
@@ -205,7 +201,6 @@ def provider_use(
     elif api_key:
         resolved_key = api_key
     else:
-        # Check if this provider already has a key saved in the current config
         try:
             cfg
         except NameError:
@@ -241,7 +236,6 @@ def provider_use(
         console.print("[red]API key cannot be empty.[/red]")
         raise typer.Exit(1)
 
-    # cfg may already be loaded above; reload only if needed
     try:
         cfg
     except NameError:
@@ -314,7 +308,6 @@ def provider_status():
     console.print()
 
 
-# ── Vision subcommands ────────────────────────────────────────────────────────
 
 @vision_app.command("set")
 def vision_set(
@@ -332,7 +325,6 @@ def vision_set(
         console.print("[red]Not initialized.[/red] Run [bold cyan]gillie init[/bold cyan] first.")
         raise typer.Exit(1)
 
-    # Interactive preset selection when no provider given and no manual overrides
     if provider is None and not base_url and not model:
         _vcfg = load_config()
         _current_vurl = _vcfg.services.vision.base_url or ""

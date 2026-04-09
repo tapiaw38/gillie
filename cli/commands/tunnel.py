@@ -48,7 +48,6 @@ def set_tunnel(
     if local_port is not None:
         t.local_port = local_port
 
-    # Interactive prompts for missing required fields
     if not t.host:
         t.host = typer.prompt("VPS IP or hostname")
     if not t.user:
