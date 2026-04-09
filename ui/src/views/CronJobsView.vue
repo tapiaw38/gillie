@@ -2,6 +2,8 @@
 import { ref, reactive, computed, onMounted } from 'vue'
 import { useToast } from 'primevue/usetoast'
 import { useI18n } from 'vue-i18n'
+import { useCronJobs } from '@/composables/useCronJobs'
+import type { CronJob as Job, CronJobInput as JobInput, CronJobRunResult as RunResult } from '@/types/cronJobs'
 import Button from 'primevue/button'
 import InputText from 'primevue/inputtext'
 import Textarea from 'primevue/textarea'
@@ -12,80 +14,19 @@ import Dialog from 'primevue/dialog'
 import Tag from 'primevue/tag'
 import Message from 'primevue/message'
 
-// ─── Types ────────────────────────────────────────────────────────────────────
-
-interface Job {
-  id: string
-  profile_id: string
-  name: string
-  description: string
-  cron_expr: string
-  source_type: string
-  source_params: Record<string, string>
-  destination_type: string
-  destination_params: Record<string, string>
-  message_template: string
-  enabled: boolean
-  status: string
-  last_run_at: string | null
-  last_result: string | null
-  created_at: string
-  updated_at: string
-}
-
-interface JobInput {
-  name: string
-  description: string
-  cron_expr: string
-  source_type: string
-  source_params: Record<string, string>
-  destination_type: string
-  destination_params: Record<string, string>
-  message_template: string
-  enabled: boolean
-}
-
-interface RunResult {
-  status: string
-  result: string
-}
-
-// ─── API helpers ──────────────────────────────────────────────────────────────
-
-const baseUrl = computed(() =>
-  ((import.meta.env.VITE_ASSISTANT_BASE_URL as string) || 'http://localhost:8000').replace(
-    /\/$/,
-    '',
-  ),
-)
-
-const apiHeaders = computed<Record<string, string>>(() => {
-  const headers: Record<string, string> = { 'Content-Type': 'application/json' }
-  const apiKey = import.meta.env.VITE_ASSISTANT_API_KEY as string | undefined
-  if (apiKey) headers['x-api-key'] = apiKey
-  return headers
-})
-
-async function apiFetch<T>(path: string, init: RequestInit = {}): Promise<T> {
-  const res = await fetch(`${baseUrl.value}${path}`, {
-    ...init,
-    headers: { ...apiHeaders.value, ...(init.headers as Record<string, string> | undefined) },
-  })
-  if (!res.ok) {
-    const text = await res.text().catch(() => res.statusText)
-    throw new Error(text || `HTTP ${res.status}`)
-  }
-  if (res.status === 204) return undefined as T
-  return res.json() as Promise<T>
-}
-
 // ─── State ────────────────────────────────────────────────────────────────────
 
 const { t } = useI18n()
 const toast = useToast()
-const jobs = ref<Job[]>([])
-const loading = ref(false)
-const submitting = ref(false)
+const {
+  jobs,
+  isLoading: loading,
+  isSubmitting: submitting,
+  loadJobs: loadCronJobs,
+  createJob: saveJob,
+  deleteJob: removeJob,
+  runJob: executeJob,
+} = useCronJobs()
 const runningJobId = ref<string | null>(null)
 const deletingJobId = ref<string | null>(null)
 const showCreateForm = ref(false)
@@ -187,10 +128,8 @@ const destinationParamPlaceholder = computed(() => {
 // ─── API actions ──────────────────────────────────────────────────────────────
 
 const loadJobs = async () => {
-  loading.value = true
   try {
-    const res = await apiFetch<{ data: Job[] }>('/api/v1/jobs')
-    jobs.value = res.data ?? []
+    await loadCronJobs()
   } catch (err) {
     toast.add({
       severity: 'error',
@@ -198,8 +137,6 @@ const loadJobs = async () => {
       detail: err instanceof Error ? err.message : t('common.unknownError'),
       life: 4000,
     })
-  } finally {
-    loading.value = false
   }
 }
 
@@ -243,12 +180,8 @@ const createJob = async () => {
     return
   }
 
-  submitting.value = true
   try {
-    await apiFetch<{ data: Job }>('/api/v1/jobs', {
-      method: 'POST',
-      body: JSON.stringify(form),
-    })
+    await saveJob(form)
     toast.add({ severity: 'success', summary: t('cronJobs.taskCreated'), life: 3000 })
     resetForm()
     showCreateForm.value = false
@@ -260,8 +193,6 @@ const createJob = async () => {
       detail: err instanceof Error ? err.message : t('common.unknownError'),
       life: 4000,
     })
-  } finally {
-    submitting.value = false
   }
 }
 
@@ -275,9 +206,8 @@ const deleteJob = async () => {
   deletingJobId.value = jobToDelete.value.id
   showDeleteConfirm.value = false
   try {
-    await apiFetch(`/api/v1/jobs/${jobToDelete.value.id}`, { method: 'DELETE' })
+    await removeJob(jobToDelete.value.id)
     toast.add({ severity: 'success', summary: t('cronJobs.taskDeleted'), life: 3000 })
-    jobs.value = jobs.value.filter((j) => j.id !== jobToDelete.value!.id)
   } catch (err) {
     toast.add({
       severity: 'error',
@@ -294,7 +224,7 @@ const deleteJob = async () => {
 const runJob = async (job: Job) => {
   runningJobId.value = job.id
   try {
-    const res = await apiFetch<RunResult>(`/api/v1/jobs/${job.id}/run`, { method: 'POST' })
+    const res = await executeJob(job.id)
     lastRunResult.value = res
     showRunResult.value = true
     await loadJobs()

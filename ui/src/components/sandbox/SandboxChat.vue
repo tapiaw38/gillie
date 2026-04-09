@@ -8,8 +8,7 @@ import Textarea from 'primevue/textarea'
 import { useToast } from 'primevue/usetoast'
 import Toast from 'primevue/toast'
 import { useI18n } from 'vue-i18n'
-
-// ── Types ─────────────────────────────────────────────────────────────────────
+import { useSandboxTransport } from '@/composables/useSandboxTransport'
 
 interface ToolCallEvent {
   name: string
@@ -33,8 +32,6 @@ interface ApprovalRequest {
   diff: string
 }
 
-// ── Props & Emits ─────────────────────────────────────────────────────────────
-
 interface HistoricalMessage {
   id: string
   content: string
@@ -57,10 +54,9 @@ interface Emits {
 const props = defineProps<Props>()
 const emit = defineEmits<Emits>()
 
-// ── State ─────────────────────────────────────────────────────────────────────
-
 const toast = useToast()
 const { t } = useI18n()
+const { streamSandboxMessage, approveToolRequest } = useSandboxTransport()
 const messages = ref<ChatMessage[]>([])
 const inputText = ref('')
 const isStreaming = ref(false)
@@ -74,20 +70,13 @@ const approvalVisible = ref(false)
 const approvalFeedback = ref('')
 const approvalLoading = ref(false)
 
-// Workspace state
 const currentWorkspace = ref('')
 
-// Autocomplete state
 const autocompleteVisible = ref(false)
 const autocompleteItems = ref<{ label: string; value: string; hint?: string }[]>([])
 const autocompleteIndex = ref(0)
-// Position in inputText where the current @ or / token starts (for replacement on select)
 const tokenStart = ref(0)
-const tokenIsAt = ref(false) // true = @ token, false = / command
-
-// ── Constants ─────────────────────────────────────────────────────────────────
-
-const BASE_URL = import.meta.env.VITE_API_URL ?? 'http://localhost:8000'
+const tokenIsAt = ref(false)
 
 const SLASH_COMMANDS = [
   { label: '/new', value: '/new', hint: 'Start a new conversation' },
@@ -134,8 +123,6 @@ const renderMarkdown = (content: string): string => {
     ADD_ATTR: ['class', 'target', 'rel'],
   })
 }
-
-// ── Computed ──────────────────────────────────────────────────────────────────
 
 const canSend = computed(
   () => inputText.value.trim().length > 0 && !isStreaming.value && props.conversationId !== null,
@@ -401,22 +388,12 @@ const sendMessage = async () => {
   const assistantMsg = messages.value.find((m) => m.id === assistantId)!
 
   try {
-    const headers: Record<string, string> = {
-      'Content-Type': 'application/json',
-      'x-api-key': props.apiKey,
-    }
-    if (currentWorkspace.value) {
-      headers['X-Gillie-Workspace'] = currentWorkspace.value
-    }
-
-    const response = await fetch(
-      `${BASE_URL}/conversation/${props.conversationId}/message/stream`,
-      {
-        method: 'POST',
-        headers,
-        body: JSON.stringify({ content }),
-        signal: streamAbortController.value.signal,
-      },
+    const response = await streamSandboxMessage(
+      props.conversationId!,
+      content,
+      props.apiKey,
+      currentWorkspace.value || undefined,
+      streamAbortController.value.signal,
     )
 
     if (!response.ok) {
@@ -503,7 +480,12 @@ const processStreamEvent = async (msg: ChatMessage, payload: unknown) => {
     }
     if (payload.startsWith('[ERROR]')) {
       const errText = payload.slice(7).trim()
-      toast.add({ severity: 'error', summary: t('sandbox.errorStream'), detail: errText, life: 5000 })
+      toast.add({
+        severity: 'error',
+        summary: t('sandbox.errorStream'),
+        detail: errText,
+        life: 5000,
+      })
       msg.content += `\n\n*Error: ${errText}*`
       return
     }
@@ -577,18 +559,12 @@ const handleApproval = async (approved: boolean) => {
   approvalLoading.value = true
 
   try {
-    await fetch(`${BASE_URL}/conversation/tool/approve`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'x-api-key': props.apiKey,
-      },
-      body: JSON.stringify({
-        request_id: pendingApproval.value.request_id,
-        approved,
-        feedback: approvalFeedback.value,
-      }),
-    })
+    await approveToolRequest(
+      pendingApproval.value.request_id,
+      approved,
+      props.apiKey,
+      approvalFeedback.value,
+    )
   } catch {
     toast.add({
       severity: 'error',
@@ -1077,7 +1053,9 @@ watch(
         </div>
 
         <div class="approval-feedback">
-          <label class="approval-feedback-label">{{ t('sandbox.approvalFeedbackPlaceholder') }}</label>
+          <label class="approval-feedback-label">{{
+            t('sandbox.approvalFeedbackPlaceholder')
+          }}</label>
           <Textarea
             v-model="approvalFeedback"
             :placeholder="t('sandbox.approvalFeedbackPlaceholder')"

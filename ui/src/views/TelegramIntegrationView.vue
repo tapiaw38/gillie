@@ -2,6 +2,7 @@
 import type { IntegrationParams, TelegramIntegrationConfig } from '@/types/assistant'
 import { onMounted, reactive, computed, watch, ref } from 'vue'
 import { useAssistant } from '@/composables/useAssistant'
+import { useTelegram } from '@/composables/useTelegram'
 import { useErrorToast } from '@/composables/useErrorToast'
 import { useI18n } from 'vue-i18n'
 import Toast from 'primevue/toast'
@@ -22,6 +23,7 @@ const {
 } = useAssistant()
 
 const { t } = useI18n()
+const { registerWebhook: registerTelegramWebhook, isRegisteringWebhook } = useTelegram()
 
 const errorWatchers = [
   { flag: isAddIntegrationError, summary: t('systemCommands.errorSaveConfig'), detail: addIntegrationError },
@@ -86,7 +88,6 @@ const currentIntegration = computed(() =>
 )
 
 const publicUrl = ref('')
-const isRegisteringWebhook = ref(false)
 const webhookStatus = ref<'idle' | 'success' | 'error'>('idle')
 const webhookStatusMessage = ref('')
 
@@ -99,36 +100,28 @@ const apiBase = computed(() => {
 
 const webhookUrl = computed(() => `${apiBase.value}/api/telegram/webhook`)
 
-const setWebhookUrl = computed(() => `${API_BASE}/api/telegram/set-webhook`)
-
 const registerWebhook = async () => {
   if (!publicUrl.value.trim()) {
     webhookStatus.value = 'error'
     webhookStatusMessage.value = t('integrations.telegram.enterPublicUrl')
     return
   }
-  isRegisteringWebhook.value = true
   webhookStatus.value = 'idle'
   try {
-    const res = await fetch(setWebhookUrl.value, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ webhook_url: webhookUrl.value }),
-    })
-    if (res.ok) {
-      webhookStatus.value = 'success'
-      webhookStatusMessage.value = `${t('integrations.telegram.webhookRegistered')}: ${webhookUrl.value}`
-    } else {
-      const err = await res.json().catch(() => ({}))
-      webhookStatus.value = 'error'
-      webhookStatusMessage.value = err.error || `Error ${res.status}`
-    }
-  } catch (e: any) {
+    const result = await registerTelegramWebhook(webhookUrl.value)
+    webhookStatus.value = 'success'
+    webhookStatusMessage.value =
+      result.message ||
+      `${t('integrations.telegram.webhookRegistered')}: ${webhookUrl.value}`
+  } catch (e: unknown) {
     webhookStatus.value = 'error'
-    webhookStatusMessage.value = e.message || 'Error de conexión'
-  } finally {
-    isRegisteringWebhook.value = false
+    webhookStatusMessage.value =
+      e instanceof Error ? e.message : t('common.unknownError')
   }
+}
+
+const copyWebhookUrl = async () => {
+  await navigator.clipboard.writeText(webhookUrl.value)
 }
 
 onMounted(async () => {
@@ -272,7 +265,7 @@ onMounted(async () => {
                 class="copy-btn"
                 type="button"
                 :title="t('integrations.copyUrl')"
-                @click="navigator.clipboard.writeText(webhookUrl)"
+                @click="copyWebhookUrl"
               >
                 <i class="pi pi-copy"></i>
               </button>
