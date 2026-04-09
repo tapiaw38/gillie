@@ -9,8 +9,6 @@ import { useErrorToast } from '@/composables/useErrorToast'
 import { useI18n } from 'vue-i18n'
 import Toast from 'primevue/toast'
 import Button from 'primevue/button'
-import Card from 'primevue/card'
-import Message from 'primevue/message'
 import InputSwitch from 'primevue/inputswitch'
 import InputText from 'primevue/inputtext'
 import Password from 'primevue/password'
@@ -36,14 +34,14 @@ const {
   checkStatus,
   disconnect,
   isConnected,
-  isLoading,
+  isSaveCredentialsPending: isLoading,
   savedClientId,
   savedRedirectUri,
   hasSecret,
   isSaveCredentialsError,
   saveCredentialsError,
-  isGetAuthUrlError,
-  getAuthUrlError,
+  isGetAuthorizationUrlError: isGetAuthUrlError,
+  getAuthorizationUrlError: getAuthUrlError,
   isCheckStatusError,
   checkStatusError,
 } = useCalendar()
@@ -268,7 +266,6 @@ onMounted(async () => {
 
 <template>
   <div class="integration-container">
-
     <!-- Unified header row -->
     <div class="page-header">
       <div class="header-left">
@@ -282,7 +279,9 @@ onMounted(async () => {
       </div>
       <div class="header-toggle">
         <span class="toggle-status" :class="{ active: calendarIntegration.activated }">
-          {{ calendarIntegration.activated ? t('integrations.active') : t('integrations.inactive') }}
+          {{
+            calendarIntegration.activated ? t('integrations.active') : t('integrations.inactive')
+          }}
         </span>
         <InputSwitch v-model="calendarIntegration.activated" />
       </div>
@@ -301,7 +300,8 @@ onMounted(async () => {
       <div class="panel-body">
         <div v-if="savedClientId && !credentialsSaved" class="credentials-saved-notice">
           <i class="pi pi-check-circle"></i>
-          {{ t('integrations.googleCalendar.credentialsSaved') }} <strong>{{ savedClientId }}</strong>
+          {{ t('integrations.googleCalendar.credentialsSaved') }}
+          <strong>{{ savedClientId }}</strong>
         </div>
 
         <div class="field-group">
@@ -337,7 +337,9 @@ onMounted(async () => {
           </label>
           <InputText
             v-model="credentials.redirectUri"
-            :placeholder="savedRedirectUri || 'http://localhost:8000/api/v1/calendar/oauth/callback'"
+            :placeholder="
+              savedRedirectUri || 'http://localhost:8000/api/v1/calendar/oauth/callback'
+            "
             class="w-full"
           />
         </div>
@@ -352,7 +354,9 @@ onMounted(async () => {
             icon="pi pi-save"
             severity="primary"
             :loading="isLoading"
-            :disabled="(!credentials.clientId && !savedClientId) || (!credentials.clientSecret && !hasSecret)"
+            :disabled="
+              (!credentials.clientId && !savedClientId) || (!credentials.clientSecret && !hasSecret)
+            "
             @click="handleSaveCredentials"
           />
         </div>
@@ -365,7 +369,9 @@ onMounted(async () => {
         <span class="step-badge">2</span>
         <div>
           <p class="panel-title">{{ t('integrations.googleCalendar.connectAccount') }}</p>
-          <p class="panel-subtitle">{{ t('integrations.googleCalendar.connectAccountSubtitle') }}</p>
+          <p class="panel-subtitle">
+            {{ t('integrations.googleCalendar.connectAccountSubtitle') }}
+          </p>
         </div>
       </div>
 
@@ -389,7 +395,9 @@ onMounted(async () => {
             <i class="pi pi-times-circle"></i>
           </div>
           <div class="connection-state-text">
-            <p class="connection-state-title">{{ t('integrations.googleCalendar.notConnected') }}</p>
+            <p class="connection-state-title">
+              {{ t('integrations.googleCalendar.notConnected') }}
+            </p>
             <p class="connection-state-subtitle">
               {{ t('integrations.googleCalendar.notConnectedDesc') }}
             </p>
@@ -482,7 +490,6 @@ onMounted(async () => {
 </template>
 
 <style scoped>
-/* ── Layout ─────────────────────────────────────────────── */
 .integration-container {
   max-width: 860px;
   margin: 0 auto;
@@ -494,7 +501,6 @@ onMounted(async () => {
   box-sizing: border-box;
 }
 
-/* ── Page header ─────────────────────────────────────────── */
 .page-header {
   display: flex;
   align-items: center;
@@ -566,7 +572,6 @@ onMounted(async () => {
   color: var(--color-success);
 }
 
-/* ── Panel ───────────────────────────────────────────────── */
 .panel {
   border: 1px solid var(--do-border-light);
   border-radius: 0.75rem;
@@ -633,7 +638,6 @@ onMounted(async () => {
   margin-top: 0.25rem;
 }
 
-/* ── Form fields ─────────────────────────────────────────── */
 .field-group {
   display: flex;
   flex-direction: column;
@@ -672,7 +676,6 @@ onMounted(async () => {
   width: 100%;
 }
 
-/* ── Credentials saved notice ────────────────────────────── */
 .credentials-saved-notice {
   display: flex;
   align-items: center;
@@ -698,7 +701,6 @@ onMounted(async () => {
   flex: 1;
 }
 
-/* ── Connection state ────────────────────────────────────── */
 .connection-state {
   display: flex;
   align-items: flex-start;
@@ -745,7 +747,6 @@ onMounted(async () => {
   line-height: 1.45;
 }
 
-/* ── Connection footer ───────────────────────────────────── */
 .connection-meta {
   display: flex;
   align-items: center;
@@ -774,7 +775,6 @@ onMounted(async () => {
   gap: 0.75rem;
 }
 
-/* ── Capabilities grid ───────────────────────────────────── */
 .capabilities-grid {
   display: grid;
   grid-template-columns: 1fr 1fr;
@@ -800,7 +800,6 @@ onMounted(async () => {
   flex-shrink: 0;
 }
 
-/* ── Responsive ──────────────────────────────────────────── */
 @media (max-width: 600px) {
   .integration-container {
     padding: 0.75rem;

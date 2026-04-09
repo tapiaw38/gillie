@@ -1,71 +1,49 @@
-import { ref } from 'vue'
-import services from '@/services'
-import type { CronJob, CronJobInput, CronJobRunResult } from '@/types/cronJobs'
-import { ApplicationError, getErrorMessage } from '@/types/error'
+import { inject } from 'vue'
+import { storeToRefs } from 'pinia'
+import { useCronJobsStore } from '@/stores/cronJobsStore'
+import type { ICronJobsService } from '@/services/cronJobs/cronJobsService'
 
 export const useCronJobs = () => {
-  const jobs = ref<CronJob[]>([])
-  const isLoading = ref(false)
-  const isSubmitting = ref(false)
-  const error = ref<string | null>(null)
+  const services = inject<{ cronJobsService: ICronJobsService }>('services')
+  if (!services) throw new Error('Services not provided')
 
-  const loadJobs = async () => {
-    isLoading.value = true
-    error.value = null
-    try {
-      const response = await services.cronJobsService.listJobs()
-      jobs.value = response.data ?? []
-      return response
-    } catch (err) {
-      error.value = err instanceof ApplicationError ? getErrorMessage(err) : 'Error loading jobs'
-      throw err
-    } finally {
-      isLoading.value = false
-    }
-  }
+  const store = useCronJobsStore(services.cronJobsService)
+  const cronJobsStore = store()
 
-  const createJob = async (job: CronJobInput) => {
-    isSubmitting.value = true
-    error.value = null
-    try {
-      return await services.cronJobsService.createJob(job)
-    } catch (err) {
-      error.value = err instanceof ApplicationError ? getErrorMessage(err) : 'Error creating job'
-      throw err
-    } finally {
-      isSubmitting.value = false
-    }
-  }
+  const {
+    jobs,
+    isListJobsPending,
+    isListJobsError,
+    listJobsError,
+    isCreateJobPending,
+    isCreateJobError,
+    createJobError,
+    isDeleteJobPending,
+    isDeleteJobError,
+    isRunJobPending,
+    isRunJobError,
+    runJobError,
+  } = storeToRefs(cronJobsStore)
 
-  const deleteJob = async (jobId: string) => {
-    error.value = null
-    try {
-      await services.cronJobsService.deleteJob(jobId)
-      jobs.value = jobs.value.filter((job) => job.id !== jobId)
-    } catch (err) {
-      error.value = err instanceof ApplicationError ? getErrorMessage(err) : 'Error deleting job'
-      throw err
-    }
-  }
-
-  const runJob = async (jobId: string): Promise<CronJobRunResult> => {
-    error.value = null
-    try {
-      return await services.cronJobsService.runJob(jobId)
-    } catch (err) {
-      error.value = err instanceof ApplicationError ? getErrorMessage(err) : 'Error running job'
-      throw err
-    }
-  }
+  const { listJobs, createJob, deleteJob, runJob } = cronJobsStore
 
   return {
     jobs,
-    isLoading,
-    isSubmitting,
-    error,
-    loadJobs,
+    isListJobsPending,
+    isListJobsError,
+    listJobsError,
+    isCreateJobPending,
+    isCreateJobError,
+    createJobError,
+    isDeleteJobPending,
+    isDeleteJobError,
+    isRunJobPending,
+    isRunJobError,
+    runJobError,
+    listJobs,
     createJob,
     deleteJob,
     runJob,
+    reset: cronJobsStore.$reset,
   }
 }

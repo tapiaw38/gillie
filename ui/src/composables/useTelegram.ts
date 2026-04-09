@@ -1,28 +1,25 @@
-import { ref } from 'vue'
-import services from '@/services'
-import { ApplicationError, getErrorMessage } from '@/types/error'
+import { inject } from 'vue'
+import { storeToRefs } from 'pinia'
+import { useTelegramStore } from '@/stores/telegramStore'
+import type { ITelegramService } from '@/services/telegram/telegramService'
 
 export const useTelegram = () => {
-  const isRegisteringWebhook = ref(false)
-  const registerWebhookError = ref<string | null>(null)
+  const services = inject<{ telegramService: ITelegramService }>('services')
+  if (!services) throw new Error('Services not provided')
 
-  const registerWebhook = async (webhookUrl: string) => {
-    isRegisteringWebhook.value = true
-    registerWebhookError.value = null
-    try {
-      return await services.telegramService.registerWebhook(webhookUrl)
-    } catch (err) {
-      registerWebhookError.value =
-        err instanceof ApplicationError ? getErrorMessage(err) : 'Error registering webhook'
-      throw err
-    } finally {
-      isRegisteringWebhook.value = false
-    }
-  }
+  const store = useTelegramStore(services.telegramService)
+  const telegramStore = store()
+
+  const { isRegisterWebhookPending, isRegisterWebhookError, registerWebhookError } =
+    storeToRefs(telegramStore)
+
+  const { registerWebhook } = telegramStore
 
   return {
-    isRegisteringWebhook,
+    isRegisterWebhookPending,
+    isRegisterWebhookError,
     registerWebhookError,
     registerWebhook,
+    reset: telegramStore.$reset,
   }
 }

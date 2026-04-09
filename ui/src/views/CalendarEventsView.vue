@@ -22,7 +22,7 @@ const { t } = useI18n()
 const { assistantProfile, getAssistantProfile } = useAssistant()
 const {
   events,
-  isLoading,
+  isListEventsPending: isLoading,
   listEvents,
   updateEvent,
   deleteEvent: deleteCalendarEvent,

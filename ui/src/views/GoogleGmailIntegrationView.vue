@@ -35,14 +35,14 @@ const {
   disconnect,
   isConnected,
   connectedEmail,
-  isLoading,
+  isSaveCredentialsPending: isLoading,
   savedClientId,
   savedRedirectUri,
   hasSecret,
   isSaveCredentialsError,
   saveCredentialsError,
-  isGetAuthUrlError,
-  getAuthUrlError,
+  isGetAuthorizationUrlError: isGetAuthUrlError,
+  getAuthorizationUrlError: getAuthUrlError,
   isCheckStatusError,
   checkStatusError,
 } = useGmail()
@@ -267,7 +267,6 @@ onMounted(async () => {
 
 <template>
   <div class="integration-container">
-
     <!-- Unified header row -->
     <div class="page-header">
       <div class="header-left">
@@ -351,7 +350,9 @@ onMounted(async () => {
             icon="pi pi-save"
             severity="primary"
             :loading="isLoading"
-            :disabled="(!credentials.clientId && !savedClientId) || (!credentials.clientSecret && !hasSecret)"
+            :disabled="
+              (!credentials.clientId && !savedClientId) || (!credentials.clientSecret && !hasSecret)
+            "
             @click="handleSaveCredentials"
           />
         </div>
@@ -481,7 +482,6 @@ onMounted(async () => {
 </template>
 
 <style scoped>
-/* ── Layout ─────────────────────────────────────────────── */
 .integration-container {
   max-width: 860px;
   margin: 0 auto;
@@ -493,7 +493,6 @@ onMounted(async () => {
   box-sizing: border-box;
 }
 
-/* ── Page header ─────────────────────────────────────────── */
 .page-header {
   display: flex;
   align-items: center;
@@ -565,7 +564,6 @@ onMounted(async () => {
   color: var(--color-success);
 }
 
-/* ── Panel ───────────────────────────────────────────────── */
 .panel {
   border: 1px solid var(--do-border-light);
   border-radius: 0.75rem;
@@ -632,7 +630,6 @@ onMounted(async () => {
   margin-top: 0.25rem;
 }
 
-/* ── Form fields ─────────────────────────────────────────── */
 .field-group {
   display: flex;
   flex-direction: column;
@@ -671,7 +668,6 @@ onMounted(async () => {
   width: 100%;
 }
 
-/* ── Credentials saved notice ────────────────────────────── */
 .credentials-saved-notice {
   display: flex;
   align-items: center;
@@ -697,7 +693,6 @@ onMounted(async () => {
   flex: 1;
 }
 
-/* ── Connection state ────────────────────────────────────── */
 .connection-state {
   display: flex;
   align-items: flex-start;
@@ -744,7 +739,6 @@ onMounted(async () => {
   line-height: 1.45;
 }
 
-/* ── Connection footer ───────────────────────────────────── */
 .connection-meta {
   display: flex;
   align-items: center;
@@ -773,7 +767,6 @@ onMounted(async () => {
   gap: 0.75rem;
 }
 
-/* ── Capabilities grid ───────────────────────────────────── */
 .capabilities-grid {
   display: grid;
   grid-template-columns: 1fr 1fr;
@@ -799,7 +792,6 @@ onMounted(async () => {
   flex-shrink: 0;
 }
 
-/* ── Responsive ──────────────────────────────────────────── */
 @media (max-width: 600px) {
   .integration-container {
     padding: 0.75rem;

@@ -3,7 +3,11 @@ import { ref, reactive, computed, onMounted } from 'vue'
 import { useToast } from 'primevue/usetoast'
 import { useI18n } from 'vue-i18n'
 import { useCronJobs } from '@/composables/useCronJobs'
-import type { CronJob as Job, CronJobInput as JobInput, CronJobRunResult as RunResult } from '@/types/cronJobs'
+import type {
+  CronJob as Job,
+  CronJobInput as JobInput,
+  CronJobRunResult as RunResult,
+} from '@/types/cronJobs'
 import Button from 'primevue/button'
 import InputText from 'primevue/inputtext'
 import Textarea from 'primevue/textarea'
@@ -14,15 +18,13 @@ import Dialog from 'primevue/dialog'
 import Tag from 'primevue/tag'
 import Message from 'primevue/message'
 
-// ─── State ────────────────────────────────────────────────────────────────────
-
 const { t } = useI18n()
 const toast = useToast()
 const {
   jobs,
-  isLoading: loading,
-  isSubmitting: submitting,
-  loadJobs: loadCronJobs,
+  isListJobsPending: loading,
+  isCreateJobPending: submitting,
+  listJobs: loadCronJobs,
   createJob: saveJob,
   deleteJob: removeJob,
   runJob: executeJob,
@@ -34,8 +36,6 @@ const showDeleteConfirm = ref(false)
 const jobToDelete = ref<Job | null>(null)
 const lastRunResult = ref<RunResult | null>(null)
 const showRunResult = ref(false)
-
-// ─── Dropdown options ─────────────────────────────────────────────────────────
 
 const sourceTypeOptions = computed(() => [
   { label: t('cronJobs.sourceCommand'), value: 'system_command' },
@@ -58,8 +58,6 @@ const cronExamples = computed(() => [
   { label: t('cronJobs.sunMidnight'), value: '0 0 * * 0' },
 ])
 
-// ─── Form state ───────────────────────────────────────────────────────────────
-
 const emptyForm = (): JobInput => ({
   name: '',
   description: '',
@@ -80,8 +78,6 @@ const validationErrors = reactive({
   source_params: '',
   destination_params: '',
 })
-
-// ─── Computed helpers ─────────────────────────────────────────────────────────
 
 const sourceParamKey = computed(() => {
   if (form.source_type === 'system_command') return 'command'
@@ -124,8 +120,6 @@ const destinationParamPlaceholder = computed(() => {
   if (form.destination_type === 'slack') return '#general'
   return ''
 })
-
-// ─── API actions ──────────────────────────────────────────────────────────────
 
 const loadJobs = async () => {
   try {
@@ -252,8 +246,6 @@ const applyCronExample = (value: string) => {
   form.cron_expr = value
 }
 
-// ─── Display helpers ──────────────────────────────────────────────────────────
-
 const formatDate = (iso: string | null): string => {
   if (!iso) return '—'
   return new Date(iso).toLocaleString('es-AR', {
@@ -279,8 +271,6 @@ const statusSeverity = (status: string): 'success' | 'warn' | 'danger' | 'info' 
   if (status === 'running') return 'info'
   return 'warn'
 }
-
-// ─── Lifecycle ────────────────────────────────────────────────────────────────
 
 onMounted(loadJobs)
 </script>
@@ -671,8 +661,6 @@ onMounted(loadJobs)
   box-sizing: border-box;
 }
 
-/* ─── Header ──────────────────────────────────────────────────────────────── */
-
 .header-section {
   margin-bottom: 1.5rem;
 }
@@ -724,8 +712,6 @@ onMounted(loadJobs)
   flex-shrink: 0;
 }
 
-/* ─── State panels ────────────────────────────────────────────────────────── */
-
 .panel {
   border: 1px solid var(--do-border-light);
   border-radius: 0.75rem;
@@ -766,8 +752,6 @@ onMounted(loadJobs)
   color: var(--do-text-muted);
   font-size: 0.95rem;
 }
-
-/* ─── Jobs grid ───────────────────────────────────────────────────────────── */
 
 .jobs-grid {
   display: grid;
@@ -835,8 +819,6 @@ onMounted(loadJobs)
   flex-wrap: wrap;
   justify-content: flex-end;
 }
-
-/* ─── Meta grid ───────────────────────────────────────────────────────────── */
 
 .job-meta-grid {
   display: grid;
@@ -928,16 +910,12 @@ onMounted(loadJobs)
   -webkit-box-orient: vertical;
 }
 
-/* ─── Job actions ─────────────────────────────────────────────────────────── */
-
 .job-actions {
   display: flex;
   gap: 0.5rem;
   padding-top: 0.5rem;
   border-top: 1px solid var(--do-border-light);
 }
-
-/* ─── Create form ─────────────────────────────────────────────────────────── */
 
 .create-form {
   display: flex;
@@ -1009,8 +987,6 @@ onMounted(loadJobs)
   width: 100%;
 }
 
-/* ─── Cron examples ───────────────────────────────────────────────────────── */
-
 .cron-examples {
   display: flex;
   align-items: center;
@@ -1056,8 +1032,6 @@ onMounted(loadJobs)
   border-radius: 0.25rem;
 }
 
-/* ─── Dialog dark theme ───────────────────────────────────────────────────── */
-
 :deep(.p-dialog) {
   background: var(--do-bg);
   border: 1px solid var(--do-border-light);
@@ -1096,8 +1070,6 @@ onMounted(loadJobs)
   background: var(--do-bg);
 }
 
-/* ─── Dialog actions ──────────────────────────────────────────────────────── */
-
 .dialog-actions {
   display: flex;
   justify-content: flex-end;
@@ -1106,8 +1078,6 @@ onMounted(loadJobs)
   border-top: 1px solid var(--do-border-light);
   margin-top: 0.5rem;
 }
-
-/* ─── Delete confirm ──────────────────────────────────────────────────────── */
 
 .confirm-body {
   display: flex;
@@ -1128,8 +1098,6 @@ onMounted(loadJobs)
   color: var(--do-text);
   line-height: 1.5;
 }
-
-/* ─── Run result ──────────────────────────────────────────────────────────── */
 
 .run-result-body {
   display: flex;
@@ -1167,8 +1135,6 @@ onMounted(loadJobs)
 :deep(.modern-switch) {
   transform: scale(1.1);
 }
-
-/* ─── Responsive ──────────────────────────────────────────────────────────── */
 
 @media (max-width: 640px) {
   .cronjobs-container {
