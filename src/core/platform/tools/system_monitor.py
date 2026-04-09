@@ -41,16 +41,11 @@ _HARDCODED_BLACKLIST: List[str] = [
     "init 6",
 ]
 
-# Patterns that might expose secrets in output
 _SECRET_RE = re.compile(
     r"(password|passwd|secret|token|api_key|apikey|auth)\s*[=:]\s*\S+",
     re.IGNORECASE,
 )
 
-
-# ---------------------------------------------------------------------------
-# Helpers
-# ---------------------------------------------------------------------------
 
 def _get_blacklist(profile) -> List[str]:
     """Return combined blacklist: hardcoded base + integration config."""
@@ -99,10 +94,6 @@ def _sanitize(output: str) -> str:
         result = result[:_MAX_OUTPUT_CHARS] + "\n...(truncated)"
     return result
 
-
-# ---------------------------------------------------------------------------
-# Public API (called by LangChain tools)
-# ---------------------------------------------------------------------------
 
 async def propose_command(command: str, profile) -> Dict[str, Any]:
     """

@@ -85,7 +85,6 @@ class Integrations:
         else:
             logger.info("Gmail integration disabled (no repository)")
 
-        # MCP — in-process DatetimeTools
         self.mcp = MCPClient()
         logger.info("MCPClient (in-process) initialized")
 

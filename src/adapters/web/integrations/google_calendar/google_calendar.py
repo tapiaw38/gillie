@@ -21,8 +21,6 @@ class GoogleCalendarIntegration:
         self._fallback_client = fallback_client
         self._pending_verifiers: Dict[str, str] = {}  # user_id -> code_verifier (PKCE)
 
-    # ── Credentials & auth ────────────────────────────────────────────────────
-
     def _get_client(self) -> GoogleCalendarClient:
         """Return a GoogleCalendarClient built from DB credentials, falling back to env-var client."""
         creds = self.repository.find_credentials()
@@ -109,8 +107,6 @@ class GoogleCalendarIntegration:
             refresh_token=session.refresh_token,
             expiry=session.token_expiry,
         )
-
-    # ── Calendar event operations (Google API only) ───────────────────────────
 
     def list_events(
         self,
@@ -210,7 +206,6 @@ class GoogleCalendarIntegration:
         service = self._get_service(user_id)
         client = self._get_client()
 
-        # Fetch current event to fill in unchanged fields
         current = client.get_event(service, event_id)
         current_start = current.get("start", {})
         current_end = current.get("end", {})
@@ -235,8 +230,6 @@ class GoogleCalendarIntegration:
     def delete_event(self, user_id: str, event_id: str, **kwargs) -> None:
         service = self._get_service(user_id)
         self._get_client().delete_event(service, event_id)
-
-    # ── Helpers ───────────────────────────────────────────────────────────────
 
     @staticmethod
     def _google_event_to_dict(google_event: Dict[str, Any], user_id: str) -> Dict[str, Any]:

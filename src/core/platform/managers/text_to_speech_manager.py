@@ -62,19 +62,16 @@ class TextToSpeechService:
         try:
             logger.info("Starting text-to-speech generation...")
 
-            # Use default settings if none provided
             if settings is None:
                 settings = self._get_default_settings()
             settings["language"] = language
 
-            # Generate audio
             audio_data = await self._generate_audio(text, settings)
 
             if not audio_data:
                 logger.error("Failed to generate audio data")
                 return None
 
-            # Upload to storage
             audio_url = await self._upload_audio_to_storage(
                 audio_data=audio_data,
                 user_id=user_id,
@@ -135,13 +132,10 @@ class TextToSpeechService:
             Exception: If upload fails
         """
         try:
-            # Create a BytesIO object from the audio data
             audio_file = io.BytesIO(audio_data)
 
-            # Generate a unique filename with timestamp
             filename = self._generate_audio_filename(conversation_id)
 
-            # Upload to storage service
             s3_key = self.store_service.put_object(
                 file=audio_file,
                 user_file=user_id,
@@ -150,7 +144,6 @@ class TextToSpeechService:
                 object_id=conversation_id,
             )
 
-            # Generate public URL
             audio_url = self.store_service.generate_url(s3_key)
 
             return audio_url
@@ -199,7 +192,6 @@ class TextToSpeechService:
                 logger.warning("No available voices found")
                 return None
 
-            # Log all available voices for debugging
             for i, voice in enumerate(voices):
                 logger.info(
                     f"Voice {i}: {voice.get('name', 'No name')} - "
@@ -207,12 +199,10 @@ class TextToSpeechService:
                     f"Languages: {voice.get('languages', [])}"
                 )
 
-            # Search for Spanish female voice
             spanish_female_voice = self._find_spanish_female_voice(voices)
             if spanish_female_voice:
                 return spanish_female_voice
 
-            # Fallback to any female voice
             female_voice = self._find_female_voice(voices)
             if female_voice:
                 return female_voice
