@@ -101,6 +101,16 @@ export const useDrive = () => {
     }
   }
 
+  const disconnect = async () => {
+    isLoading.value = true
+    try {
+      await services.driveService.disconnect()
+      statusData.value = null
+    } finally {
+      isLoading.value = false
+    }
+  }
+
   return {
     // State
     authorizationData,
@@ -124,5 +134,6 @@ export const useDrive = () => {
     saveCredentials,
     getAuthorizationUrl,
     checkStatus,
+    disconnect,
   }
 }

@@ -102,7 +102,7 @@ Show current configuration summary, including both file paths.
 Example output:
 
 ```sh
-✨🐟 Gillie — Sofia
+✨🐙 Gillie — Sofia
 Soul:   /home/user/.gillie/soul.json
 Config: /home/user/.gillie/config.json
 

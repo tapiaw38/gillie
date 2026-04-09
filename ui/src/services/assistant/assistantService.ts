@@ -10,12 +10,17 @@ import type {
   AssistantFileRemoveResponse,
   IntegrationParams,
   IntegrationResponse,
+  ProfileOptionsResponse,
+  CustomProviderInput,
 } from '@/types/assistant.ts'
 
 export interface IAssistantService {
   addAssistant(assistantProfile: AssistantProfileParams): Promise<AssistantProfileResponse>
   getAssistant(): Promise<AssistantProfileResponse>
   updateAssistant(assistantProfile: AssistantProfileUpdateParams): Promise<AssistantProfileResponse>
+  getOptions(): Promise<ProfileOptionsResponse>
+  setProvider(provider: string, api_key?: string): Promise<{ data: { provider: string; model: string } }>
+  addProvider(input: CustomProviderInput): Promise<{ data: { name: string; model: string } }>
   addApiKey(apiKey: ApiKeyParams): Promise<ApiKeyResponse>
   removeApiKey(apiKeyId: string): Promise<ApiKeyRemoveResponse>
   addFiles(files: File[]): Promise<AssistantFileResponse>
@@ -43,6 +48,21 @@ export class AssistantService implements IAssistantService {
     assistantProfile: AssistantProfileUpdateParams,
   ): Promise<AssistantProfileResponse> {
     const { data } = await this.api.patch<AssistantProfileResponse>('/profile/', assistantProfile)
+    return data
+  }
+
+  async getOptions(): Promise<ProfileOptionsResponse> {
+    const { data } = await this.api.get<ProfileOptionsResponse>('/profile/options')
+    return data
+  }
+
+  async setProvider(provider: string, api_key?: string): Promise<{ data: { provider: string; model: string } }> {
+    const { data } = await this.api.post('/system/provider', { provider, api_key: api_key || undefined })
+    return data
+  }
+
+  async addProvider(input: CustomProviderInput): Promise<{ data: { name: string; model: string } }> {
+    const { data } = await this.api.post('/system/provider/custom', input)
     return data
   }
 

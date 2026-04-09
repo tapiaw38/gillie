@@ -1,5 +1,5 @@
 from pydantic import BaseModel, Field
-from typing import Optional, List
+from typing import Optional, List, Dict, Any
 from datetime import datetime
 from .api_key import ApiKey
 from ..file.file import File
@@ -19,9 +19,12 @@ class Profile(BaseModel):
     is_active: Optional[bool] = Field(default=True)
     tts_enabled: Optional[bool] = Field(default=False)
     response_language: Optional[str] = Field(default="en")
+    active_provider: Optional[str] = Field(default=None)
+    provider_keys: Optional[Dict[str, str]] = Field(default=None)
+    custom_providers: Optional[Dict[str, Any]] = Field(default=None)
     api_keys: Optional[List[ApiKey]] = Field(default=None)
     files: Optional[List[File]] = Field(default=None)
     integrations: Optional[List[Integration]] = Field(default=None)
 
     class Config:
-        allow_population_by_field_name = True
+        populate_by_name = True

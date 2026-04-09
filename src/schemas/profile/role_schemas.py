@@ -7,6 +7,15 @@ class RoleOutputData(BaseModel):
     name: str
 
 
+class ProviderOutputData(BaseModel):
+    key: str
+    model: str
+    base_url: str = ""
+    auth_type: str = "api_key"
+    api_key_set: bool = False
+    is_builtin: bool = True
+
+
 class RoleOutput(BaseModel):
     data: RoleOutputData
     @staticmethod
@@ -22,6 +31,8 @@ class RoleOutput(BaseModel):
 class ListOptionsOutputData(BaseModel):
     """Output data structure for role list options"""
     roles: List[RoleOutputData]
+    providers: List[ProviderOutputData] = []
+    active_provider: str = ""
 
 
 class ListOptionsOutput(BaseModel):

@@ -118,6 +118,16 @@ async def check_calendar_status(
     )
 
 
+@router.delete("/session", status_code=status.HTTP_204_NO_CONTENT)
+async def disconnect_calendar(
+    request: Request,
+    usecases: Usecases = Depends(get_usecases),
+):
+    """Disconnect (revoke) the Google Calendar OAuth session."""
+    user_id = request.state.user.get("user_id")
+    usecases.calendar.disconnect_usecase.execute(user_id)
+
+
 @router.post("/events", response_model=CalendarEventOutput, status_code=status.HTTP_201_CREATED)
 async def create_calendar_event(
     event: CalendarEventInput,

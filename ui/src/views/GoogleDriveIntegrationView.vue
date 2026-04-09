@@ -34,6 +34,7 @@ const {
   saveCredentials,
   getAuthorizationUrl,
   checkStatus,
+  disconnect,
   isConnected,
   isLoading,
   savedClientId,
@@ -46,6 +47,19 @@ const {
   isCheckStatusError,
   checkStatusError,
 } = useDrive()
+
+const handleDisconnect = async () => {
+  await disconnect()
+  driveIntegration.activated = false
+  const config = driveIntegration.config as GoogleDriveIntegrationConfig
+  config.is_connected = false
+  toast.add({
+    severity: 'info',
+    summary: t('integrations.googleDrive.disconnected'),
+    detail: t('integrations.googleDrive.disconnectedDesc'),
+    life: 3000,
+  })
+}
 
 const { openOAuthPopup } = useOAuthPopup()
 
@@ -410,6 +424,13 @@ onMounted(async () => {
                 icon="pi pi-refresh"
                 severity="secondary"
                 @click="checkConnectionStatus"
+              />
+              <Button
+                :label="t('integrations.disconnect')"
+                icon="pi pi-sign-out"
+                severity="danger"
+                :loading="isLoading"
+                @click="handleDisconnect"
               />
               <Button
                 :label="t('integrations.googleDrive.viewFiles')"

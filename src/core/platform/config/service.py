@@ -3,7 +3,7 @@ from pathlib import Path
 from dotenv import load_dotenv
 from enum import Enum
 from dataclasses import dataclass
-from typing import Optional, TYPE_CHECKING
+from typing import Optional, TYPE_CHECKING, Dict, Any
 
 if TYPE_CHECKING:
     from cli.config.schema import AssistantConfig
@@ -42,14 +42,14 @@ class ServerConfig:
 
 _PROVIDER_PRESETS: dict = {
     "deepseek":   {"base_url": "https://api.deepseek.com",                               "model": "deepseek-chat",                "auth_type": "api_key"},
-    "deepseek-chat": {"base_url": "https://openrouter.ai/api/v1",                        "model": "deepseek/deepseek-chat",       "auth_type": "api_key"},
-    "kimi-k2":    {"base_url": "https://openrouter.ai/api/v1",                           "model": "moonshotai/kimi-k2",           "auth_type": "api_key"},
+    "kimi-k2":    {"base_url": "https://api.moonshot.ai/v1",                            "model": "kimi-k2-0905-preview",         "auth_type": "api_key"},
     "anthropic":  {"base_url": "https://api.anthropic.com/v1",                           "model": "claude-sonnet-4-6",            "auth_type": "api_key"},
     "openai":     {"base_url": "https://api.openai.com/v1",                              "model": "gpt-4o",                       "auth_type": "api_key"},
-    "kimi":       {"base_url": "https://api.moonshot.cn/v1",                             "model": "kimi-k2",                      "auth_type": "api_key"},
+    "kimi":       {"base_url": "https://api.moonshot.ai/v1",                            "model": "kimi-k2-turbo-preview",        "auth_type": "api_key"},
     "gemini":     {"base_url": "https://generativelanguage.googleapis.com/v1beta/openai/","model": "gemini-2.0-flash",             "auth_type": "api_key"},
     "groq":       {"base_url": "https://api.groq.com/openai/v1",                         "model": "llama-3.3-70b-versatile",      "auth_type": "api_key"},
     "claude":     {"base_url": "https://api.anthropic.com/v1",                           "model": "claude-haiku-4-5-20251001",    "auth_type": "bearer"},
+    "qwen3":      {"base_url": "http://localhost:11434/v1",                              "model": "qwen3:4b",                     "auth_type": "none"},
 }
 
 
@@ -59,7 +59,7 @@ class OpenAIConfig:
     base_url: str
     model: str
     role: str
-    auth_type: str = "api_key"  # "api_key" | "bearer"
+    auth_type: str = "api_key"  # "api_key" | "bearer" | "none"
 
 
 @dataclass
@@ -336,7 +336,7 @@ def read_config() -> ConfigurationService:
     )
 
     embeddings_config = EmbeddingsConfig(
-        provider=get_env("EMBEDDING_PROVIDER", "huggingface"),
+        provider=get_env("EMBEDDING_PROVIDER", "openai"),
         batch_size=int(get_env("EMBEDDING_BATCH_SIZE", "32")),
         device=get_env("EMBEDDING_DEVICE", "cpu"),
         openai_model=get_env("OPENAI_EMBEDDING_MODEL", "text-embedding-3-small"),
@@ -426,6 +426,43 @@ def read_config() -> ConfigurationService:
         storage_config=storage_config,
         vision_config=vision_config,
     )
+
+
+def get_available_providers(
+    provider_keys: Optional[Dict[str, str]] = None,
+    custom_providers: Optional[Dict[str, Any]] = None,
+) -> Dict[str, Any]:
+    """
+    Return the full provider map: built-in presets merged with profile data.
+    Each entry has base_url, model, auth_type, api_key (may be empty), is_builtin.
+    """
+    keys = provider_keys or {}
+    customs = custom_providers or {}
+
+    merged: Dict[str, Any] = {}
+    for name, preset in _PROVIDER_PRESETS.items():
+        merged[name] = {**preset, "api_key": keys.get(name, ""), "is_builtin": True}
+    for name, entry in customs.items():
+        if name not in merged:
+            merged[name] = {**entry, "api_key": keys.get(name, entry.get("api_key", "")), "is_builtin": False}
+    return merged
+
+
+def get_active_provider_name(active_provider: Optional[str] = None) -> str:
+    """Return stored active provider name, or detect from current config."""
+    if active_provider:
+        return active_provider
+    try:
+        config = get_config_service()
+        current_base = config.openai_config.base_url
+        current_model = config.openai_config.model
+        for name, preset in _PROVIDER_PRESETS.items():
+            if preset["base_url"] == current_base and preset["model"] == current_model:
+                return name
+        return "custom"
+    except Exception:
+        return "custom"
+
 
 
 def init_config() -> None:

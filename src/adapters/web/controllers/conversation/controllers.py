@@ -127,6 +127,7 @@ async def add_message_stream(
     user_id = request.state.user.get("user_id")
     client_workspace = request.headers.get("X-Gillie-Workspace", "")
     plan_mode = request.headers.get("X-Gillie-Mode", "") == "plan"
+    has_pty = request.headers.get("X-GTerm-Session", "") == "1"
 
     async def event_generator():
         try:
@@ -136,6 +137,7 @@ async def add_message_stream(
                 user_id=user_id,
                 client_workspace=client_workspace,
                 plan_mode=plan_mode,
+                has_pty=has_pty,
             ):
                 yield f"data: {json.dumps(token)}\n\n"
         except Exception as e:
@@ -166,6 +168,26 @@ async def approve_tool(request: Request):
     approved = bool(body.get("approved", False))
     feedback = str(body.get("feedback", "") or "")
     found = submit_decision(request_id, approved, feedback)
+    return {"ok": found}
+
+
+@router.post("/{conversation_id}/pty-result", status_code=status.HTTP_200_OK)
+async def submit_pty_result(conversation_id: str, request: Request):
+    """Receive PTY command output from a GTerm session.
+
+    GTerm sends this after capturing the output of a command it ran in the
+    active PTY on behalf of the AI. The waiting LLM tool coroutine is
+    unblocked with the captured output.
+
+    Body:
+        request_id (str): The UUID from the pty_command SSE event.
+        output     (str): The captured stdout from the PTY.
+    """
+    from src.core.platform.ai.tools.pty_manager import submit_result
+    body = await request.json()
+    request_id = body.get("request_id", "")
+    output = str(body.get("output", "") or "")
+    found = submit_result(request_id, output)
     return {"ok": found}
 
 

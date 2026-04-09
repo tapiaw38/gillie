@@ -113,7 +113,7 @@ class LangChainService:
             api_key=self.config.api_key,
             base_url=self.config.base_url if hasattr(self.config, 'base_url') and self.config.base_url else None,
             temperature=0.7,
-            max_tokens=2000,
+            max_tokens=8000,
             timeout=300.0,
             max_retries=2,
         )
@@ -135,6 +135,19 @@ class LangChainService:
             f"LangChainService initialized: model={self.config.model}, "
             f"langsmith={enable_langsmith}"
         )
+
+    def reload_llm(self, model: str, base_url: str, api_key: str) -> None:
+        """Rebuild the ChatOpenAI instance for a new provider (hot-reload)."""
+        self.llm = ChatOpenAI(
+            model=model,
+            api_key=api_key,
+            base_url=base_url if base_url else None,
+            temperature=0.7,
+            max_tokens=8000,
+            timeout=300.0,
+            max_retries=2,
+        )
+        logger.info(f"LangChainService LLM reloaded: model={model}")
 
     def _setup_langsmith(self):
         """Configure LangSmith tracing"""
@@ -223,7 +236,7 @@ class LangChainService:
 
         async with self.semaphore:
             try:
-                system_prompt = self._build_system_prompt(profile, context, client_workspace)
+                system_prompt = self._build_system_prompt(profile, context, client_workspace, has_pty=False)
 
                 messages = self._convert_messages_to_langchain(
                     previous_messages=previous_messages,
@@ -293,6 +306,7 @@ class LangChainService:
         shell_output_queue: Optional[asyncio.Queue] = None,
         client_workspace: str = "",
         plan_mode: bool = False,
+        has_pty: bool = False,
     ):
         """
         Stream AI response tokens. Uses astream() for direct responses and
@@ -306,7 +320,7 @@ class LangChainService:
 
         async with self.semaphore:
             try:
-                system_prompt = self._build_system_prompt(profile, context, client_workspace)
+                system_prompt = self._build_system_prompt(profile, context, client_workspace, has_pty=has_pty)
                 messages = self._convert_messages_to_langchain(
                     previous_messages=previous_messages,
                     system_prompt=system_prompt,
@@ -354,6 +368,46 @@ class LangChainService:
 
                     approval_callback = _approval_callback
 
+                pty_callback = None
+                if has_pty and shell_output_queue is not None:
+                    async def _pty_callback(command: str) -> dict:
+                        import uuid as _uuid
+                        from src.core.platform.ai.tools.pty_manager import (
+                            create_pending, get_result, cleanup,
+                        )
+                        request_id = str(_uuid.uuid4())
+                        await shell_output_queue.put({
+                            "type": "pty_command",
+                            "request_id": request_id,
+                            "command": command,
+                        })
+                        event = create_pending(request_id)
+                        try:
+                            await asyncio.wait_for(event.wait(), timeout=120)
+                            output = get_result(request_id)
+                            return {
+                                "exit_code": 0,
+                                "stdout": output,
+                                "stderr": "",
+                                "truncated": False,
+                                "via_pty": True,
+                            }
+                        except asyncio.TimeoutError:
+                            logger.warning(
+                                f"PTY command request {request_id} timed out after 120s"
+                            )
+                            return {
+                                "exit_code": -1,
+                                "stdout": "",
+                                "stderr": f"PTY command timed out after 120s: {command}",
+                                "truncated": False,
+                                "via_pty": True,
+                            }
+                        finally:
+                            cleanup(request_id)
+
+                    pty_callback = _pty_callback
+
                 tools = None
                 llm_with_tools = self.llm
                 if use_tools:
@@ -367,6 +421,7 @@ class LangChainService:
                         client_workspace=client_workspace,
                         approval_callback=approval_callback,
                         plan_mode=plan_mode,
+                        pty_callback=pty_callback,
                     )
                     llm_with_tools = self.llm.bind_tools(tools)
 
@@ -476,6 +531,23 @@ class LangChainService:
                 tool_result = f"Tool {tool_name} not found"
                 for tool in tools or []:
                     if tool.name == tool_name:
+                        if hasattr(tool, 'args_schema') and tool.args_schema:
+                            try:
+                                validated = tool.args_schema(**tool_args)
+                                tool_args = validated.model_dump()
+                            except Exception as ve:
+                                missing = [
+                                    fname for fname, finfo in tool.args_schema.model_fields.items()
+                                    if finfo.is_required() and fname not in tool_args
+                                ]
+                                missing_str = ", ".join(missing) if missing else "unknown"
+                                tool_result = (
+                                    f"Tool call validation failed for '{tool_name}': missing required fields: {missing_str}. "
+                                    f"You MUST retry this tool call immediately with ALL required arguments included in a single call. "
+                                    f"Do not respond to the user until the tool succeeds."
+                                )
+                                logger.warning(f"Tool {tool_name} args validation failed — missing: {missing_str}")
+                                break
                         try:
                             if hasattr(tool, 'coroutine') and tool.coroutine:
                                 tool_result = await tool.coroutine(**tool_args)
@@ -640,6 +712,7 @@ class LangChainService:
         profile: Profile,
         context: Optional[str],
         client_workspace: str = "",
+        has_pty: bool = False,
     ) -> str:
         """
         Build system prompt from profile and context.
@@ -722,6 +795,21 @@ class LangChainService:
                 )
             except Exception as e:
                 logger.warning(f"Could not build workspace map: {e}")
+
+        if has_pty:
+            system_prompt += (
+                "\n\n## GTerm Session — Remote PTY Active\n"
+                "You are running inside GTerm. The user's terminal is connected to a "
+                "REMOTE machine (e.g. a VPS via SSH). The `run_command` tool routes "
+                "commands through that remote PTY.\n"
+                "CRITICAL RULES:\n"
+                "- NEVER use `read_file` to read system paths such as /proc, /sys, "
+                "/var/log, /run, /etc (these paths exist on the LOCAL machine, not the remote).\n"
+                "- To check RAM, CPU, disk, processes, or logs on the remote machine, "
+                "ALWAYS use `run_command` (e.g. `free -h`, `df -h`, `journalctl -n 50`, "
+                "`top -bn1`, `cat /proc/meminfo`).\n"
+                "- `read_file` is only safe for workspace project files.\n"
+            )
 
         return system_prompt
 

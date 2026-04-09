@@ -17,12 +17,13 @@ from cli.commands.install import app as install_app
 from cli.commands.agent import app as agent_app
 from cli.commands.reset import app as reset_app
 from cli.commands.provider import app as provider_app
+from cli.commands.build import app as build_app
 
 console = Console()
 
 app = typer.Typer(
     name="gillie",
-    help="✨🐟 [bold cyan]Gillie[/bold cyan] — Single-user AI assistant CLI",
+    help="✨🐙 [bold cyan]Gillie[/bold cyan] — Single-user AI assistant CLI",
     no_args_is_help=True,
     rich_markup_mode="rich",
 )
@@ -43,6 +44,7 @@ app.add_typer(install_app, name="install", help="Install Python dependencies")
 app.add_typer(agent_app, name="agent", help="Interactive chat with the assistant")
 app.add_typer(reset_app, name="reset", help="Reset Gillie to factory state")
 app.add_typer(provider_app, name="provider", help="Manage AI provider (DeepSeek, OpenRouter, Claude, etc.)")
+app.add_typer(build_app, name="build", hidden=True)
 
 
 @app.command("status")
@@ -61,7 +63,7 @@ def status():
     s = config.services
 
     console.print()
-    console.print(f"✨🐟 [bold cyan]Gillie[/bold cyan] — {config.profile.assistant_name}")
+    console.print(f"✨🐙 [bold cyan]Gillie[/bold cyan] — {config.profile.assistant_name}")
     console.print(f"[dim]Soul:   {get_soul_path()}[/dim]")
     console.print(f"[dim]Config: {get_config_path()}[/dim]")
     console.print()

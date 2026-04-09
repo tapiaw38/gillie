@@ -17,18 +17,16 @@ from cli.config.schema import (
     OpenAIServiceConfig,
     LangChainServiceConfig,
     QdrantServiceConfig,
-    EmbeddingsServiceConfig,
     StorageServiceConfig,
     S3ServiceConfig,
     TTSServiceConfig,
     STTServiceConfig,
     WhatsAppServiceConfig,
-    MercadoLibreServiceConfig,
     LangSmithServiceConfig,
     LLMExtendedServiceConfig,
     LoggingConfig,
 )
-from cli.config.manager import save_config, config_exists, get_config_path, get_soul_path
+from cli.config.manager import save_config, load_config, config_exists, get_config_path, get_soul_path
 
 console = Console()
 
@@ -71,19 +69,23 @@ def init(
     """Interactive setup wizard for Gillie."""
     console.print()
     console.print(Panel(
-        "✨🐟 [bold cyan]Gillie[/bold cyan] — Setup Wizard",
+        "✨🐙 [bold cyan]Gillie[/bold cyan] — Setup Wizard",
         subtitle="Single-user AI assistant",
         border_style="cyan",
     ))
     console.print()
 
-    # Check existing config
+    existing_user_id: str | None = None
     if config_exists() and not force:
         console.print(f"[yellow]Config already exists at {get_config_path()}[/yellow]")
         overwrite = _prompt_confirm("Overwrite existing configuration?", default=False)
         if not overwrite:
             console.print("[dim]Setup cancelled.[/dim]")
             raise typer.Exit(0)
+        try:
+            existing_user_id = load_config().user_id
+        except Exception:
+            pass
 
     console.print("[bold]Assistant Profile[/bold]")
     console.print("[dim]Configure your AI assistant's identity[/dim]")
@@ -118,9 +120,30 @@ def init(
 
     console.print()
     console.print("[bold]AI Provider[/bold]")
-    openai_key = _prompt_password("API key (OpenAI / DeepSeek / compatible)")
-    openai_base_url = _prompt_text("Base URL", default="https://api.deepseek.com")
-    openai_model = _prompt_text("Model name", default="deepseek-chat")
+
+    from src.core.platform.config.service import _PROVIDER_PRESETS
+    provider_choices = list(_PROVIDER_PRESETS.keys()) + ["other (custom)"]
+    selected_provider = _prompt_select("Provider", choices=provider_choices, default="deepseek")
+
+    if selected_provider == "other (custom)":
+        openai_base_url = _prompt_text("Base URL", required=True)
+        openai_model = _prompt_text("Model name", required=True)
+        openai_auth_type = _prompt_select("Auth type", choices=["api_key", "bearer", "none"], default="api_key")
+        active_provider = "custom"
+    else:
+        preset = _PROVIDER_PRESETS[selected_provider]
+        openai_base_url = preset["base_url"]
+        openai_model = preset["model"]
+        openai_auth_type = preset["auth_type"]
+        active_provider = selected_provider
+        console.print(f"  [dim]URL:   [bold]{openai_base_url}[/bold][/dim]")
+        console.print(f"  [dim]Model: [bold]{openai_model}[/bold][/dim]")
+
+    if openai_auth_type != "none":
+        openai_key = _prompt_password(f"API key for {selected_provider}")
+    else:
+        openai_key = ""
+
     openai_temperature = float(_prompt_text("Temperature", default="0.7"))
     openai_max_tokens = int(_prompt_text("Max tokens", default="2000"))
 
@@ -148,23 +171,6 @@ def init(
                 host=qdrant_host,
                 port=qdrant_port,
                 api_key=qdrant_api_key or None,
-            )
-
-    embeddings_provider = "huggingface"
-    embeddings_cfg = EmbeddingsServiceConfig(provider="huggingface")
-    if enable_langchain:
-        console.print()
-        console.print("[bold]Embeddings[/bold]")
-        embeddings_provider = _prompt_select(
-            "Embeddings provider",
-            choices=["huggingface", "openai"],
-            default="huggingface",
-        )
-        embeddings_cfg = EmbeddingsServiceConfig(provider=embeddings_provider)
-        if embeddings_provider == "huggingface":
-            embeddings_cfg.hf_model = _prompt_text(
-                "HuggingFace model",
-                default="sentence-transformers/all-MiniLM-L6-v2",
             )
 
     console.print()
@@ -205,10 +211,6 @@ def init(
         whatsapp_cfg = WhatsAppServiceConfig(enabled=True, verify_token=verify_token)
 
     console.print()
-    console.print("[bold]MercadoLibre Integration[/bold]")
-    enable_ml = _prompt_confirm("Enable MercadoLibre integration?", default=False)
-
-    console.print()
     console.print("[bold]Observability (LangSmith)[/bold]")
     enable_langsmith = _prompt_confirm("Enable LangSmith tracing?", default=False)
     langsmith_cfg = LangSmithServiceConfig(enabled=False)
@@ -225,9 +227,8 @@ def init(
     server_port = int(_prompt_text("Port", default="8000"))
     log_level = _prompt_select("Log level", choices=["INFO", "DEBUG", "WARNING", "ERROR"], default="INFO")
 
-    # Build config
     config = AssistantConfig(
-        user_id=str(uuid.uuid4()),
+        user_id=existing_user_id or str(uuid.uuid4()),
         profile=ProfileConfig(
             assistant_name=assistant_name,
             business_name=business_name,
@@ -243,16 +244,16 @@ def init(
                 model=openai_model,
                 temperature=openai_temperature,
                 max_tokens=openai_max_tokens,
+                auth_type=openai_auth_type,
+                active_provider=active_provider,
             ),
             langchain=langchain_cfg,
             qdrant=qdrant_cfg,
-            embeddings=embeddings_cfg,
             storage=storage_cfg,
             s3=s3_cfg,
             tts=TTSServiceConfig(enabled=enable_tts),
             stt=STTServiceConfig(enabled=enable_stt),
             whatsapp=whatsapp_cfg,
-            mercadolibre=MercadoLibreServiceConfig(enabled=enable_ml),
             langsmith=langsmith_cfg,
             llm=LLMExtendedServiceConfig(),
         ),
@@ -264,7 +265,7 @@ def init(
     console.print()
     _print_summary(config)
     console.print()
-    console.print(f"✨🐟 [green]✓[/green] Soul saved to   [bold]{get_soul_path()}[/bold]")
+    console.print(f"✨🐙 [green]✓[/green] Soul saved to   [bold]{get_soul_path()}[/bold]")
     console.print(f"   [green]✓[/green] Config saved to [bold]{get_config_path()}[/bold]")
     console.print()
     console.print(f"Start the server with: [bold cyan]./gillie start[/bold cyan]")
@@ -291,7 +292,6 @@ def _print_summary(config: AssistantConfig) -> None:
     table.add_row("TTS", "✓ enabled" if config.services.tts.enabled else "✗ disabled")
     table.add_row("STT", "✓ enabled" if config.services.stt.enabled else "✗ disabled")
     table.add_row("WhatsApp", "✓ enabled" if config.services.whatsapp.enabled else "✗ disabled")
-    table.add_row("MercadoLibre", "✓ enabled" if config.services.mercadolibre.enabled else "✗ disabled")
     table.add_row("LangSmith", "✓ enabled" if config.services.langsmith.enabled else "✗ disabled")
     table.add_row("Server", f"{config.server.host}:{config.server.port}")
 

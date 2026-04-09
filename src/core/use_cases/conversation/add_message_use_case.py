@@ -323,21 +323,17 @@ class AddMessageUseCase:
             return (None, response)
 
         try:
-            # Inject skill context BEFORE any AI processing (highest priority)
             enhanced_context = self._inject_skill_context(message_context, user_message.content)
 
-            # Build chat history for function execution
             chat_history = self.context_factory.platform_managers.message_history.build_chat_history(
                 messages=conversation.messages,
-                max_messages=40
+                max_messages=20
             )
 
-            # Convert messages to string for conversation context (last 40 to avoid processing entire history)
             conversation_history = self.context_factory.platform_managers.message_history.convert_messages_to_string(
-                conversation.messages[-40:]
+                conversation.messages[-20:]
             )
 
-            # Generate response using AI response service
             return await self.context_factory.platform_managers.ai_response.generate_response(
                 user_message=user_message.content,
                 profile=conversation.profile,
@@ -359,6 +355,7 @@ class AddMessageUseCase:
         user_id: str,
         client_workspace: str = "",
         plan_mode: bool = False,
+        has_pty: bool = False,
     ):
         """
         Streaming variant for CLI use. Validates the conversation, saves the user
@@ -382,7 +379,7 @@ class AddMessageUseCase:
         enhanced_context = self._inject_skill_context(None, content)
         conversation_history = (
             self.context_factory.platform_managers.message_history
-            .convert_messages_to_string(conversation.messages[-40:])
+            .convert_messages_to_string(conversation.messages[-20:])
             if self.context_factory.platform_managers
             else ""
         )
@@ -402,6 +399,7 @@ class AddMessageUseCase:
             shell_output_queue=shell_output_queue,
             client_workspace=client_workspace,
             plan_mode=plan_mode,
+            has_pty=has_pty,
         ):
             # dict tokens (shell_output, etc.) are forwarded as-is; only str
             # tokens contribute to the persisted assistant message text.
@@ -452,7 +450,6 @@ class AddMessageUseCase:
 
             enhanced_context = f"{skill_context}\n\n{message_context}" if message_context else skill_context
 
-            # Search for query-specific snippets and append them
             if user_query:
                 search_results = skill_manager.search_memory(user_query)
                 no_results_msg = "No se encontraron resultados relevantes en la memoria"
@@ -538,7 +535,7 @@ class AddMessageUseCase:
             logger.info("Image processing activated")
 
             conversation_history = self.context_factory.platform_managers.message_history.convert_messages_to_string(
-                conversation.messages[-40:]
+                conversation.messages[-20:]
             )
 
             formatted_images = await self.context_factory.platform_managers.image_processing.search_and_format_images(

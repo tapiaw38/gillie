@@ -44,7 +44,7 @@ def show():
     config = load_config()
     s = config.services
 
-    table = Table(title="✨🐟 Services Configuration", box=box.ROUNDED, border_style="cyan")
+    table = Table(title="✨🐙 Services Configuration", box=box.ROUNDED, border_style="cyan")
     table.add_column("Service", style="bold")
     table.add_column("Status")
     table.add_column("Details")
@@ -173,5 +173,5 @@ def edit(
 
     save_config(config)
     console.print()
-    console.print(f"✨🐟 [green]✓[/green] Service [bold]{service}[/bold] updated.")
+    console.print(f"✨🐙 [green]✓[/green] Service [bold]{service}[/bold] updated.")
     console.print()

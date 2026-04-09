@@ -4,6 +4,12 @@
   "private": true,
   "type": "module",
   "main": "out/main/index.js",
+  "description": "Gillie AI — Single-user AI assistant",
+  "homepage": "https://gillie.ai",
+  "author": {
+    "name": "Gillie AI",
+    "email": "hello@gillie.ai"
+  },
   "scripts": {
     "dev": "electron-vite dev",
     "build": "electron-vite build",
@@ -18,7 +24,7 @@
     "appId": "ai.gillie.app",
     "productName": "Gillie AI",
     "directories": {
-      "output": "release"
+      "output": "../release/ui"
     },
     "files": [
       "out/**/*"

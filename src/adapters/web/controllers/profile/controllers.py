@@ -119,4 +119,5 @@ async def list_options(
     request: Request,
     usecases: Usecases = Depends(get_usecases)
 ):
-    return usecases.profile.list_options_usecase.execute()
+    user_id = request.state.user.get("user_id", "")
+    return usecases.profile.list_options_usecase.execute(user_id=user_id)

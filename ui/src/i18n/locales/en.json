@@ -69,6 +69,13 @@
     "availableIntegrations": "Available Integrations",
     "availableIntegrationsDesc": "Connect your assistant to different platforms",
     "integrationsDesc": "Connect your assistant to different platforms",
+    "availableSkills": "Skills",
+    "skillsDesc": "Expand and configure your assistant's capabilities",
+    "skillGroups": {
+      "messaging": "Messaging",
+      "productivity": "Productivity",
+      "automation": "Automation"
+    },
     "stats": "Statistics",
     "statsDesc": "Activity summary",
     "remainingIterations": "Remaining Iterations",
@@ -78,6 +85,20 @@
     "assistantNamePlaceholder": "Enter the assistant name",
     "nameUpdated": "Name updated",
     "clickToEdit": "Click to edit",
+    "aiModel": "AI Model",
+    "aiModelDefault": "Default",
+    "aiModelUpdated": "AI model updated",
+    "errorAiModel": "Error changing AI model",
+    "providerAdded": "Provider added",
+    "addProvider": "Add provider",
+    "providerName": "Provider name",
+    "providerBaseUrl": "Base URL",
+    "providerModel": "Model",
+    "providerAuthType": "Auth type",
+    "providerApiKey": "API Key",
+    "providerApiKeyPlaceholder": "Enter API key",
+    "providerApiKeyRequired": "This provider needs an API key",
+    "applyProvider": "Apply",
     "audioEnabled": "Audio enabled",
     "audioDisabled": "Audio disabled",
     "errorAudio": "Error changing audio",
@@ -351,6 +372,7 @@
   "integrations": {
     "active": "Active",
     "inactive": "Inactive",
+    "disconnect": "Disconnect",
     "credentials": "Credentials",
     "currentState": "Current State",
     "setupGuide": "Setup Guide",
@@ -379,8 +401,8 @@
       "title": "Telegram",
       "subtitle": "Connect the assistant to your bot to reply to messages automatically",
       "botCredentials": "Bot Credentials",
-      "botCredentialsSubtitle": "Obtained from @BotFather on Telegram",
-      "botTokenHelp": "Token obtained by sending /newbot to @BotFather.",
+      "botCredentialsSubtitle": "Obtained from {'@'}BotFather on Telegram",
+      "botTokenHelp": "Token obtained by sending /newbot to {'@'}BotFather.",
       "secretTokenHelp": "If set, the webhook only accepts requests with this token in the X-Telegram-Bot-Api-Secret-Token header.",
       "tokenConfigured": "Token configured",
       "noToken": "No token saved",
@@ -503,7 +525,9 @@
       "errorCheckStatus": "Error checking status",
       "errorGetProfileId": "Could not get profile ID",
       "errorGetAuthUrlMsg": "Could not get authorization URL",
-      "autoSync": "Automatic synchronization"
+      "autoSync": "Automatic synchronization",
+      "disconnected": "Disconnected",
+      "disconnectedDesc": "Google Calendar session disconnected successfully"
     },
     "googleDrive": {
       "title": "Google Drive",
@@ -549,7 +573,9 @@
       "errorGetAuthUrl": "Error getting authorization URL",
       "errorCheckStatus": "Error checking status",
       "errorGetProfileId": "Could not get profile ID",
-      "errorGetAuthUrlMsg": "Could not get authorization URL"
+      "errorGetAuthUrlMsg": "Could not get authorization URL",
+      "disconnected": "Disconnected",
+      "disconnectedDesc": "Google Drive session disconnected successfully"
     },
     "googleGmail": {
       "subtitle": "Connect your assistant with Gmail to send and read emails",
@@ -591,7 +617,9 @@
       "errorGetAuthUrl": "Error getting authorization URL",
       "errorCheckStatus": "Error checking status",
       "errorGetProfileId": "Could not get profile ID",
-      "errorGetAuthUrlMsg": "Could not get authorization URL"
+      "errorGetAuthUrlMsg": "Could not get authorization URL",
+      "disconnected": "Disconnected",
+      "disconnectedDesc": "Gmail session disconnected successfully"
     },
     "store": {
       "title": "Storage Integration",

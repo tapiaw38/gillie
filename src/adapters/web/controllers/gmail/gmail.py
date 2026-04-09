@@ -118,6 +118,16 @@ async def check_gmail_status(
     )
 
 
+@router.delete("/session", status_code=status.HTTP_204_NO_CONTENT)
+async def disconnect_gmail(
+    request: Request,
+    usecases: Usecases = Depends(get_usecases),
+):
+    """Disconnect (revoke) the Gmail OAuth session."""
+    user_id = request.state.user.get("user_id")
+    usecases.gmail.disconnect_usecase.execute(user_id)
+
+
 @router.get("/emails", response_model=GmailEmailListOutput, status_code=status.HTTP_200_OK)
 async def list_emails(
     request: Request,

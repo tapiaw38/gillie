@@ -31,6 +31,7 @@ export interface ICalendarService {
     profileId?: string,
   ): Promise<CalendarEventResponse>
   deleteEvent(eventId: string, profileId?: string): Promise<void>
+  disconnect(): Promise<void>
 }
 
 export class CalendarService implements ICalendarService {
@@ -111,5 +112,9 @@ export class CalendarService implements ICalendarService {
   async deleteEvent(eventId: string, profileId?: string): Promise<void> {
     const params = profileId ? { profile_id: profileId } : {}
     await this.api.delete(`/api/v1/calendar/events/${eventId}`, { params })
+  }
+
+  async disconnect(): Promise<void> {
+    await this.api.delete('/api/v1/calendar/session')
   }
 }

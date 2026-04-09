@@ -48,6 +48,65 @@ app = typer.Typer()
 
 _CLI_CONV_TITLE = "CLI Agent"
 
+# ─── Session-level config cache ────────────────────────────────────────────────
+# Loaded once at session start to avoid repeated disk reads per request.
+_config_cache = None
+
+def _get_config():
+    global _config_cache
+    if _config_cache is None:
+        _config_cache = load_config()
+    return _config_cache
+
+
+# ─── Session token / cost tracker ─────────────────────────────────────────────
+
+_session_tokens_in  = 0   # estimated input tokens sent this session
+_session_tokens_out = 0   # estimated output tokens received this session
+
+
+def _estimate_tokens(text: str) -> int:
+    """Rough token estimate: 4 chars ≈ 1 token."""
+    return max(1, len(text) // 4)
+
+
+def _track_tokens(user_msg: str, assistant_reply: str) -> None:
+    global _session_tokens_in, _session_tokens_out
+    _session_tokens_in  += _estimate_tokens(user_msg)
+    _session_tokens_out += _estimate_tokens(assistant_reply)
+
+
+def _print_session_cost() -> None:
+    """Print a token / estimated cost summary for the current session."""
+    total = _session_tokens_in + _session_tokens_out
+    if total == 0:
+        return
+    # Rough pricing: $0.27 / 1M input + $1.10 / 1M output (DeepSeek-chat defaults)
+    cost_usd = (_session_tokens_in * 0.27 + _session_tokens_out * 1.10) / 1_000_000
+    console.print(
+        f"\n[dim]Session: ~{_session_tokens_in:,} in · ~{_session_tokens_out:,} out "
+        f"· ~{total:,} total tokens · est. ${cost_usd:.4f}[/dim]"
+    )
+
+
+# ─── agent.md workspace context ────────────────────────────────────────────────
+
+_AGENT_MD_NAMES = ("agent.md", "AGENT.md", ".agent.md")
+
+
+def _load_agent_md(workspace: "Path") -> str | None:
+    """Return the contents of agent.md from the workspace, or None if absent."""
+    for name in _AGENT_MD_NAMES:
+        candidate = workspace / name
+        if candidate.exists() and candidate.is_file():
+            try:
+                text = candidate.read_text(encoding="utf-8", errors="replace").strip()
+                if text:
+                    return text
+            except OSError:
+                pass
+    return None
+
 
 # ─── Approval modes ────────────────────────────────────────────────────────────
 
@@ -76,6 +135,7 @@ _SAFE_TOOLS = {
     "save_solution", "cron_list", "describe_image", "take_screenshot",
     "browser_navigate", "browser_get_content", "browser_screenshot", "browser_close",
     "browser_connect", "browser_switch_tab", "browser_enable_remote_debug", "browser_evaluate",
+    "browser_act", "browser_extract",
 }
 
 # High-risk: always ask, even in AUTO_EDIT.
@@ -122,7 +182,7 @@ def _build_prompt(mode: str) -> str:
 # ─── HTTP helpers ─────────────────────────────────────────────────────────────
 
 def _base_url() -> str:
-    config = load_config()
+    config = _get_config()
     host = config.server.host or "127.0.0.1"
     if host == "0.0.0.0":
         host = "127.0.0.1"
@@ -285,14 +345,32 @@ def _clear_messages(conv_id: str) -> None:
 
 # ─── Display helpers ───────────────────────────────────────────────────────────
 
-def _print_header(assistant_name: str, conv_id: str, mode: str = _Mode.CONFIRM_RISKY) -> None:
+_AUTO_COMPACT_THRESHOLD = 30  # auto-compact when message count exceeds this
+
+
+def _maybe_auto_compact(conv_id: str, messages: list) -> None:
+    """Silently compact the conversation when it grows too large."""
+    if len(messages) < _AUTO_COMPACT_THRESHOLD:
+        return
+    try:
+        result = _post_json(f"/conversation/{conv_id}/compact", {})
+        if result.get("compacted"):
+            n = result.get("summarized", "?")
+            console.print(f"[dim]Auto-compacted: {n} messages → 1 summary[/dim]\n")
+    except Exception:
+        pass
+
+
+def _print_header(assistant_name: str, conv_id: str, mode: str = _Mode.CONFIRM_RISKY, agent_md: bool = False) -> None:
     ws = _workspace()
+    agent_md_line = "[dim]📋 agent.md loaded — workspace context active[/dim]\n" if agent_md else ""
     console.print()
     console.print(Panel(
-        f"✨🐟 [bold cyan]{assistant_name}[/bold cyan]\n"
+        f"✨🐙 [bold cyan]{assistant_name}[/bold cyan]\n"
         f"[dim]Conversation: {conv_id}[/dim]\n"
         f"[dim]Workspace:    {ws}[/dim]\n"
         f"[dim]Mode: {mode} | /mode to change[/dim]\n"
+        f"{agent_md_line}"
         f"[dim]/new · /list · /clear · /compact · /plan · /mode · /model · /attach · /files · /id · /exit[/dim]\n"
         f"[dim]Esc — cancel running agent[/dim]\n"
         f"[dim]@path — work with local file · /attach path — upload to storage[/dim]",
@@ -435,17 +513,13 @@ def _stream_assistant(
                     if not r:
                         continue
                     ch = os.read(fd, 1)
-                    if ch == b"\x1b":
+                    if ch in (b"\x1b", b"\x03"):  # ESC or Ctrl+C → cancel running agent
                         _cancel_requested.set()
                         if _resp_holder[0] is not None:
                             try:
                                 _resp_holder[0].close()
                             except Exception:
                                 pass
-                        break
-                    elif ch == b"\x03":  # Ctrl+C → keep original behaviour
-                        import signal as _signal
-                        os.kill(os.getpid(), _signal.SIGINT)
                         break
             finally:
                 termios.tcsetattr(fd, termios.TCSADRAIN, old_settings)
@@ -777,6 +851,7 @@ def _stream_assistant(
         console.print(f"[dim]🔊 Playing audio...[/dim]")
         _play_audio(audio_url)
 
+    _track_tokens(content, full_text)
     return full_text
 
 
@@ -1068,7 +1143,7 @@ def listen(
 
     console.print()
     console.print(Panel(
-        f"✨🐟 [bold cyan]{assistant_name}[/bold cyan] — listen mode\n"
+        f"✨🐙 [bold cyan]{assistant_name}[/bold cyan] — listen mode\n"
         f"[dim]Speak when you see the mic. {silence}s of silence to send. Ctrl+C to quit.[/dim]\n"
         f"[dim]{vad_status}[/dim]",
         border_style="cyan",
@@ -1278,6 +1353,7 @@ def agent(
     ctx: typer.Context,
     new: bool = typer.Option(False, "--new", "-n", help="Force a new conversation"),
     conv_id: str = typer.Option(None, "--id", help="Attach to a specific conversation ID"),
+    resume: str = typer.Option(None, "--resume", "-r", help="Resume a conversation by ID (alias for --id)"),
     workspace: str = typer.Option(None, "--workspace", "-w", help="Set workspace directory for this session"),
     show_workspace: bool = typer.Option(False, "--show-workspace", help="Print current workspace and exit"),
     yolo: bool = typer.Option(False, "--yolo", help="Auto-approve all tool calls (alias for --mode yolo)"),
@@ -1316,12 +1392,15 @@ def agent(
             raise typer.Exit(1)
         os.environ["GILLIE_WORKSPACE"] = str(ws_path)
 
-    config = load_config()
+    # --resume is an alias for --id
+    effective_conv_id = conv_id or resume
+
+    config = _get_config()
     assistant_name = config.profile.assistant_name
 
     # ── resolve conversation ──────────────────────────────────────────────────
-    if conv_id:
-        result = _get(f"/conversation/{conv_id}")
+    if effective_conv_id:
+        result = _get(f"/conversation/{effective_conv_id}")
         conversation = result.get("data", result)
     elif new:
         conversation = _create_conversation()
@@ -1349,17 +1428,24 @@ def agent(
     # Local files accessed or modified by AI tools during this session.
     session_local_files: list = []
 
-    _print_header(assistant_name, current_id, mode[0])
+    # ── Load agent.md workspace context ──────────────────────────────────────
+    ws = _workspace()
+    agent_md_content = _load_agent_md(ws)
+
+    _print_header(assistant_name, current_id, mode[0], agent_md=agent_md_content is not None)
 
     # Show workspace contents if available
-    ws = _workspace()
     if ws.exists():
         _print_workspace_summary(ws)
 
     # Show recent history if resuming
     messages = conversation.get("messages", [])
     if messages:
+        _maybe_auto_compact(current_id, messages)
         _print_history(messages, assistant_name)
+
+    # Track whether agent.md has been injected into this session already
+    _agent_md_injected = bool(messages)  # if resuming, skip re-injection
 
     # ── REPL ─────────────────────────────────────────────────────────────────
     console.print(f"[dim]Type your message and press Enter. /exit to quit.[/dim]")
@@ -1464,10 +1550,25 @@ def agent(
             return _pt_session.prompt(prompt_text).strip()
         return console.input(f"[bold cyan]{prompt_text}[/bold cyan]").strip()
 
+    _last_ctrl_c: float = 0.0  # timestamp of last Ctrl+C at the prompt
+
     while True:
         try:
             user_input = _read_input()
-        except (KeyboardInterrupt, EOFError):
+            _last_ctrl_c = 0.0  # reset on successful input
+        except KeyboardInterrupt:
+            import time as _t
+            now = _t.time()
+            if now - _last_ctrl_c < 2.0:
+                # Second Ctrl+C within 2s → exit
+                _print_session_cost()
+                console.print("\n[dim]Goodbye 👋[/dim]")
+                break
+            _last_ctrl_c = now
+            console.print("\n[dim]Press Ctrl+C again to exit, or type a message to continue.[/dim]")
+            continue
+        except EOFError:
+            _print_session_cost()
             console.print("\n[dim]Goodbye 👋[/dim]")
             break
 
@@ -1478,6 +1579,7 @@ def agent(
         cmd = user_input.lower()
 
         if cmd in ("/exit", "/quit", "/q"):
+            _print_session_cost()
             console.print("[dim]Goodbye 👋[/dim]")
             break
 
@@ -1650,6 +1752,14 @@ def agent(
                 )
         user_input = expanded
 
+        # ── inject agent.md on first message of the session ──────────────
+        if not _agent_md_injected and agent_md_content:
+            user_input = (
+                f"<workspace_context>\n{agent_md_content}\n</workspace_context>\n\n"
+                + user_input
+            )
+            _agent_md_injected = True
+
         # ── send message (streaming) ─────────────────────────────────────
         _print_user(user_input)
         _stream_assistant(
@@ -1662,3 +1772,12 @@ def agent(
             always_rejected=always_rejected,
             session_local_files=session_local_files,
         )
+
+    # ── Cleanup on exit: close browser sessions to avoid orphan processes ────
+    try:
+        requests.post(
+            _base_url() + "/browser/close",
+            timeout=3,
+        )
+    except Exception:
+        pass

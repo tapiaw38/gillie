@@ -35,6 +35,7 @@ class OpenAIServiceConfig:
     timeout: float = 45.0
     max_retries: int = 3
     auth_type: str = "api_key"  # "api_key" | "bearer"
+    active_provider: str = ""
 
 
 @dataclass

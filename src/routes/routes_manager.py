@@ -24,17 +24,23 @@ from src.adapters.web.controllers.job.controllers import (
     set_usecases as set_job_usecases,
     set_scheduler as set_job_scheduler,
 )
+from src.adapters.web.controllers.system.controllers import (
+    router as system_router,
+    set_openai_integration,
+    set_usecases as set_system_usecases,
+)
 from src.core.use_cases.use_cases import Usecases
 from src.core.platform.config.service import ConfigurationService
 
 
 class RoutesManager:
-    def __init__(self, app: FastAPI, usecases: Usecases, config_service=ConfigurationService, neonize_integration=None, scheduler=None):
+    def __init__(self, app: FastAPI, usecases: Usecases, config_service=ConfigurationService, neonize_integration=None, scheduler=None, openai_integration=None):
         self.app = app
         self.usecases = usecases
         self.config_service = config_service
         self.neonize_integration = neonize_integration
         self.scheduler = scheduler
+        self.openai_integration = openai_integration
 
     def include_routes(self):
         conversation.controllers.set_usecases(self.usecases)
@@ -52,6 +58,9 @@ class RoutesManager:
         set_job_usecases(self.usecases)
         if self.scheduler is not None:
             set_job_scheduler(self.scheduler)
+        if self.openai_integration is not None:
+            set_openai_integration(self.openai_integration)
+        set_system_usecases(self.usecases)
 
         self.app.dependency_overrides[ConfigurationService] = lambda: self.config_service
 
@@ -78,3 +87,4 @@ class RoutesManager:
         self.app.include_router(slack_router)
         self.app.include_router(telegram_router)
         self.app.include_router(job_router)
+        self.app.include_router(system_router)

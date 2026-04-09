@@ -21,6 +21,7 @@ export interface IDriveService {
   saveCredentials(clientId: string, clientSecret: string, redirectUri?: string): Promise<void>
   getAuthorizationUrl(profileId?: string): Promise<DriveAuthorizationResponse>
   checkStatus(profileId?: string): Promise<DriveStatusResponse>
+  disconnect(): Promise<void>
 }
 
 export class DriveService implements IDriveService {
@@ -51,5 +52,9 @@ export class DriveService implements IDriveService {
     const params = profileId ? { profile_id: profileId } : {}
     const { data } = await this.api.get<DriveStatusResponse>('/api/v1/drive/status', { params })
     return data
+  }
+
+  async disconnect(): Promise<void> {
+    await this.api.delete('/api/v1/drive/session')
   }
 }

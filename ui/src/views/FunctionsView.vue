@@ -433,21 +433,21 @@ const openWorkflowForCard = (fn: Record<string, unknown>) => {
       <div class="banner-right">
         <Button
           v-if="hasWorkflow()"
-          :label="editorMode === 'json' ? t('functions.switchToVisual') : t('functions.switchToJson')"
+          v-tooltip.bottom="editorMode === 'json' ? t('functions.switchToVisual') : t('functions.switchToJson')"
           :icon="editorMode === 'json' ? 'pi pi-sitemap' : 'pi pi-code'"
           size="small"
           severity="info"
           @click="toggleEditorMode"
         />
         <Button
-          :label="t('functions.cancelEdit')"
+          v-tooltip.bottom="t('functions.cancelEdit')"
           icon="pi pi-times"
           size="small"
           severity="secondary"
           @click="toggleEdit"
         />
         <Button
-          :label="t('functions.saveFunctions')"
+          v-tooltip.bottom="t('functions.saveFunctions')"
           icon="pi pi-save"
           size="small"
           :loading="isSaving"
@@ -518,7 +518,7 @@ const openWorkflowForCard = (fn: Record<string, unknown>) => {
             </div>
             <Button
               v-if="fn.type === 'workflow'"
-              :label="t('functions.viewWorkflow')"
+              v-tooltip.bottom="t('functions.viewWorkflow')"
               icon="pi pi-sitemap"
               size="small"
               text
