@@ -94,8 +94,6 @@ class SkillManager:
         self._ensure_memory_root()
         self._ensure_rules_skill()
 
-    # ─── Generic skill operations ──────────────────────────────────────────────
-
     def list_skills(self) -> List[str]:
         """Return names (without extension) of all .skill.md files."""
         return [p.stem.replace(".skill", "") for p in sorted(self.memory_dir.glob("*.skill.md"))]
@@ -118,8 +116,6 @@ class SkillManager:
             return False
         path.unlink()
         return True
-
-    # ─── Memory root (memory.md) ──────────────────────────────────────────────
 
     def _memory_root_path(self) -> Path:
         return self.memory_dir / "memory.md"
@@ -181,8 +177,6 @@ class SkillManager:
             return ""
         return self._resolve_references(raw)
 
-    # ─── Base context (always injected into LLM) ──────────────────────────────
-
     def get_base_context(self) -> str:
         """
         Loads memory.md, resolves `ver X.skill.md` references, and wraps the
@@ -197,8 +191,6 @@ class SkillManager:
             + resolved.strip()
             + "\n\n=================================="
         )
-
-    # ─── General memory ───────────────────────────────────────────────────────
 
     def get_general_memory(self) -> str:
         return self.load_skill("general")
@@ -281,8 +273,6 @@ class SkillManager:
         self.save_skill("general", content.strip() + "\n")
         logger.info("general.skill.md overwritten (%d chars)", len(content))
 
-    # ─── Solutions memory (operates on solutions.skill.md) ────────────────────
-
     def append_solution(
         self,
         problem: str,
@@ -327,8 +317,6 @@ class SkillManager:
         self.save_skill("solutions", raw)
         logger.info("Saved solution %s: %s", solution_id, problem[:80])
         return solution_id
-
-    # ─── Facts memory (operates on facts.skill.md) ────────────────────────────
 
     def save_memory_fact(self, content: str, category: str = "General") -> str:
         """
@@ -413,8 +401,6 @@ class SkillManager:
 
         return "\n\n".join(all_sections)
 
-    # ─── FAQs CRUD (operates on faqs.skill.md) ────────────────────────────────
-
     def get_faqs(self) -> List[Dict]:
         """
         Parse faqs.skill.md and return a list of FAQ dicts:
@@ -486,8 +472,6 @@ class SkillManager:
         updated = updated.strip() + "\n"
         self.save_skill("faqs", updated)
         return True
-
-    # ─── Internal helpers ─────────────────────────────────────────────────────
 
     def _skill_path(self, name: str) -> Path:
         return self.memory_dir / f"{name}.skill.md"

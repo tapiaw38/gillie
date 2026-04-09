@@ -11,7 +11,6 @@ from rich import box
 app = typer.Typer(help="Install Python dependencies")
 console = Console()
 
-# System packages required or recommended for gillie features
 _SYSTEM_DEPS = [
     {
         "package": "portaudio",
@@ -212,7 +211,6 @@ def _install_system_deps():
     else:
         console.print("[red]✗[/red] Some packages failed to install.")
 
-    # Run post-install commands (e.g. playwright install chromium)
     for dep in missing:
         post = dep.get("post_install")
         if post:

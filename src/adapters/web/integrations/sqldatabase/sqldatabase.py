@@ -22,16 +22,13 @@ from typing import Any, Dict, List, Optional
 
 logger = logging.getLogger(__name__)
 
-# These are ALWAYS blocked regardless of user config
 _ALWAYS_BLOCKED = frozenset([
     "DROP", "TRUNCATE", "ALTER", "CREATE", "GRANT", "REVOKE",
     "EXEC", "EXECUTE",
 ])
 
-# DML operations that are blocked by default but may be unlocked per integration
 _DEFAULT_BLOCKED_DML = frozenset(["INSERT", "UPDATE", "DELETE"])
 
-# Full set of DML operations tracked for `allowed_operations`
 _ALL_DML = frozenset(["INSERT", "UPDATE", "DELETE"])
 
 
@@ -63,8 +60,6 @@ class SQLDatabaseIntegration:
             if t.get("name")
         }
 
-        # Merge caller-supplied keywords with the always-blocked set.
-        # When the caller passes None we apply the safe default (block all DML).
         caller_blocked = (
             {k.upper() for k in blocked_keywords}
             if blocked_keywords is not None
@@ -72,9 +67,6 @@ class SQLDatabaseIntegration:
         )
         self.blocked_keywords: frozenset = _ALWAYS_BLOCKED | caller_blocked
 
-    # ------------------------------------------------------------------
-    # Convenience properties
-    # ------------------------------------------------------------------
 
     @property
     def table_names(self) -> List[str]:
@@ -94,7 +86,6 @@ class SQLDatabaseIntegration:
                 ops.append(dml)
         return ops
 
-    # Keep for backward compat (first table)
     @property
     def allowed_table(self) -> str:
         return self.table_names[0] if self.table_names else ""
@@ -102,10 +93,6 @@ class SQLDatabaseIntegration:
     @property
     def table_description(self) -> str:
         return self._tables.get(self.allowed_table, "")
-
-    # ------------------------------------------------------------------
-    # Public API
-    # ------------------------------------------------------------------
 
     async def query(
         self,
@@ -184,7 +171,6 @@ class SQLDatabaseIntegration:
         if not sql:
             return {"success": False, "error": "La sentencia SQL no puede estar vacía."}
 
-        # --- security: blocked keywords (whole-word match) ---
         sql_upper = sql.upper()
         for kw in self.blocked_keywords:
             pattern = rf"\b{re.escape(kw)}\b"
@@ -196,14 +182,12 @@ class SQLDatabaseIntegration:
                     ),
                 }
 
-        # --- security: comment markers (not word-bounded) ---
         if "--" in sql or "/*" in sql:
             return {
                 "success": False,
                 "error": "Operación no permitida: los comentarios SQL están bloqueados.",
             }
 
-        # --- security: multiple statements ---
         if sql.count(";") > 1:
             return {
                 "success": False,
@@ -235,10 +219,6 @@ class SQLDatabaseIntegration:
         except Exception as e:
             logger.error(f"[sqldatabase] execute() error: {e}", exc_info=True)
             return {"success": False, "error": str(e)}
-
-    # ------------------------------------------------------------------
-    # Internal helpers
-    # ------------------------------------------------------------------
 
     def _build_query(
         self,
@@ -300,7 +280,6 @@ class SQLDatabaseIntegration:
             if kw in upper:
                 raise ValueError(f"Forbidden keyword in filter: {kw!r}")
 
-        # Detect subqueries referencing other tables
         from_matches = re.findall(r"\bFROM\s+([a-zA-Z_][a-zA-Z0-9_]*)", upper)
         for ref in from_matches:
             if ref.lower() != table:

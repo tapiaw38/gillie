@@ -7,6 +7,8 @@ from src.core.platform.config.service import ConfigurationService
 from openai import AsyncOpenAI
 import asyncio
 from dataclasses import dataclass
+from collections import Counter
+import re
 
 try:
     import cv2
@@ -38,6 +40,20 @@ class ProcessingResult:
 class BaseFileProcessor:
     """Base class with common functionality for file processing"""
 
+    _MULTILINGUAL_STOPWORDS = {
+        "the", "a", "an", "and", "or", "but", "in", "on", "at", "to", "for", "of",
+        "with", "by", "from", "up", "about", "into", "through", "during", "before",
+        "after", "above", "below", "between", "among", "is", "are", "was", "were",
+        "be", "been", "being", "have", "has", "had", "do", "does", "did", "will",
+        "would", "should", "could", "can", "may", "might", "must", "shall", "this",
+        "that", "these", "those", "i", "you", "he", "she", "it", "we", "they", "me",
+        "him", "her", "us", "them", "my", "your", "his", "its", "our", "their", "if",
+        "so", "as", "el", "la", "los", "las", "un", "una", "de", "del", "al", "en",
+        "y", "que", "es", "se", "no", "te", "lo", "le", "da", "su", "por", "son",
+        "con", "para", "sin", "pero", "sus", "como", "si", "ya", "mi", "tu", "todo",
+        "todos", "toda", "todas", "mas", "más", "esta", "este", "estos", "estas",
+    }
+
     def __init__(self, config_service: ConfigurationService):
         config = config_service.openai_config
         self.api_key = config.api_key
@@ -52,6 +68,51 @@ class BaseFileProcessor:
         else:
             self._vision_client = None
             self._vision_model = None
+
+    def _extract_keywords_from_phrase_common(self, phrase: str) -> List[str]:
+        """Extract unique keywords from a short search phrase."""
+        try:
+            cleaned_phrase = phrase.lower().strip()
+            words = re.findall(
+                r"\b[a-zA-ZáéíóúñüÁÉÍÓÚÑÜ0-9]{2,}\b",
+                cleaned_phrase,
+                re.IGNORECASE,
+            )
+
+            keywords = []
+            seen = set()
+            for word in words:
+                word_lower = word.lower()
+                if (
+                    word_lower not in self._MULTILINGUAL_STOPWORDS
+                    and word_lower not in seen
+                ):
+                    keywords.append(word)
+                    seen.add(word_lower)
+
+            return keywords or [phrase.strip()]
+        except Exception:
+            return [phrase.strip()]
+
+    def _extract_keywords_from_text_common(
+        self, text: str, min_word_length: int = 4, max_keywords: int = 10
+    ) -> List[str]:
+        """Extract the most frequent keywords from longer text."""
+        try:
+            words = re.findall(
+                r"\b[a-zA-ZáéíóúñüÁÉÍÓÚÑÜ]{3,}\b",
+                text.lower(),
+            )
+            keywords = [
+                word
+                for word in words
+                if word not in self._MULTILINGUAL_STOPWORDS
+                and len(word) >= min_word_length
+            ]
+            word_counts = Counter(keywords)
+            return [word for word, _ in word_counts.most_common(max_keywords)]
+        except Exception:
+            return []
 
     def _analyze_image_with_python_tools(self, image_base64: str) -> Dict[str, Any]:
         """Analyze image using Python tools (common for all processors)"""
@@ -338,7 +399,6 @@ class BaseFileProcessor:
         try:
             base_score = 0.0
 
-            # Quality score contributes significantly to relevance
             quality_score = analysis.get("quality_score", 0.0)
             if quality_score > 0.8:
                 base_score += 0.35  # High quality images are more relevant
@@ -349,7 +409,6 @@ class BaseFileProcessor:
             elif quality_score > 0.2:
                 base_score += 0.05
 
-            # Objects detected indicates content richness
             objects_detected = analysis.get("objects_detected", 0)
             if objects_detected > 5:
                 base_score += 0.40  # Many objects = complex, detailed content
@@ -360,11 +419,9 @@ class BaseFileProcessor:
             elif objects_detected > 0:
                 base_score += 0.10
 
-            # Text detection adds context relevance
             if analysis.get("text_detected", False):
                 base_score += 0.15
 
-            # Color variety indicates visual richness
             dominant_colors = analysis.get("dominant_colors", [])
             if len(dominant_colors) > 4:
                 base_score += 0.20
@@ -373,15 +430,12 @@ class BaseFileProcessor:
             elif len(dominant_colors) > 1:
                 base_score += 0.10
 
-            # Search term specific bonuses
             search_term_lower = search_term.lower()
 
-            # Generic product/content terms
             if search_term_lower in ["product", "item", "article", "object"]:
                 if objects_detected > 0:
                     base_score += 0.30
 
-            # Visual content terms
             elif search_term_lower in [
                 "chart",
                 "graph",
@@ -394,13 +448,11 @@ class BaseFileProcessor:
                 if analysis.get("text_detected", False):
                     base_score += 0.15
 
-            # Image quality terms
             elif search_term_lower in ["image", "photo", "picture", "illustration"]:
                 base_score += 0.20
                 if quality_score > 0.6:
                     base_score += 0.15
 
-            # Dimension-based relevance (larger images often more important)
             dimensions = analysis.get("dimensions", (0, 0))
             if dimensions[0] > 0 and dimensions[1] > 0:
                 pixel_count = dimensions[0] * dimensions[1]
@@ -409,13 +461,11 @@ class BaseFileProcessor:
                 elif pixel_count > 100000:  # Medium resolution
                     base_score += 0.05
 
-            # Penalty for very low quality (likely corrupted or irrelevant)
             if quality_score < 0.1:
                 base_score *= 0.3
             elif quality_score < 0.2:
                 base_score *= 0.6
 
-            # Ensure score is between 0 and 1
             return min(max(base_score, 0.0), 1.0)
 
         except Exception as e:
@@ -435,35 +485,28 @@ class BaseFileProcessor:
             search_term_lower = search_term.lower()
             base_score = 0.0
 
-            # 1. Check for text detection (images with text are often more relevant)
             if analysis.get("text_detected", False):
                 base_score += 0.2
 
-            # 2. Quality score bonus (higher quality images are often more relevant)
             quality_score = analysis.get("quality_score", 0)
             if quality_score > 0.7:
                 base_score += 0.15
             elif quality_score > 0.5:
                 base_score += 0.1
 
-            # 3. Object detection bonus
             objects_detected = analysis.get("objects_detected", 0)
             if objects_detected > 0:
                 base_score += min(objects_detected * 0.1, 0.2)
 
-            # 4. Image properties analysis
             dimensions = analysis.get("dimensions", (0, 0))
             if dimensions[0] > 300 and dimensions[1] > 300:  # Reasonable size
                 base_score += 0.1
 
-            # 5. Brightness and contrast (well-balanced images often more relevant)
             brightness = analysis.get("brightness", 0)
             contrast = analysis.get("contrast", 0)
             if 0.3 < brightness < 0.8 and contrast > 30:
                 base_score += 0.1
 
-            # 6. Search term matching bonuses
-            # Check if search term contains common image-related keywords
             image_keywords = [
                 "chart",
                 "graph",
@@ -484,29 +527,23 @@ class BaseFileProcessor:
                     base_score += 0.15
                     break
 
-            # 7. File context bonus (if img_data contains context)
             if img_data:
                 sheet_name = img_data.get("sheet_name", "").lower()
                 page_info = img_data.get("page_number", 1)
 
-                # First page/sheet bonus
                 if page_info == 1:
                     base_score += 0.1
 
-                # Sheet name relevance
                 if search_term_lower in sheet_name:
                     base_score += 0.2
 
-            # 8. Default baseline for any valid image
             base_score += 0.3
 
-            # Cap the score at 1.0
             final_score = min(base_score, 1.0)
 
             return final_score
 
         except Exception as e:
-            # Return a default moderate score on error
             return 0.5
 
     def _describe_colors(self, colors: List[List[int]]) -> str:

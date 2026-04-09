@@ -68,7 +68,6 @@ def reset(
 
     errors = []
 
-    # ── 1. MongoDB ────────────────────────────────────────────────────────────
     console.print()
     console.print("[bold]Resetting MongoDB...[/bold]")
     try:
@@ -85,7 +84,6 @@ def reset(
         console.print(f"  [yellow]⚠[/yellow]  {msg}")
         errors.append(msg)
 
-    # ── 2. Qdrant ─────────────────────────────────────────────────────────────
     console.print("[bold]Resetting Qdrant...[/bold]")
     qdrant_enabled = config and config.services.qdrant.enabled if config else False
     if qdrant_enabled:
@@ -116,7 +114,6 @@ def reset(
     else:
         console.print("  [dim]Qdrant not enabled — skipped[/dim]")
 
-    # ── 3. Local storage files ────────────────────────────────────────────────
     if not keep_storage:
         console.print("[bold]Removing local storage files...[/bold]")
         storage_path = DEFAULT_LOCAL_STORAGE
@@ -136,7 +133,6 @@ def reset(
         else:
             console.print("  [dim]No local storage directory found — skipped[/dim]")
 
-    # ── 4. CLI config files ───────────────────────────────────────────────────
     if not keep_config:
         console.print("[bold]Removing CLI config...[/bold]")
         for path in [get_soul_path(), get_config_path()]:
@@ -148,11 +144,9 @@ def reset(
                     msg = f"Could not remove {path}: {e}"
                     console.print(f"  [yellow]⚠[/yellow]  {msg}")
                     errors.append(msg)
-        # Remove config dir if empty
         if CONFIG_DIR.exists() and not any(CONFIG_DIR.iterdir()):
             CONFIG_DIR.rmdir()
 
-    # ── Summary ───────────────────────────────────────────────────────────────
     console.print()
     if errors:
         console.print(f"[yellow]Reset completed with {len(errors)} warning(s):[/yellow]")

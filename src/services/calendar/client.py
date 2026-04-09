@@ -63,8 +63,6 @@ class GoogleCalendarClient:
         creds.refresh(Request())
         return {"access_token": creds.token, "expiry": creds.expiry}
 
-    # ── Service builder ──────────────────────────────────────────────────────
-
     def build_service(self, access_token: str, refresh_token: str, expiry: datetime):
         """Build an authenticated Google Calendar service object."""
         from google.oauth2.credentials import Credentials

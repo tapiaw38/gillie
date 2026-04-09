@@ -82,8 +82,6 @@ class MCPClient:
     async def health_check(self) -> bool:
         return True
 
-    # ── Stub context methods (no longer backed by external service) ────────
-
     async def get_user_profile(self, user_id: str, api_key: str) -> Dict[str, Any]:
         return {"success": False, "message": "Context tools not available in single-user mode"}
 

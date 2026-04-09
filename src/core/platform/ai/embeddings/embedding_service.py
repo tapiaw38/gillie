@@ -71,11 +71,9 @@ class EmbeddingService:
         Returns:
             Embedding dimension
         """
-        # Try to get dimension from model if available
         if hasattr(self.embeddings_model, 'dimension'):
             return self.embeddings_model.dimension
         elif hasattr(self.embeddings_model, 'model_name'):
-            # Common dimensions for known models
             model_dimensions = {
                 'text-embedding-3-small': 1536,
                 'text-embedding-3-large': 3072,

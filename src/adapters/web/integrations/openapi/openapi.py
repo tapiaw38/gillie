@@ -62,10 +62,6 @@ class OpenAIIntegration:
 
         self.logger.info(f"OpenAI integration initialized with model: {self.model}, auth_type: {self.auth_type}")
 
-    # ------------------------------------------------------------------
-    # Client construction helpers
-    # ------------------------------------------------------------------
-
     def _build_client(self) -> AsyncOpenAI:
         """Construct an AsyncOpenAI client with the current credentials."""
         return AsyncOpenAI(

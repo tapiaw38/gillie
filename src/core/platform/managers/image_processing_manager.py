@@ -72,7 +72,6 @@ class ImageProcessingService:
             Formatted images string or None if no images found
         """
         try:
-            # Generate optimal search keyword
             search_keyword = await self._generate_image_search_keyword(
                 user_message=user_message,
                 profile=profile,
@@ -82,7 +81,6 @@ class ImageProcessingService:
 
             logger.info(f"Generated image search keyword: '{search_keyword}'")
 
-            # Search for images
             images = await self._search_images(
                 keyword=search_keyword,
                 profile=profile,
@@ -93,7 +91,6 @@ class ImageProcessingService:
                 logger.info("No images found for the search keyword")
                 return None
 
-            # Filter by confidence
             filtered_images = self._filter_by_confidence(
                 images=images,
                 threshold=confidence_threshold
@@ -103,7 +100,6 @@ class ImageProcessingService:
                 logger.info("No images passed confidence threshold")
                 return None
 
-            # Format for chat response
             formatted_images = self._format_images(
                 images=filtered_images,
                 search_term=search_keyword,
@@ -174,7 +170,6 @@ class ImageProcessingService:
             List of image search results
         """
         try:
-            # Optimize for fast processing if enabled
             if ENABLE_FAST_IMAGE_PROCESSING:
                 logger.info("Using optimized fast image processing mode")
                 max_results = min(max_results, 2)

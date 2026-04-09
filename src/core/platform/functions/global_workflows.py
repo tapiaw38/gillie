@@ -41,10 +41,6 @@ To add a new workflow:
 from typing import List, Dict, Any, Optional
 
 
-# ============================================================================
-# CALENDAR WORKFLOWS
-# ============================================================================
-
 _CALENDAR_BASE = "http://localhost:8000/api/v1/calendar"
 _CALENDAR_HEADERS = {"Authorization": "Bearer {auth_token}", "Content-Type": "application/json"}
 
@@ -181,10 +177,6 @@ CALENDAR_DELETE_EVENT = {
 }
 
 
-# ============================================================================
-# DRIVE WORKFLOWS
-# ============================================================================
-
 _DRIVE_BASE = "http://localhost:8000/api/v1/drive"
 _DRIVE_HEADERS = {"Authorization": "Bearer {auth_token}", "Content-Type": "application/json"}
 
@@ -301,11 +293,6 @@ DRIVE_MOVE_FILE = {
 }
 
 
-# ============================================================================
-# GLOBAL WORKFLOW REGISTRY
-# Add your workflows here.
-# ============================================================================
-
 GLOBAL_WORKFLOWS: List[Dict[str, Any]] = [
     CALENDAR_LIST_EVENTS,
     CALENDAR_CREATE_EVENT,
@@ -317,10 +304,6 @@ GLOBAL_WORKFLOWS: List[Dict[str, Any]] = [
     DRIVE_MOVE_FILE,
 ]
 
-
-# ============================================================================
-# HELPERS
-# ============================================================================
 
 def has_active_integration(profile, integration_name: str) -> bool:
     """Return True if the profile has an active, connected integration by name.

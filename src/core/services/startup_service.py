@@ -45,9 +45,6 @@ class StartupService:
         except Exception as e:
             logger.warning(f"Startup initialization failed: {e}")
 
-    # ------------------------------------------------------------------
-    # Private helpers
-    # ------------------------------------------------------------------
 
     def _ensure_profile(
         self,

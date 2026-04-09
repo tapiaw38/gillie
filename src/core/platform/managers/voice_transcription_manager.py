@@ -55,13 +55,10 @@ class VoiceTranscriptionService:
         try:
             logger.info(f"Starting audio transcription for file: {audio_file.filename}")
 
-            # Read the audio file content
             audio_content = await audio_file.read()
 
-            # Extract audio format from filename
             audio_format = self._extract_audio_format(audio_file.filename)
 
-            # Perform transcription
             transcription_result = await self._perform_transcription(
                 audio_bytes=audio_content,
                 audio_format=audio_format,

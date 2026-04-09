@@ -24,7 +24,6 @@ ROOT = Path(__file__).resolve().parents[2]
 RELEASE = ROOT / "release"
 
 
-# ─── helpers ──────────────────────────────────────────────────────────────────
 
 def _run(cmd: list[str], cwd: Path | None = None, env: dict | None = None) -> int:
     result = subprocess.run(
@@ -41,11 +40,7 @@ def _section(title: str) -> None:
     console.print()
 
 
-# ─── API target ───────────────────────────────────────────────────────────────
 
-# Deps that are optional / incompatible with Python 3.14 or too heavy to bundle.
-# They use lazy imports in the codebase so excluding them only disables those
-# optional features (WhatsApp/neonize, local HuggingFace embeddings, OpenCV).
 _API_EXCLUDED_PACKAGES = [
     "neonize",
     "langchain_huggingface",
@@ -93,7 +88,6 @@ def _build_api(out: Path) -> bool:
         "--output-filename=gillie-api",
         f"--output-dir={out}",
         "--follow-imports",
-        # Core packages
         "--include-package=src",
         "--include-package=fastapi",
         "--include-package=uvicorn",
@@ -117,9 +111,7 @@ def _build_api(out: Path) -> bool:
         "--include-package=PIL",
         "--include-package=qdrant_client",
         "--include-package=apscheduler",
-        # Non-code data files needed at runtime
         "--include-data-dir=src=src",
-        # Exclude heavy / optional / 3.14-incompatible deps
         *exclude_flags,
         "--python-flag=no_docstrings",
         "--python-flag=no_asserts",
@@ -141,7 +133,6 @@ def _build_api(out: Path) -> bool:
     return True
 
 
-# ─── CLI target ───────────────────────────────────────────────────────────────
 
 def _build_cli(out: Path) -> bool:
     _section("CLI — Nuitka compilation")
@@ -194,7 +185,6 @@ def _build_cli(out: Path) -> bool:
     return True
 
 
-# ─── UI target ────────────────────────────────────────────────────────────────
 
 def _build_ui(out: Path) -> bool:
     _section("UI — Electron build")
@@ -226,7 +216,6 @@ def _build_ui(out: Path) -> bool:
     return True
 
 
-# ─── command ──────────────────────────────────────────────────────────────────
 
 @app.command("run", hidden=True)
 def build_run(

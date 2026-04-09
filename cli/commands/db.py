@@ -117,7 +117,6 @@ def status():
         console.print()
         return
 
-    # Check docker container
     if not shutil.which("docker"):
         console.print("[yellow]⚠[/yellow] Docker not installed — cannot check container status.")
         return
