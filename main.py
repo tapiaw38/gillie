@@ -203,7 +203,12 @@ if config_service.single_user_config:
 else:
     user_id = "default-user"
 
-neonize_integration = NeonizeIntegration(sessions_dir="./data/whatsapp", stt_integration=integrations.stt)
+neonize_integration = NeonizeIntegration(
+    sessions_dir="./data/whatsapp",
+    stt_integration=integrations.stt,
+    whatsapp_device_repository=repositories.whatsapp_device,
+    profile_repository=repositories.profile,
+)
 
 
 routes_manager = RoutesManager(app, usecases, config_service, neonize_integration=neonize_integration, scheduler=scheduler, openai_integration=integrations.openai)
