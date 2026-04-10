@@ -20,6 +20,19 @@ export interface ISandboxService {
     hasImageProcessor?: 'activate' | 'deactivate',
     hasTextToVoice?: 'activate' | 'deactivate',
   ): Promise<SandboxMessageResponse>
+  streamSandboxMessage(
+    conversationId: string,
+    content: string,
+    apiKey: string,
+    workspace?: string,
+    signal?: AbortSignal,
+  ): Promise<Response>
+  approveToolRequest(
+    requestId: string,
+    approved: boolean,
+    apiKey: string,
+    feedback?: string,
+  ): Promise<void>
   deleteSandboxConversation(conversationId: string): Promise<void>
 }
 
@@ -81,6 +94,52 @@ export class SandboxService implements ISandboxService {
       },
     )
     return data
+  }
+
+  async streamSandboxMessage(
+    conversationId: string,
+    content: string,
+    apiKey: string,
+    workspace?: string,
+    signal?: AbortSignal,
+  ): Promise<Response> {
+    const baseURL = this.api.defaults.baseURL?.replace(/\/$/, '') ?? ''
+    const headers: Record<string, string> = {
+      'Content-Type': 'application/json',
+      'x-api-key': apiKey,
+    }
+
+    if (workspace) {
+      headers['X-Gillie-Workspace'] = workspace
+    }
+
+    return fetch(`${baseURL}/conversation/${conversationId}/message/stream`, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify({ content }),
+      signal,
+    })
+  }
+
+  async approveToolRequest(
+    requestId: string,
+    approved: boolean,
+    apiKey: string,
+    feedback: string = '',
+  ): Promise<void> {
+    await this.api.post(
+      '/conversation/tool/approve',
+      {
+        request_id: requestId,
+        approved,
+        feedback,
+      },
+      {
+        headers: {
+          'x-api-key': apiKey,
+        },
+      },
+    )
   }
 
   async deleteSandboxConversation(conversationId: string): Promise<void> {

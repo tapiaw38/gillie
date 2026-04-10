@@ -22,22 +22,29 @@ from typing import Callable, Dict, Optional
 logger = logging.getLogger(__name__)
 
 _neonize_loop_started = False
+_neonize_loop: Optional[asyncio.AbstractEventLoop] = None
 
 
 def _ensure_neonize_loop() -> None:
     """
-    Start neonize's internal event_global_loop in a daemon thread if not already running.
-    Must be called before any client.connect() or events will never fire.
+    Create a new asyncio event loop, register it with neonize via set_event_loop(),
+    and start it in a background daemon thread.
+
+    neonize >= 0.3.16 changed the API: event_global_loop starts as None and must be
+    set explicitly (or is set automatically when connect() runs inside a running loop).
+    We pre-create and register the loop here so Go callbacks can dispatch events even
+    before connect() is awaited.
     """
-    global _neonize_loop_started
+    global _neonize_loop_started, _neonize_loop
     if _neonize_loop_started:
         return
     try:
-        from neonize.aioze.events import event_global_loop
-        if not event_global_loop.is_running():
-            thread = threading.Thread(target=event_global_loop.run_forever, daemon=True)
-            thread.start()
-            logger.info("[neonize] event_global_loop started in background daemon thread")
+        from neonize.aioze.events import set_event_loop
+        _neonize_loop = asyncio.new_event_loop()
+        set_event_loop(_neonize_loop)
+        thread = threading.Thread(target=_neonize_loop.run_forever, daemon=True)
+        thread.start()
+        logger.info("[neonize] event_global_loop created and started in background daemon thread")
         _neonize_loop_started = True
     except ImportError:
         pass  # neonize not installed — will fail later with a clear error
@@ -111,7 +118,6 @@ class NeonizeIntegration:
         """
         try:
             import qrcode
-            from neonize.aioze.events import event_global_loop
         except ImportError as e:
             raise RuntimeError(
                 "neonize and/or qrcode[pil] are not installed."
@@ -180,7 +186,7 @@ class NeonizeIntegration:
             if exc:
                 logger.error(f"[neonize] connect() failed for device {device_id}: {exc}", exc_info=exc)
 
-        fut = asyncio.run_coroutine_threadsafe(client.connect(), event_global_loop)
+        fut = asyncio.run_coroutine_threadsafe(client.connect(), _neonize_loop)
         fut.add_done_callback(_on_connect_done)
         logger.info(f"[neonize] Started QR auth for device {device_id}")
 
@@ -190,8 +196,7 @@ class NeonizeIntegration:
         client = await self.create_client(device_id)
 
         if not self._is_running(device_id):
-            from neonize.aioze.events import event_global_loop
-            asyncio.run_coroutine_threadsafe(client.connect(), event_global_loop)
+            asyncio.run_coroutine_threadsafe(client.connect(), _neonize_loop)
             await asyncio.sleep(2)
 
         try:
@@ -242,7 +247,6 @@ class NeonizeIntegration:
                         exc_info=True,
                     )
 
-        from neonize.aioze.events import event_global_loop
         logger.info(
             f"[neonize] Connecting device {device_id} with event codes: "
             f"{list(client.event.list_func.keys())}"
@@ -253,7 +257,7 @@ class NeonizeIntegration:
             if exc:
                 logger.error(f"[neonize] connect() failed for device {device_id}: {exc}", exc_info=exc)
 
-        fut = asyncio.run_coroutine_threadsafe(client.connect(), event_global_loop)
+        fut = asyncio.run_coroutine_threadsafe(client.connect(), _neonize_loop)
         fut.add_done_callback(_on_connect_done)
         logger.info(f"[neonize] Device {device_id} connected and listening")
 

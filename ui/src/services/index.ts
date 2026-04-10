@@ -5,6 +5,8 @@ import { whatsappService } from './whatsapp'
 import { calendarService } from './calendar'
 import { driveService } from './drive'
 import { gmailService } from './gmail'
+import { cronJobsService } from './cronJobs'
+import { telegramService } from './telegram'
 
 class Services {
   assistantService: typeof assistantService
@@ -14,6 +16,8 @@ class Services {
   calendarService: typeof calendarService
   driveService: typeof driveService
   gmailService: typeof gmailService
+  cronJobsService: typeof cronJobsService
+  telegramService: typeof telegramService
 
   constructor() {
     this.assistantService = assistantService
@@ -23,6 +27,8 @@ class Services {
     this.calendarService = calendarService
     this.driveService = driveService
     this.gmailService = gmailService
+    this.cronJobsService = cronJobsService
+    this.telegramService = telegramService
   }
 }
 

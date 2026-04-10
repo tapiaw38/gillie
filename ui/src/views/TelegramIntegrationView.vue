@@ -2,12 +2,12 @@
 import type { IntegrationParams, TelegramIntegrationConfig } from '@/types/assistant'
 import { onMounted, reactive, computed, watch, ref } from 'vue'
 import { useAssistant } from '@/composables/useAssistant'
+import { useTelegram } from '@/composables/useTelegram'
 import { useErrorToast } from '@/composables/useErrorToast'
 import { useI18n } from 'vue-i18n'
 import Toast from 'primevue/toast'
 import InputText from 'primevue/inputtext'
 import Button from 'primevue/button'
-import Card from 'primevue/card'
 import Message from 'primevue/message'
 import InputSwitch from 'primevue/inputswitch'
 
@@ -22,10 +22,20 @@ const {
 } = useAssistant()
 
 const { t } = useI18n()
+const { registerWebhook: registerTelegramWebhook, isRegisterWebhookPending: isRegisteringWebhook } =
+  useTelegram()
 
 const errorWatchers = [
-  { flag: isAddIntegrationError, summary: t('systemCommands.errorSaveConfig'), detail: addIntegrationError },
-  { flag: isGetAssistantProfileError, summary: t('systemCommands.errorLoadProfile'), detail: getAssistantProfileError },
+  {
+    flag: isAddIntegrationError,
+    summary: t('systemCommands.errorSaveConfig'),
+    detail: addIntegrationError,
+  },
+  {
+    flag: isGetAssistantProfileError,
+    summary: t('systemCommands.errorLoadProfile'),
+    detail: getAssistantProfileError,
+  },
 ]
 
 const { toast } = useErrorToast(errorWatchers)
@@ -77,20 +87,24 @@ const updateIntegration = async () => {
   }
 }
 
-watch(() => telegramIntegration.activated, async () => {
-  await updateIntegration()
-})
+watch(
+  () => telegramIntegration.activated,
+  async () => {
+    await updateIntegration()
+  },
+)
 
 const currentIntegration = computed(() =>
   assistantProfile.value?.integrations?.find((i) => i.name === 'telegram'),
 )
 
 const publicUrl = ref('')
-const isRegisteringWebhook = ref(false)
 const webhookStatus = ref<'idle' | 'success' | 'error'>('idle')
 const webhookStatusMessage = ref('')
 
-const API_BASE = (import.meta.env.VITE_ASSISTANT_BASE_URL as string || 'http://localhost:8000').replace(/\/$/, '')
+const API_BASE = (
+  (import.meta.env.VITE_ASSISTANT_BASE_URL as string) || 'http://localhost:8000'
+).replace(/\/$/, '')
 
 const apiBase = computed(() => {
   if (publicUrl.value.trim()) return publicUrl.value.trim().replace(/\/$/, '')
@@ -99,36 +113,26 @@ const apiBase = computed(() => {
 
 const webhookUrl = computed(() => `${apiBase.value}/api/telegram/webhook`)
 
-const setWebhookUrl = computed(() => `${API_BASE}/api/telegram/set-webhook`)
-
 const registerWebhook = async () => {
   if (!publicUrl.value.trim()) {
     webhookStatus.value = 'error'
     webhookStatusMessage.value = t('integrations.telegram.enterPublicUrl')
     return
   }
-  isRegisteringWebhook.value = true
   webhookStatus.value = 'idle'
   try {
-    const res = await fetch(setWebhookUrl.value, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ webhook_url: webhookUrl.value }),
-    })
-    if (res.ok) {
-      webhookStatus.value = 'success'
-      webhookStatusMessage.value = `${t('integrations.telegram.webhookRegistered')}: ${webhookUrl.value}`
-    } else {
-      const err = await res.json().catch(() => ({}))
-      webhookStatus.value = 'error'
-      webhookStatusMessage.value = err.error || `Error ${res.status}`
-    }
-  } catch (e: any) {
+    const result = await registerTelegramWebhook(webhookUrl.value)
+    webhookStatus.value = 'success'
+    webhookStatusMessage.value =
+      result.message || `${t('integrations.telegram.webhookRegistered')}: ${webhookUrl.value}`
+  } catch (e: unknown) {
     webhookStatus.value = 'error'
-    webhookStatusMessage.value = e.message || 'Error de conexión'
-  } finally {
-    isRegisteringWebhook.value = false
+    webhookStatusMessage.value = e instanceof Error ? e.message : t('common.unknownError')
   }
+}
+
+const copyWebhookUrl = async () => {
+  await navigator.clipboard.writeText(webhookUrl.value)
 }
 
 onMounted(async () => {
@@ -147,7 +151,6 @@ onMounted(async () => {
 
 <template>
   <div class="integration-container">
-
     <!-- Unified header row -->
     <div class="page-header">
       <div class="header-left">
@@ -161,7 +164,9 @@ onMounted(async () => {
       </div>
       <div class="header-toggle">
         <span class="toggle-status" :class="{ active: telegramIntegration.activated }">
-          {{ telegramIntegration.activated ? t('integrations.active') : t('integrations.inactive') }}
+          {{
+            telegramIntegration.activated ? t('integrations.active') : t('integrations.inactive')
+          }}
         </span>
         <InputSwitch v-model="telegramIntegration.activated" />
       </div>
@@ -218,9 +223,19 @@ onMounted(async () => {
         <div class="panel-footer">
           <div class="saved-state">
             <template v-if="currentIntegration">
-              <span class="saved-dot" :class="{ configured: !!(currentIntegration.config as unknown as TelegramIntegrationConfig).bot_token }"></span>
+              <span
+                class="saved-dot"
+                :class="{
+                  configured: !!(currentIntegration.config as unknown as TelegramIntegrationConfig)
+                    .bot_token,
+                }"
+              ></span>
               <span class="saved-label">
-                {{ (currentIntegration.config as unknown as TelegramIntegrationConfig).bot_token ? t('integrations.telegram.tokenConfigured') : t('integrations.telegram.noToken') }}
+                {{
+                  (currentIntegration.config as unknown as TelegramIntegrationConfig).bot_token
+                    ? t('integrations.telegram.tokenConfigured')
+                    : t('integrations.telegram.noToken')
+                }}
               </span>
             </template>
           </div>
@@ -250,7 +265,9 @@ onMounted(async () => {
           <label class="field-label">
             <i class="pi pi-globe field-icon"></i>
             {{ t('integrations.telegram.publicUrl') }}
-            <span class="optional">ngrok / cloudflare / {{ t('integrations.telegram.publicUrl') }}</span>
+            <span class="optional"
+              >ngrok / cloudflare / {{ t('integrations.telegram.publicUrl') }}</span
+            >
           </label>
           <InputText
             v-model="publicUrl"
@@ -272,7 +289,7 @@ onMounted(async () => {
                 class="copy-btn"
                 type="button"
                 :title="t('integrations.copyUrl')"
-                @click="navigator.clipboard.writeText(webhookUrl)"
+                @click="copyWebhookUrl"
               >
                 <i class="pi pi-copy"></i>
               </button>
@@ -334,7 +351,10 @@ onMounted(async () => {
         </li>
         <li class="step-item">
           <span class="step-num">6</span>
-          <span>Pegá la URL de ngrok en el paso 2 y hacé clic en <strong>Registrar en Telegram</strong></span>
+          <span
+            >Pegá la URL de ngrok en el paso 2 y hacé clic en
+            <strong>Registrar en Telegram</strong></span
+          >
         </li>
       </ol>
     </div>
@@ -344,7 +364,6 @@ onMounted(async () => {
 </template>
 
 <style scoped>
-/* ── Layout ─────────────────────────────────────────────── */
 .integration-container {
   max-width: 860px;
   margin: 0 auto;
@@ -356,7 +375,6 @@ onMounted(async () => {
   box-sizing: border-box;
 }
 
-/* ── Page header ─────────────────────────────────────────── */
 .page-header {
   display: flex;
   align-items: center;
@@ -376,19 +394,16 @@ onMounted(async () => {
 }
 
 .icon-wrapper {
-  flex-shrink: 0;
-  width: 3rem;
-  height: 3rem;
-  border-radius: 0.75rem;
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 1.4rem;
-  color: #fff;
+  font-size: 2rem;
+  color: var(--do-blue);
+  flex-shrink: 0;
 }
 
 .tg-icon {
-  background: linear-gradient(135deg, #0088cc 0%, #005f8e 100%);
+  color: #0088cc;
 }
 
 .header-text {
@@ -428,7 +443,6 @@ onMounted(async () => {
   color: var(--color-success);
 }
 
-/* ── Panel ───────────────────────────────────────────────── */
 .panel {
   border: 1px solid var(--do-border-light);
   border-radius: 0.75rem;
@@ -495,7 +509,6 @@ onMounted(async () => {
   margin-top: 0.25rem;
 }
 
-/* ── Form fields ─────────────────────────────────────────── */
 .field-group {
   display: flex;
   flex-direction: column;
@@ -541,7 +554,6 @@ onMounted(async () => {
   width: 100%;
 }
 
-/* ── Saved state ─────────────────────────────────────────── */
 .saved-state {
   display: flex;
   align-items: center;
@@ -565,7 +577,6 @@ onMounted(async () => {
   color: var(--do-text-muted);
 }
 
-/* ── Webhook URL row ─────────────────────────────────────── */
 .webhook-row {
   margin-top: 0.25rem;
 }
@@ -607,7 +618,9 @@ onMounted(async () => {
   border-left: 1px solid var(--do-border-light);
   color: var(--do-text-muted);
   cursor: pointer;
-  transition: color 0.2s, background 0.2s;
+  transition:
+    color 0.2s,
+    background 0.2s;
   font-size: 0.875rem;
 }
 
@@ -616,13 +629,11 @@ onMounted(async () => {
   background: rgba(255, 255, 255, 0.08);
 }
 
-/* ── Webhook feedback ────────────────────────────────────── */
 .webhook-feedback {
   flex: 1;
   min-width: 0;
 }
 
-/* ── Steps guide ─────────────────────────────────────────── */
 .steps-list {
   list-style: none;
   margin: 0;
@@ -663,7 +674,6 @@ onMounted(async () => {
   color: var(--do-text);
 }
 
-/* ── Responsive ──────────────────────────────────────────── */
 @media (max-width: 600px) {
   .integration-container {
     padding: 0.75rem;

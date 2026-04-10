@@ -4,7 +4,6 @@ import { useAssistant } from '@/composables/useAssistant'
 import { useToast } from 'primevue/usetoast'
 import { useI18n } from 'vue-i18n'
 import type { ToolPromptsConfig } from '@/types/assistant'
-import Card from 'primevue/card'
 import Button from 'primevue/button'
 import Textarea from 'primevue/textarea'
 import Toast from 'primevue/toast'
@@ -51,7 +50,9 @@ const prompts = ref<ToolPromptsConfig>({})
 const enabled = ref<Record<string, boolean>>({})
 
 // Initialize all tools as enabled by default
-TOOL_META.forEach((t) => { enabled.value[t.key] = true })
+TOOL_META.forEach((t) => {
+  enabled.value[t.key] = true
+})
 
 const resetToDefault = (key: keyof ToolPromptsConfig) => {
   prompts.value[key] = ''
@@ -65,17 +66,25 @@ const save = async () => {
       if (v && v.trim()) toSave[k as keyof ToolPromptsConfig] = v.trim()
     }
 
-    const disabledTools = TOOL_META
-      .filter((t) => !enabled.value[t.key])
-      .map((t) => t.key)
+    const disabledTools = TOOL_META.filter((t) => !enabled.value[t.key]).map((t) => t.key)
 
     await updateAssistantProfile({
       tool_prompts: JSON.stringify(toSave),
       disabled_tools: disabledTools,
     })
-    toast.add({ severity: 'success', summary: t('toolPrompts.saved'), detail: t('toolPrompts.savedDesc'), life: 3000 })
+    toast.add({
+      severity: 'success',
+      summary: t('toolPrompts.saved'),
+      detail: t('toolPrompts.savedDesc'),
+      life: 3000,
+    })
   } catch {
-    toast.add({ severity: 'error', summary: t('toolPrompts.error'), detail: t('toolPrompts.errorDesc'), life: 3000 })
+    toast.add({
+      severity: 'error',
+      summary: t('toolPrompts.error'),
+      detail: t('toolPrompts.errorDesc'),
+      life: 3000,
+    })
   } finally {
     isSaving.value = false
   }
@@ -116,15 +125,21 @@ onMounted(async () => {
       <AccordionTab v-for="tool in TOOL_META" :key="tool.key">
         <template #header>
           <div class="tab-header">
-            <i :class="tool.icon" class="tab-icon" :style="{ opacity: enabled[tool.key] ? 1 : 0.4 }"></i>
-            <span class="tab-label" :style="{ opacity: enabled[tool.key] ? 1 : 0.5 }">{{ t(`toolPrompts.tools.${tool.key}.label`) }}</span>
-            <span v-if="!enabled[tool.key]" class="tab-badge tab-badge--disabled">{{ t('toolPrompts.disabled') }}</span>
-            <span v-else-if="prompts[tool.key]" class="tab-badge">{{ t('toolPrompts.custom') }}</span>
-            <InputSwitch
-              v-model="enabled[tool.key]"
-              class="tool-toggle"
-              @click.stop
-            />
+            <i
+              :class="tool.icon"
+              class="tab-icon"
+              :style="{ opacity: enabled[tool.key] ? 1 : 0.4 }"
+            ></i>
+            <span class="tab-label" :style="{ opacity: enabled[tool.key] ? 1 : 0.5 }">{{
+              t(`toolPrompts.tools.${tool.key}.label`)
+            }}</span>
+            <span v-if="!enabled[tool.key]" class="tab-badge tab-badge--disabled">{{
+              t('toolPrompts.disabled')
+            }}</span>
+            <span v-else-if="prompts[tool.key]" class="tab-badge">{{
+              t('toolPrompts.custom')
+            }}</span>
+            <InputSwitch v-model="enabled[tool.key]" class="tool-toggle" @click.stop />
           </div>
         </template>
 
@@ -185,16 +200,11 @@ onMounted(async () => {
 }
 
 .header-icon {
-  width: 3.2rem;
-  height: 3.2rem;
-  border-radius: 0.75rem;
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 1.6rem;
-  color: white;
-  background: linear-gradient(135deg, #6366f1 0%, #4f46e5 100%);
-  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.08);
+  font-size: 2rem;
+  color: var(--do-blue);
   flex-shrink: 0;
 }
 
@@ -238,14 +248,14 @@ onMounted(async () => {
 .tab-badge {
   font-size: 0.75rem;
   font-weight: 600;
-  background: rgba(59,130,246,0.15);
+  background: rgba(59, 130, 246, 0.15);
   color: #93c5fd;
   padding: 0.15rem 0.5rem;
   border-radius: 999px;
 }
 
 .tab-badge--disabled {
-  background: rgba(255,68,68,0.15);
+  background: rgba(255, 68, 68, 0.15);
   color: #fca5a5;
 }
 
@@ -281,8 +291,8 @@ onMounted(async () => {
   display: flex;
   justify-content: flex-end;
   padding: 1rem;
-  background: rgba(255,255,255,0.04);
+  background: rgba(255, 255, 255, 0.04);
   border-radius: 0.75rem;
-  border: 1px solid rgba(255,255,255,0.08);
+  border: 1px solid rgba(255, 255, 255, 0.08);
 }
 </style>

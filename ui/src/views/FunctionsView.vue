@@ -47,7 +47,6 @@ const sampleJson = [
   },
 ]
 
-// All parsed functions regardless of type
 const allFunctions = computed(() => {
   try {
     const parsed = JSON.parse(jsonContent.value)
@@ -59,14 +58,13 @@ const allFunctions = computed(() => {
   }
 })
 
-// Only workflow-type functions for visual editor
-const availableWorkflows = computed(() => {
+const availableWorkflows = computed<WorkflowFunction[]>(() => {
   try {
     const parsed = JSON.parse(jsonContent.value)
     if (Array.isArray(parsed)) {
-      return parsed.filter((f) => f.type === 'workflow')
+      return parsed.filter((f: WorkflowFunction) => f.type === 'workflow')
     } else if (parsed.functions && Array.isArray(parsed.functions)) {
-      return parsed.functions.filter((f: { type: string }) => f.type === 'workflow')
+      return parsed.functions.filter((f: WorkflowFunction) => f.type === 'workflow')
     }
     return []
   } catch {
@@ -202,7 +200,6 @@ const saveFunctions = async () => {
 
 const toggleEdit = () => {
   if (isEditing.value) {
-    // Cancelling — restore from profile or sample
     if (assistantProfile.value?.functions && assistantProfile.value.functions.trim() !== '') {
       jsonContent.value = assistantProfile.value.functions
     } else {
@@ -236,7 +233,6 @@ const restoreSample = () => {
   })
 }
 
-// Parse JSON to workflow for visual editor
 const parseJsonToWorkflow = (): WorkflowFunction | null => {
   const workflows = availableWorkflows.value
 
@@ -251,7 +247,6 @@ const parseJsonToWorkflow = (): WorkflowFunction | null => {
   return workflows[selectedWorkflowIndex.value]
 }
 
-// Toggle between JSON and Visual editor (editing mode)
 const toggleEditorMode = () => {
   if (editorMode.value === 'json') {
     currentWorkflow.value = parseJsonToWorkflow()
@@ -270,7 +265,6 @@ const toggleEditorMode = () => {
   }
 }
 
-// Toggle workflow visual in readonly mode
 const toggleWorkflowVisual = () => {
   if (showWorkflowVisual.value) {
     showWorkflowVisual.value = false
@@ -289,13 +283,11 @@ const toggleWorkflowVisual = () => {
   }
 }
 
-// Handle workflow save from visual editor
 const handleWorkflowSave = async (workflow: WorkflowFunction) => {
   jsonContent.value = JSON.stringify([workflow], null, 2)
   await saveFunctions()
 }
 
-// Handle workflow update from visual editor (export to JSON without saving)
 const handleWorkflowUpdate = (workflow: WorkflowFunction) => {
   jsonContent.value = JSON.stringify([workflow], null, 2)
   toast.add({
@@ -306,22 +298,23 @@ const handleWorkflowUpdate = (workflow: WorkflowFunction) => {
   })
 }
 
-// Handle workflow selection change
 const handleWorkflowChange = () => {
   currentWorkflow.value = parseJsonToWorkflow()
 }
 
-// Returns icon class based on function type
 const getFunctionIcon = (type: string): string => {
   switch (type) {
-    case 'workflow': return 'pi pi-sitemap'
-    case 'http': return 'pi pi-globe'
-    case 'function': return 'pi pi-cog'
-    default: return 'pi pi-code'
+    case 'workflow':
+      return 'pi pi-sitemap'
+    case 'http':
+      return 'pi pi-globe'
+    case 'function':
+      return 'pi pi-cog'
+    default:
+      return 'pi pi-code'
   }
 }
 
-// Open workflow visual viewer from a function card
 const openWorkflowForCard = (fn: Record<string, unknown>) => {
   const idx = availableWorkflows.value.findIndex((w) => w.name === fn.name)
   if (idx >= 0) {
@@ -363,7 +356,9 @@ const openWorkflowForCard = (fn: Record<string, unknown>) => {
           <template v-if="!isEditing">
             <Button
               v-if="hasWorkflow()"
-              v-tooltip.bottom="showWorkflowVisual ? t('functions.hideWorkflow') : t('functions.viewWorkflow')"
+              v-tooltip.bottom="
+                showWorkflowVisual ? t('functions.hideWorkflow') : t('functions.viewWorkflow')
+              "
               :icon="showWorkflowVisual ? 'pi pi-eye-slash' : 'pi pi-sitemap'"
               size="small"
               severity="secondary"
@@ -433,7 +428,9 @@ const openWorkflowForCard = (fn: Record<string, unknown>) => {
       <div class="banner-right">
         <Button
           v-if="hasWorkflow()"
-          v-tooltip.bottom="editorMode === 'json' ? t('functions.switchToVisual') : t('functions.switchToJson')"
+          v-tooltip.bottom="
+            editorMode === 'json' ? t('functions.switchToVisual') : t('functions.switchToJson')
+          "
           :icon="editorMode === 'json' ? 'pi pi-sitemap' : 'pi pi-code'"
           size="small"
           severity="info"
@@ -458,10 +455,7 @@ const openWorkflowForCard = (fn: Record<string, unknown>) => {
     </div>
 
     <!-- Functions Summary Panel (readonly, has functions) -->
-    <div
-      v-if="!isEditing && allFunctions.length > 0"
-      class="functions-summary"
-    >
+    <div v-if="!isEditing && allFunctions.length > 0" class="functions-summary">
       <div class="summary-header">
         <span class="summary-title">
           <i class="pi pi-list"></i>
@@ -500,13 +494,18 @@ const openWorkflowForCard = (fn: Record<string, unknown>) => {
                 'type-http': fn.type === 'http',
                 'type-default': fn.type !== 'workflow' && fn.type !== 'http',
               }"
-            >{{ fn.type }}</span>
+              >{{ fn.type }}</span
+            >
           </div>
           <p class="function-desc">{{ fn.description || t('common.description') }}</p>
           <div class="function-footer">
             <div v-if="fn.input_params && fn.input_params.length" class="function-meta">
               <i class="pi pi-sliders-h"></i>
-              <span>{{ fn.input_params.length }} parámetro{{ fn.input_params.length !== 1 ? 's' : '' }}</span>
+              <span
+                >{{ fn.input_params.length }} parámetro{{
+                  fn.input_params.length !== 1 ? 's' : ''
+                }}</span
+              >
             </div>
             <div v-else-if="fn.steps && fn.steps.length" class="function-meta">
               <i class="pi pi-share-alt"></i>
@@ -531,10 +530,7 @@ const openWorkflowForCard = (fn: Record<string, unknown>) => {
     </div>
 
     <!-- Empty State (readonly, no functions) -->
-    <Card
-      v-else-if="!isEditing && allFunctions.length === 0"
-      class="empty-state-card"
-    >
+    <Card v-else-if="!isEditing && allFunctions.length === 0" class="empty-state-card">
       <template #content>
         <div class="empty-state">
           <div class="empty-illustration">
@@ -590,10 +586,7 @@ const openWorkflowForCard = (fn: Record<string, unknown>) => {
     />
 
     <!-- JSON Editor Card (editing, json mode only) -->
-    <Card
-      v-if="isEditing && editorMode === 'json'"
-      class="editor-card"
-    >
+    <Card v-if="isEditing && editorMode === 'json'" class="editor-card">
       <template #content>
         <div class="editor-section">
           <div class="editor-header">
@@ -664,15 +657,11 @@ const openWorkflowForCard = (fn: Record<string, unknown>) => {
 }
 
 .icon-wrapper {
-  width: 2.25rem;
-  height: 2.25rem;
-  border-radius: 0.625rem;
-  background: var(--gradient-primary);
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 1rem;
-  color: white;
+  font-size: 2rem;
+  color: var(--do-blue);
   flex-shrink: 0;
 }
 
@@ -721,7 +710,9 @@ const openWorkflowForCard = (fn: Record<string, unknown>) => {
   display: flex;
   align-items: center;
   justify-content: center;
-  transition: transform 0.15s, box-shadow 0.15s;
+  transition:
+    transform 0.15s,
+    box-shadow 0.15s;
   box-shadow: var(--shadow-primary);
 }
 
@@ -864,7 +855,9 @@ const openWorkflowForCard = (fn: Record<string, unknown>) => {
   display: flex;
   flex-direction: column;
   gap: 0.4rem;
-  transition: transform 0.15s, box-shadow 0.15s;
+  transition:
+    transform 0.15s,
+    box-shadow 0.15s;
   cursor: default;
 }
 
@@ -1144,7 +1137,9 @@ const openWorkflowForCard = (fn: Record<string, unknown>) => {
   line-height: 1.6;
   background: var(--do-text);
   color: var(--do-border-light);
-  transition: border-color 0.2s ease, box-shadow 0.2s ease;
+  transition:
+    border-color 0.2s ease,
+    box-shadow 0.2s ease;
   resize: vertical;
   min-height: 600px;
 }

@@ -89,9 +89,7 @@ const handleDeleteConversation = (conversationId: string) => {
         })
       } catch (err) {
         const errorMessage =
-          err instanceof ApplicationError
-            ? getErrorMessage(err)
-            : t('sandbox.errorDelete')
+          err instanceof ApplicationError ? getErrorMessage(err) : t('sandbox.errorDelete')
         toast.add({
           severity: 'error',
           summary: t('common.error'),
@@ -189,7 +187,6 @@ const toggleMobileMenu = () => {
 </template>
 
 <style scoped>
-/* ── Root ─────────────────────────────────────────────────────────────── */
 .chat-view {
   height: 100vh;
   width: 100%;
@@ -199,7 +196,6 @@ const toggleMobileMenu = () => {
   overflow: hidden;
 }
 
-/* ── Mobile topbar (hidden on desktop) ────────────────────────────────── */
 .mobile-topbar {
   display: none;
   align-items: center;
@@ -220,7 +216,6 @@ const toggleMobileMenu = () => {
   max-width: 60%;
 }
 
-/* ── Layout ───────────────────────────────────────────────────────────── */
 .chat-layout {
   flex: 1;
   display: flex;
@@ -229,7 +224,6 @@ const toggleMobileMenu = () => {
   position: relative;
 }
 
-/* ── Sidebar ──────────────────────────────────────────────────────────── */
 .chat-sidebar {
   width: 280px;
   flex-shrink: 0;
@@ -273,12 +267,10 @@ const toggleMobileMenu = () => {
   border-radius: 2px;
 }
 
-/* ── Mobile sidebar overlay ───────────────────────────────────────────── */
 .sidebar-overlay {
   display: none;
 }
 
-/* ── Main area ────────────────────────────────────────────────────────── */
 .chat-main {
   flex: 1;
   display: flex;
@@ -287,7 +279,6 @@ const toggleMobileMenu = () => {
   min-width: 0;
 }
 
-/* ── Chat header ──────────────────────────────────────────────────────── */
 .chat-header {
   display: flex;
   align-items: center;
@@ -339,7 +330,6 @@ const toggleMobileMenu = () => {
   box-shadow: 0 0 5px rgba(10, 207, 131, 0.5);
 }
 
-/* ── Chat body ────────────────────────────────────────────────────────── */
 .chat-body {
   flex: 1;
   overflow: hidden;
@@ -347,7 +337,6 @@ const toggleMobileMenu = () => {
   height: 0;
 }
 
-/* ── Responsive ───────────────────────────────────────────────────────── */
 @media (max-width: 768px) {
   .mobile-topbar {
     display: flex;

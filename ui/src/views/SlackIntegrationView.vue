@@ -7,7 +7,6 @@ import { useI18n } from 'vue-i18n'
 import Toast from 'primevue/toast'
 import InputText from 'primevue/inputtext'
 import Button from 'primevue/button'
-import Card from 'primevue/card'
 import Message from 'primevue/message'
 import InputSwitch from 'primevue/inputswitch'
 
@@ -24,8 +23,16 @@ const {
 const { t } = useI18n()
 
 const errorWatchers = [
-  { flag: isAddIntegrationError, summary: t('systemCommands.errorSaveConfig'), detail: addIntegrationError },
-  { flag: isGetAssistantProfileError, summary: t('systemCommands.errorLoadProfile'), detail: getAssistantProfileError },
+  {
+    flag: isAddIntegrationError,
+    summary: t('systemCommands.errorSaveConfig'),
+    detail: addIntegrationError,
+  },
+  {
+    flag: isGetAssistantProfileError,
+    summary: t('systemCommands.errorLoadProfile'),
+    detail: getAssistantProfileError,
+  },
 ]
 
 const { toast } = useErrorToast(errorWatchers)
@@ -62,7 +69,11 @@ const saveConfig = async () => {
   try {
     await addIntegration(slackIntegration)
     await getAssistantProfile()
-    toast.add({ severity: 'success', summary: t('integrations.slack.credentialsSaved'), life: 3000 })
+    toast.add({
+      severity: 'success',
+      summary: t('integrations.slack.credentialsSaved'),
+      life: 3000,
+    })
   } catch (error) {
     console.error('Error al guardar la configuración:', error)
   }
@@ -77,17 +88,41 @@ const updateIntegration = async () => {
   }
 }
 
-watch(() => slackIntegration.activated, async () => {
-  await updateIntegration()
-})
+watch(
+  () => slackIntegration.activated,
+  async () => {
+    await updateIntegration()
+  },
+)
 
 const currentIntegration = computed(() =>
   assistantProfile.value?.integrations?.find((i) => i.name === 'slack'),
 )
 
-const API_BASE = (import.meta.env.VITE_ASSISTANT_BASE_URL as string || 'http://localhost:8000').replace(/\/$/, '')
+const API_BASE = (
+  (import.meta.env.VITE_ASSISTANT_BASE_URL as string) || 'http://localhost:8000'
+).replace(/\/$/, '')
 
 const webhookUrl = computed(() => `${API_BASE}/api/slack/events`)
+
+const copyWebhookUrl = async () => {
+  try {
+    await navigator.clipboard.writeText(webhookUrl.value)
+    toast.add({
+      severity: 'success',
+      summary: t('integrations.copyUrl'),
+      life: 2000,
+    })
+  } catch (error) {
+    console.error('Error al copiar webhook URL:', error)
+    toast.add({
+      severity: 'error',
+      summary: t('common.error'),
+      detail: t('common.unknownError'),
+      life: 3000,
+    })
+  }
+}
 
 onMounted(async () => {
   await getAssistantProfile()
@@ -105,7 +140,6 @@ onMounted(async () => {
 
 <template>
   <div class="integration-container">
-
     <!-- Unified header row -->
     <div class="page-header">
       <div class="header-left">
@@ -209,7 +243,7 @@ onMounted(async () => {
                 class="copy-btn"
                 type="button"
                 :title="t('integrations.copyUrl')"
-                @click="navigator.clipboard.writeText(webhookUrl)"
+                @click="copyWebhookUrl"
               >
                 <i class="pi pi-copy"></i>
               </button>
@@ -225,11 +259,13 @@ onMounted(async () => {
           </div>
           <div class="status-row-value">
             <span class="status-value-text">
-              {{ currentIntegration
-                ? (currentIntegration.config as unknown as SlackIntegrationConfig).bot_token
-                  ? '•••••••••••••••••••'
+              {{
+                currentIntegration
+                  ? (currentIntegration.config as unknown as SlackIntegrationConfig).bot_token
+                    ? '•••••••••••••••••••'
+                    : t('integrations.notConfigured')
                   : t('integrations.notConfigured')
-                : t('integrations.notConfigured') }}
+              }}
             </span>
           </div>
         </div>
@@ -241,11 +277,13 @@ onMounted(async () => {
           </div>
           <div class="status-row-value">
             <span class="status-value-text">
-              {{ currentIntegration
-                ? (currentIntegration.config as unknown as SlackIntegrationConfig).signing_secret
-                  ? '•••••••••••••••••••'
+              {{
+                currentIntegration
+                  ? (currentIntegration.config as unknown as SlackIntegrationConfig).signing_secret
+                    ? '•••••••••••••••••••'
+                    : t('integrations.notConfigured')
                   : t('integrations.notConfigured')
-                : t('integrations.notConfigured') }}
+              }}
             </span>
           </div>
         </div>
@@ -295,7 +333,6 @@ onMounted(async () => {
 </template>
 
 <style scoped>
-/* ── Layout ─────────────────────────────────────────────── */
 .integration-container {
   max-width: 860px;
   margin: 0 auto;
@@ -307,7 +344,6 @@ onMounted(async () => {
   box-sizing: border-box;
 }
 
-/* ── Page header ─────────────────────────────────────────── */
 .page-header {
   display: flex;
   align-items: center;
@@ -327,19 +363,16 @@ onMounted(async () => {
 }
 
 .icon-wrapper {
-  flex-shrink: 0;
-  width: 3rem;
-  height: 3rem;
-  border-radius: 0.75rem;
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 1.4rem;
-  color: #fff;
+  font-size: 2rem;
+  color: var(--do-blue);
+  flex-shrink: 0;
 }
 
 .slack-icon {
-  background: linear-gradient(135deg, #4a154b 0%, #611f69 100%);
+  color: #611f69;
 }
 
 .header-text {
@@ -379,7 +412,6 @@ onMounted(async () => {
   color: var(--color-success);
 }
 
-/* ── Panel ───────────────────────────────────────────────── */
 .panel {
   border: 1px solid var(--do-border-light);
   border-radius: 0.75rem;
@@ -446,7 +478,6 @@ onMounted(async () => {
   margin-top: 0.25rem;
 }
 
-/* ── Form fields ─────────────────────────────────────────── */
 .field-group {
   display: flex;
   flex-direction: column;
@@ -485,7 +516,6 @@ onMounted(async () => {
   width: 100%;
 }
 
-/* ── Status rows ─────────────────────────────────────────── */
 .status-row {
   display: flex;
   flex-direction: column;
@@ -523,7 +553,6 @@ onMounted(async () => {
   color: var(--do-text);
 }
 
-/* ── Webhook URL ─────────────────────────────────────────── */
 .webhook-url-wrap {
   display: flex;
   align-items: center;
@@ -555,7 +584,9 @@ onMounted(async () => {
   border-left: 1px solid var(--do-border-light);
   color: var(--do-text-muted);
   cursor: pointer;
-  transition: color 0.2s, background 0.2s;
+  transition:
+    color 0.2s,
+    background 0.2s;
   font-size: 0.875rem;
 }
 
@@ -564,7 +595,6 @@ onMounted(async () => {
   background: rgba(255, 255, 255, 0.08);
 }
 
-/* ── Steps guide ─────────────────────────────────────────── */
 .steps-list {
   list-style: none;
   margin: 0;
@@ -605,7 +635,6 @@ onMounted(async () => {
   color: var(--do-text);
 }
 
-/* ── Responsive ──────────────────────────────────────────── */
 @media (max-width: 600px) {
   .integration-container {
     padding: 0.75rem;

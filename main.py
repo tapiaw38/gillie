@@ -35,12 +35,14 @@ app = FastAPI(
 register_exception_handlers(app)
 
 _raw_origins = os.getenv("ALLOWED_ORIGINS", "*")
-_allow_origins = [o.strip() for o in _raw_origins.split(",")] if _raw_origins != "*" else ["*"]
+_allow_all = _raw_origins == "*"
+_allow_origins = ["*"] if _allow_all else [o.strip() for o in _raw_origins.split(",")]
+_allow_origin_regex = None if _allow_all else r"(file://.*|null|app://.*|http://localhost(:\d+)?|https://localhost(:\d+)?)"
 
 app.add_middleware(
     CORSMiddleware,
     allow_origins=_allow_origins,
-    allow_origin_regex=r"(file://.*|null|app://.*|http://localhost(:\d+)?|https://localhost(:\d+)?)",
+    allow_origin_regex=_allow_origin_regex,
     allow_credentials=False,
     allow_methods=["*"],
     allow_headers=["*"],

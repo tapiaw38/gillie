@@ -442,16 +442,12 @@ const removeApiKeyOpenModal = (apiKeyID: string) => {
 }
 
 .icon-wrapper {
-  width: 4rem;
-  height: 4rem;
-  border-radius: 0.75rem;
-  background: var(--gradient-primary);
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 1.5rem;
-  color: white;
-  box-shadow: 0 4px 14px rgba(0, 105, 255, 0.3);
+  font-size: 2rem;
+  color: var(--do-blue);
+  flex-shrink: 0;
 }
 
 .page-title {

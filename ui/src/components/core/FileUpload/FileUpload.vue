@@ -308,13 +308,13 @@ const formatSize = (bytes: number) => {
 
 :deep(.p-fileupload) {
   background: var(--p-surface-card, #1e1e2e);
-  border-color: var(--p-surface-border, rgba(255,255,255,0.1));
+  border-color: var(--p-surface-border, rgba(255, 255, 255, 0.1));
   color: var(--p-text-color, #e2e8f0);
 }
 
 :deep(.p-fileupload-header) {
   background: var(--p-surface-card, #1e1e2e);
-  border-color: var(--p-surface-border, rgba(255,255,255,0.1));
+  border-color: var(--p-surface-border, rgba(255, 255, 255, 0.1));
   color: var(--p-text-color, #e2e8f0);
 }
 
@@ -322,7 +322,7 @@ const formatSize = (bytes: number) => {
   max-height: 400px;
   overflow-y: auto;
   background: var(--p-surface-card, #1e1e2e);
-  border-color: var(--p-surface-border, rgba(255,255,255,0.1));
+  border-color: var(--p-surface-border, rgba(255, 255, 255, 0.1));
   color: var(--p-text-color, #e2e8f0);
 }
 

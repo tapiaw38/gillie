@@ -2,6 +2,12 @@
 import { ref, reactive, computed, onMounted } from 'vue'
 import { useToast } from 'primevue/usetoast'
 import { useI18n } from 'vue-i18n'
+import { useCronJobs } from '@/composables/useCronJobs'
+import type {
+  CronJob as Job,
+  CronJobInput as JobInput,
+  CronJobRunResult as RunResult,
+} from '@/types/cronJobs'
 import Button from 'primevue/button'
 import InputText from 'primevue/inputtext'
 import Textarea from 'primevue/textarea'
@@ -12,80 +18,17 @@ import Dialog from 'primevue/dialog'
 import Tag from 'primevue/tag'
 import Message from 'primevue/message'
 
-// ─── Types ────────────────────────────────────────────────────────────────────
-
-interface Job {
-  id: string
-  profile_id: string
-  name: string
-  description: string
-  cron_expr: string
-  source_type: string
-  source_params: Record<string, string>
-  destination_type: string
-  destination_params: Record<string, string>
-  message_template: string
-  enabled: boolean
-  status: string
-  last_run_at: string | null
-  last_result: string | null
-  created_at: string
-  updated_at: string
-}
-
-interface JobInput {
-  name: string
-  description: string
-  cron_expr: string
-  source_type: string
-  source_params: Record<string, string>
-  destination_type: string
-  destination_params: Record<string, string>
-  message_template: string
-  enabled: boolean
-}
-
-interface RunResult {
-  status: string
-  result: string
-}
-
-// ─── API helpers ──────────────────────────────────────────────────────────────
-
-const baseUrl = computed(() =>
-  ((import.meta.env.VITE_ASSISTANT_BASE_URL as string) || 'http://localhost:8000').replace(
-    /\/$/,
-    '',
-  ),
-)
-
-const apiHeaders = computed<Record<string, string>>(() => {
-  const headers: Record<string, string> = { 'Content-Type': 'application/json' }
-  const apiKey = import.meta.env.VITE_ASSISTANT_API_KEY as string | undefined
-  if (apiKey) headers['x-api-key'] = apiKey
-  return headers
-})
-
-async function apiFetch<T>(path: string, init: RequestInit = {}): Promise<T> {
-  const res = await fetch(`${baseUrl.value}${path}`, {
-    ...init,
-    headers: { ...apiHeaders.value, ...(init.headers as Record<string, string> | undefined) },
-  })
-  if (!res.ok) {
-    const text = await res.text().catch(() => res.statusText)
-    throw new Error(text || `HTTP ${res.status}`)
-  }
-  if (res.status === 204) return undefined as T
-  return res.json() as Promise<T>
-}
-
-// ─── State ────────────────────────────────────────────────────────────────────
-
 const { t } = useI18n()
 const toast = useToast()
-const jobs = ref<Job[]>([])
-const loading = ref(false)
-const submitting = ref(false)
+const {
+  jobs,
+  isListJobsPending: loading,
+  isCreateJobPending: submitting,
+  listJobs: loadCronJobs,
+  createJob: saveJob,
+  deleteJob: removeJob,
+  runJob: executeJob,
+} = useCronJobs()
 const runningJobId = ref<string | null>(null)
 const deletingJobId = ref<string | null>(null)
 const showCreateForm = ref(false)
@@ -93,8 +36,6 @@ const showDeleteConfirm = ref(false)
 const jobToDelete = ref<Job | null>(null)
 const lastRunResult = ref<RunResult | null>(null)
 const showRunResult = ref(false)
-
-// ─── Dropdown options ─────────────────────────────────────────────────────────
 
 const sourceTypeOptions = computed(() => [
   { label: t('cronJobs.sourceCommand'), value: 'system_command' },
@@ -117,8 +58,6 @@ const cronExamples = computed(() => [
   { label: t('cronJobs.sunMidnight'), value: '0 0 * * 0' },
 ])
 
-// ─── Form state ───────────────────────────────────────────────────────────────
-
 const emptyForm = (): JobInput => ({
   name: '',
   description: '',
@@ -139,8 +78,6 @@ const validationErrors = reactive({
   source_params: '',
   destination_params: '',
 })
-
-// ─── Computed helpers ─────────────────────────────────────────────────────────
 
 const sourceParamKey = computed(() => {
   if (form.source_type === 'system_command') return 'command'
@@ -184,13 +121,9 @@ const destinationParamPlaceholder = computed(() => {
   return ''
 })
 
-// ─── API actions ──────────────────────────────────────────────────────────────
-
 const loadJobs = async () => {
-  loading.value = true
   try {
-    const res = await apiFetch<{ data: Job[] }>('/api/v1/jobs')
-    jobs.value = res.data ?? []
+    await loadCronJobs()
   } catch (err) {
     toast.add({
       severity: 'error',
@@ -198,8 +131,6 @@ const loadJobs = async () => {
       detail: err instanceof Error ? err.message : t('common.unknownError'),
       life: 4000,
     })
-  } finally {
-    loading.value = false
   }
 }
 
@@ -243,12 +174,8 @@ const createJob = async () => {
     return
   }
 
-  submitting.value = true
   try {
-    await apiFetch<{ data: Job }>('/api/v1/jobs', {
-      method: 'POST',
-      body: JSON.stringify(form),
-    })
+    await saveJob(form)
     toast.add({ severity: 'success', summary: t('cronJobs.taskCreated'), life: 3000 })
     resetForm()
     showCreateForm.value = false
@@ -260,8 +187,6 @@ const createJob = async () => {
       detail: err instanceof Error ? err.message : t('common.unknownError'),
       life: 4000,
     })
-  } finally {
-    submitting.value = false
   }
 }
 
@@ -275,9 +200,8 @@ const deleteJob = async () => {
   deletingJobId.value = jobToDelete.value.id
   showDeleteConfirm.value = false
   try {
-    await apiFetch(`/api/v1/jobs/${jobToDelete.value.id}`, { method: 'DELETE' })
+    await removeJob(jobToDelete.value.id)
     toast.add({ severity: 'success', summary: t('cronJobs.taskDeleted'), life: 3000 })
-    jobs.value = jobs.value.filter((j) => j.id !== jobToDelete.value!.id)
   } catch (err) {
     toast.add({
       severity: 'error',
@@ -294,7 +218,7 @@ const deleteJob = async () => {
 const runJob = async (job: Job) => {
   runningJobId.value = job.id
   try {
-    const res = await apiFetch<RunResult>(`/api/v1/jobs/${job.id}/run`, { method: 'POST' })
+    const res = await executeJob(job.id)
     lastRunResult.value = res
     showRunResult.value = true
     await loadJobs()
@@ -322,8 +246,6 @@ const applyCronExample = (value: string) => {
   form.cron_expr = value
 }
 
-// ─── Display helpers ──────────────────────────────────────────────────────────
-
 const formatDate = (iso: string | null): string => {
   if (!iso) return '—'
   return new Date(iso).toLocaleString('es-AR', {
@@ -349,8 +271,6 @@ const statusSeverity = (status: string): 'success' | 'warn' | 'danger' | 'info' 
   if (status === 'running') return 'info'
   return 'warn'
 }
-
-// ─── Lifecycle ────────────────────────────────────────────────────────────────
 
 onMounted(loadJobs)
 </script>
@@ -741,8 +661,6 @@ onMounted(loadJobs)
   box-sizing: border-box;
 }
 
-/* ─── Header ──────────────────────────────────────────────────────────────── */
-
 .header-section {
   margin-bottom: 1.5rem;
 }
@@ -755,15 +673,11 @@ onMounted(loadJobs)
 }
 
 .icon-wrapper {
-  width: 3.2rem;
-  height: 3.2rem;
-  border-radius: 0.75rem;
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 1.6rem;
-  color: #fff;
-  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.08);
+  font-size: 2rem;
+  color: var(--do-blue);
   flex-shrink: 0;
 }
 
@@ -793,8 +707,6 @@ onMounted(loadJobs)
   margin-left: auto;
   flex-shrink: 0;
 }
-
-/* ─── State panels ────────────────────────────────────────────────────────── */
 
 .panel {
   border: 1px solid var(--do-border-light);
@@ -836,8 +748,6 @@ onMounted(loadJobs)
   color: var(--do-text-muted);
   font-size: 0.95rem;
 }
-
-/* ─── Jobs grid ───────────────────────────────────────────────────────────── */
 
 .jobs-grid {
   display: grid;
@@ -905,8 +815,6 @@ onMounted(loadJobs)
   flex-wrap: wrap;
   justify-content: flex-end;
 }
-
-/* ─── Meta grid ───────────────────────────────────────────────────────────── */
 
 .job-meta-grid {
   display: grid;
@@ -998,16 +906,12 @@ onMounted(loadJobs)
   -webkit-box-orient: vertical;
 }
 
-/* ─── Job actions ─────────────────────────────────────────────────────────── */
-
 .job-actions {
   display: flex;
   gap: 0.5rem;
   padding-top: 0.5rem;
   border-top: 1px solid var(--do-border-light);
 }
-
-/* ─── Create form ─────────────────────────────────────────────────────────── */
 
 .create-form {
   display: flex;
@@ -1079,8 +983,6 @@ onMounted(loadJobs)
   width: 100%;
 }
 
-/* ─── Cron examples ───────────────────────────────────────────────────────── */
-
 .cron-examples {
   display: flex;
   align-items: center;
@@ -1126,8 +1028,6 @@ onMounted(loadJobs)
   border-radius: 0.25rem;
 }
 
-/* ─── Dialog dark theme ───────────────────────────────────────────────────── */
-
 :deep(.p-dialog) {
   background: var(--do-bg);
   border: 1px solid var(--do-border-light);
@@ -1166,8 +1066,6 @@ onMounted(loadJobs)
   background: var(--do-bg);
 }
 
-/* ─── Dialog actions ──────────────────────────────────────────────────────── */
-
 .dialog-actions {
   display: flex;
   justify-content: flex-end;
@@ -1176,8 +1074,6 @@ onMounted(loadJobs)
   border-top: 1px solid var(--do-border-light);
   margin-top: 0.5rem;
 }
-
-/* ─── Delete confirm ──────────────────────────────────────────────────────── */
 
 .confirm-body {
   display: flex;
@@ -1198,8 +1094,6 @@ onMounted(loadJobs)
   color: var(--do-text);
   line-height: 1.5;
 }
-
-/* ─── Run result ──────────────────────────────────────────────────────────── */
 
 .run-result-body {
   display: flex;
@@ -1237,8 +1131,6 @@ onMounted(loadJobs)
 :deep(.modern-switch) {
   transform: scale(1.1);
 }
-
-/* ─── Responsive ──────────────────────────────────────────────────────────── */
 
 @media (max-width: 640px) {
   .cronjobs-container {

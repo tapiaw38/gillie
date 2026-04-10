@@ -9,8 +9,6 @@ import { useErrorToast } from '@/composables/useErrorToast'
 import { useI18n } from 'vue-i18n'
 import Toast from 'primevue/toast'
 import Button from 'primevue/button'
-import Card from 'primevue/card'
-import Message from 'primevue/message'
 import InputSwitch from 'primevue/inputswitch'
 import InputText from 'primevue/inputtext'
 import Password from 'primevue/password'
@@ -36,14 +34,14 @@ const {
   checkStatus,
   disconnect,
   isConnected,
-  isLoading,
+  isSaveCredentialsPending: isLoading,
   savedClientId,
   savedRedirectUri,
   hasSecret,
   isSaveCredentialsError,
   saveCredentialsError,
-  isGetAuthUrlError,
-  getAuthUrlError,
+  isGetAuthorizationUrlError: isGetAuthUrlError,
+  getAuthorizationUrlError: getAuthUrlError,
   isCheckStatusError,
   checkStatusError,
 } = useDrive()
@@ -267,7 +265,6 @@ onMounted(async () => {
 
 <template>
   <div class="integration-container">
-
     <!-- Unified header row -->
     <div class="page-header">
       <div class="header-left">
@@ -351,7 +348,9 @@ onMounted(async () => {
             icon="pi pi-save"
             severity="primary"
             :loading="isLoading"
-            :disabled="(!credentials.clientId && !savedClientId) || (!credentials.clientSecret && !hasSecret)"
+            :disabled="
+              (!credentials.clientId && !savedClientId) || (!credentials.clientSecret && !hasSecret)
+            "
             @click="handleSaveCredentials"
           />
         </div>
@@ -528,19 +527,16 @@ onMounted(async () => {
 }
 
 .icon-wrapper {
-  flex-shrink: 0;
-  width: 3rem;
-  height: 3rem;
-  border-radius: 0.75rem;
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 1.4rem;
-  color: #fff;
+  font-size: 2rem;
+  color: var(--do-blue);
+  flex-shrink: 0;
 }
 
 .drive-icon {
-  background: linear-gradient(135deg, #1a73e8 0%, #0d47a1 100%);
+  color: #1a73e8;
 }
 
 .header-text {
@@ -580,7 +576,6 @@ onMounted(async () => {
   color: var(--color-success);
 }
 
-/* ── Panel ───────────────────────────────────────────────── */
 .panel {
   border: 1px solid var(--do-border-light);
   border-radius: 0.75rem;
@@ -647,7 +642,6 @@ onMounted(async () => {
   margin-top: 0.25rem;
 }
 
-/* ── Form fields ─────────────────────────────────────────── */
 .field-group {
   display: flex;
   flex-direction: column;
@@ -686,7 +680,6 @@ onMounted(async () => {
   width: 100%;
 }
 
-/* ── Credentials saved notice ────────────────────────────── */
 .credentials-saved-notice {
   display: flex;
   align-items: center;
@@ -712,7 +705,6 @@ onMounted(async () => {
   flex: 1;
 }
 
-/* ── Connection state ────────────────────────────────────── */
 .connection-state {
   display: flex;
   align-items: flex-start;
@@ -759,7 +751,6 @@ onMounted(async () => {
   line-height: 1.45;
 }
 
-/* ── Connection footer ───────────────────────────────────── */
 .connection-meta {
   display: flex;
   align-items: center;
@@ -788,7 +779,6 @@ onMounted(async () => {
   gap: 0.75rem;
 }
 
-/* ── Capabilities grid ───────────────────────────────────── */
 .capabilities-grid {
   display: grid;
   grid-template-columns: 1fr 1fr;
@@ -814,7 +804,6 @@ onMounted(async () => {
   flex-shrink: 0;
 }
 
-/* ── Formats row ─────────────────────────────────────────── */
 .formats-row {
   display: flex;
   align-items: center;
@@ -840,7 +829,6 @@ onMounted(async () => {
   padding: 0.2rem 0.55rem;
 }
 
-/* ── Responsive ──────────────────────────────────────────── */
 @media (max-width: 600px) {
   .integration-container {
     padding: 0.75rem;

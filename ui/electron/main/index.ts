@@ -233,6 +233,9 @@ function createWindow(): void {
   }
 }
 
+app.commandLine.appendSwitch('disable-gpu')
+app.commandLine.appendSwitch('disable-software-rasterizer')
+
 app.whenReady().then(() => {
   electronApp.setAppUserModelId('ai.gillie')
 
@@ -241,9 +244,16 @@ app.whenReady().then(() => {
   })
 
   session.defaultSession.webRequest.onHeadersReceived((details, callback) => {
+    const headers = { ...details.responseHeaders }
+    // Remove any existing CORS headers (case-insensitive) to avoid duplicates
+    for (const key of Object.keys(headers)) {
+      if (key.toLowerCase().startsWith('access-control-')) {
+        delete headers[key]
+      }
+    }
     callback({
       responseHeaders: {
-        ...details.responseHeaders,
+        ...headers,
         'Access-Control-Allow-Origin': ['*'],
         'Access-Control-Allow-Methods': ['GET, POST, PUT, PATCH, DELETE, OPTIONS'],
         'Access-Control-Allow-Headers': ['Content-Type, Authorization, x-api-key'],

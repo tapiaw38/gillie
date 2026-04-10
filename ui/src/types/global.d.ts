@@ -3,6 +3,22 @@
 export {}
 
 declare global {
+  interface ImportMetaEnv {
+    readonly BASE_URL: string
+    readonly DEV: boolean
+    readonly VITE_API_URL?: string
+    readonly VITE_ASSISTANT_BASE_URL?: string
+    readonly VITE_ASSISTANT_API_KEY?: string
+    readonly VITE_CALENDAR_BASE_URL?: string
+    readonly VITE_DRIVE_BASE_URL?: string
+    readonly VITE_GMAIL_BASE_URL?: string
+    readonly VITE_WHATSAPP_API_BASE_URL?: string
+  }
+
+  interface ImportMeta {
+    readonly env: ImportMetaEnv
+  }
+
   interface Window {
     google?: {
       accounts?: {
