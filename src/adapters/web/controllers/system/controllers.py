@@ -54,10 +54,8 @@ async def set_provider(
     preset = providers[body.provider]
     config = get_config_service()
 
-    # Resolve API key: request body → stored keys → current config
-    api_key = body.api_key or preset.get("api_key") or config.openai_config.api_key
+    api_key = body.api_key or preset.get("api_key", "")
 
-    # Persist active provider and key in profile
     user_id = request.state.user.get("user_id", "")
     if user_id:
         usecases.profile.update_provider_usecase.execute(
@@ -66,13 +64,11 @@ async def set_provider(
             api_key=api_key,
         )
 
-    # Update in-memory config
     config.openai_config.base_url = preset["base_url"]
     config.openai_config.model = preset["model"]
     config.openai_config.auth_type = preset["auth_type"]
     config.openai_config.api_key = api_key
 
-    # Hot-reload LLM
     if _openai_integration is not None:
         _openai_integration.reload_provider(
             base_url=preset["base_url"],
