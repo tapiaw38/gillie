@@ -1,3 +1,29 @@
+<script setup lang="ts">
+import Card from 'primevue/card'
+import Button from 'primevue/button'
+import { useToast } from 'primevue/usetoast'
+
+const toast = useToast()
+
+const contactSupport = () => {
+  toast.add({
+    severity: 'info',
+    summary: 'Contactar Soporte',
+    detail: 'Enviaremos un correo a nuestro equipo de soporte para que te contacten pronto.',
+    life: 4000,
+  })
+}
+
+const scheduleDemo = () => {
+  toast.add({
+    severity: 'success',
+    summary: 'Demo Programada',
+    detail: 'Hemos registrado tu solicitud. Un representante se pondrá en contacto contigo.',
+    life: 4000,
+  })
+}
+</script>
+
 <template>
   <div class="about-container">
     <!-- Header Section -->
@@ -155,32 +181,6 @@
   </div>
 </template>
 
-<script setup lang="ts">
-import Card from 'primevue/card'
-import Button from 'primevue/button'
-import { useToast } from 'primevue/usetoast'
-
-const toast = useToast()
-
-const contactSupport = () => {
-  toast.add({
-    severity: 'info',
-    summary: 'Contactar Soporte',
-    detail: 'Enviaremos un correo a nuestro equipo de soporte para que te contacten pronto.',
-    life: 4000,
-  })
-}
-
-const scheduleDemo = () => {
-  toast.add({
-    severity: 'success',
-    summary: 'Demo Programada',
-    detail: 'Hemos registrado tu solicitud. Un representante se pondrá en contacto contigo.',
-    life: 4000,
-  })
-}
-</script>
-
 <style scoped>
 .about-container {
   max-width: 1200px;
@@ -299,7 +299,7 @@ const scheduleDemo = () => {
   width: 100%;
   height: 250px;
   border-radius: 1rem;
-  background: rgba(99,102,241,0.1);
+  background: rgba(99, 102, 241, 0.1);
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -334,7 +334,7 @@ const scheduleDemo = () => {
 }
 
 :deep(.features-card .p-card-header) {
-  background: rgba(255,255,255,0.04);
+  background: rgba(255, 255, 255, 0.04);
   padding: 1.5rem 2rem;
   border-bottom: 1px solid #e2e8f0;
 }
@@ -381,14 +381,14 @@ const scheduleDemo = () => {
   display: flex;
   gap: 1rem;
   padding: 1.5rem;
-  background: rgba(255,255,255,0.04);
+  background: rgba(255, 255, 255, 0.04);
   border-radius: 0.75rem;
   border: 1px solid #e2e8f0;
   transition: all 0.3s ease;
 }
 
 .feature-item:hover {
-  background: rgba(255,255,255,0.07);
+  background: rgba(255, 255, 255, 0.07);
   box-shadow: 0 4px 20px rgba(0, 0, 0, 0.08);
   transform: translateY(-2px);
 }
@@ -435,7 +435,7 @@ const scheduleDemo = () => {
 }
 
 :deep(.contact-card .p-card-header) {
-  background: rgba(16,185,129,0.08);
+  background: rgba(16, 185, 129, 0.08);
   padding: 1.5rem 2rem;
   border-bottom: 1px solid #e2e8f0;
 }
@@ -522,13 +522,13 @@ const scheduleDemo = () => {
   }
 
   .icon-wrapper {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-size: 2rem;
-  color: var(--do-blue);
-  flex-shrink: 0;
-}
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 2rem;
+    color: var(--do-blue);
+    flex-shrink: 0;
+  }
 
   .page-title {
     font-size: 1.75rem;

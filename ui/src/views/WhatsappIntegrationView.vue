@@ -7,7 +7,6 @@ import { useI18n } from 'vue-i18n'
 import Toast from 'primevue/toast'
 import InputText from 'primevue/inputtext'
 import Button from 'primevue/button'
-import Card from 'primevue/card'
 import Message from 'primevue/message'
 import InputSwitch from 'primevue/inputswitch'
 
@@ -58,7 +57,9 @@ const validationErrors = reactive({
 const saveConfig = async () => {
   const config = whatsappIntegration.config as WhatsappIntegrationConfig
 
-  validationErrors.accessToken = !config.accessToken ? t('integrations.whatsapp.accessTokenRequired') : ''
+  validationErrors.accessToken = !config.accessToken
+    ? t('integrations.whatsapp.accessTokenRequired')
+    : ''
   validationErrors.phoneNumberId = !config.phoneNumberId
     ? t('integrations.whatsapp.phoneNumberIdRequired')
     : ''
@@ -128,7 +129,6 @@ onMounted(async () => {
 
 <template>
   <div class="integration-container">
-
     <!-- Page header row -->
     <div class="page-header">
       <div class="header-left">
@@ -142,7 +142,9 @@ onMounted(async () => {
       </div>
       <div class="header-toggle">
         <span class="toggle-status" :class="{ active: whatsappIntegration.activated }">
-          {{ whatsappIntegration.activated ? t('integrations.active') : t('integrations.inactive') }}
+          {{
+            whatsappIntegration.activated ? t('integrations.active') : t('integrations.inactive')
+          }}
         </span>
         <InputSwitch v-model="whatsappIntegration.activated" />
       </div>
@@ -248,7 +250,8 @@ onMounted(async () => {
           </span>
           <code class="status-value">
             {{
-              (searchWhatsappIntegration?.config as unknown as WhatsappIntegrationConfig)?.accessToken
+              (searchWhatsappIntegration?.config as unknown as WhatsappIntegrationConfig)
+                ?.accessToken
                 ? '&bull;&bull;&bull;&bull;&bull;&bull;&bull;&bull;&bull;&bull;&bull;'
                 : 'No configurado'
             }}
@@ -262,8 +265,8 @@ onMounted(async () => {
           </span>
           <code class="status-value">
             {{
-              (searchWhatsappIntegration?.config as unknown as WhatsappIntegrationConfig)?.phoneNumberId
-                || 'No configurado'
+              (searchWhatsappIntegration?.config as unknown as WhatsappIntegrationConfig)
+                ?.phoneNumberId || 'No configurado'
             }}
           </code>
         </div>
@@ -275,8 +278,8 @@ onMounted(async () => {
           </span>
           <code class="status-value">
             {{
-              (searchWhatsappIntegration?.config as unknown as WhatsappIntegrationConfig)?.businessAccountId
-                || 'No configurado'
+              (searchWhatsappIntegration?.config as unknown as WhatsappIntegrationConfig)
+                ?.businessAccountId || 'No configurado'
             }}
           </code>
         </div>
@@ -308,7 +311,10 @@ onMounted(async () => {
         </li>
         <li class="step-item">
           <span class="step-num">4</span>
-          <span>Copia el <strong>Phone Number ID</strong> y el <strong>Business Account ID</strong></span>
+          <span
+            >Copia el <strong>Phone Number ID</strong> y el
+            <strong>Business Account ID</strong></span
+          >
         </li>
         <li class="step-item">
           <span class="step-num">5</span>

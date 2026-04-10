@@ -7,7 +7,6 @@ import { useI18n } from 'vue-i18n'
 import Toast from 'primevue/toast'
 import InputText from 'primevue/inputtext'
 import Button from 'primevue/button'
-import Card from 'primevue/card'
 import InputSwitch from 'primevue/inputswitch'
 import Tag from 'primevue/tag'
 
@@ -24,8 +23,16 @@ const {
 } = useAssistant()
 
 const errorWatchers = [
-  { flag: isAddIntegrationError, summary: t('systemCommands.errorSaveConfig'), detail: addIntegrationError },
-  { flag: isGetAssistantProfileError, summary: t('systemCommands.errorLoadProfile'), detail: getAssistantProfileError },
+  {
+    flag: isAddIntegrationError,
+    summary: t('systemCommands.errorSaveConfig'),
+    detail: addIntegrationError,
+  },
+  {
+    flag: isGetAssistantProfileError,
+    summary: t('systemCommands.errorLoadProfile'),
+    detail: getAssistantProfileError,
+  },
 ]
 
 const { toast } = useErrorToast(errorWatchers)
@@ -48,9 +55,22 @@ const blacklist = computed<string[]>(() => {
 })
 
 const HARDCODED_BLACKLIST = [
-  'rm -rf /', 'rm -rf /*', 'mkfs', 'dd if=', ':(){ :|:& };:',
-  '> /dev/sda', 'shred', 'fdisk', 'parted', 'wipefs',
-  'shutdown', 'reboot', 'halt', 'poweroff', 'init 0', 'init 6',
+  'rm -rf /',
+  'rm -rf /*',
+  'mkfs',
+  'dd if=',
+  ':(){ :|:& };:',
+  '> /dev/sda',
+  'shred',
+  'fdisk',
+  'parted',
+  'wipefs',
+  'shutdown',
+  'reboot',
+  'halt',
+  'poweroff',
+  'init 0',
+  'init 6',
 ]
 
 const saveIntegration = async () => {
@@ -101,7 +121,6 @@ onMounted(async () => {
 
 <template>
   <div class="integration-container">
-
     <!-- Unified header row -->
     <div class="page-header">
       <div class="header-left">
@@ -135,7 +154,12 @@ onMounted(async () => {
           <div class="toggle-row-info">
             <span class="toggle-row-label">{{ t('systemCommands.requireConfirmation') }}</span>
             <span class="toggle-row-desc">
-              <template v-if="(integration.config as unknown as SystemCommandsIntegrationConfig).require_confirmation">
+              <template
+                v-if="
+                  (integration.config as unknown as SystemCommandsIntegrationConfig)
+                    .require_confirmation
+                "
+              >
                 {{ t('systemCommands.confirmationDesc') }}
               </template>
               <template v-else>
@@ -144,7 +168,10 @@ onMounted(async () => {
             </span>
           </div>
           <InputSwitch
-            v-model="(integration.config as unknown as SystemCommandsIntegrationConfig).require_confirmation"
+            v-model="
+              (integration.config as unknown as SystemCommandsIntegrationConfig)
+                .require_confirmation
+            "
             :disabled="!integration.activated"
             @change="saveIntegration"
           />

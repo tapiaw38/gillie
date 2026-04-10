@@ -10,11 +10,9 @@ import Button from 'primevue/button'
 import Dialog from 'primevue/dialog'
 import InputText from 'primevue/inputtext'
 import Dropdown from 'primevue/dropdown'
-import Card from 'primevue/card'
 import Tag from 'primevue/tag'
 import Toast from 'primevue/toast'
 import ProgressSpinner from 'primevue/progressspinner'
-import Message from 'primevue/message'
 import { useI18n } from 'vue-i18n'
 
 const whatsapp = useWhatsApp()
@@ -44,10 +42,9 @@ const countries: Country[] = [
   { name: 'Estados Unidos', flag: '🇺🇸', dial: '+1' },
 ]
 
-const selectedCountry = ref<Country>(countries[0]) // Argentina por defecto
+const selectedCountry = ref<Country>(countries[0]) // Argentina
 const localPhone = ref('')
 
-// State
 const devices = ref<WhatsAppDevice[]>([])
 const loading = ref(false)
 const showCreateDialog = ref(false)
@@ -62,13 +59,10 @@ function getWsBaseUrl(): string {
   return httpBase.replace(/^https?/, (p: string) => (p === 'https' ? 'wss' : 'ws'))
 }
 
-// Form data
 const newDevice = ref({ device_name: '' })
 
-// Computed
 const hasDevices = computed(() => devices.value?.length > 0)
 
-// Methods
 const loadDevices = async () => {
   loading.value = true
   try {
@@ -321,7 +315,7 @@ onMounted(() => {
     <div class="panel">
       <!-- Loading state -->
       <div v-if="loading && !hasDevices" class="loading-state">
-        <ProgressSpinner style="width: 2.5rem; height: 2.5rem;" />
+        <ProgressSpinner style="width: 2.5rem; height: 2.5rem" />
         <p class="loading-text">{{ t('integrations.whatsappDevices.loadingDevices') }}</p>
       </div>
 
@@ -343,7 +337,11 @@ onMounted(() => {
         :rows="10"
         class="devices-table"
       >
-        <Column field="device_name" :header="t('integrations.whatsappDevices.deviceName')" :sortable="true">
+        <Column
+          field="device_name"
+          :header="t('integrations.whatsappDevices.deviceName')"
+          :sortable="true"
+        >
           <template #body="{ data }">
             <div class="device-name">
               <i class="pi pi-mobile"></i>
@@ -352,7 +350,11 @@ onMounted(() => {
           </template>
         </Column>
 
-        <Column field="phone_number" :header="t('integrations.whatsappDevices.phone')" :sortable="true">
+        <Column
+          field="phone_number"
+          :header="t('integrations.whatsappDevices.phone')"
+          :sortable="true"
+        >
           <template #body="{ data }">
             <span class="phone-number">{{ data.phone_number }}</span>
           </template>
@@ -360,14 +362,15 @@ onMounted(() => {
 
         <Column field="status" :header="t('integrations.whatsappDevices.status')" :sortable="true">
           <template #body="{ data }">
-            <Tag
-              :severity="getStatusSeverity(data.status)"
-              :value="getStatusLabel(data.status)"
-            />
+            <Tag :severity="getStatusSeverity(data.status)" :value="getStatusLabel(data.status)" />
           </template>
         </Column>
 
-        <Column field="last_connected_at" :header="t('integrations.whatsappDevices.lastConnection')" :sortable="true">
+        <Column
+          field="last_connected_at"
+          :header="t('integrations.whatsappDevices.lastConnection')"
+          :sortable="true"
+        >
           <template #body="{ data }">
             <span v-if="data.last_connected_at" class="date">
               {{ new Date(data.last_connected_at).toLocaleString() }}
@@ -469,7 +472,12 @@ onMounted(() => {
           :disabled="loading"
           @click="showCreateDialog = false"
         />
-        <Button :label="t('integrations.whatsappDevices.create')" icon="pi pi-check" :loading="loading" @click="createDevice" />
+        <Button
+          :label="t('integrations.whatsappDevices.create')"
+          icon="pi pi-check"
+          :loading="loading"
+          @click="createDevice"
+        />
       </template>
     </Dialog>
 
@@ -500,20 +508,23 @@ onMounted(() => {
             :src="qrCode"
             alt="QR Code"
             class="qr-code"
-            style="background: white; padding: 0.75rem; border-radius: 0.5rem; display: block;"
+            style="background: white; padding: 0.75rem; border-radius: 0.5rem; display: block"
           />
         </div>
 
         <!-- Loading state -->
         <div v-else class="qr-loading">
-          <ProgressSpinner style="width: 2.5rem; height: 2.5rem;" />
+          <ProgressSpinner style="width: 2.5rem; height: 2.5rem" />
           <p class="qr-loading-text">Conectando con WhatsApp…</p>
         </div>
 
         <!-- Warning -->
         <div v-if="qrCode" class="qr-warning">
           <i class="pi pi-exclamation-triangle warning-icon"></i>
-          <span>Este código QR expira en 60 segundos. Si expira, cierra esta ventana y vuelve a conectar.</span>
+          <span
+            >Este código QR expira en 60 segundos. Si expira, cierra esta ventana y vuelve a
+            conectar.</span
+          >
         </div>
       </div>
 
