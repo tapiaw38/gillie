@@ -342,15 +342,11 @@ const conversationSelectedHandler = computed(() => {
 }
 
 .icon-wrapper {
-  width: 3.2rem;
-  height: 3.2rem;
-  border-radius: 0.875rem;
-  background: var(--gradient-primary);
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 1.5rem;
-  color: #fff;
+  font-size: 2rem;
+  color: var(--do-blue);
   flex-shrink: 0;
 }
 
@@ -440,23 +436,20 @@ const conversationSelectedHandler = computed(() => {
 }
 
 .header-icon {
-  width: 3.2rem;
-  height: 3.2rem;
-  border-radius: 0.75rem;
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 1.25rem;
-  color: #fff;
+  font-size: 2rem;
+  color: var(--do-blue);
   flex-shrink: 0;
 }
 
 .conversations-icon {
-  background: var(--gradient-primary);
+  color: var(--do-blue);
 }
 
 .messages-icon {
-  background: var(--gradient-warning);
+  color: var(--do-warning);
 }
 
 .header-text h3 {
@@ -827,20 +820,26 @@ const conversationSelectedHandler = computed(() => {
   }
 
   .icon-wrapper {
-    width: 2.75rem;
-    height: 2.75rem;
-    font-size: 1.25rem;
-  }
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 2rem;
+  color: var(--do-blue);
+  flex-shrink: 0;
+}
 
   .page-title {
     font-size: 1.15rem;
   }
 
   .header-icon {
-    width: 2.5rem;
-    height: 2.5rem;
-    font-size: 1rem;
-  }
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 2rem;
+  color: var(--do-blue);
+  flex-shrink: 0;
+}
 
   .refresh-button {
     width: 2.5rem;

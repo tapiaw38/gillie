@@ -260,19 +260,16 @@ onMounted(async () => {
 }
 
 .icon-wrapper {
-  flex-shrink: 0;
-  width: 3rem;
-  height: 3rem;
-  border-radius: 0.75rem;
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 1.4rem;
-  color: #fff;
+  font-size: 2rem;
+  color: var(--do-blue);
+  flex-shrink: 0;
 }
 
 .cmd-icon {
-  background: linear-gradient(135deg, #0f172a 0%, #334155 100%);
+  color: #94a3b8;
 }
 
 .header-text {

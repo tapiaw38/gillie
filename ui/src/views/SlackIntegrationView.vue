@@ -327,19 +327,16 @@ onMounted(async () => {
 }
 
 .icon-wrapper {
-  flex-shrink: 0;
-  width: 3rem;
-  height: 3rem;
-  border-radius: 0.75rem;
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 1.4rem;
-  color: #fff;
+  font-size: 2rem;
+  color: var(--do-blue);
+  flex-shrink: 0;
 }
 
 .slack-icon {
-  background: linear-gradient(135deg, #4a154b 0%, #611f69 100%);
+  color: #611f69;
 }
 
 .header-text {

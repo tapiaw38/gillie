@@ -235,20 +235,16 @@ onMounted(async () => {
 }
 
 .icon-wrapper {
-  width: 4rem;
-  height: 4rem;
-  border-radius: 1rem;
   display: flex;
   align-items: center;
   justify-content: center;
   font-size: 2rem;
-  color: white;
-  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.1);
+  color: var(--do-blue);
+  flex-shrink: 0;
 }
 
 .mercadolibre-icon {
-  background: linear-gradient(135deg, #ffe600 0%, #ffb800 100%);
-  color: #333;
+  color: #ffe600;
 }
 
 .header-content {
@@ -516,10 +512,13 @@ onMounted(async () => {
   }
 
   .icon-wrapper {
-    width: 3rem;
-    height: 3rem;
-    font-size: 1.5rem;
-  }
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 2rem;
+  color: var(--do-blue);
+  flex-shrink: 0;
+}
 
   .integration-title {
     font-size: 1.75rem;

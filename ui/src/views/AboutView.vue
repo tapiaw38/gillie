@@ -203,16 +203,12 @@ const scheduleDemo = () => {
 }
 
 .icon-wrapper {
-  width: 4rem;
-  height: 4rem;
-  border-radius: 1rem;
-  background: var(--gradient-primary);
   display: flex;
   align-items: center;
   justify-content: center;
   font-size: 2rem;
-  color: white;
-  box-shadow: var(--shadow-primary);
+  color: var(--do-blue);
+  flex-shrink: 0;
 }
 
 .header-content {
@@ -350,15 +346,12 @@ const scheduleDemo = () => {
 }
 
 .header-icon {
-  width: 3rem;
-  height: 3rem;
-  border-radius: 0.75rem;
-  background: var(--gradient-info);
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 1.25rem;
-  color: white;
+  font-size: 2rem;
+  color: var(--do-blue);
+  flex-shrink: 0;
 }
 
 .header-text h3 {
@@ -529,10 +522,13 @@ const scheduleDemo = () => {
   }
 
   .icon-wrapper {
-    width: 3rem;
-    height: 3rem;
-    font-size: 1.5rem;
-  }
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 2rem;
+  color: var(--do-blue);
+  flex-shrink: 0;
+}
 
   .page-title {
     font-size: 1.75rem;

@@ -310,19 +310,16 @@ watch(codeMethodsBlock, (newValue) => {
 }
 
 .icon-wrapper {
-  width: 4rem;
-  height: 4rem;
-  border-radius: 1rem;
   display: flex;
   align-items: center;
   justify-content: center;
   font-size: 2rem;
-  color: white;
-  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.1);
+  color: var(--do-blue);
+  flex-shrink: 0;
 }
 
 .web-icon {
-  background: var(--gradient-info);
+  color: #2F82FF;
 }
 
 .header-content {
@@ -417,18 +414,16 @@ watch(codeMethodsBlock, (newValue) => {
 }
 
 .header-icon {
-  width: 3rem;
-  height: 3rem;
-  border-radius: 0.75rem;
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 1.25rem;
-  color: white;
+  font-size: 2rem;
+  color: var(--do-blue);
+  flex-shrink: 0;
 }
 
 .setup-header-icon {
-  background: var(--gradient-success);
+  color: var(--do-success);
 }
 
 .header-text h3 {
@@ -556,22 +551,15 @@ watch(codeMethodsBlock, (newValue) => {
 }
 
 .code-header-icon {
-  width: 3rem;
-  height: 3rem;
-  border-radius: 0.75rem;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-size: 1.25rem;
-  color: white;
+  color: var(--do-blue);
 }
 
 .config-icon {
-  background: var(--gradient-primary);
+  color: var(--do-blue);
 }
 
 .methods-icon {
-  background: var(--gradient-warning);
+  color: var(--do-blue);
 }
 
 .code-header-text h3 {
@@ -727,10 +715,13 @@ code {
   }
 
   .icon-wrapper {
-    width: 3rem;
-    height: 3rem;
-    font-size: 1.5rem;
-  }
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 2rem;
+  color: var(--do-blue);
+  flex-shrink: 0;
+}
 
   .integration-title {
     font-size: 1.75rem;
@@ -738,10 +729,8 @@ code {
 
   .header-icon,
   .code-header-icon {
-    width: 2.5rem;
-    height: 2.5rem;
-    font-size: 1rem;
-  }
+  color: var(--do-blue);
+}
 
   :deep(.setup-card .p-card-content),
   :deep(.info-card .p-card-content) {

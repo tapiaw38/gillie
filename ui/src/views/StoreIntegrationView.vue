@@ -227,19 +227,16 @@ const removeFile = async (fileId: string) => {
 }
 
 .icon-wrapper {
-  width: 4rem;
-  height: 4rem;
-  border-radius: 1rem;
   display: flex;
   align-items: center;
   justify-content: center;
   font-size: 2rem;
-  color: white;
-  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.1);
+  color: var(--do-blue);
+  flex-shrink: 0;
 }
 
 .storage-icon {
-  background: var(--gradient-primary);
+  color: var(--do-blue);
 }
 
 .header-content {
@@ -322,22 +319,20 @@ const removeFile = async (fileId: string) => {
 }
 
 .header-icon {
-  width: 3rem;
-  height: 3rem;
-  border-radius: 0.75rem;
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 1.25rem;
-  color: white;
+  font-size: 2rem;
+  color: var(--do-blue);
+  flex-shrink: 0;
 }
 
 .upload-header-icon {
-  background: var(--gradient-success);
+  color: var(--do-success);
 }
 
 .files-header-icon {
-  background: var(--gradient-primary);
+  color: var(--do-blue);
 }
 
 .header-text h3 {
@@ -627,10 +622,13 @@ const removeFile = async (fileId: string) => {
   }
 
   .icon-wrapper {
-    width: 3rem;
-    height: 3rem;
-    font-size: 1.5rem;
-  }
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 2rem;
+  color: var(--do-blue);
+  flex-shrink: 0;
+}
 
   .integration-title {
     font-size: 1.75rem;
@@ -641,10 +639,13 @@ const removeFile = async (fileId: string) => {
   }
 
   .header-icon {
-    width: 2.5rem;
-    height: 2.5rem;
-    font-size: 1rem;
-  }
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 2rem;
+  color: var(--do-blue);
+  flex-shrink: 0;
+}
 
   :deep(.upload-card .p-card-content),
   :deep(.files-card .p-card-content),

@@ -512,19 +512,16 @@ onMounted(async () => {
 }
 
 .icon-wrapper {
-  flex-shrink: 0;
-  width: 3rem;
-  height: 3rem;
-  border-radius: 0.75rem;
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 1.4rem;
-  color: #fff;
+  font-size: 2rem;
+  color: var(--do-blue);
+  flex-shrink: 0;
 }
 
 .gmail-icon {
-  background: linear-gradient(135deg, #ea4335 0%, #fbbc05 100%);
+  color: #ea4335;
 }
 
 .header-text {

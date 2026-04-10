@@ -15,6 +15,23 @@ import { useErrorToast } from '@/composables/useErrorToast'
 import { useI18n } from 'vue-i18n'
 import type { IAssistantService } from '@/services/assistant/assistantService'
 
+type IntegrationItem = {
+  name: string
+  description: string
+  icon: string
+  tone: string
+  to: string
+  enabled: boolean
+}
+
+type SkillGroup = {
+  id: string
+  name: string
+  icon: string
+  tone: string
+  items: IntegrationItem[]
+}
+
 const { t } = useI18n()
 
 const { toogleValue: isVisible } = useToogle(false)
@@ -61,14 +78,13 @@ const pendingApiKey = ref<string>('')
 const showApiKeyInput = ref(false)
 const pendingProvider = ref<string>('')
 
-// New provider form
 const showAddProvider = ref(false)
-const newProvider = reactive({ name: '', base_url: '', model: '', auth_type: 'api_key', api_key: '' })
-
-const selectedProviderNeedsKey = computed(() => {
-  if (!pendingProvider.value) return false
-  const p = providerOptions.value.find(x => x.key === pendingProvider.value)
-  return p ? (p.auth_type !== 'none' && !p.api_key_set) : false
+const newProvider = reactive({
+  name: '',
+  base_url: '',
+  model: '',
+  auth_type: 'api_key',
+  api_key: '',
 })
 
 watch(
@@ -97,7 +113,7 @@ const onProviderSelect = (key: string) => {
     applyProvider(key)
     return
   }
-  const p = providerOptions.value.find(x => x.key === key)
+  const p = providerOptions.value.find((x) => x.key === key)
   if (p && p.auth_type !== 'none' && !p.api_key_set) {
     pendingProvider.value = key
     pendingApiKey.value = ''
@@ -113,9 +129,8 @@ const applyProvider = async (key: string, apiKey?: string) => {
   showApiKeyInput.value = false
   try {
     await services!.assistantService.setProvider(key, apiKey)
-    // Update local api_key_set flag
     if (apiKey) {
-      const p = providerOptions.value.find(x => x.key === key)
+      const p = providerOptions.value.find((x) => x.key === key)
       if (p) p.api_key_set = true
     }
     toast.add({ severity: 'success', summary: t('dashboard.aiModelUpdated'), life: 2000 })
@@ -140,11 +155,16 @@ const submitNewProvider = async () => {
   if (!newProvider.name || !newProvider.base_url || !newProvider.model) return
   try {
     await services!.assistantService.addProvider({ ...newProvider })
-    // Reload options to show the new provider
     const opts = await services!.assistantService.getOptions()
     providerOptions.value = opts.data.providers ?? []
     showAddProvider.value = false
-    Object.assign(newProvider, { name: '', base_url: '', model: '', auth_type: 'api_key', api_key: '' })
+    Object.assign(newProvider, {
+      name: '',
+      base_url: '',
+      model: '',
+      auth_type: 'api_key',
+      api_key: '',
+    })
     toast.add({ severity: 'success', summary: t('dashboard.providerAdded'), life: 2000 })
   } catch {
     toast.add({ severity: 'error', summary: t('dashboard.errorAiModel'), life: 3000 })
@@ -265,7 +285,7 @@ const totalMessagesInConversation = computed(() => {
   }, 0)
 })
 
-const integrations = computed(() => [
+const integrations = computed<IntegrationItem[]>(() => [
   {
     name: t('dashboard.integrations.storage.name'),
     description: t('dashboard.integrations.storage.description'),
@@ -390,31 +410,48 @@ const toggleGroup = (id: string) => {
   }
 }
 
-const MESSAGING_ROUTES = ['whatsapp-integration', 'whatsapp-devices', 'slack-integration', 'telegram-integration']
-const PRODUCTIVITY_ROUTES = ['google-calendar-integration', 'google-drive-integration', 'google-gmail-integration', 'store-integration', 'sqldatabase-integration']
-const AUTOMATION_ROUTES = ['system-commands', 'cron-jobs', 'tool-prompts', 'functions', 'my-account']
+const MESSAGING_ROUTES = [
+  'whatsapp-integration',
+  'whatsapp-devices',
+  'slack-integration',
+  'telegram-integration',
+]
+const PRODUCTIVITY_ROUTES = [
+  'google-calendar-integration',
+  'google-drive-integration',
+  'google-gmail-integration',
+  'store-integration',
+  'sqldatabase-integration',
+]
+const AUTOMATION_ROUTES = [
+  'system-commands',
+  'cron-jobs',
+  'tool-prompts',
+  'functions',
+  'my-account',
+]
 
-const skillGroups = computed(() => [
+const skillGroups = computed<SkillGroup[]>(() => [
   {
     id: 'messaging',
     name: t('dashboard.skillGroups.messaging'),
     icon: 'pi pi-comments',
     tone: 'success',
-    items: integrations.value.filter(i => MESSAGING_ROUTES.includes(i.to)),
+    items: integrations.value.filter((i: IntegrationItem) => MESSAGING_ROUTES.includes(i.to)),
   },
   {
     id: 'productivity',
     name: t('dashboard.skillGroups.productivity'),
     icon: 'pi pi-briefcase',
     tone: 'info',
-    items: integrations.value.filter(i => PRODUCTIVITY_ROUTES.includes(i.to)),
+    items: integrations.value.filter((i: IntegrationItem) => PRODUCTIVITY_ROUTES.includes(i.to)),
   },
   {
     id: 'automation',
     name: t('dashboard.skillGroups.automation'),
     icon: 'pi pi-cog',
     tone: 'warning',
-    items: integrations.value.filter(i => AUTOMATION_ROUTES.includes(i.to)),
+    items: integrations.value.filter((i: IntegrationItem) => AUTOMATION_ROUTES.includes(i.to)),
   },
 ])
 </script>
@@ -492,7 +529,12 @@ const skillGroups = computed(() => [
                       class="pi pi-spin pi-spinner name-edit-spinner"
                     />
                   </div>
-                  <h3 v-else class="name-clickable" @click="startEditName" :title="t('dashboard.clickToEdit')">
+                  <h3
+                    v-else
+                    class="name-clickable"
+                    @click="startEditName"
+                    :title="t('dashboard.clickToEdit')"
+                  >
                     {{ assistantProfile?.assistant_name }}
                     <i class="pi pi-pencil name-pencil-icon" />
                   </h3>
@@ -522,13 +564,17 @@ const skillGroups = computed(() => [
                     :class="{ 'lang-opt--active': responseLang === 'en' }"
                     :disabled="isUpdateAssistantProfilePending"
                     @click="setResponseLanguage('en')"
-                  >EN</button>
+                  >
+                    EN
+                  </button>
                   <button
                     class="lang-opt"
                     :class="{ 'lang-opt--active': responseLang === 'es' }"
                     :disabled="isUpdateAssistantProfilePending"
                     @click="setResponseLanguage('es')"
-                  >ES</button>
+                  >
+                    ES
+                  </button>
                 </div>
               </div>
 
@@ -545,13 +591,16 @@ const skillGroups = computed(() => [
                     @change="onProviderSelect(($event.target as HTMLSelectElement).value)"
                   >
                     <option value="">{{ t('dashboard.aiModelDefault') }}</option>
-                    <option
-                      v-for="p in providerOptions"
-                      :key="p.key"
-                      :value="p.key"
-                    >{{ p.key }} — {{ p.model }}</option>
+                    <option v-for="p in providerOptions" :key="p.key" :value="p.key">
+                      {{ p.key }} — {{ p.model }}
+                    </option>
                   </select>
-                  <button type="button" class="add-provider-toggle" :title="t('dashboard.addProvider')" @click="showAddProvider = !showAddProvider">
+                  <button
+                    type="button"
+                    class="add-provider-toggle"
+                    :title="t('dashboard.addProvider')"
+                    @click="showAddProvider = !showAddProvider"
+                  >
                     <i :class="showAddProvider ? 'pi pi-times' : 'pi pi-plus-circle'"></i>
                   </button>
                 </div>
@@ -561,7 +610,9 @@ const skillGroups = computed(() => [
               <div v-if="showApiKeyInput" class="tts-row provider-apikey-row">
                 <div class="tts-info">
                   <i class="pi pi-key tts-icon"></i>
-                  <span class="tts-label">{{ t('dashboard.providerApiKey') }} ({{ pendingProvider }})</span>
+                  <span class="tts-label"
+                    >{{ t('dashboard.providerApiKey') }} ({{ pendingProvider }})</span
+                  >
                 </div>
                 <div class="provider-apikey-actions">
                   <InputText
@@ -572,18 +623,46 @@ const skillGroups = computed(() => [
                     @keyup.enter="submitApiKey"
                     @keyup.escape="cancelApiKey"
                   />
-                  <Button icon="pi pi-check" size="small" severity="success" :disabled="!pendingApiKey.trim()" @click="submitApiKey" />
-                  <Button icon="pi pi-times" size="small" severity="secondary" @click="cancelApiKey" />
+                  <Button
+                    icon="pi pi-check"
+                    size="small"
+                    severity="success"
+                    :disabled="!pendingApiKey.trim()"
+                    @click="submitApiKey"
+                  />
+                  <Button
+                    icon="pi pi-times"
+                    size="small"
+                    severity="secondary"
+                    @click="cancelApiKey"
+                  />
                 </div>
               </div>
 
               <!-- Add custom provider form -->
               <div v-if="showAddProvider" class="add-provider-form">
                 <div class="add-provider-fields">
-                  <InputText v-model="newProvider.name" size="small" :placeholder="t('dashboard.providerName')" />
-                  <InputText v-model="newProvider.base_url" size="small" :placeholder="t('dashboard.providerBaseUrl')" />
-                  <InputText v-model="newProvider.model" size="small" :placeholder="t('dashboard.providerModel')" />
-                  <InputText v-model="newProvider.api_key" size="small" :placeholder="t('dashboard.providerApiKeyPlaceholder')" type="password" />
+                  <InputText
+                    v-model="newProvider.name"
+                    size="small"
+                    :placeholder="t('dashboard.providerName')"
+                  />
+                  <InputText
+                    v-model="newProvider.base_url"
+                    size="small"
+                    :placeholder="t('dashboard.providerBaseUrl')"
+                  />
+                  <InputText
+                    v-model="newProvider.model"
+                    size="small"
+                    :placeholder="t('dashboard.providerModel')"
+                  />
+                  <InputText
+                    v-model="newProvider.api_key"
+                    size="small"
+                    :placeholder="t('dashboard.providerApiKeyPlaceholder')"
+                    type="password"
+                  />
                 </div>
                 <div class="add-provider-actions">
                   <Button
@@ -592,11 +671,14 @@ const skillGroups = computed(() => [
                     :disabled="!newProvider.name || !newProvider.base_url || !newProvider.model"
                     @click="submitNewProvider"
                   />
-                  <Button :label="t('common.cancel')" size="small" severity="secondary" @click="showAddProvider = false" />
+                  <Button
+                    :label="t('common.cancel')"
+                    size="small"
+                    severity="secondary"
+                    @click="showAddProvider = false"
+                  />
                 </div>
               </div>
-
-
             </div>
           </template>
         </Card>
@@ -654,7 +736,10 @@ const skillGroups = computed(() => [
                   <span class="skill-group-name">{{ group.name }}</span>
                   <span class="skill-group-count">{{ group.items.length }}</span>
                 </div>
-                <i class="pi pi-chevron-down skill-chevron" :class="{ 'is-rotated': openGroups.has(group.id) }"></i>
+                <i
+                  class="pi pi-chevron-down skill-chevron"
+                  :class="{ 'is-rotated': openGroups.has(group.id) }"
+                ></i>
               </button>
 
               <div v-show="openGroups.has(group.id)" class="skill-group-content">
@@ -682,8 +767,12 @@ const skillGroups = computed(() => [
                       </div>
 
                       <div class="integration-actions">
-                        <span v-if="integration.enabled" class="integration-action-label">{{ t('common.configure') }}</span>
-                        <span v-else class="integration-action-label">{{ t('common.comingSoon') }}</span>
+                        <span v-if="integration.enabled" class="integration-action-label">{{
+                          t('common.configure')
+                        }}</span>
+                        <span v-else class="integration-action-label">{{
+                          t('common.comingSoon')
+                        }}</span>
                       </div>
 
                       <div class="integration-legend">{{ integration.description }}</div>
@@ -763,11 +852,14 @@ const skillGroups = computed(() => [
             severity="secondary"
             @click="() => changeVisible(false)"
           />
-          <Button type="submit" :label="t('dashboard.createAssistant')" :loading="isAddAssistantProfilePending" />
+          <Button
+            type="submit"
+            :label="t('dashboard.createAssistant')"
+            :loading="isAddAssistantProfilePending"
+          />
         </div>
       </form>
     </DefaultModal>
-
   </div>
 
   <Toast />
@@ -787,11 +879,11 @@ const skillGroups = computed(() => [
   display: flex;
   justify-content: space-between;
   align-items: center;
-  background: rgba(255,255,255,0.03);
+  background: rgba(255, 255, 255, 0.03);
   padding: 0.85rem 1rem;
   border-radius: 0.75rem;
   box-shadow: none;
-  border: 1px solid rgba(255,255,255,0.07);
+  border: 1px solid rgba(255, 255, 255, 0.07);
   margin-bottom: 1rem;
 }
 
@@ -802,16 +894,12 @@ const skillGroups = computed(() => [
 }
 
 .icon-wrapper {
-  width: 2.5rem;
-  height: 2.5rem;
-  border-radius: 0.55rem;
-  background: var(--gradient-primary);
   display: flex;
   align-items: center;
   justify-content: center;
-  color: white;
-  font-size: 1rem;
-  box-shadow: 0 4px 14px var(--shadow-light);
+  font-size: 2rem;
+  color: var(--do-blue);
+  flex-shrink: 0;
 }
 
 .title-section {
@@ -886,10 +974,10 @@ const skillGroups = computed(() => [
 }
 
 .skill-group {
-  border: 1px solid rgba(255,255,255,0.08);
+  border: 1px solid rgba(255, 255, 255, 0.08);
   border-radius: 0.6rem;
   overflow: hidden;
-  background: rgba(255,255,255,0.02);
+  background: rgba(255, 255, 255, 0.02);
 }
 
 .skill-group-header {
@@ -907,12 +995,12 @@ const skillGroups = computed(() => [
 }
 
 .skill-group-header:hover {
-  background: rgba(255,255,255,0.04);
+  background: rgba(255, 255, 255, 0.04);
 }
 
 .skill-group-header.is-open {
-  background: rgba(255,255,255,0.04);
-  border-bottom: 1px solid rgba(255,255,255,0.07);
+  background: rgba(255, 255, 255, 0.04);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.07);
 }
 
 .skill-group-title {
@@ -934,17 +1022,17 @@ const skillGroups = computed(() => [
 
 .skill-group-icon.tone-success {
   color: var(--do-success);
-  background: rgba(34,197,94,0.12);
+  background: rgba(34, 197, 94, 0.12);
 }
 
 .skill-group-icon.tone-info {
   color: var(--do-info);
-  background: rgba(6,182,212,0.12);
+  background: rgba(6, 182, 212, 0.12);
 }
 
 .skill-group-icon.tone-warning {
   color: var(--do-warning);
-  background: rgba(245,158,11,0.12);
+  background: rgba(245, 158, 11, 0.12);
 }
 
 .skill-group-name {
@@ -957,8 +1045,8 @@ const skillGroups = computed(() => [
   font-size: 0.72rem;
   font-weight: 600;
   color: var(--do-text-muted);
-  background: rgba(255,255,255,0.08);
-  border: 1px solid rgba(255,255,255,0.1);
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.1);
   border-radius: 999px;
   padding: 0.1rem 0.45rem;
 }
@@ -1053,7 +1141,7 @@ const skillGroups = computed(() => [
   align-items: center;
   justify-content: space-between;
   padding: 0.5rem 0;
-  border-top: 1px solid rgba(255,255,255,0.07);
+  border-top: 1px solid rgba(255, 255, 255, 0.07);
 }
 
 .tts-info {
@@ -1088,7 +1176,9 @@ const skillGroups = computed(() => [
   color: var(--do-text-muted);
   border: none;
   cursor: pointer;
-  transition: background 0.15s, color 0.15s;
+  transition:
+    background 0.15s,
+    color 0.15s;
 }
 
 .lang-opt:hover:not(:disabled) {
@@ -1107,7 +1197,7 @@ const skillGroups = computed(() => [
 }
 
 .provider-select {
-  background: rgba(255,255,255,0.05);
+  background: rgba(255, 255, 255, 0.05);
   border: 1px solid var(--do-border-light);
   border-radius: 0.4rem;
   color: var(--do-text);
@@ -1134,7 +1224,7 @@ const skillGroups = computed(() => [
   align-items: flex-start;
   gap: 0.5rem;
   padding-top: 0.5rem;
-  border-top: 1px solid rgba(255,255,255,0.06);
+  border-top: 1px solid rgba(255, 255, 255, 0.06);
 }
 
 .provider-apikey-actions {
@@ -1150,8 +1240,8 @@ const skillGroups = computed(() => [
 }
 
 .add-provider-form {
-  background: rgba(255,255,255,0.03);
-  border: 1px solid rgba(255,255,255,0.08);
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid rgba(255, 255, 255, 0.08);
   border-radius: 0.5rem;
   padding: 0.75rem;
   display: flex;
@@ -1203,7 +1293,7 @@ const skillGroups = computed(() => [
 .profile-actions {
   margin-top: 0.65rem;
   padding-top: 0.65rem;
-  border-top: 1px solid rgba(255,255,255,0.07);
+  border-top: 1px solid rgba(255, 255, 255, 0.07);
   display: flex;
   gap: 0.75rem;
   flex-wrap: wrap;
@@ -1291,8 +1381,10 @@ const skillGroups = computed(() => [
   padding: 0.65rem 0.85rem;
   border-radius: 0.5rem;
   text-decoration: none;
-  transition: background 0.15s, transform 0.15s;
-  border: 1px solid rgba(255,255,255,0.06);
+  transition:
+    background 0.15s,
+    transform 0.15s;
+  border: 1px solid rgba(255, 255, 255, 0.06);
 }
 
 .qa-btn i {
@@ -1313,22 +1405,22 @@ const skillGroups = computed(() => [
 }
 
 .qa-btn--primary {
-  background: rgba(59,130,246,0.12);
+  background: rgba(59, 130, 246, 0.12);
   color: #60a5fa;
 }
 
 .qa-btn--primary:hover {
-  background: rgba(59,130,246,0.22);
+  background: rgba(59, 130, 246, 0.22);
   transform: translateX(3px);
 }
 
 .qa-btn--secondary {
-  background: rgba(255,255,255,0.04);
+  background: rgba(255, 255, 255, 0.04);
   color: var(--do-text-secondary);
 }
 
 .qa-btn--secondary:hover {
-  background: rgba(255,255,255,0.08);
+  background: rgba(255, 255, 255, 0.08);
   transform: translateX(3px);
 }
 
@@ -1373,9 +1465,9 @@ const skillGroups = computed(() => [
 .stat-item {
   text-align: center;
   padding: 0.65rem;
-  background: rgba(255,255,255,0.04);
+  background: rgba(255, 255, 255, 0.04);
   border-radius: 0.5rem;
-  border: 1px solid rgba(255,255,255,0.07);
+  border: 1px solid rgba(255, 255, 255, 0.07);
   position: relative;
 }
 
@@ -1428,8 +1520,8 @@ const skillGroups = computed(() => [
 /* Integration Buttons */
 .integration-button {
   position: relative;
-  border: 1px solid rgba(255,255,255,0.08);
-  background: rgba(255,255,255,0.03);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(255, 255, 255, 0.03);
   width: 100%;
   text-align: left;
   padding: 0.55rem 0.7rem;
@@ -1446,9 +1538,9 @@ const skillGroups = computed(() => [
 
 .integration-button:not(.is-disabled):hover,
 .integration-button:not(.is-disabled):focus-visible {
-  border-color: rgba(59,130,246,0.4);
-  background: rgba(59,130,246,0.06);
-  box-shadow: 0 0 0 1px rgba(59,130,246,0.2);
+  border-color: rgba(59, 130, 246, 0.4);
+  background: rgba(59, 130, 246, 0.06);
+  box-shadow: 0 0 0 1px rgba(59, 130, 246, 0.2);
   outline: none;
 }
 
@@ -1482,8 +1574,8 @@ const skillGroups = computed(() => [
   font-size: 0.72rem;
   font-weight: 600;
   color: var(--do-text-secondary);
-  border: 1px solid rgba(255,255,255,0.1);
-  background: rgba(255,255,255,0.05);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  background: rgba(255, 255, 255, 0.05);
   border-radius: 999px;
   padding: 0.15rem 0.45rem;
 }
@@ -1647,8 +1739,8 @@ const skillGroups = computed(() => [
 
 :deep(.form-field .p-inputtext),
 :deep(.form-field .p-inputtextarea) {
-  background: rgba(255,255,255,0.05);
-  border: 1.5px solid rgba(255,255,255,0.1);
+  background: rgba(255, 255, 255, 0.05);
+  border: 1.5px solid rgba(255, 255, 255, 0.1);
   color: var(--do-text);
   border-radius: 0.5rem;
   padding: 0.55rem;
@@ -1666,18 +1758,18 @@ const skillGroups = computed(() => [
   justify-content: flex-end;
   gap: 0.6rem;
   padding-top: 0.65rem;
-  border-top: 1px solid rgba(255,255,255,0.07);
+  border-top: 1px solid rgba(255, 255, 255, 0.07);
 }
 
 /* PrimeVue Card Dark Overrides */
 :deep(.p-card) {
-  background: rgba(255,255,255,0.03);
-  border: 1px solid rgba(255,255,255,0.07);
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid rgba(255, 255, 255, 0.07);
   color: var(--do-text);
 }
 
 :deep(.p-card-header) {
-  border-bottom: 1px solid rgba(255,255,255,0.07);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.07);
   background: transparent;
 }
 
@@ -1742,9 +1834,12 @@ const skillGroups = computed(() => [
   }
 
   .icon-wrapper {
-    width: 2.2rem;
-    height: 2.2rem;
-    font-size: 0.9rem;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 2rem;
+    color: var(--do-blue);
+    flex-shrink: 0;
   }
 
   .dashboard-title {

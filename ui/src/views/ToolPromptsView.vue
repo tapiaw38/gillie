@@ -185,16 +185,11 @@ onMounted(async () => {
 }
 
 .header-icon {
-  width: 3.2rem;
-  height: 3.2rem;
-  border-radius: 0.75rem;
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 1.6rem;
-  color: white;
-  background: linear-gradient(135deg, #6366f1 0%, #4f46e5 100%);
-  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.08);
+  font-size: 2rem;
+  color: var(--do-blue);
   flex-shrink: 0;
 }
 
