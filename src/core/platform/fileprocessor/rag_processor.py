@@ -5,14 +5,10 @@ import hashlib
 import os
 from pathlib import Path
 
-from langchain_community.document_loaders import UnstructuredFileLoader
 from langchain_text_splitters import RecursiveCharacterTextSplitter
-from langchain_huggingface import HuggingFaceEmbeddings
-from langchain_community.vectorstores import FAISS
 from langchain_core.documents import Document
 
 from src.core.platform.config.service import ConfigurationService
-from src.adapters.vectorstore.qdrant_adapter import QdrantVectorStoreAdapter
 
 logger = logging.getLogger(__name__)
 
@@ -23,18 +19,9 @@ class RAGDocumentProcessor:
         self.openai_config = config_service.openai_config
         self.use_qdrant = use_qdrant
 
-        try:
-            self.embeddings = HuggingFaceEmbeddings(
-                model_name="sentence-transformers/all-MiniLM-L6-v2",
-                model_kwargs={"device": "cpu"},
-                encode_kwargs={"normalize_embeddings": True},
-            )
-            logger.info("Using HuggingFace embeddings (local)")
-        except Exception as e:
-            logger.warning(f"Failed to load HuggingFace embeddings: {e}")
-
-            self.embeddings = None
-            logger.info("Falling back to simple TF-IDF embeddings")
+        self.embeddings = None
+        self._embeddings_initialized = False
+        self.qdrant_adapter = None
 
         self.text_splitter = RecursiveCharacterTextSplitter(
             chunk_size=1000,
@@ -43,10 +30,35 @@ class RAGDocumentProcessor:
             separators=["\n\n", "\n", " ", ""],
         )
 
+        self.vector_store_path = Path("./vector_stores")
+        self.vector_store_path.mkdir(exist_ok=True)
+
+        self.vectorstore_cache = {}
+        self.embeddings_cache = {}
+
+    def _ensure_embeddings(self):
+        """Lazy-load embeddings and Qdrant adapter on first use."""
+        if self._embeddings_initialized:
+            return
+        self._embeddings_initialized = True
+        try:
+            from langchain_huggingface import HuggingFaceEmbeddings
+            self.embeddings = HuggingFaceEmbeddings(
+                model_name="sentence-transformers/all-MiniLM-L6-v2",
+                model_kwargs={"device": "cpu"},
+                encode_kwargs={"normalize_embeddings": True},
+            )
+            logger.info("Using HuggingFace embeddings (local)")
+        except Exception as e:
+            logger.warning(f"Failed to load HuggingFace embeddings: {e}")
+            self.embeddings = None
+            logger.info("Falling back to simple TF-IDF embeddings")
+
         if self.use_qdrant and self.embeddings:
             try:
+                from src.adapters.vectorstore.qdrant_adapter import QdrantVectorStoreAdapter
                 self.qdrant_adapter = QdrantVectorStoreAdapter(
-                    config_service=config_service,
+                    config_service=self.config_service,
                     embeddings=self.embeddings
                 )
                 if self.qdrant_adapter.health_check():
@@ -61,19 +73,13 @@ class RAGDocumentProcessor:
         else:
             self.use_qdrant = False
 
-        self.vector_store_path = Path("./vector_stores")
-        self.vector_store_path.mkdir(exist_ok=True)
-
-        self.vectorstore_cache = {}
-
-        self.embeddings_cache = {}
-
     def _get_document_id(self, file_url: str) -> str:
         return hashlib.md5(file_url.encode()).hexdigest()
 
     async def process_and_store_document(
         self, file_url: str, file_type: str, profile_id: Optional[str] = None
     ) -> Dict[str, Any]:
+        self._ensure_embeddings()
         try:
             document_id = self._get_document_id(file_url)
 
@@ -163,6 +169,7 @@ class RAGDocumentProcessor:
                     return result
 
             if self.embeddings:
+                from langchain_community.vectorstores import FAISS
                 vectorstore = FAISS.from_documents(
                     documents=chunks, embedding=self.embeddings
                 )
@@ -319,6 +326,7 @@ class RAGDocumentProcessor:
                 temp_file.write(pdf_data)
 
             try:
+                from langchain_community.document_loaders import UnstructuredFileLoader
                 loader = UnstructuredFileLoader(temp_path)
                 documents = loader.load()
 
@@ -395,6 +403,7 @@ class RAGDocumentProcessor:
     async def search_relevant_content(
         self, query: str, document_ids: List[str], max_results: int = 5, profile_id: Optional[str] = None
     ) -> Dict[str, Any]:
+        self._ensure_embeddings()
         try:
             all_results = []
 
@@ -436,6 +445,7 @@ class RAGDocumentProcessor:
                         )
 
                         if faiss_path.exists():
+                            from langchain_community.vectorstores import FAISS
                             vectorstore = FAISS.load_local(
                                 str(faiss_path), self.embeddings
                             )

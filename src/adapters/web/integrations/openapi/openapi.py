@@ -1,22 +1,22 @@
 from src.core.platform.config.service import ConfigurationService
 from openai import AsyncOpenAI
-from typing import Optional, List, Dict, Any
+from typing import Optional, List, Dict, Any, TYPE_CHECKING
 import os
 from src.core.domain import Profile
-from src.core.platform.fileprocessor.pdf_processor import FileImageProcessor
-from src.core.platform.fileprocessor.xlsx_processor import ExcelImageProcessor
-from src.core.platform.fileprocessor.processor import ImageSearchResult
-from src.core.platform.fileprocessor.hybrid_processor import HybridDocumentProcessor
-from src.core.platform.fileprocessor.rag_processor import RAGDocumentProcessor
 from src.core.platform.logging import get_logger, log_function_call, log_execution_time
-import pandas as pd
-from PyPDF2 import PdfReader
 import asyncio
 import aiohttp
 import tempfile
 import json
 import time
 from pathlib import Path
+
+if TYPE_CHECKING:
+    from src.core.platform.fileprocessor.pdf_processor import FileImageProcessor
+    from src.core.platform.fileprocessor.xlsx_processor import ExcelImageProcessor
+    from src.core.platform.fileprocessor.processor import ImageSearchResult
+    from src.core.platform.fileprocessor.hybrid_processor import HybridDocumentProcessor
+    from src.core.platform.fileprocessor.rag_processor import RAGDocumentProcessor
 
 
 class OpenAIIntegration:
@@ -33,10 +33,11 @@ class OpenAIIntegration:
         self.client = self._build_client()
         self._extra_headers: Dict[str, str] = {}
 
-        self.image_processor = FileImageProcessor(config_service)
-        self.excel_processor = ExcelImageProcessor(config_service)
-        self.hybrid_processor = HybridDocumentProcessor(config_service)
-        self.rag_processor = RAGDocumentProcessor(config_service)
+        self._config_service = config_service
+        self._image_processor = None
+        self._excel_processor = None
+        self._hybrid_processor = None
+        self._rag_processor = None
         self._processed_documents = {}
 
         self.langchain_service = None
@@ -61,6 +62,34 @@ class OpenAIIntegration:
                 self.langchain_service = None
 
         self.logger.info(f"OpenAI integration initialized with model: {self.model}, auth_type: {self.auth_type}")
+
+    @property
+    def image_processor(self) -> "FileImageProcessor":
+        if self._image_processor is None:
+            from src.core.platform.fileprocessor.pdf_processor import FileImageProcessor
+            self._image_processor = FileImageProcessor(self._config_service)
+        return self._image_processor
+
+    @property
+    def excel_processor(self) -> "ExcelImageProcessor":
+        if self._excel_processor is None:
+            from src.core.platform.fileprocessor.xlsx_processor import ExcelImageProcessor
+            self._excel_processor = ExcelImageProcessor(self._config_service)
+        return self._excel_processor
+
+    @property
+    def hybrid_processor(self) -> "HybridDocumentProcessor":
+        if self._hybrid_processor is None:
+            from src.core.platform.fileprocessor.hybrid_processor import HybridDocumentProcessor
+            self._hybrid_processor = HybridDocumentProcessor(self._config_service)
+        return self._hybrid_processor
+
+    @property
+    def rag_processor(self) -> "RAGDocumentProcessor":
+        if self._rag_processor is None:
+            from src.core.platform.fileprocessor.rag_processor import RAGDocumentProcessor
+            self._rag_processor = RAGDocumentProcessor(self._config_service)
+        return self._rag_processor
 
     def _build_client(self) -> AsyncOpenAI:
         """Construct an AsyncOpenAI client with the current credentials."""
@@ -347,6 +376,7 @@ class OpenAIIntegration:
                         async for chunk in response.content.iter_chunked(8192):
                             temp_file.write(chunk)
 
+            import pandas as pd
             text_parts = []
             try:
                 excel_file = pd.ExcelFile(temp_path)
@@ -407,6 +437,7 @@ class OpenAIIntegration:
                         async for chunk in response.content.iter_chunked(8192):
                             temp_file.write(chunk)
 
+            from PyPDF2 import PdfReader
             text_parts = []
             try:
                 with open(temp_path, "rb") as file:

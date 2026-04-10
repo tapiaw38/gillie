@@ -9,10 +9,7 @@ from src.core.platform.config.service import ConfigurationService
 from openai import AsyncOpenAI
 import asyncio
 from dataclasses import dataclass
-import cv2
 import numpy as np
-from skimage import feature, filters, measure
-import matplotlib.pyplot as plt
 from io import BytesIO
 import re
 import pytesseract

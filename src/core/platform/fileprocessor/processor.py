@@ -16,8 +16,6 @@ except ImportError:
     cv2 = None
 import numpy as np
 from io import BytesIO
-import pandas as pd
-import matplotlib.pyplot as plt
 
 
 @dataclass
