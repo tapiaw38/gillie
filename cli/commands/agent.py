@@ -1519,24 +1519,21 @@ def agent(
             continue
 
         if cmd in ("/model", "/provider"):
-            from cli.config.manager import config_exists as _cfg_exists, load_config as _load_cfg
-            from src.core.platform.config.service import _PROVIDER_PRESETS
-            if _cfg_exists():
-                _cfg = _load_cfg()
-                s = _cfg.services.openai
-                _provider = next(
-                    (n for n, p in _PROVIDER_PRESETS.items() if p["base_url"] == s.base_url),
-                    "custom",
-                )
-                _key_status = "[green]set[/green]" if s.api_key else "[red]missing[/red]"
+            try:
+                _opts = _get("/profile/options")
+                _active = _opts.get("active_provider", "")
+                _providers = _opts.get("providers", [])
+                _pinfo = next((p for p in _providers if p.get("key") == _active), None)
                 console.print()
-                console.print(f"  [bold]Provider:[/bold] [cyan]{_provider}[/cyan]")
-                console.print(f"  [bold]Model   :[/bold] {s.model}")
-                console.print(f"  [bold]Base URL:[/bold] [dim]{s.base_url}[/dim]")
-                console.print(f"  [bold]API key :[/bold] {_key_status}")
+                console.print(f"  [bold]Provider:[/bold] [cyan]{_active or '(none)'}[/cyan]")
+                if _pinfo:
+                    console.print(f"  [bold]Model   :[/bold] {_pinfo.get('model', '')}")
+                    console.print(f"  [bold]Base URL:[/bold] [dim]{_pinfo.get('base_url', '')}[/dim]")
+                    _key_status = "[green]set[/green]" if _pinfo.get("api_key_set") else "[red]missing[/red]"
+                    console.print(f"  [bold]API key :[/bold] {_key_status}")
                 console.print()
-            else:
-                console.print("[dim]No config found.[/dim]\n")
+            except Exception:
+                console.print("[dim]Could not reach backend.[/dim]\n")
             continue
 
         if cmd in ("/list", "/ls", "/conversations", "/convs"):

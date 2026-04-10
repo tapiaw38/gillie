@@ -16,6 +16,50 @@ from langchain_openai import ChatOpenAI
 from langchain_core.messages import HumanMessage, AIMessage, SystemMessage, ToolMessage
 from langchain_core.tools import StructuredTool
 
+
+def _is_anthropic_url(base_url: str) -> bool:
+    return base_url and "anthropic.com" in base_url
+
+
+def _extract_text(content) -> str:
+    """Normalize LLM chunk content to str (Anthropic returns list of blocks)."""
+    if isinstance(content, str):
+        return content
+    if isinstance(content, list):
+        return "".join(
+            block.get("text", "") if isinstance(block, dict) else str(block)
+            for block in content
+        )
+    return str(content) if content else ""
+
+
+def _build_llm(model: str, api_key: str, base_url: str, auth_type: str = "api_key"):
+    """Build the appropriate LLM based on provider URL and auth type.
+
+    - Anthropic + api_key → ChatAnthropic (x-api-key, /v1/messages)
+    - Anthropic + bearer  → ChatOpenAI   (Authorization: Bearer, /v1/chat/completions)
+    - Everything else     → ChatOpenAI
+    """
+    if _is_anthropic_url(base_url) and auth_type == "api_key":
+        from langchain_anthropic import ChatAnthropic
+        return ChatAnthropic(
+            model=model,
+            api_key=api_key,
+            temperature=0.7,
+            max_tokens=8000,
+            timeout=300.0,
+            max_retries=2,
+        )
+    return ChatOpenAI(
+        model=model,
+        api_key=api_key,
+        base_url=base_url if base_url else None,
+        temperature=0.7,
+        max_tokens=8000,
+        timeout=300.0,
+        max_retries=2,
+    )
+
 from src.core.platform.config.service import ConfigurationService
 from src.core.domain import Profile
 from .tools.models import create_langchain_tools
@@ -108,14 +152,11 @@ class LangChainService:
         self.store_service = None
         self.job_usecases = None
 
-        self.llm = ChatOpenAI(
+        self.llm = _build_llm(
             model=self.config.model,
             api_key=self.config.api_key,
             base_url=self.config.base_url if hasattr(self.config, 'base_url') and self.config.base_url else None,
-            temperature=0.7,
-            max_tokens=8000,
-            timeout=300.0,
-            max_retries=2,
+            auth_type=getattr(self.config, 'auth_type', 'api_key'),
         )
 
 
@@ -136,17 +177,9 @@ class LangChainService:
             f"langsmith={enable_langsmith}"
         )
 
-    def reload_llm(self, model: str, base_url: str, api_key: str) -> None:
-        """Rebuild the ChatOpenAI instance for a new provider (hot-reload)."""
-        self.llm = ChatOpenAI(
-            model=model,
-            api_key=api_key,
-            base_url=base_url if base_url else None,
-            temperature=0.7,
-            max_tokens=8000,
-            timeout=300.0,
-            max_retries=2,
-        )
+    def reload_llm(self, model: str, base_url: str, api_key: str, auth_type: str = "api_key") -> None:
+        """Rebuild the LLM instance for a new provider (hot-reload)."""
+        self.llm = _build_llm(model=model, api_key=api_key, base_url=base_url, auth_type=auth_type)
         logger.info(f"LangChainService LLM reloaded: model={model}")
 
     def _setup_langsmith(self):
@@ -278,7 +311,7 @@ class LangChainService:
                         tools=tools
                     )
                 else:
-                    response_text = response.content
+                    response_text = _extract_text(response.content)
 
                 self.memory_manager.save_checkpoint(
                     thread_id=thread_id,
@@ -434,8 +467,9 @@ class LangChainService:
                     if hasattr(chunk, "tool_call_chunks") and chunk.tool_call_chunks:
                         has_tool_calls = True
                     if not has_tool_calls and chunk.content:
-                        yield chunk.content
-                        full_content += chunk.content
+                        text = _extract_text(chunk.content)
+                        yield text
+                        full_content += text
 
                 if has_tool_calls:
                     combined = accumulated_chunks[0]
@@ -608,7 +642,7 @@ class LangChainService:
                 logger.error(f"LLM invoke failed after tool execution (round {round_num + 1}): {e}")
                 from langchain_core.messages import AIMessage as _AIMsg
                 response = _AIMsg(content="Lo siento, ocurrió un error al procesar los resultados. Por favor, intenta de nuevo.")
-            content = response.content or ""
+            content = _extract_text(response.content)
             logger.info(f"Response after round {round_num + 1}: length={len(content)}, has_more_tool_calls={bool(getattr(response, 'tool_calls', None))}")
 
             if content and not getattr(response, "tool_calls", None):

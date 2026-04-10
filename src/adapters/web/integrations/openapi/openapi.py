@@ -108,7 +108,7 @@ class OpenAIIntegration:
         self.auth_type = auth_type
         self.client = self._build_client()
         if self.langchain_service is not None:
-            self.langchain_service.reload_llm(model=model, base_url=base_url, api_key=api_key)
+            self.langchain_service.reload_llm(model=model, base_url=base_url, api_key=api_key, auth_type=auth_type)
         self.logger.info(f"Provider reloaded: model={model}, base_url={base_url}")
 
     def set_skill_manager(self, skill_manager) -> None:

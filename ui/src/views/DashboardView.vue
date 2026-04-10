@@ -77,6 +77,9 @@ const aiProvider = ref<string>('')
 const pendingApiKey = ref<string>('')
 const showApiKeyInput = ref(false)
 const pendingProvider = ref<string>('')
+const pendingProviderHasKey = computed(() =>
+  providerOptions.value.find((x) => x.key === pendingProvider.value)?.api_key_set ?? false,
+)
 
 const showAddProvider = ref(false)
 const newProvider = reactive({
@@ -121,6 +124,14 @@ const onProviderSelect = (key: string) => {
   } else {
     applyProvider(key)
   }
+}
+
+const openUpdateKeyInput = () => {
+  const key = aiProvider.value
+  if (!key) return
+  pendingProvider.value = key
+  pendingApiKey.value = ''
+  showApiKeyInput.value = true
 }
 
 const applyProvider = async (key: string, apiKey?: string) => {
@@ -596,6 +607,15 @@ const skillGroups = computed<SkillGroup[]>(() => [
                     </option>
                   </select>
                   <button
+                    v-if="aiProvider && providerOptions.find((p) => p.key === aiProvider)?.auth_type !== 'none'"
+                    type="button"
+                    class="add-provider-toggle"
+                    :title="t('dashboard.updateProviderKey')"
+                    @click="openUpdateKeyInput"
+                  >
+                    <i class="pi pi-key"></i>
+                  </button>
+                  <button
                     type="button"
                     class="add-provider-toggle"
                     :title="t('dashboard.addProvider')"
@@ -606,7 +626,7 @@ const skillGroups = computed<SkillGroup[]>(() => [
                 </div>
               </div>
 
-              <!-- API Key input (shown when selected provider has no key) -->
+              <!-- API Key input -->
               <div v-if="showApiKeyInput" class="tts-row provider-apikey-row">
                 <div class="tts-info">
                   <i class="pi pi-key tts-icon"></i>
@@ -618,7 +638,7 @@ const skillGroups = computed<SkillGroup[]>(() => [
                   <InputText
                     v-model="pendingApiKey"
                     size="small"
-                    :placeholder="t('dashboard.providerApiKeyPlaceholder')"
+                    :placeholder="pendingProviderHasKey ? t('dashboard.providerApiKeyKeepPlaceholder') : t('dashboard.providerApiKeyPlaceholder')"
                     type="password"
                     @keyup.enter="submitApiKey"
                     @keyup.escape="cancelApiKey"
@@ -627,7 +647,7 @@ const skillGroups = computed<SkillGroup[]>(() => [
                     icon="pi pi-check"
                     size="small"
                     severity="success"
-                    :disabled="!pendingApiKey.trim()"
+                    :disabled="!pendingProviderHasKey && !pendingApiKey.trim()"
                     @click="submitApiKey"
                   />
                   <Button

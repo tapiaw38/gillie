@@ -54,19 +54,9 @@ def _restart_service_if_running() -> None:
 @app.command("list")
 def provider_list():
     """Show all available providers."""
-    from cli.config.manager import config_exists, load_config
-
-    current_base_url = ""
-    current_model = ""
-    if config_exists():
-        try:
-            cfg = load_config()
-            current_base_url = cfg.services.openai.base_url
-            current_model = cfg.services.openai.model
-        except Exception:
-            pass
-
     profile_data = get_provider_data()
+    active_provider = profile_data.get("active_provider", "")
+
     all_providers = get_available_providers(
         provider_keys=profile_data.get("provider_keys"),
         custom_providers=profile_data.get("custom_providers"),
@@ -90,7 +80,7 @@ def provider_list():
         else:
             key_status = "[green]set[/green]" if entry.get("api_key") else "[yellow]not set[/yellow]"
 
-        is_active = (current_base_url == entry.get("base_url") and current_model == entry.get("model"))
+        is_active = name == active_provider
         active_marker = " [bold cyan]*[/bold cyan]" if is_active else ""
         label = "[dim](custom)[/dim] " if not entry.get("is_builtin", True) else ""
         table.add_row(
@@ -122,19 +112,16 @@ def provider_use(
 
     if provider is None:
         from pathlib import Path as _Path
-        _cfg = load_config()
-        _current_base_url = _cfg.services.openai.base_url or ""
         _has_claude_session = (_Path.home() / ".claude" / ".credentials.json").exists()
         _profile_data = get_provider_data()
+        _active_provider = _profile_data.get("active_provider", "")
         _all = get_available_providers(
             provider_keys=_profile_data.get("provider_keys"),
             custom_providers=_profile_data.get("custom_providers"),
         )
 
         def _choice_label(name: str, entry: dict) -> str:
-            is_active = (entry.get("base_url") == _current_base_url and
-                         entry.get("model") == _cfg.services.openai.model)
-            active = " *" if is_active else "  "
+            active = " *" if name == _active_provider else "  "
             key_ok = entry.get("api_key") or entry.get("auth_type") in ("none", "bearer")
             key_mark = "" if key_ok else " [no key]"
             custom = " (custom)" if not entry.get("is_builtin", True) else ""
@@ -149,10 +136,7 @@ def provider_use(
             provider = _inquirer.select(
                 message="Select provider:",
                 choices=choices,
-                default=next(
-                    (n for n, p in _all.items() if p.get("base_url") == _current_base_url),
-                    choices[0]["value"],
-                ),
+                default=_active_provider if _active_provider in _all else choices[0]["value"],
                 pointer="❯",
                 qmark="",
             ).execute()
@@ -201,14 +185,9 @@ def provider_use(
     elif api_key:
         resolved_key = api_key
     else:
-        try:
-            cfg
-        except NameError:
-            cfg = load_config()
-        target_url = preset["base_url"]
-        saved_key = cfg.services.provider_keys.get(target_url) or cfg.services.openai.api_key or ""
-        active_url = cfg.services.openai.base_url or ""
-        saved_key_is_for_active = saved_key and active_url == target_url
+        _pd2 = get_provider_data()
+        saved_key = (_pd2.get("provider_keys") or {}).get(provider, "")
+        saved_key_is_for_active = saved_key and _pd2.get("active_provider") == provider
 
         if saved_key:
             masked = saved_key[:8] + "..." + saved_key[-4:]
@@ -285,25 +264,20 @@ def provider_add(
 @app.command("status")
 def provider_status():
     """Show the current provider configuration."""
-    from cli.config.manager import config_exists, load_config
+    profile_data = get_provider_data()
+    active_provider = profile_data.get("active_provider", "")
 
-    if not config_exists():
-        console.print("[red]Not initialized.[/red] Run [bold cyan]gillie init[/bold cyan] first.")
-        raise typer.Exit(1)
-
-    cfg = load_config()
-    s = cfg.services.openai
-
-    active_provider = next(
-        (name for name, p in _PROVIDER_PRESETS.items() if p["base_url"] == s.base_url),
-        "custom",
+    all_providers = get_available_providers(
+        provider_keys=profile_data.get("provider_keys"),
+        custom_providers=profile_data.get("custom_providers"),
     )
+    entry = all_providers.get(active_provider, {})
 
     console.print()
-    console.print(f"[bold]Provider :[/bold] [cyan]{active_provider}[/cyan]")
-    console.print(f"[bold]Base URL :[/bold] {s.base_url}")
-    console.print(f"[bold]Model    :[/bold] {s.model}")
-    key_status = "[green]present[/green]" if s.api_key else "[red]missing[/red]"
+    console.print(f"[bold]Provider :[/bold] [cyan]{active_provider or '(none)'}[/cyan]")
+    console.print(f"[bold]Base URL :[/bold] {entry.get('base_url', '')}")
+    console.print(f"[bold]Model    :[/bold] {entry.get('model', '')}")
+    key_status = "[green]present[/green]" if entry.get("api_key") else "[red]missing[/red]"
     console.print(f"[bold]API key  :[/bold] {key_status}")
     console.print()
 
