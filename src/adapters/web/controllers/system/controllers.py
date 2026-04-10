@@ -5,6 +5,7 @@ from src.core.platform.config.service import (
     get_config_service,
     get_available_providers,
 )
+from src.core.platform.errors.application_error import ApplicationError
 from src.core.use_cases.use_cases import Usecases
 
 _usecases_instance = None
@@ -47,18 +48,24 @@ async def set_provider(
     request: Request,
     usecases: Usecases = Depends(get_usecases),
 ):
-    providers = get_available_providers()
+    user_id = request.state.user.get("user_id", "")
+    try:
+        profile = usecases.profile.find_by_user_id_usecase.execute(user_id=user_id) if user_id else None
+    except ApplicationError:
+        profile = None
+    profile_data = profile.data if profile else None
+    profile_keys = (profile_data.provider_keys if profile_data else None) or {}
+    profile_custom = (profile_data.custom_providers if profile_data else None) or {}
+
+    providers = get_available_providers(provider_keys=profile_keys, custom_providers=profile_custom)
     if body.provider not in providers:
         raise HTTPException(status_code=400, detail=f"Unknown provider: {body.provider}")
 
     preset = providers[body.provider]
     config = get_config_service()
 
-    # Resolve API key: request body → stored keys → current config
-    api_key = body.api_key or preset.get("api_key") or config.openai_config.api_key
+    api_key = body.api_key or preset.get("api_key", "")
 
-    # Persist active provider and key in profile
-    user_id = request.state.user.get("user_id", "")
     if user_id:
         usecases.profile.update_provider_usecase.execute(
             user_id=user_id,
@@ -66,13 +73,11 @@ async def set_provider(
             api_key=api_key,
         )
 
-    # Update in-memory config
     config.openai_config.base_url = preset["base_url"]
     config.openai_config.model = preset["model"]
     config.openai_config.auth_type = preset["auth_type"]
     config.openai_config.api_key = api_key
 
-    # Hot-reload LLM
     if _openai_integration is not None:
         _openai_integration.reload_provider(
             base_url=preset["base_url"],

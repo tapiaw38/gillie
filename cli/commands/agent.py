@@ -1520,7 +1520,7 @@ def agent(
 
         if cmd in ("/model", "/provider"):
             try:
-                _opts = _get("/profile/options")
+                _opts = _get("/profile/options").get("data", {})
                 _active = _opts.get("active_provider", "")
                 _providers = _opts.get("providers", [])
                 _pinfo = next((p for p in _providers if p.get("key") == _active), None)

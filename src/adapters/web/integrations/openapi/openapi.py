@@ -91,8 +91,14 @@ class OpenAIIntegration:
             self._rag_processor = RAGDocumentProcessor(self._config_service)
         return self._rag_processor
 
-    def _build_client(self) -> AsyncOpenAI:
-        """Construct an AsyncOpenAI client with the current credentials."""
+    def _is_anthropic(self) -> bool:
+        return self.base_url and "anthropic.com" in self.base_url and self.auth_type == "api_key"
+
+    def _build_client(self):
+        """Construct the appropriate async client for the current provider."""
+        if self._is_anthropic():
+            from anthropic import AsyncAnthropic
+            return AsyncAnthropic(api_key=self.api_key, timeout=45.0, max_retries=3)
         return AsyncOpenAI(
             api_key=self.api_key,
             base_url=self.base_url,
@@ -719,13 +725,25 @@ class OpenAIIntegration:
         ]
         for attempt in range(2):
             try:
-                response = await self.client.chat.completions.create(
-                    model=self.model,
-                    messages=messages,
-                    temperature=0.3,
-                    max_tokens=1024,
-                )
-                return response.choices[0].message.content or ""
+                if self._is_anthropic():
+                    system_content = messages[0]["content"] if messages and messages[0]["role"] == "system" else ""
+                    user_messages = [m for m in messages if m["role"] != "system"]
+                    response = await self.client.messages.create(
+                        model=self.model,
+                        system=system_content,
+                        messages=user_messages,
+                        temperature=0.3,
+                        max_tokens=1024,
+                    )
+                    return response.content[0].text if response.content else ""
+                else:
+                    response = await self.client.chat.completions.create(
+                        model=self.model,
+                        messages=messages,
+                        temperature=0.3,
+                        max_tokens=1024,
+                    )
+                    return response.choices[0].message.content or ""
             except Exception as e:
                 is_auth_error = "401" in str(e) or "authentication" in str(e).lower()
                 if attempt == 0 and is_auth_error and self._handle_bearer_401():
