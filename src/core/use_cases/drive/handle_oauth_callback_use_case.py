@@ -16,13 +16,14 @@ INTEGRATION_TYPE = "oauth"
 
 class HandleOAuthCallbackUseCase:
     def __init__(self, context_factory: Factory):
-        self.context_factory = context_factory()
+        self.context_factory = context_factory
 
     def execute(self, user_id: str, code: str) -> dict:
         try:
-            token_config = self.context_factory.integrations.google_drive.handle_oauth_callback(user_id, code)
+            context = self.context_factory()
+            token_config = context.integrations.google_drive.handle_oauth_callback(user_id, code)
 
-            profile = self.context_factory.repositories.profile.find_by_user_id(user_id)
+            profile = context.repositories.profile.find_by_user_id(user_id)
             if not profile:
                 raise NewApplicationError(ProfileGetNotFoundError)
 
@@ -48,7 +49,7 @@ class HandleOAuthCallbackUseCase:
                 )
                 updated = integrations + [new_entry]
 
-            self.context_factory.repositories.profile.update_integrations(user_id, updated)
+            context.repositories.profile.update_integrations(user_id, updated)
 
             return {
                 "user_id": user_id,

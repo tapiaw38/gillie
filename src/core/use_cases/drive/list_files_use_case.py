@@ -11,12 +11,13 @@ logger = logging.getLogger(__name__)
 
 class ListFilesUseCase:
     def __init__(self, context_factory: Factory):
-        self.context_factory = context_factory()
+        self.context_factory = context_factory
 
     def execute(self, user_id: str, folder_id: Optional[str] = None) -> List[Dict]:
         try:
-            service = get_drive_service(self.context_factory, user_id)
-            return self.context_factory.integrations.google_drive.list_files(
+            context = self.context_factory()
+            service = get_drive_service(context, user_id)
+            return context.integrations.google_drive.list_files(
                 service, folder_id
             )
         except NewApplicationError:

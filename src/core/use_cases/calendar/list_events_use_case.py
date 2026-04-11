@@ -9,7 +9,7 @@ logger = logging.getLogger(__name__)
 
 class ListEventsUseCase:
     def __init__(self, context_factory: Factory):
-        self.context_factory = context_factory()
+        self.context_factory = context_factory
 
     def execute(
         self,
@@ -20,7 +20,8 @@ class ListEventsUseCase:
         **kwargs,
     ) -> List[Dict]:
         try:
-            return self.context_factory.integrations.google_calendar.list_events(
+            context = self.context_factory()
+            return context.integrations.google_calendar.list_events(
                 user_id=user_id,
                 start_date=start_date,
                 end_date=end_date,

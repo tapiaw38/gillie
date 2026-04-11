@@ -9,11 +9,12 @@ INTEGRATION_NAME = "google_drive"
 
 class CheckSessionStatusUseCase:
     def __init__(self, context_factory: Factory):
-        self.context_factory = context_factory()
+        self.context_factory = context_factory
 
     def execute(self, user_id: str) -> bool:
         try:
-            profile = self.context_factory.repositories.profile.find_by_user_id(user_id)
+            context = self.context_factory()
+            profile = context.repositories.profile.find_by_user_id(user_id)
             if not profile:
                 return False
             drive_integration = next(

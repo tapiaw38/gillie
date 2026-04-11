@@ -11,11 +11,12 @@ logger = logging.getLogger(__name__)
 
 class ListDevicesUseCase:
     def __init__(self, context_factory: Factory):
-        self.context_factory = context_factory()
+        self.context_factory = context_factory
 
     def execute(self, user_id: str) -> List[WhatsAppDevice]:
         try:
-            return self.context_factory.repositories.whatsapp_device.find_by_user_id(user_id)
+            context = self.context_factory()
+            return context.repositories.whatsapp_device.find_by_user_id(user_id)
         except Exception as e:
             logger.error(f"Error listing WhatsApp devices: {e}", exc_info=True)
             raise NewApplicationError(WhatsAppDeviceListQueryError, e)

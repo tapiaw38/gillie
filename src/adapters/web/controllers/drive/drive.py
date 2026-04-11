@@ -16,27 +16,16 @@ from src.schemas.drive import (
     DriveCredentialsInput,
 )
 from src.core.use_cases.use_cases import Usecases
+from src.adapters.web.dependencies import get_usecases
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/v1/drive", tags=["drive"])
 
-_usecases_instance = None
-
-
-def set_usecases(usecases: Usecases):
-    global _usecases_instance
-    _usecases_instance = usecases
-
-
-def get_usecases() -> Usecases:
-    if _usecases_instance is None:
-        raise Exception("Usecases not initialized. Call set_usecases first.")
-    return _usecases_instance
-
 
 @router.get("/credentials", status_code=status.HTTP_200_OK)
 async def get_drive_credentials(
+    request: Request,
     usecases: Usecases = Depends(get_usecases),
 ):
     """Get saved Google Drive OAuth credentials (client_id only, secret never returned)."""
@@ -46,6 +35,7 @@ async def get_drive_credentials(
 @router.post("/credentials", status_code=status.HTTP_204_NO_CONTENT)
 async def save_credentials(
     body: DriveCredentialsInput,
+    request: Request,
     usecases: Usecases = Depends(get_usecases),
 ):
     """Save Google Drive OAuth app credentials to MongoDB."""

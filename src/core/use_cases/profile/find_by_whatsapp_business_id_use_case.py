@@ -10,7 +10,7 @@ class FindByWhatsAppBusinessIdUseCase:
     """
 
     def __init__(self, context_factory: Factory):
-        self.context_factory = context_factory()
+        self.context_factory = context_factory
 
     def execute(self, business_account_id: str) -> Optional[Profile]:
         """
@@ -22,7 +22,7 @@ class FindByWhatsAppBusinessIdUseCase:
         Returns:
             Profile if found, None otherwise
         """
-        context = self.context_factory
+        context = self.context_factory()
 
         profiles = context.repositories.profile.find_all()
 

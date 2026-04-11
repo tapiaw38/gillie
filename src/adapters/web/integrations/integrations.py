@@ -90,6 +90,26 @@ class Integrations:
 
         Integrations._instance = self
 
+    def make_whatsapp_client(self, access_token: str, phone_number_id: str):
+        from src.adapters.web.integrations.whatsapp.whatsapp import WhatsAppIntegration
+        return WhatsAppIntegration(access_token=access_token, phone_number_id=phone_number_id)
+
+    def make_slack_client(self, bot_token: str, signing_secret: str = ""):
+        from src.adapters.web.integrations.slack.slack import SlackIntegration
+        return SlackIntegration(bot_token=bot_token, signing_secret=signing_secret)
+
+    def make_telegram_client(self, bot_token: str, secret_token: str = "", store_service=None):
+        from src.adapters.web.integrations.telegram.telegram import TelegramIntegration
+        return TelegramIntegration(bot_token=bot_token, secret_token=secret_token, store_service=store_service)
+
+    def make_sqldatabase_client(self, connection_string: str, allowed_table: str, table_description: str = ""):
+        from src.adapters.web.integrations.sqldatabase.sqldatabase import SQLDatabaseIntegration
+        return SQLDatabaseIntegration(
+            connection_string=connection_string,
+            allowed_table=allowed_table,
+            table_description=table_description,
+        )
+
     def initialize_mercadolibre(self, access_token: str, user_id: str):
         """Initialize MercadoLibre integration with user credentials."""
         self.mercadolibre = MercadoLibreIntegration(access_token, user_id)

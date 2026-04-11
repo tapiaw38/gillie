@@ -13,7 +13,7 @@ logger = logging.getLogger(__name__)
 
 class SendMessageUseCase:
     def __init__(self, context_factory: Factory):
-        self.context_factory = context_factory()
+        self.context_factory = context_factory
 
     async def execute(
         self,
@@ -22,7 +22,8 @@ class SendMessageUseCase:
         text: str,
         neonize_integration,
     ) -> str:
-        device = self.context_factory.repositories.whatsapp_device.find_by_id(device_id)
+        context = self.context_factory()
+        device = context.repositories.whatsapp_device.find_by_id(device_id)
         if not device:
             raise NewApplicationError(WhatsAppDeviceNotFoundError)
 

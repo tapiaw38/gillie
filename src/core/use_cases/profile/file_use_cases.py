@@ -160,29 +160,30 @@ class AddFilesUseCase:
 
 class DeleteFileByIdUseCase:
     def __init__(self, context_factory: Factory):
-        self.context_factory = context_factory()
+        self.context_factory = context_factory
 
     async def execute(self, user_id: str, file_id: str):
         try:
-            file = self.context_factory.repositories.profile.get_file_by_id(
+            context = self.context_factory()
+            file = context.repositories.profile.get_file_by_id(
                 user_id, file_id
             )
             if not file:
                 raise NewApplicationError(ProfileFileNotFoundError)
 
-            self.context_factory.repositories.profile.delete_file_by_id(
+            context.repositories.profile.delete_file_by_id(
                 user_id, file_id
             )
 
-            create_task(_delete_from_s3(self.context_factory.store_service, file.name, file_id))
-            create_task(_delete_from_qdrant(self.context_factory.config_service, file.url, file_id, user_id))
+            create_task(_delete_from_s3(context.store_service, file.name, file_id))
+            create_task(_delete_from_qdrant(context.config_service, file.url, file_id, user_id))
             logger.info(f"[Delete] background tasks queued for file {file_id} (S3 + Qdrant)")
 
-            profile = self.context_factory.repositories.profile.find_by_user_id(user_id)
+            profile = context.repositories.profile.find_by_user_id(user_id)
             if not profile:
                 raise NewApplicationError(ProfileGetNotFoundError)
 
-            self.context_factory.repositories.conversation.update_profile_by_user_id(
+            context.repositories.conversation.update_profile_by_user_id(
                 user_id,
                 profile=profile,
             )

@@ -10,11 +10,12 @@ from src.core.platform.errors.mappings.profile import (
 
 class FindByUserIdUseCase:
     def __init__(self, context_factory: Factory):
-        self.context_factory = context_factory()
+        self.context_factory = context_factory
 
     def execute(self, user_id: str):
         try:
-            profile = self.context_factory.repositories.profile.find_by_user_id(user_id)
+            context = self.context_factory()
+            profile = context.repositories.profile.find_by_user_id(user_id)
             if not profile:
                 raise NewApplicationError(ProfileGetNotFoundError)
             return ProfileOutput.from_output(profile)

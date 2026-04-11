@@ -7,17 +7,7 @@ from src.core.platform.config.service import (
 )
 from src.core.platform.errors.application_error import ApplicationError
 from src.core.use_cases.use_cases import Usecases
-
-_usecases_instance = None
-
-def set_usecases(usecases: Usecases):
-    global _usecases_instance
-    _usecases_instance = usecases
-
-def get_usecases() -> Usecases:
-    if _usecases_instance is None:
-        raise Exception("Usecases not initialized")
-    return _usecases_instance
+from src.adapters.web.dependencies import get_usecases
 
 router = APIRouter(prefix="/system", tags=["system"])
 

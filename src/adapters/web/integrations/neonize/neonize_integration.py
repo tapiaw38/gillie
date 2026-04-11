@@ -61,11 +61,13 @@ class NeonizeIntegration:
         await integration.disconnect(device_id)
     """
 
-    def __init__(self, sessions_dir: str = "./data/whatsapp", stt_integration=None):
+    def __init__(self, sessions_dir: str = "./data/whatsapp", stt_integration=None, whatsapp_device_repository=None, profile_repository=None):
         self.sessions_dir = sessions_dir
         os.makedirs(sessions_dir, exist_ok=True)
         self._clients: Dict[str, object] = {}  # device_id → NewAClient
         self._stt_integration = stt_integration  # optional STT for audio transcription
+        self._whatsapp_device_repository = whatsapp_device_repository
+        self._profile_repository = profile_repository
         # Per-device+JID queues and workers ensure messages from the same sender
         # are always processed in order without dropping concurrent messages.
         self._jid_queues: Dict[str, asyncio.Queue] = {}   # key: "{device_id}:{jid}"
@@ -74,6 +76,22 @@ class NeonizeIntegration:
 
     def _session_path(self, device_id: str) -> str:
         return os.path.join(self.sessions_dir, f"{device_id}.db")
+
+    _LANG_MAP = {"en": "en-US", "es": "es-ES", "fr": "fr-FR", "de": "de-DE", "pt": "pt-BR", "it": "it-IT"}
+
+    def _get_stt_language(self, device_id: str) -> str:
+        """Resolve the STT language from the device owner's profile response_language."""
+        try:
+            if self._whatsapp_device_repository and self._profile_repository:
+                device = self._whatsapp_device_repository.find_by_id(device_id)
+                if device:
+                    profile = self._profile_repository.find_by_user_id(device.user_id)
+                    if profile:
+                        lang = getattr(profile, "response_language", None) or "en"
+                        return self._LANG_MAP.get(lang, f"{lang}-{lang.upper()}")
+        except Exception:
+            pass
+        return "es-ES"
 
     async def create_client(self, device_id: str) -> object:
         """Create (or return existing) neonize client for device_id."""
@@ -524,9 +542,12 @@ class NeonizeIntegration:
                 f"[neonize] Transcribing audio ({duration}s, {audio_format}) for device {device_id}"
             )
 
+            stt_language = self._get_stt_language(device_id)
+            logger.info(f"[neonize] STT language for device {device_id}: {stt_language}")
             result = await self._stt_integration.audio_bytes_to_text(
                 audio_bytes=audio_bytes,
                 audio_format=audio_format,
+                settings={"language": stt_language},
             )
 
             if result.get("success") and result.get("text"):

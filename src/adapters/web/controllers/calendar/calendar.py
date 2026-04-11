@@ -9,6 +9,7 @@ from src.schemas.calendar import (
     CalendarCredentialsInput,
 )
 from src.core.use_cases.use_cases import Usecases
+from src.adapters.web.dependencies import get_usecases
 from typing import Optional
 import logging
 
@@ -18,19 +19,6 @@ router = APIRouter(
     prefix="/api/v1/calendar",
     tags=["calendar"],
 )
-
-_usecases_instance = None
-
-
-def set_usecases(usecases: Usecases):
-    global _usecases_instance
-    _usecases_instance = usecases
-
-
-def get_usecases() -> Usecases:
-    if _usecases_instance is None:
-        raise Exception("Usecases not initialized. Call set_usecases first.")
-    return _usecases_instance
 
 
 @router.get("/credentials", status_code=status.HTTP_200_OK)

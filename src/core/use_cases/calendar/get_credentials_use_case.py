@@ -4,10 +4,11 @@ from src.core.platform.appcontext.appcontext import Factory
 
 class GetCredentialsUseCase:
     def __init__(self, context_factory: Factory):
-        self.context_factory = context_factory()
+        self.context_factory = context_factory
 
     def execute(self) -> Optional[dict]:
-        creds = self.context_factory.repositories.calendar.find_credentials()
+        context = self.context_factory()
+        creds = context.repositories.calendar.find_credentials()
         if not creds:
             return None
         return {

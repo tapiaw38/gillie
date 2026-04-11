@@ -2,32 +2,24 @@ from fastapi import FastAPI
 from fastapi.staticfiles import StaticFiles
 from src.adapters.web.controllers import conversation, profile, whatsapp
 from src.adapters.web.controllers.nosql.controllers import router as nosql_router
-from src.adapters.web.controllers.calendar.calendar import router as calendar_router, set_usecases as set_calendar_usecases
-from src.adapters.web.controllers.gmail.gmail import router as gmail_router, set_usecases as set_gmail_usecases
-from src.adapters.web.controllers.drive.drive import router as drive_router, set_usecases as set_drive_usecases
-from src.adapters.web.controllers.memory.controllers import router as memory_router, set_usecases as set_memory_usecases
+from src.adapters.web.controllers.calendar.calendar import router as calendar_router
+from src.adapters.web.controllers.gmail.gmail import router as gmail_router
+from src.adapters.web.controllers.drive.drive import router as drive_router
+from src.adapters.web.controllers.memory.controllers import router as memory_router
 from src.adapters.web.controllers.whatsapp.device_controllers import (
     router as whatsapp_device_router,
-    set_usecases as set_whatsapp_device_usecases,
     set_neonize as set_whatsapp_device_neonize,
+    set_app as set_whatsapp_device_app,
 )
-from src.adapters.web.controllers.slack.controllers import (
-    router as slack_router,
-    set_usecases as set_slack_usecases,
-)
-from src.adapters.web.controllers.telegram.controllers import (
-    router as telegram_router,
-    set_usecases as set_telegram_usecases,
-)
+from src.adapters.web.controllers.slack.controllers import router as slack_router
+from src.adapters.web.controllers.telegram.controllers import router as telegram_router
 from src.adapters.web.controllers.job.controllers import (
     router as job_router,
-    set_usecases as set_job_usecases,
     set_scheduler as set_job_scheduler,
 )
 from src.adapters.web.controllers.system.controllers import (
     router as system_router,
     set_openai_integration,
-    set_usecases as set_system_usecases,
 )
 from src.core.use_cases.use_cases import Usecases
 from src.core.platform.config.service import ConfigurationService
@@ -43,24 +35,15 @@ class RoutesManager:
         self.openai_integration = openai_integration
 
     def include_routes(self):
-        conversation.controllers.set_usecases(self.usecases)
-        profile.controllers.set_usecases(self.usecases)
-        whatsapp.controllers.set_usecases(self.usecases)
-        set_calendar_usecases(self.usecases)
-        set_drive_usecases(self.usecases)
-        set_gmail_usecases(self.usecases)
-        set_memory_usecases(self.usecases)
-        set_whatsapp_device_usecases(self.usecases)
+        self.app.state.usecases = self.usecases
+
+        set_whatsapp_device_app(self.app)
         if self.neonize_integration is not None:
             set_whatsapp_device_neonize(self.neonize_integration)
-        set_slack_usecases(self.usecases)
-        set_telegram_usecases(self.usecases)
-        set_job_usecases(self.usecases)
         if self.scheduler is not None:
             set_job_scheduler(self.scheduler)
         if self.openai_integration is not None:
             set_openai_integration(self.openai_integration)
-        set_system_usecases(self.usecases)
 
         self.app.dependency_overrides[ConfigurationService] = lambda: self.config_service
 

@@ -13,28 +13,29 @@ from src.core.platform.errors.mappings.profile import (
 
 class ChangeStatusUseCase:
     def __init__(self, context_factory: Factory):
-        self.context_factory = context_factory()
+        self.context_factory = context_factory
 
     def execute(self, user_id: str, status: bool):
         try:
+            context = self.context_factory()
             updated_profile = Profile(
                 updated_at=datetime.now(timezone.utc),
                 is_active=status,
             )
 
-            search_profile = self.context_factory.repositories.profile.find_by_user_id(
+            search_profile = context.repositories.profile.find_by_user_id(
                 user_id
             )
             if not search_profile:
                 raise NewApplicationError(ProfileGetNotFoundError)
 
-            profile_updated_id = self.context_factory.repositories.profile.update(
+            profile_updated_id = context.repositories.profile.update(
                 search_profile.id, updated_profile
             )
             if not profile_updated_id:
                 raise NewApplicationError(ProfileUpdateNotFoundError)
 
-            profile_updated = self.context_factory.repositories.profile.find_by_id(
+            profile_updated = context.repositories.profile.find_by_id(
                 profile_updated_id
             )
             if not profile_updated:

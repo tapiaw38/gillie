@@ -5,24 +5,9 @@ from fastapi import APIRouter, Request
 from fastapi.responses import JSONResponse, PlainTextResponse
 
 from src.adapters.web.integrations.slack.slack import SlackIntegration
-from src.core.use_cases.use_cases import Usecases
+from src.adapters.web.dependencies import get_usecases
 
 router = APIRouter(prefix="/api/slack", tags=["Slack"])
-
-_usecases_instance = None
-
-
-def set_usecases(usecases: Usecases):
-    """Set the usecases instance (called during app initialization)."""
-    global _usecases_instance
-    _usecases_instance = usecases
-
-
-def get_usecases() -> Usecases:
-    """Get the usecases instance for dependency injection."""
-    if _usecases_instance is None:
-        raise Exception("Usecases not initialized. Call set_usecases first.")
-    return _usecases_instance
 
 
 @router.get("/verify", response_class=PlainTextResponse)
@@ -79,7 +64,7 @@ async def slack_events(request: Request):
     # Verify request authenticity using the signing secret from the active profile
     # We resolve the profile first (needed for the signing_secret) but fall back to
     # a no-secret instance when the profile is missing, which skips verification.
-    usecases = get_usecases()
+    usecases = get_usecases(request)
 
     profile = usecases.profile.find_with_active_slack_integration_usecase.execute()
 

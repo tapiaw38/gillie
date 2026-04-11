@@ -9,11 +9,12 @@ logger = logging.getLogger(__name__)
 
 class HandleOAuthCallbackUseCase:
     def __init__(self, context_factory: Factory):
-        self.context_factory = context_factory()
+        self.context_factory = context_factory
 
     def execute(self, user_id: str, code: str) -> dict:
         try:
-            return self.context_factory.integrations.gmail.handle_oauth_callback(user_id, code)
+            context = self.context_factory()
+            return context.integrations.gmail.handle_oauth_callback(user_id, code)
         except Exception as e:
             logger.error(f"Error handling Gmail OAuth callback: {e}", exc_info=True)
             raise NewApplicationError(GmailOAuthError, e)

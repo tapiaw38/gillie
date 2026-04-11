@@ -20,10 +20,11 @@ from uuid import uuid4
 
 class AddApiKeyUseCase:
     def __init__(self, context_factory: Factory):
-        self.context_factory = context_factory()
+        self.context_factory = context_factory
 
     async def execute(self, api_key: ApiKeyInput, user_id: str):
         try:
+            context = self.context_factory()
             generated_id = str(uuid4())
             api_key_value = f"sk-{str(uuid4()).replace('-', '')}"
 
@@ -36,7 +37,7 @@ class AddApiKeyUseCase:
                 created_at=datetime.now(timezone.utc),
             )
 
-            profile = self.context_factory.repositories.profile.find_by_user_id(user_id)
+            profile = context.repositories.profile.find_by_user_id(user_id)
             if not profile:
                 raise NewApplicationError(ProfileGetNotFoundError)
 
@@ -48,11 +49,11 @@ class AddApiKeyUseCase:
 
             profile.api_keys.append(new_api_key)
 
-            self.context_factory.repositories.profile.update_api_keys(
+            context.repositories.profile.update_api_keys(
                 user_id, profile.api_keys
             )
 
-            self.context_factory.repositories.conversation.update_profile_by_user_id(
+            context.repositories.conversation.update_profile_by_user_id(
                 user_id,
                 profile=profile,
             )
@@ -65,24 +66,25 @@ class AddApiKeyUseCase:
 
 class DeleteApiKeyUseCase:
     def __init__(self, context_factory: Factory):
-        self.context_factory = context_factory()
+        self.context_factory = context_factory
 
     async def execute(self, user_id: str, api_key_id: str):
         try:
-            profile = self.context_factory.repositories.profile.find_by_user_id(user_id)
+            context = self.context_factory()
+            profile = context.repositories.profile.find_by_user_id(user_id)
             if not profile:
                 raise NewApplicationError(ProfileGetNotFoundError)
 
             if profile.api_keys is None or not any(k.id == api_key_id for k in profile.api_keys):
                 raise NewApplicationError(ProfileApiKeyNotFoundError)
 
-            self.context_factory.repositories.profile.deactivate_api_key(
+            context.repositories.profile.deactivate_api_key(
                 user_id, api_key_id
             )
 
-            updated_profile = self.context_factory.repositories.profile.find_by_user_id(user_id)
+            updated_profile = context.repositories.profile.find_by_user_id(user_id)
 
-            self.context_factory.repositories.conversation.update_profile_by_user_id(
+            context.repositories.conversation.update_profile_by_user_id(
                 user_id,
                 profile=updated_profile,
             )

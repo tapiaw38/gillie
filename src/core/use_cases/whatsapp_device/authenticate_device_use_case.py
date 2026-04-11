@@ -22,7 +22,7 @@ class AuthenticateDeviceUseCase:
     """
 
     def __init__(self, context_factory: Factory):
-        self.context_factory = context_factory()
+        self.context_factory = context_factory
 
     async def execute(
         self,
@@ -32,11 +32,12 @@ class AuthenticateDeviceUseCase:
         phone_number: Optional[str] = None,
         message_handler: Optional[Callable] = None,
     ) -> None:
-        device = self.context_factory.repositories.whatsapp_device.find_by_id(device_id)
+        context = self.context_factory()
+        device = context.repositories.whatsapp_device.find_by_id(device_id)
         if not device:
             raise NewApplicationError(WhatsAppDeviceNotFoundError)
 
-        self.context_factory.repositories.whatsapp_device.update_status(device_id, "connecting")
+        context.repositories.whatsapp_device.update_status(device_id, "connecting")
 
         try:
             if auth_method == "pair":
@@ -44,14 +45,14 @@ class AuthenticateDeviceUseCase:
                     raise NewApplicationError(WhatsAppDevicePhoneRequiredError)
 
                 pair_code = await neonize_integration.get_pair_code(device_id, phone_number.strip())
-                self.context_factory.repositories.whatsapp_device.update_fields(
+                context.repositories.whatsapp_device.update_fields(
                     device_id,
                     pair_code=pair_code,
                     phone_number=phone_number.strip(),
                 )
 
             else:
-                repo = self.context_factory.repositories.whatsapp_device
+                repo = context.repositories.whatsapp_device
 
                 async def on_qr_ready(qr_data_url: str) -> None:
                     repo.update_fields(device_id, qr_code=qr_data_url)
@@ -72,5 +73,5 @@ class AuthenticateDeviceUseCase:
             raise
         except Exception as e:
             logger.error(f"Error authenticating device {device_id}: {e}", exc_info=True)
-            self.context_factory.repositories.whatsapp_device.update_status(device_id, "disconnected")
+            context.repositories.whatsapp_device.update_status(device_id, "disconnected")
             raise NewApplicationError(WhatsAppDeviceAuthError, e)

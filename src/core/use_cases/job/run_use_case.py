@@ -6,10 +6,7 @@ from typing import Optional
 
 from src.core.platform.appcontext.appcontext import Factory
 from src.core.platform.errors import NewApplicationError
-from src.core.platform.errors.mappings.job import (
-    JobGetNotFoundError,
-    JobRunError,
-)
+from src.core.platform.errors.mappings.job import JobGetNotFoundError
 from src.schemas.job import JobRunOutput
 
 logger = logging.getLogger(__name__)
@@ -67,7 +64,7 @@ class RunJobUseCase:
         params = job.source_params
 
         if source_type == "system_command":
-            return await self._run_system_command(params.get("command", ""), context)
+            return await self._run_system_command(params.get("command", ""))
         elif source_type == "http_get":
             return await self._run_http_get(params)
         elif source_type == "db_query":
@@ -77,7 +74,7 @@ class RunJobUseCase:
         else:
             raise ValueError(f"Unknown source_type: {source_type}")
 
-    async def _run_system_command(self, command: str, context) -> str:
+    async def _run_system_command(self, command: str) -> str:
         if not command:
             raise ValueError("system_command source requires 'command' param")
 
@@ -119,18 +116,18 @@ class RunJobUseCase:
         if not profile:
             raise ValueError(f"Profile not found for profile_id={profile_id}")
 
-        sql_integration = self._get_sql_integration(profile)
-        if sql_integration is None:
-            raise ValueError("No active sqldatabase integration found on profile")
-
         columns = params.get("columns", ["*"])
         filters = params.get("filters")
         limit = params.get("limit", 20)
 
+        sql_integration = self._get_sql_integration(profile, context)
+        if sql_integration is None:
+            raise ValueError("No active sqldatabase integration found on profile")
+
         result = await sql_integration.query(columns=columns, filters=filters, limit=limit)
         return json.dumps(result, ensure_ascii=False, default=str)
 
-    def _get_sql_integration(self, profile):
+    def _get_sql_integration(self, profile, context):
         if not profile or not profile.integrations:
             return None
         for integration in profile.integrations:
@@ -140,8 +137,7 @@ class RunJobUseCase:
                 allowed_table = config.get("allowed_table")
                 if not connection_string or not allowed_table:
                     return None
-                from src.adapters.web.integrations.sqldatabase.sqldatabase import SQLDatabaseIntegration
-                return SQLDatabaseIntegration(
+                return context.integrations.make_sqldatabase_client(
                     connection_string=connection_string,
                     allowed_table=allowed_table,
                     table_description=config.get("table_description", ""),
@@ -161,15 +157,15 @@ class RunJobUseCase:
             return
 
         if dest_type == "whatsapp":
-            await self._send_whatsapp(profile, dest_params, message)
+            await self._send_whatsapp(profile, dest_params, message, context)
         elif dest_type == "telegram":
-            await self._send_telegram(profile, dest_params, message)
+            await self._send_telegram(profile, dest_params, message, context)
         elif dest_type == "slack":
-            await self._send_slack(profile, dest_params, message)
+            await self._send_slack(profile, dest_params, message, context)
         else:
             raise ValueError(f"Unknown destination_type: {dest_type}")
 
-    async def _send_whatsapp(self, profile, params: dict, message: str) -> None:
+    async def _send_whatsapp(self, profile, params: dict, message: str, context) -> None:
         phone = params.get("phone")
         if not phone:
             raise ValueError("whatsapp destination requires 'phone' param")
@@ -178,8 +174,7 @@ class RunJobUseCase:
         if not integration_config:
             raise ValueError("No active whatsapp integration found on profile")
 
-        from src.adapters.web.integrations.whatsapp.whatsapp import WhatsAppIntegration
-        wa = WhatsAppIntegration(
+        wa = context.integrations.make_whatsapp_client(
             access_token=integration_config.get("access_token", ""),
             phone_number_id=integration_config.get("phone_number_id", ""),
         )
@@ -187,7 +182,7 @@ class RunJobUseCase:
         if not success:
             raise ValueError("WhatsApp message delivery failed")
 
-    async def _send_telegram(self, profile, params: dict, message: str) -> None:
+    async def _send_telegram(self, profile, params: dict, message: str, context) -> None:
         chat_id = params.get("chat_id")
         if not chat_id:
             raise ValueError("telegram destination requires 'chat_id' param")
@@ -196,15 +191,14 @@ class RunJobUseCase:
         if not integration_config:
             raise ValueError("No active telegram integration found on profile")
 
-        from src.adapters.web.integrations.telegram.telegram import TelegramIntegration
-        tg = TelegramIntegration(
+        tg = context.integrations.make_telegram_client(
             bot_token=integration_config.get("bot_token", ""),
         )
         success = tg.send_message(chat_id, message)
         if not success:
             raise ValueError("Telegram message delivery failed")
 
-    async def _send_slack(self, profile, params: dict, message: str) -> None:
+    async def _send_slack(self, profile, params: dict, message: str, context) -> None:
         channel = params.get("channel")
         if not channel:
             raise ValueError("slack destination requires 'channel' param")
@@ -213,8 +207,7 @@ class RunJobUseCase:
         if not integration_config:
             raise ValueError("No active slack integration found on profile")
 
-        from src.adapters.web.integrations.slack.slack import SlackIntegration
-        slack = SlackIntegration(
+        slack = context.integrations.make_slack_client(
             bot_token=integration_config.get("bot_token", ""),
         )
         success = slack.send_message(channel, message)

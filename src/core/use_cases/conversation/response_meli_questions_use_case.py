@@ -5,9 +5,9 @@ from typing import Optional, List, Dict
 
 class ResponseMeliQuestionsUseCase:
     def __init__(self, context_factory: Factory):
-        self.context_factory = context_factory()
+        self.context_factory = context_factory
 
-    async def _process_mercadolibre_integration(self, integration, profile):
+    async def _process_mercadolibre_integration(self, integration, profile, context):
         try:
             ml_config = integration.config
             access_token = ml_config.get("access_token")
@@ -22,10 +22,10 @@ class ResponseMeliQuestionsUseCase:
                 logger.warning("MercadoLibre integration missing credentials")
                 return
 
-            self.context_factory.integrations.initialize_mercadolibre(
+            context.integrations.initialize_mercadolibre(
                 access_token, ml_user_id
             )
-            ml_integration = self.context_factory.integrations.mercadolibre
+            ml_integration = context.integrations.mercadolibre
 
             if not ml_integration:
                 logger.error("Failed to initialize MercadoLibre integration")
@@ -47,7 +47,7 @@ class ResponseMeliQuestionsUseCase:
 
                     logger.info("Processing MercadoLibre unanswered questions...")
                     results = await ml_integration.auto_answer_questions_with_ai(
-                        self.context_factory.integrations.openai,
+                        context.integrations.openai,
                         profile,
                         auto_send=auto_answer,
                     )
@@ -86,8 +86,8 @@ class ResponseMeliQuestionsUseCase:
                 "Starting MercadoLibre questions processing for all active integrations..."
             )
 
-            # Buscar todos los perfiles
-            profiles = self.context_factory.repositories.profile.find_all()
+            context = self.context_factory()
+            profiles = context.repositories.profile.find_all()
             logger.info(f"Found {len(profiles)} total profiles")
 
             processed_profiles = 0
@@ -115,7 +115,7 @@ class ResponseMeliQuestionsUseCase:
                         for integration in meli_integrations:
                             try:
                                 await self._process_mercadolibre_integration(
-                                    integration, profile
+                                    integration, profile, context
                                 )
                                 processed_profiles += 1
                                 logger.info(

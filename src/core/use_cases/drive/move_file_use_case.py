@@ -10,11 +10,11 @@ logger = logging.getLogger(__name__)
 
 class MoveFileUseCase:
     def __init__(self, context_factory: Factory):
-        self.context_factory = context_factory()
+        self.context_factory = context_factory
 
     def execute(self, user_id: str, file_id: str, new_folder_id: str) -> dict:
         try:
-            ctx = self.context_factory
+            ctx = self.context_factory()
             service = get_drive_service(ctx, user_id)
             result = ctx.integrations.google_drive.move_file(service, file_id, new_folder_id)
             return {

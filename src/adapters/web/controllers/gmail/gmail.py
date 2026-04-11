@@ -12,6 +12,7 @@ from src.schemas.gmail import (
     GmailStatusOutput,
 )
 from src.core.use_cases.use_cases import Usecases
+from src.adapters.web.dependencies import get_usecases
 import logging
 
 logger = logging.getLogger(__name__)
@@ -21,22 +22,10 @@ router = APIRouter(
     tags=["gmail"],
 )
 
-_usecases_instance = None
-
-
-def set_usecases(usecases: Usecases):
-    global _usecases_instance
-    _usecases_instance = usecases
-
-
-def get_usecases() -> Usecases:
-    if _usecases_instance is None:
-        raise Exception("Usecases not initialized. Call set_usecases first.")
-    return _usecases_instance
-
 
 @router.get("/credentials", status_code=status.HTTP_200_OK)
 async def get_gmail_credentials(
+    request: Request,
     usecases: Usecases = Depends(get_usecases),
 ):
     """Get saved Gmail OAuth credentials (client_id only, secret never returned)."""
@@ -46,6 +35,7 @@ async def get_gmail_credentials(
 @router.post("/credentials", status_code=status.HTTP_200_OK)
 async def set_gmail_credentials(
     creds: GmailCredentialsInput,
+    request: Request,
     usecases: Usecases = Depends(get_usecases),
 ):
     """Save Google OAuth2 app credentials (client_id / client_secret) to MongoDB."""

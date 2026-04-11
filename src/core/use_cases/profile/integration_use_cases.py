@@ -15,10 +15,11 @@ from uuid import uuid4
 
 class AddIntegrationUseCase:
     def __init__(self, context_factory: Factory):
-        self.context_factory = context_factory()
+        self.context_factory = context_factory
 
     async def execute(self, user_id: str, integration: IntegrationInput):
-        profile = self.context_factory.repositories.profile.find_by_user_id(user_id)
+        context = self.context_factory()
+        profile = context.repositories.profile.find_by_user_id(user_id)
         if not profile:
             raise NewApplicationError(ProfileGetNotFoundError)
 
@@ -35,7 +36,6 @@ class AddIntegrationUseCase:
             created_at=datetime.now(timezone.utc),
             updated_at=datetime.now(timezone.utc),
         )
-        # Check for existing integration: by id first, then by name+type fallback
         for integ in profile.integrations:
             match_by_id = integration.id and integ.id == integration.id
             match_by_name = (not integration.id) and integ.name == new_integration.name and integ.type == new_integration.type
@@ -45,10 +45,10 @@ class AddIntegrationUseCase:
                 integ.activated = new_integration.activated
                 integ.config = new_integration.config
                 integ.updated_at = datetime.now(timezone.utc)
-                self.context_factory.repositories.profile.update_integrations(
+                context.repositories.profile.update_integrations(
                     user_id, profile.integrations
                 )
-                self.context_factory.repositories.conversation.update_profile_by_user_id(
+                context.repositories.conversation.update_profile_by_user_id(
                     user_id,
                     profile=profile,
                 )
@@ -56,11 +56,11 @@ class AddIntegrationUseCase:
 
         profile.integrations.append(new_integration)
 
-        self.context_factory.repositories.profile.update_integrations(
+        context.repositories.profile.update_integrations(
             user_id, profile.integrations
         )
 
-        self.context_factory.repositories.conversation.update_profile_by_user_id(
+        context.repositories.conversation.update_profile_by_user_id(
             user_id,
             profile=profile,
         )
@@ -70,10 +70,11 @@ class AddIntegrationUseCase:
 
 class DeleteIntegrationUseCase:
     def __init__(self, context_factory: Factory):
-        self.context_factory = context_factory()
+        self.context_factory = context_factory
 
     async def execute(self, user_id: str, integration_id: str):
-        profile = self.context_factory.repositories.profile.find_by_user_id(user_id)
+        context = self.context_factory()
+        profile = context.repositories.profile.find_by_user_id(user_id)
         if not profile:
             raise NewApplicationError(ProfileGetNotFoundError)
 
@@ -89,6 +90,6 @@ class DeleteIntegrationUseCase:
         if len(profile.integrations) == original_len:
             raise NewApplicationError(ProfileIntegrationNotFoundError)
 
-        self.context_factory.repositories.profile.update_integrations(user_id, profile.integrations)
-        self.context_factory.repositories.conversation.update_profile_by_user_id(user_id, profile=profile)
+        context.repositories.profile.update_integrations(user_id, profile.integrations)
+        context.repositories.conversation.update_profile_by_user_id(user_id, profile=profile)
         return IntegrationListOutput.from_output(profile.integrations)
