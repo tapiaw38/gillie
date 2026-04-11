@@ -69,14 +69,23 @@ def provider_list():
     table.add_column("Type", style="dim")
 
     from pathlib import Path as _Path
-    _has_claude_session = (_Path.home() / ".claude" / ".credentials.json").exists()
+
+    def _bearer_session_exists(entry: dict) -> bool:
+        src = entry.get("token_source", "claude")
+        if src == "claude":
+            return (_Path.home() / ".claude" / ".credentials.json").exists()
+        if src == "qwen":
+            return (_Path.home() / ".qwen" / "oauth_creds.json").exists()
+        if src == "codex":
+            return (_Path.home() / ".codex" / "auth.json").exists()
+        return False
 
     for name, entry in all_providers.items():
         auth = entry.get("auth_type", "api_key")
         if auth == "none":
             key_status = "[green]local[/green]"
         elif auth == "bearer":
-            key_status = "[green]session[/green]" if _has_claude_session else "[yellow]no session[/yellow]"
+            key_status = "[green]session[/green]" if _bearer_session_exists(entry) else "[yellow]no session[/yellow]"
         else:
             key_status = "[green]set[/green]" if entry.get("api_key") else "[yellow]not set[/yellow]"
 
@@ -101,6 +110,7 @@ def provider_list():
 def provider_use(
     provider: Optional[str] = typer.Argument(None, help="Provider name (deepseek-chat, kimi-k2, anthropic, openai, claude, kimi, gemini, groq, deepseek)"),
     api_key: Optional[str] = typer.Option(None, "--api-key", "-k", help="API key (skips interactive prompt)"),
+    model: Optional[str] = typer.Option(None, "--model", "-m", help="Model name (overrides preset default)"),
 ):
     """Switch to a provider and update the configuration."""
     from InquirerPy import inquirer as _inquirer
@@ -111,8 +121,6 @@ def provider_use(
         raise typer.Exit(1)
 
     if provider is None:
-        from pathlib import Path as _Path
-        _has_claude_session = (_Path.home() / ".claude" / ".credentials.json").exists()
         _profile_data = get_provider_data()
         _active_provider = _profile_data.get("active_provider", "")
         _all = get_available_providers(
@@ -160,28 +168,89 @@ def provider_use(
         resolved_key = "ollama"
         console.print("[dim]No API key required for local provider.[/dim]")
     elif preset.get("auth_type") == "bearer":
-        import json
-        from pathlib import Path
-        creds_path = Path.home() / ".claude" / ".credentials.json"
-        if creds_path.exists():
-            try:
-                creds = json.loads(creds_path.read_text())
-                resolved_key = creds.get("claudeAiOauth", {}).get("accessToken", "")
-            except Exception:
-                resolved_key = ""
+        import json as _json
+        from pathlib import Path as _Path
+
+        token_source = preset.get("token_source", "claude")
+
+        if token_source == "claude":
+            default_creds_path = _Path.home() / ".claude" / ".credentials.json"
+        elif token_source == "codex":
+            default_creds_path = _Path.home() / ".codex" / "auth.json"
         else:
-            resolved_key = ""
+            default_creds_path = _Path.home() / ".qwen" / "oauth_creds.json"
+
+        if api_key:
+            resolved_key = api_key
+        else:
+            creds_path_str = str(default_creds_path)
+            if not default_creds_path.exists():
+                console.print(f"[yellow]Credentials file not found:[/yellow] {default_creds_path}")
+                if token_source == "claude":
+                    console.print("[dim]Make sure you are logged in to Claude Code (claude.ai/code)[/dim]")
+                else:
+                    console.print("[dim]Run [bold]qwen auth login[/bold] to authenticate.[/dim]")
+                creds_path_str = typer.prompt("Path to credentials file", default=creds_path_str)
+                action = "default"
+            else:
+                try:
+                    action = _inquirer.select(
+                        message=f"Credentials found at {default_creds_path}:",
+                        choices=[
+                            {"name": f"  Use default path ({default_creds_path})", "value": "default"},
+                            {"name": "  Use a different path", "value": "custom"},
+                            {"name": "  Enter token manually", "value": "manual"},
+                        ],
+                        pointer="❯",
+                        qmark="",
+                    ).execute()
+                except KeyboardInterrupt:
+                    raise typer.Exit(0)
+
+            if action == "custom":
+                creds_path_str = typer.prompt("Path to credentials file", default=creds_path_str)
+
+            if action == "manual":
+                resolved_key = typer.prompt("Enter bearer token", hide_input=True)
+            else:
+                try:
+                    creds = _json.loads(_Path(creds_path_str).read_text())
+                    if token_source == "claude":
+                        resolved_key = creds.get("claudeAiOauth", {}).get("accessToken", "")
+                    elif token_source == "codex":
+                        resolved_key = creds.get("tokens", {}).get("access_token", "")
+                    else:
+                        resolved_key = creds.get("access_token", "")
+                except Exception as e:
+                    console.print(f"[red]Could not read credentials file:[/red] {e}")
+                    resolved_key = ""
 
         if not resolved_key:
-            console.print("[yellow]Could not read Claude Code session from ~/.claude/.credentials.json[/yellow]")
-            console.print("[dim]Make sure you are logged in to Claude Code (claude.ai/code)[/dim]")
-            if api_key:
-                resolved_key = api_key
+            console.print("[yellow]No token found.[/yellow]")
+            raise typer.Exit(1)
+
+        console.print(f"[dim]Using {token_source} session token.[/dim]")
+
+        if not model:
+            default_model = preset["model"]
+            try:
+                model_action = _inquirer.select(
+                    message="Model:",
+                    choices=[
+                        {"name": f"  Use default ({default_model})", "value": "default"},
+                        {"name": "  Enter a different model", "value": "custom"},
+                    ],
+                    pointer="❯",
+                    qmark="",
+                ).execute()
+            except KeyboardInterrupt:
+                raise typer.Exit(0)
+            if model_action == "custom":
+                model = typer.prompt("Model name", default=default_model)
             else:
-                console.print("[red]No bearer token available.[/red]")
-                raise typer.Exit(1)
-        else:
-            console.print("[dim]Using Claude Code session token from ~/.claude/.credentials.json[/dim]")
+                model = default_model
+        preset = {**preset, "model": model}
+
     elif api_key:
         resolved_key = api_key
     else:
@@ -229,7 +298,7 @@ def provider_use(
 
     console.print(f"[green]Provider switched to[/green] [bold cyan]{provider}[/bold cyan]")
     console.print(f"  Base URL : {preset['base_url']}")
-    console.print(f"  Model    : {preset['model']}")
+    console.print(f"  Model    : {cfg.services.openai.model}")
     console.print()
 
     _restart_service_if_running()
