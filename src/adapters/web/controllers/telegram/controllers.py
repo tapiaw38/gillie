@@ -5,23 +5,11 @@ from fastapi import APIRouter, Depends, Request
 from fastapi.responses import JSONResponse, PlainTextResponse
 
 from src.core.use_cases.use_cases import Usecases
+from src.adapters.web.dependencies import get_usecases
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/telegram", tags=["Telegram"])
-
-_usecases_instance = None
-
-
-def set_usecases(usecases: Usecases):
-    global _usecases_instance
-    _usecases_instance = usecases
-
-
-def get_usecases() -> Usecases:
-    if _usecases_instance is None:
-        raise Exception("Usecases not initialized. Call set_usecases first.")
-    return _usecases_instance
 
 
 @router.get("/verify", response_class=PlainTextResponse)

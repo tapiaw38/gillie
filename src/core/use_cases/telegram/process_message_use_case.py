@@ -4,7 +4,6 @@ from src.core.domain import Profile, SenderEnum
 from src.core.platform.errors import NewApplicationError
 from src.core.platform.errors.mappings.common import ValidationError
 from src.core.platform.logging import get_logger
-from src.adapters.web.integrations.telegram.telegram import TelegramIntegration
 from src.schemas import ConversationInput, MessageInput
 
 
@@ -43,10 +42,10 @@ class ProcessTelegramMessageUseCase:
             )
 
         try:
-            tg_client = TelegramIntegration(
+            tg_client = context.integrations.make_telegram_client(
                 bot_token=bot_token,
                 secret_token=telegram_integration.config.get("secret_token", ""),
-                store_service=getattr(context, "store_service", None),
+                store_service=context.store_service,
             )
 
             messages = tg_client.receive_message(payload)

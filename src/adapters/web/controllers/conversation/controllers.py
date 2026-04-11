@@ -9,6 +9,7 @@ from src.core.domain import (
     SenderEnum,
 )
 from src.core.use_cases.use_cases import Usecases
+from src.adapters.web.dependencies import get_usecases
 from typing import Optional
 
 
@@ -16,19 +17,6 @@ router = APIRouter(
     prefix="/conversation",
     tags=["Conversation"],
 )
-
-_usecases_instance = None
-
-def set_usecases(usecases: Usecases):
-    """Set the usecases instance (called during app initialization)"""
-    global _usecases_instance
-    _usecases_instance = usecases
-
-def get_usecases() -> Usecases:
-    """Get the usecases instance for dependency injection"""
-    if _usecases_instance is None:
-        raise Exception("Usecases not initialized. Call set_usecases first.")
-    return _usecases_instance
 
 @router.post("/", status_code=status.HTTP_201_CREATED)
 async def create_conversation(
@@ -172,7 +160,7 @@ async def approve_tool(request: Request):
 
 
 @router.post("/{conversation_id}/pty-result", status_code=status.HTTP_200_OK)
-async def submit_pty_result(conversation_id: str, request: Request):
+async def submit_pty_result(conversation_id: str, request: Request):  # noqa: ARG001
     """Receive PTY command output from a GTerm session.
 
     GTerm sends this after capturing the output of a command it ran in the

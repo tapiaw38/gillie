@@ -2,9 +2,10 @@ import asyncio
 import logging
 from typing import List, Optional
 
-from fastapi import APIRouter, Request, WebSocket, WebSocketDisconnect, status
+from fastapi import APIRouter, Depends, Request, WebSocket, WebSocketDisconnect, status
 
 from src.core.use_cases.use_cases import Usecases
+from src.adapters.web.dependencies import get_usecases
 from src.schemas.whatsapp.device_schemas import (
     AuthenticateDeviceRequest,
     CreateDeviceRequest,
@@ -18,13 +19,8 @@ logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/whatsapp", tags=["WhatsApp Device"])
 
-_usecases_instance: Optional[Usecases] = None
 _neonize_integration = None
-
-
-def set_usecases(usecases: Usecases):
-    global _usecases_instance
-    _usecases_instance = usecases
+_app = None
 
 
 def set_neonize(neonize_integration):
@@ -32,10 +28,9 @@ def set_neonize(neonize_integration):
     _neonize_integration = neonize_integration
 
 
-def get_usecases() -> Usecases:
-    if _usecases_instance is None:
-        raise RuntimeError("Usecases not initialized. Call set_usecases first.")
-    return _usecases_instance
+def set_app(app):
+    global _app
+    _app = app
 
 
 def get_neonize():
@@ -53,7 +48,7 @@ async def _handle_incoming_message(device_id: str, sender_jid: str, text: str):
     Called by neonize when an incoming WhatsApp message is received.
     Processes the message via AI and replies.
     """
-    usecases = get_usecases()
+    usecases = _app.state.usecases
     neonize = get_neonize()
 
     try:
@@ -138,9 +133,8 @@ async def _handle_incoming_message(device_id: str, sender_jid: str, text: str):
 
 
 @router.post("/device/register", response_model=DeviceResponse, status_code=status.HTTP_201_CREATED)
-async def create_device(request: Request, body: CreateDeviceRequest):
+async def create_device(request: Request, body: CreateDeviceRequest, usecases: Usecases = Depends(get_usecases)):
     user_id = _get_user_id(request)
-    usecases = get_usecases()
     device = usecases.whatsapp_device.create_usecase.execute(
         user_id=user_id,
         device_name=body.device_name,
@@ -150,30 +144,26 @@ async def create_device(request: Request, body: CreateDeviceRequest):
 
 
 @router.get("/device", response_model=List[DeviceResponse])
-async def list_devices(request: Request):
+async def list_devices(request: Request, usecases: Usecases = Depends(get_usecases)):
     user_id = _get_user_id(request)
-    usecases = get_usecases()
     devices = usecases.whatsapp_device.list_usecase.execute(user_id)
     return [DeviceResponse(**d.dict()) for d in devices]
 
 
 @router.get("/device/{device_id}", response_model=DeviceResponse)
-async def get_device(device_id: str):
-    usecases = get_usecases()
+async def get_device(device_id: str, request: Request, usecases: Usecases = Depends(get_usecases)):
     device = usecases.whatsapp_device.get_usecase.execute(device_id)
     return DeviceResponse(**device.dict())
 
 
 @router.delete("/device/{device_id}", status_code=status.HTTP_204_NO_CONTENT)
-async def delete_device(device_id: str):
-    usecases = get_usecases()
+async def delete_device(device_id: str, request: Request, usecases: Usecases = Depends(get_usecases)):
     neonize = get_neonize()
     await usecases.whatsapp_device.delete_usecase.execute(device_id, neonize)
 
 
 @router.post("/device/{device_id}/authenticate", response_model=DeviceResponse)
-async def authenticate_device(device_id: str, body: AuthenticateDeviceRequest):
-    usecases = get_usecases()
+async def authenticate_device(device_id: str, body: AuthenticateDeviceRequest, request: Request, usecases: Usecases = Depends(get_usecases)):
     neonize = get_neonize()
     await usecases.whatsapp_device.authenticate_usecase.execute(
         device_id=device_id,
@@ -187,8 +177,7 @@ async def authenticate_device(device_id: str, body: AuthenticateDeviceRequest):
 
 
 @router.post("/device/{device_id}/connect", status_code=status.HTTP_204_NO_CONTENT)
-async def connect_device(device_id: str):
-    usecases = get_usecases()
+async def connect_device(device_id: str, request: Request, usecases: Usecases = Depends(get_usecases)):
     neonize = get_neonize()
     await usecases.whatsapp_device.connect_usecase.execute(
         device_id=device_id,
@@ -198,15 +187,13 @@ async def connect_device(device_id: str):
 
 
 @router.post("/device/{device_id}/disconnect", status_code=status.HTTP_204_NO_CONTENT)
-async def disconnect_device(device_id: str):
-    usecases = get_usecases()
+async def disconnect_device(device_id: str, request: Request, usecases: Usecases = Depends(get_usecases)):
     neonize = get_neonize()
     await usecases.whatsapp_device.disconnect_usecase.execute(device_id, neonize)
 
 
 @router.post("/device/{device_id}/send", response_model=SendMessageResponse)
-async def send_message(device_id: str, body: SendMessageRequest):
-    usecases = get_usecases()
+async def send_message(device_id: str, body: SendMessageRequest, request: Request, usecases: Usecases = Depends(get_usecases)):
     neonize = get_neonize()
     message_id = await usecases.whatsapp_device.send_message_usecase.execute(
         device_id=device_id,
@@ -218,12 +205,11 @@ async def send_message(device_id: str, body: SendMessageRequest):
 
 
 @router.post("/message/send", response_model=SendMessageResponse)
-async def send_message_by_phone(body: SendMessageByPhoneRequest):
+async def send_message_by_phone(body: SendMessageByPhoneRequest, request: Request, usecases: Usecases = Depends(get_usecases)):
     """
     UI-compatible send endpoint.
     Accepts { device_id, recipient_phone, content } and converts phone → JID.
     """
-    usecases = get_usecases()
     neonize = get_neonize()
 
     phone = body.recipient_phone.lstrip("+")
@@ -247,7 +233,7 @@ async def qr_stream(websocket: WebSocket, device_id: str):
     await websocket.accept()
 
     try:
-        usecases = get_usecases()
+        usecases = websocket.app.state.usecases
         interval = 2
 
         for i in range(60):

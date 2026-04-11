@@ -4,7 +4,6 @@ from src.core.domain import Profile, SenderEnum
 from src.core.platform.errors import NewApplicationError
 from src.core.platform.errors.mappings.common import ValidationError
 from src.core.platform.logging import get_logger
-from src.adapters.web.integrations.whatsapp.whatsapp import WhatsAppIntegration
 from src.schemas import ConversationInput, MessageInput
 
 
@@ -55,10 +54,8 @@ class ProcessWhatsAppMessageUseCase:
                     Exception(f"WhatsApp configuration is not valid: missing {config}")
                 )
 
-        from src.core.use_cases.use_cases import Usecases
-
         try:
-            wa_client = WhatsAppIntegration(
+            wa_client = context.integrations.make_whatsapp_client(
                 access_token=whatsapp_integration.config["accessToken"],
                 phone_number_id=whatsapp_integration.config["phoneNumberId"],
             )
@@ -132,7 +129,7 @@ class ProcessWhatsAppMessageUseCase:
                     )
 
                     new_conversation = context.repositories.conversation.create(
-                        conversation_input.dict(), profile.user_id
+                        conversation_input.model_dump(), profile.user_id
                     )
 
                     conversation_id = new_conversation

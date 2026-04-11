@@ -6,6 +6,7 @@ from src.schemas import (
     IntegrationInput,
 )
 from typing import List
+from src.adapters.web.dependencies import get_usecases
 from src.core.use_cases.use_cases import Usecases
 
 
@@ -13,17 +14,6 @@ router = APIRouter(
     prefix="/profile",
     tags=["profile"],
 )
-
-_usecases_instance = None
-
-def set_usecases(usecases: Usecases):
-    global _usecases_instance
-    _usecases_instance = usecases
-
-def get_usecases() -> Usecases:
-    if _usecases_instance is None:
-        raise Exception("Usecases not initialized. Call set_usecases first.")
-    return _usecases_instance
 
 
 @router.get("/", status_code=status.HTTP_200_OK)

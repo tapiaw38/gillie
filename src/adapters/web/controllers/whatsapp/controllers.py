@@ -1,5 +1,6 @@
 from fastapi import APIRouter, Depends, Body, HTTPException, status, Request, UploadFile, File, Form
 from fastapi.responses import PlainTextResponse, JSONResponse
+from src.adapters.web.dependencies import get_usecases
 from src.core.use_cases.use_cases import Usecases
 from src.schemas import (
     ProcessExternalMessageRequest,
@@ -19,19 +20,6 @@ last_payloads = deque(maxlen=10)
 
 router = APIRouter(prefix="/api/whatsapp", tags=["WhatsApp"])
 
-_usecases_instance = None
-
-def set_usecases(usecases: Usecases):
-    """Set the usecases instance (called during app initialization)"""
-    global _usecases_instance
-    _usecases_instance = usecases
-
-def get_usecases() -> Usecases:
-    """Get the usecases instance for dependency injection"""
-    if _usecases_instance is None:
-        raise Exception("Usecases not initialized. Call set_usecases first.")
-    return _usecases_instance
-
 
 @router.get("/verify", response_class=PlainTextResponse)
 async def verify_endpoint():
@@ -42,6 +30,7 @@ async def verify_endpoint():
 
 @router.post("/transcribe-audio")
 async def transcribe_audio(
+    request: Request,
     audio: UploadFile = File(...),
     language: str = Form("es-ES"),
     usecases: Usecases = Depends(get_usecases),
@@ -70,6 +59,7 @@ async def transcribe_audio(
 
 @router.post("/test-send")
 async def test_send_message(
+    request: Request,
     phone_number: str = Body(..., embed=True),
     message: str = Body(..., embed=True),
     usecases: Usecases = Depends(get_usecases),

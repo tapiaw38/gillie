@@ -5,7 +5,6 @@ from src.core.domain import Profile, SenderEnum
 from src.core.platform.errors import NewApplicationError
 from src.core.platform.errors.mappings.common import ValidationError
 from src.core.platform.logging import get_logger
-from src.adapters.web.integrations.slack.slack import SlackIntegration
 from src.schemas import ConversationInput, MessageInput
 
 
@@ -58,7 +57,7 @@ class ProcessSlackMessageUseCase:
                 )
 
         try:
-            slack_client = SlackIntegration(
+            slack_client = context.integrations.make_slack_client(
                 bot_token=slack_integration.config["bot_token"],
                 signing_secret=slack_integration.config.get("signing_secret", ""),
             )
