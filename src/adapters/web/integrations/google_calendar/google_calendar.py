@@ -3,7 +3,7 @@ from datetime import datetime, timezone
 from typing import Optional, Dict, List, Any
 
 from src.core.domain.calendar import CalendarSession
-from src.services.calendar.client import GoogleCalendarClient
+from src.adapters.services.google_calendar.client import GoogleCalendarClient
 from src.adapters.datasources.repositories.calendar.repository import Repository as CalendarRepository
 
 logger = logging.getLogger(__name__)

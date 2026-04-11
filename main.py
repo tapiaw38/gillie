@@ -18,7 +18,7 @@ from src.core.platform.nosql.migrations import execute_migrations
 from src.core.platform.objectstorange.s3_session import get_s3_session
 from src.adapters.storeservice.s3_storeservice import S3StoreService
 from src.adapters.storeservice.local_storeservice import LocalStoreService
-from src.core.platform.services.platform_services import PlatformServices
+from src.core.platform.managers.platform_manager import PlatformServices
 from src.core.platform.managers.skill_manager import SkillManager
 from src.core.platform.errors.exception_handler import register_exception_handlers
 from src.adapters.web.middlewares.authorization import SingleUserMiddleware
@@ -193,7 +193,7 @@ if repositories.job is not None:
 
 if config_service.single_user_config:
     user_id = config_service.single_user_config.user_id
-    from src.core.services.startup_service import StartupService
+    from src.adapters.bootstrap.startup_service import StartupService
     StartupService(
         usecases=usecases,
         config_service=config_service,

@@ -31,7 +31,7 @@ class Integrations:
 
         self.google_calendar = None
         if calendar_repository is not None:
-            from src.services.calendar.client import GoogleCalendarClient
+            from src.adapters.services.google_calendar.client import GoogleCalendarClient
             gc_cfg = config_service.google_calendar_config
             fallback_client = None
             if gc_cfg and gc_cfg.client_id:
@@ -52,7 +52,7 @@ class Integrations:
         gd_cfg = config_service.google_drive_config
         drive_fallback_client = None
         if gd_cfg and gd_cfg.client_id:
-            from src.services.gdrive.client import GoogleDriveClient
+            from src.adapters.services.google_drive.client import GoogleDriveClient
             drive_fallback_client = GoogleDriveClient(
                 client_id=gd_cfg.client_id,
                 client_secret=gd_cfg.client_secret,
@@ -67,7 +67,7 @@ class Integrations:
         # Gmail integration
         self.gmail = None
         if gmail_repository is not None:
-            from src.services.gmail.client import GoogleGmailClient
+            from src.adapters.services.gmail.client import GoogleGmailClient
             from src.adapters.web.integrations.gmail.gmail import GmailIntegration
             gm_cfg = config_service.google_gmail_config
             fallback_client = None

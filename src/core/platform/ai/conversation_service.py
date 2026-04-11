@@ -8,8 +8,8 @@ import logging
 from typing import Optional, List, Dict, Any
 from dataclasses import dataclass
 
-from ..providers.base import BaseLLMProvider, LLMRequest
-from ..memory.manager import ConversationMemoryManager
+from .providers.base import BaseLLMProvider, LLMRequest
+from .memory.manager import ConversationMemoryManager
 from .circuit_breaker import CircuitBreakerService, CircuitBreakerConfig
 
 logger = logging.getLogger(__name__)

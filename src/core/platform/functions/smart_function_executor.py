@@ -10,7 +10,7 @@ from langchain_core.messages import HumanMessage
 
 from src.core.platform.functions.workflow_executor import WorkflowExecutor
 from src.core.platform.functions.global_workflows import get_available_workflows
-from src.core.services.configuration_service import ConfigurationService
+from src.core.platform.config.service import ConfigurationService
 from src.core.domain import Profile
 
 logger = logging.getLogger(__name__)

@@ -6,11 +6,11 @@ implementing the Dependency Inversion Principle by centralizing
 service instantiation and management.
 """
 
-from src.core.platform.services.voice_transcription_service import VoiceTranscriptionService
-from src.core.platform.services.text_to_speech_service import TextToSpeechService
-from src.core.platform.services.image_processing_service import ImageProcessingService
-from src.core.platform.services.ai_response_service import AIResponseService
-from src.core.platform.services.message_history_service import MessageHistoryService
+from src.core.platform.managers.voice_transcription_manager import VoiceTranscriptionService
+from src.core.platform.managers.text_to_speech_manager import TextToSpeechService
+from src.core.platform.managers.image_processing_manager import ImageProcessingService
+from src.core.platform.managers.ai_response_manager import AIResponseService
+from src.core.platform.managers.message_history_manager import MessageHistoryService
 from src.core.platform.managers.skill_manager import SkillManager
 
 
