@@ -6,8 +6,6 @@ import * as nodePath from 'path'
 import * as https from 'https'
 import * as http from 'http'
 
-// ── IPC: fs:readFile ───────────────────────────────────────────────────────────
-
 ipcMain.handle('fs:readFile', async (_event, filePath: string): Promise<string> => {
   try {
     const content = fs.readFileSync(filePath, 'utf8')
@@ -17,8 +15,6 @@ ipcMain.handle('fs:readFile', async (_event, filePath: string): Promise<string> 
     throw new Error(`Cannot read file "${filePath}": ${msg}`)
   }
 })
-
-// ── IPC: fs:listDir ────────────────────────────────────────────────────────────
 
 const SKIP_DIRS = new Set([
   '.git',
@@ -57,7 +53,6 @@ ipcMain.handle('fs:listDir', async (_event, dirPath: string): Promise<string[]> 
   return results
 })
 
-// Shallow listing (immediate children only) used for tab completion
 ipcMain.handle('fs:listDirShallow', async (_event, dirPath: string): Promise<string[]> => {
   try {
     const entries = fs.readdirSync(dirPath, { withFileTypes: true })
@@ -69,10 +64,7 @@ ipcMain.handle('fs:listDirShallow', async (_event, dirPath: string): Promise<str
   }
 })
 
-// ── IPC: fs:glob ───────────────────────────────────────────────────────────────
-
 function globMatch(pattern: string, filePath: string): boolean {
-  // Convert glob pattern to regex
   const regexStr = pattern
     .replace(/[.+^${}()|[\]\\]/g, '\\$&') // escape special regex chars except * and ?
     .replace(/\*\*/g, '\u0000') // temporarily replace **
@@ -119,8 +111,6 @@ ipcMain.handle('fs:glob', async (_event, pattern: string, base: string): Promise
   globRecursive(resolvedBase, resolvedBase, pattern, results, 100)
   return results
 })
-
-// ── IPC: net:fetchUrl ──────────────────────────────────────────────────────────
 
 function stripHtml(html: string): string {
   return html
@@ -215,7 +205,6 @@ function createWindow(): void {
     return { action: 'deny' }
   })
 
-  // Prevent the main window from navigating away from the app (e.g. clicking image links)
   mainWindow.webContents.on('will-navigate', (event, url) => {
     const appBase = is.dev
       ? process.env['ELECTRON_RENDERER_URL']
@@ -245,7 +234,6 @@ app.whenReady().then(() => {
 
   session.defaultSession.webRequest.onHeadersReceived((details, callback) => {
     const headers = { ...details.responseHeaders }
-    // Remove any existing CORS headers (case-insensitive) to avoid duplicates
     for (const key of Object.keys(headers)) {
       if (key.toLowerCase().startsWith('access-control-')) {
         delete headers[key]
