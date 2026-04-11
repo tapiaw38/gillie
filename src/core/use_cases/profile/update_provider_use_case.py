@@ -11,7 +11,7 @@ from src.core.platform.errors.mappings.profile import (
 
 class UpdateProviderUseCase:
     def __init__(self, context_factory: Factory):
-        self.context_factory = context_factory()
+        self.context_factory = context_factory
 
     def execute(
         self,
@@ -21,7 +21,8 @@ class UpdateProviderUseCase:
     ) -> None:
         """Set the active provider and optionally store its API key."""
         try:
-            profile = self.context_factory.repositories.profile.find_by_user_id(user_id)
+            context = self.context_factory()
+            profile = context.repositories.profile.find_by_user_id(user_id)
             if not profile:
                 raise NewApplicationError(ProfileUpdateNotFoundError)
 
@@ -35,7 +36,7 @@ class UpdateProviderUseCase:
                 updated_at=datetime.now(timezone.utc),
             )
 
-            self.context_factory.repositories.profile.update(profile.id, updated)
+            context.repositories.profile.update(profile.id, updated)
 
         except PyMongoError as e:
             raise NewApplicationError(ProfileUpdateQueryError, e)
@@ -51,7 +52,8 @@ class UpdateProviderUseCase:
     ) -> None:
         """Add or update a custom provider without changing the active provider."""
         try:
-            profile = self.context_factory.repositories.profile.find_by_user_id(user_id)
+            context = self.context_factory()
+            profile = context.repositories.profile.find_by_user_id(user_id)
             if not profile:
                 raise NewApplicationError(ProfileUpdateNotFoundError)
 
@@ -73,7 +75,7 @@ class UpdateProviderUseCase:
                 updated_at=datetime.now(timezone.utc),
             )
 
-            self.context_factory.repositories.profile.update(profile.id, updated)
+            context.repositories.profile.update(profile.id, updated)
 
         except PyMongoError as e:
             raise NewApplicationError(ProfileUpdateQueryError, e)

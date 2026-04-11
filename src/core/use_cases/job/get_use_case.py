@@ -13,11 +13,12 @@ logger = logging.getLogger(__name__)
 
 class GetJobUseCase:
     def __init__(self, context_factory: Factory):
-        self.context_factory = context_factory()
+        self.context_factory = context_factory
 
     def execute(self, job_id: str) -> JobOutput:
         try:
-            job = self.context_factory.repositories.job.find_by_id(job_id)
+            context = self.context_factory()
+            job = context.repositories.job.find_by_id(job_id)
         except Exception as e:
             logger.error(f"Error getting job: {e}", exc_info=True)
             raise NewApplicationError(JobGetQueryError, e)

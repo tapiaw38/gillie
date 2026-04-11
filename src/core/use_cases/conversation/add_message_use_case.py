@@ -52,7 +52,7 @@ class AddMessageUseCase:
         Args:
             context_factory: Factory for creating context instances
         """
-        self.context_factory = context_factory()
+        self.context_factory = context_factory
 
     async def execute(
         self,
@@ -92,20 +92,21 @@ class AddMessageUseCase:
         Raises:
             ApplicationError: If conversation not found, unauthorized, or validation error
         """
-        enhanced_content = await self._process_voice_content(message)
+        context = self.context_factory()
+        enhanced_content = await self._process_voice_content(message, context)
 
         if message.voice_content and not enhanced_content.strip():
             logger.warning("Voice content provided but transcription returned no text — skipping")
-            conversation = self._get_and_validate_conversation(conversation_id, user_id)
+            conversation = self._get_and_validate_conversation(conversation_id, user_id, context)
             return MessageListOutput.from_output(conversation.messages)
 
         user_message = self._create_user_message(enhanced_content, sender)
 
         conversation = self._get_and_validate_conversation(
-            conversation_id, user_id
+            conversation_id, user_id, context
         )
 
-        await self._compact_if_needed(conversation, conversation_id)
+        await self._compact_if_needed(conversation, conversation_id, context)
 
         self._add_message_to_conversation(conversation, user_message)
 
@@ -115,6 +116,7 @@ class AddMessageUseCase:
             message_context=message.context,
             auth_token=auth_token,
             client_workspace=client_workspace,
+            context=context,
         )
 
         if default_message:
@@ -125,14 +127,16 @@ class AddMessageUseCase:
             has_image_processor=has_image_processor,
             user_message=user_message,
             conversation=conversation,
-            message_context=message.context
+            message_context=message.context,
+            context=context,
         )
 
         audio_url = await self._generate_audio_if_enabled(
             has_text_to_voice=has_text_to_voice,
             text=ai_response_text,
             user_id=user_id,
-            conversation_id=conversation_id
+            conversation_id=conversation_id,
+            context=context,
         )
 
         assistant_message = self._create_assistant_message(
@@ -145,16 +149,17 @@ class AddMessageUseCase:
 
         self._add_message_to_conversation(conversation, assistant_message)
 
-        self._save_messages(conversation_id, conversation.messages)
+        self._save_messages(conversation_id, conversation.messages, context)
 
         return MessageListOutput.from_output(conversation.messages)
 
-    async def _process_voice_content(self, message: MessageInput) -> str:
+    async def _process_voice_content(self, message: MessageInput, context) -> str:
         """
         Processes voice content and enhances message text.
 
         Args:
             message: Input message with optional voice content
+            context: Application context
 
         Returns:
             Enhanced content with voice transcription if available
@@ -162,7 +167,7 @@ class AddMessageUseCase:
         if not message.voice_content:
             return message.content
 
-        if not self.context_factory.platform_managers:
+        if not context.platform_managers:
             logger.warning("Platform managers not available, skipping voice processing")
             return message.content
 
@@ -171,20 +176,20 @@ class AddMessageUseCase:
 
             _stt_lang = "en-US"
             try:
-                _profile = self.context_factory.repositories.profile.find_by_user_id(
-                    self.context_factory.user_id
-                ) if hasattr(self.context_factory, "user_id") else None
+                _profile = context.repositories.profile.find_by_user_id(
+                    context.user_id
+                ) if hasattr(context, "user_id") else None
                 if _profile and getattr(_profile, "response_language", None) == "es":
                     _stt_lang = "es-ES"
             except Exception:
                 pass
-            transcription = await self.context_factory.platform_managers.voice_transcription.transcribe_audio_file(
+            transcription = await context.platform_managers.voice_transcription.transcribe_audio_file(
                 audio_file=message.voice_content,
                 language=_stt_lang,
             )
 
             if transcription:
-                enhanced_content = self.context_factory.platform_managers.voice_transcription.enhance_message_with_transcription(
+                enhanced_content = context.platform_managers.voice_transcription.enhance_message_with_transcription(
                     original_message=message.content,
                     transcription=transcription
                 )
@@ -237,13 +242,14 @@ class AddMessageUseCase:
             created_at=datetime.now(timezone.utc),
         )
 
-    def _get_and_validate_conversation(self, conversation_id: str, user_id: str):
+    def _get_and_validate_conversation(self, conversation_id: str, user_id: str, context):
         """
         Retrieves and validates a conversation.
 
         Args:
             conversation_id: ID of the conversation
             user_id: ID of the user
+            context: Application context
 
         Returns:
             Conversation domain object
@@ -251,7 +257,7 @@ class AddMessageUseCase:
         Raises:
             ApplicationError: If conversation not found or user unauthorized
         """
-        conversation = self.context_factory.repositories.conversation.find_by_id(
+        conversation = context.repositories.conversation.find_by_id(
             conversation_id
         )
 
@@ -265,7 +271,7 @@ class AddMessageUseCase:
             )
             raise NewApplicationError(ForbiddenError)
 
-        full_profile = self.context_factory.repositories.profile.find_by_id(
+        full_profile = context.repositories.profile.find_by_id(
             conversation.profile.id
         )
         if full_profile:
@@ -303,6 +309,7 @@ class AddMessageUseCase:
         message_context: Optional[str],
         auth_token: Optional[str] = None,
         client_workspace: str = "",
+        context=None,
     ) -> Tuple[Optional[str], str]:
         """
         Generates AI response using the AI response service.
@@ -311,30 +318,31 @@ class AddMessageUseCase:
             user_message: User's message
             conversation: Conversation object
             message_context: Optional message context
+            context: Application context
 
         Returns:
             Tuple of (default_message, ai_response_text)
         """
-        if not self.context_factory.platform_managers:
+        if not context.platform_managers:
             logger.warning("Platform services not available, using fallback")
             response = await self._generate_ai_response_fallback(
-                user_message, conversation, message_context, client_workspace=client_workspace
+                user_message, conversation, message_context, client_workspace=client_workspace, context=context
             )
             return (None, response)
 
         try:
-            enhanced_context = self._inject_skill_context(message_context, user_message.content)
+            enhanced_context = self._inject_skill_context(message_context, user_message.content, context)
 
-            chat_history = self.context_factory.platform_managers.message_history.build_chat_history(
+            chat_history = context.platform_managers.message_history.build_chat_history(
                 messages=conversation.messages,
                 max_messages=20
             )
 
-            conversation_history = self.context_factory.platform_managers.message_history.convert_messages_to_string(
+            conversation_history = context.platform_managers.message_history.convert_messages_to_string(
                 conversation.messages[-20:]
             )
 
-            return await self.context_factory.platform_managers.ai_response.generate_response(
+            return await context.platform_managers.ai_response.generate_response(
                 user_message=user_message.content,
                 profile=conversation.profile,
                 message_context=enhanced_context,
@@ -367,20 +375,21 @@ class AddMessageUseCase:
                 run_shell tool invocations, emitted in real time as the process runs.
             dict {"type": "audio", "url": str}: audio URL when TTS is enabled.
         """
-        conversation = self._get_and_validate_conversation(conversation_id, user_id)
+        context = self.context_factory()
+        conversation = self._get_and_validate_conversation(conversation_id, user_id, context)
 
-        compaction_event = await self._compact_if_needed(conversation, conversation_id)
+        compaction_event = await self._compact_if_needed(conversation, conversation_id, context)
         if compaction_event:
             yield compaction_event
 
         user_message = self._create_user_message(content, SenderEnum.user)
         self._add_message_to_conversation(conversation, user_message)
 
-        enhanced_context = self._inject_skill_context(None, content)
+        enhanced_context = self._inject_skill_context(None, content, context)
         conversation_history = (
-            self.context_factory.platform_managers.message_history
+            context.platform_managers.message_history
             .convert_messages_to_string(conversation.messages[-20:])
-            if self.context_factory.platform_managers
+            if context.platform_managers
             else ""
         )
 
@@ -390,7 +399,7 @@ class AddMessageUseCase:
         shell_output_queue: asyncio.Queue = asyncio.Queue()
 
         full_text = ""
-        async for token in self.context_factory.integrations.openai.ask_stream(
+        async for token in context.integrations.openai.ask_stream(
             question=content,
             context=enhanced_context,
             previous_messages=conversation_history,
@@ -413,6 +422,7 @@ class AddMessageUseCase:
             text=full_text,
             user_id=user_id,
             conversation_id=conversation_id,
+            context=context,
         )
 
         if audio_url:
@@ -420,9 +430,9 @@ class AddMessageUseCase:
 
         assistant_message = self._create_assistant_message(content=full_text, audio_url=audio_url)
         self._add_message_to_conversation(conversation, assistant_message)
-        self._save_messages(conversation_id, conversation.messages)
+        self._save_messages(conversation_id, conversation.messages, context)
 
-    def _inject_skill_context(self, message_context: Optional[str], user_query: str = "") -> str:
+    def _inject_skill_context(self, message_context: Optional[str], user_query: str = "", context=None) -> str:
         """
         Inject skill context (general.skill.md + faqs.skill.md) into message context.
         When a user_query is provided, also searches memory for relevant snippets and
@@ -431,18 +441,19 @@ class AddMessageUseCase:
         Args:
             message_context: Original message context
             user_query: User's message text used to search memory for relevant snippets
+            context: Application context
 
         Returns:
             Enhanced context with skill knowledge prepended (or original if unavailable)
         """
-        if not self.context_factory.platform_managers:
+        if not context or not context.platform_managers:
             return message_context
 
-        if not self.context_factory.platform_managers.skill_manager:
+        if not context.platform_managers.skill_manager:
             return message_context
 
         try:
-            skill_manager = self.context_factory.platform_managers.skill_manager
+            skill_manager = context.platform_managers.skill_manager
             skill_context = skill_manager.get_base_context()
 
             if not skill_context:
@@ -470,6 +481,7 @@ class AddMessageUseCase:
         conversation,
         message_context: Optional[str],
         client_workspace: str = "",
+        context=None,
     ) -> str:
         """
         Fallback method for generating AI response without platform services.
@@ -479,19 +491,20 @@ class AddMessageUseCase:
             conversation: Conversation object
             message_context: Optional message context
             client_workspace: Optional client workspace path
+            context: Application context
 
         Returns:
             Generated AI response text
         """
         try:
-            enhanced_context = self._inject_skill_context(message_context)
+            enhanced_context = self._inject_skill_context(message_context, context=context)
 
             conversation_history = " - ".join([
                 f"{msg.sender}: {msg.content}"
                 for msg in conversation.messages
             ])
 
-            response = await self.context_factory.integrations.openai.ask(
+            response = await context.integrations.openai.ask(
                 user_message.content,
                 enhanced_context,
                 conversation_history,
@@ -510,7 +523,8 @@ class AddMessageUseCase:
         has_image_processor: Optional[str],
         user_message: Message,
         conversation,
-        message_context: Optional[str]
+        message_context: Optional[str],
+        context=None,
     ) -> Optional[str]:
         """
         Processes images if image processor is enabled.
@@ -520,6 +534,7 @@ class AddMessageUseCase:
             user_message: User's message
             conversation: Conversation object
             message_context: Optional message context
+            context: Application context
 
         Returns:
             Formatted images string or None
@@ -527,18 +542,18 @@ class AddMessageUseCase:
         if has_image_processor != "activate":
             return None
 
-        if not self.context_factory.platform_managers:
+        if not context or not context.platform_managers:
             logger.warning("Platform services not available, skipping image processing")
             return None
 
         try:
             logger.info("Image processing activated")
 
-            conversation_history = self.context_factory.platform_managers.message_history.convert_messages_to_string(
+            conversation_history = context.platform_managers.message_history.convert_messages_to_string(
                 conversation.messages[-20:]
             )
 
-            formatted_images = await self.context_factory.platform_managers.image_processing.search_and_format_images(
+            formatted_images = await context.platform_managers.image_processing.search_and_format_images(
                 user_message=user_message.content,
                 profile=conversation.profile,
                 message_context=message_context,
@@ -556,7 +571,8 @@ class AddMessageUseCase:
         has_text_to_voice: Optional[str],
         text: str,
         user_id: str,
-        conversation_id: str
+        conversation_id: str,
+        context=None,
     ) -> Optional[str]:
         """
         Generates audio if text-to-voice is enabled.
@@ -566,15 +582,16 @@ class AddMessageUseCase:
             text: Text to convert to speech
             user_id: User ID
             conversation_id: Conversation ID
+            context: Application context
 
         Returns:
             Audio URL or None
         """
         tts_active = has_text_to_voice == "activate"
 
-        if not tts_active:
+        if not tts_active and context:
             try:
-                profile = self.context_factory.repositories.profile.find_by_user_id(user_id)
+                profile = context.repositories.profile.find_by_user_id(user_id)
                 if profile and profile.tts_enabled:
                     tts_active = True
             except Exception:
@@ -583,7 +600,7 @@ class AddMessageUseCase:
         if not tts_active:
             return None
 
-        if not self.context_factory.platform_managers:
+        if not context or not context.platform_managers:
             logger.warning("Platform services not available, skipping audio generation")
             return None
 
@@ -592,12 +609,12 @@ class AddMessageUseCase:
 
             _tts_lang = "en"
             try:
-                _tts_profile = self.context_factory.repositories.profile.find_by_user_id(user_id)
+                _tts_profile = context.repositories.profile.find_by_user_id(user_id)
                 if _tts_profile and getattr(_tts_profile, "response_language", None):
                     _tts_lang = _tts_profile.response_language
             except Exception:
                 pass
-            audio_url = await self.context_factory.platform_managers.text_to_speech.generate_and_store_audio(
+            audio_url = await context.platform_managers.text_to_speech.generate_and_store_audio(
                 text=text,
                 user_id=user_id,
                 conversation_id=conversation_id,
@@ -612,7 +629,8 @@ class AddMessageUseCase:
 
     async def compact_now(self, conversation_id: str, user_id: str) -> dict:
         """Force-compact the conversation immediately, regardless of message count."""
-        conversation = self._get_and_validate_conversation(conversation_id, user_id)
+        context = self.context_factory()
+        conversation = self._get_and_validate_conversation(conversation_id, user_id, context)
 
         keep_recent = int(os.environ.get("COMPACTION_KEEP_RECENT", "20"))
         messages_to_summarize = conversation.messages[:-keep_recent] if len(conversation.messages) > keep_recent else conversation.messages
@@ -621,7 +639,7 @@ class AddMessageUseCase:
         if not non_summary:
             return {"compacted": False, "reason": "No hay mensajes para compactar"}
 
-        summary_text = await self._generate_summary(messages_to_summarize)
+        summary_text = await self._generate_summary(messages_to_summarize, context)
         if not summary_text:
             return {"compacted": False, "reason": "No se pudo generar el resumen"}
 
@@ -632,7 +650,7 @@ class AddMessageUseCase:
         )
         recent_messages = conversation.messages[-keep_recent:] if len(conversation.messages) > keep_recent else []
         conversation.messages = [summary_message] + recent_messages
-        self._save_messages(conversation_id, conversation.messages)
+        self._save_messages(conversation_id, conversation.messages, context)
 
         logger.info(f"Manual compaction: {len(messages_to_summarize)} messages → 1 summary")
         return {"compacted": True, "summarized": len(messages_to_summarize)}
@@ -641,6 +659,7 @@ class AddMessageUseCase:
         self,
         conversation,
         conversation_id: str,
+        context=None,
     ) -> Optional[dict]:
         """
         Compacts the conversation when it exceeds the configured threshold.
@@ -681,7 +700,7 @@ class AddMessageUseCase:
             # All older messages are already summaries — nothing to compact.
             return None
 
-        summary_text = await self._generate_summary(messages_to_summarize)
+        summary_text = await self._generate_summary(messages_to_summarize, context)
         if not summary_text:
             # Summarisation failed; continue without compacting so the normal
             # flow is never broken.
@@ -695,7 +714,7 @@ class AddMessageUseCase:
 
         conversation.messages = [summary_message] + recent_messages
 
-        self._save_messages(conversation_id, conversation.messages)
+        self._save_messages(conversation_id, conversation.messages, context)
 
         logger.info(
             f"Conversation {conversation_id} compacted: "
@@ -707,7 +726,7 @@ class AddMessageUseCase:
             "message": "Conversación compactada para optimizar el contexto",
         }
 
-    async def _generate_summary(self, messages: list) -> str:
+    async def _generate_summary(self, messages: list, context=None) -> str:
         """
         Generates a concise summary of ``messages`` using OpenAI.
 
@@ -752,7 +771,7 @@ class AddMessageUseCase:
         )
 
         try:
-            summary = await self.context_factory.integrations.openai.simple_completion(
+            summary = await context.integrations.openai.simple_completion(
                 system=system_prompt,
                 user=user_prompt,
             )
@@ -761,15 +780,16 @@ class AddMessageUseCase:
             logger.error(f"Failed to generate conversation summary: {e}")
             return ""
 
-    def _save_messages(self, conversation_id: str, messages: list[Message]) -> None:
+    def _save_messages(self, conversation_id: str, messages: list[Message], context=None) -> None:
         """
         Persists messages to the database.
 
         Args:
             conversation_id: ID of the conversation
             messages: List of messages to save
+            context: Application context
         """
-        self.context_factory.repositories.conversation.update_messages_by_id(
+        context.repositories.conversation.update_messages_by_id(
             conversation_id,
             messages,
         )

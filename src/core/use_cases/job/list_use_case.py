@@ -10,11 +10,12 @@ logger = logging.getLogger(__name__)
 
 class ListJobsUseCase:
     def __init__(self, context_factory: Factory):
-        self.context_factory = context_factory()
+        self.context_factory = context_factory
 
     def execute(self, profile_id: str) -> JobListOutput:
         try:
-            jobs = self.context_factory.repositories.job.find_all(profile_id)
+            context = self.context_factory()
+            jobs = context.repositories.job.find_all(profile_id)
             return JobListOutput(data=[JobData.from_domain(j) for j in jobs])
         except Exception as e:
             logger.error(f"Error listing jobs: {e}", exc_info=True)

@@ -14,13 +14,14 @@ from uuid import uuid4
 
 class CreateUseCase:
     def __init__(self, context_factory: Factory):
-        self.context_factory = context_factory()
+        self.context_factory = context_factory
 
     def execute(self, profile: ProfileInput, user_id: str):
         if not profile.assistant_name or profile.assistant_name.strip() == "":
             raise NewApplicationError(ProfileCreateNameRequiredError)
 
         try:
+            context = self.context_factory()
             generated_id = str(uuid4())
             new_profile = Profile(
                 _id=generated_id,
@@ -32,8 +33,8 @@ class CreateUseCase:
                 created_at=datetime.now(timezone.utc),
             )
 
-            profile_id = self.context_factory.repositories.profile.create(new_profile)
-            created_profile = self.context_factory.repositories.profile.find_by_id(
+            profile_id = context.repositories.profile.create(new_profile)
+            created_profile = context.repositories.profile.find_by_id(
                 profile_id
             )
 

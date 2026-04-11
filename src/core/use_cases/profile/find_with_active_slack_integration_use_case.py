@@ -10,7 +10,7 @@ class FindWithActiveSlackIntegrationUseCase:
     """
 
     def __init__(self, context_factory: Factory):
-        self.context_factory = context_factory()
+        self.context_factory = context_factory
 
     def execute(self) -> Optional[Profile]:
         """
@@ -19,7 +19,7 @@ class FindWithActiveSlackIntegrationUseCase:
         Returns:
             Profile if found, None otherwise
         """
-        context = self.context_factory
+        context = self.context_factory()
 
         profiles = context.repositories.profile.find_all()
 

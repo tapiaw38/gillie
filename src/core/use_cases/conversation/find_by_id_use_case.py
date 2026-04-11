@@ -12,11 +12,12 @@ from typing import Optional
 
 class FindByIdUseCase:
     def __init__(self, context_factory: Factory):
-        self.context_factory = context_factory()
+        self.context_factory = context_factory
 
     def execute(self, conversation_id: str) -> Optional[Conversation]:
         try:
-            conversation = self.context_factory.repositories.conversation.find_by_id(
+            context = self.context_factory()
+            conversation = context.repositories.conversation.find_by_id(
                 conversation_id
             )
             if not conversation:

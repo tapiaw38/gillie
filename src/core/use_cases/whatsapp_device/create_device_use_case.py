@@ -16,7 +16,7 @@ logger = logging.getLogger(__name__)
 
 class CreateDeviceUseCase:
     def __init__(self, context_factory: Factory):
-        self.context_factory = context_factory()
+        self.context_factory = context_factory
 
     def execute(self, user_id: str, device_name: str, phone_number: Optional[str] = None) -> WhatsAppDevice:
         if not device_name or not device_name.strip():
@@ -34,7 +34,8 @@ class CreateDeviceUseCase:
         )
 
         try:
-            self.context_factory.repositories.whatsapp_device.create(device)
+            context = self.context_factory()
+            context.repositories.whatsapp_device.create(device)
             return device
         except Exception as e:
             logger.error(f"Error creating WhatsApp device: {e}", exc_info=True)

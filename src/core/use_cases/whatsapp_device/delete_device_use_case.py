@@ -12,17 +12,18 @@ logger = logging.getLogger(__name__)
 
 class DeleteDeviceUseCase:
     def __init__(self, context_factory: Factory):
-        self.context_factory = context_factory()
+        self.context_factory = context_factory
 
     async def execute(self, device_id: str, neonize_integration=None) -> None:
-        device = self.context_factory.repositories.whatsapp_device.find_by_id(device_id)
+        context = self.context_factory()
+        device = context.repositories.whatsapp_device.find_by_id(device_id)
         if not device:
             raise NewApplicationError(WhatsAppDeviceNotFoundError)
 
         try:
             if neonize_integration is not None:
                 await neonize_integration.remove_client(device_id)
-            self.context_factory.repositories.whatsapp_device.delete(device_id)
+            context.repositories.whatsapp_device.delete(device_id)
         except Exception as e:
             logger.error(f"Error deleting WhatsApp device {device_id}: {e}", exc_info=True)
             raise NewApplicationError(WhatsAppDeviceDeleteError, e)

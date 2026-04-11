@@ -10,7 +10,7 @@ logger = logging.getLogger(__name__)
 
 class ReplyEmailUseCase:
     def __init__(self, context_factory: Factory):
-        self.context_factory = context_factory()
+        self.context_factory = context_factory
 
     def execute(
         self,
@@ -22,7 +22,8 @@ class ReplyEmailUseCase:
         if not body or not body.strip():
             raise NewApplicationError(GmailBodyRequiredError)
         try:
-            return self.context_factory.integrations.gmail.reply_email(
+            context = self.context_factory()
+            return context.integrations.gmail.reply_email(
                 user_id=user_id,
                 message_id=message_id,
                 body=body,

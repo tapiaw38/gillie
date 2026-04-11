@@ -6,11 +6,12 @@ from src.core.platform.errors.mappings.common import ForbiddenError
 
 class DeleteUseCase:
     def __init__(self, context_factory: Factory):
-        self.context_factory = context_factory()
+        self.context_factory = context_factory
 
     async def execute(self, conversation_id: str, user_id: str):
+        context = self.context_factory()
         search_conversation = (
-            self.context_factory.repositories.conversation.find_by_id(
+            context.repositories.conversation.find_by_id(
                 conversation_id
             )
         )
@@ -20,7 +21,7 @@ class DeleteUseCase:
         if user_id != search_conversation.profile.user_id:
             raise NewApplicationError(ForbiddenError)
 
-        self.context_factory.repositories.conversation.delete_by_id(
+        context.repositories.conversation.delete_by_id(
             conversation_id
         )
 

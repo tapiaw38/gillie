@@ -15,7 +15,7 @@ logger = logging.getLogger(__name__)
 
 class SendEmailUseCase:
     def __init__(self, context_factory: Factory):
-        self.context_factory = context_factory()
+        self.context_factory = context_factory
 
     def execute(
         self,
@@ -34,7 +34,8 @@ class SendEmailUseCase:
         if not body or not body.strip():
             raise NewApplicationError(GmailBodyRequiredError)
         try:
-            return self.context_factory.integrations.gmail.send_email(
+            context = self.context_factory()
+            return context.integrations.gmail.send_email(
                 user_id=user_id,
                 to=to,
                 subject=subject,

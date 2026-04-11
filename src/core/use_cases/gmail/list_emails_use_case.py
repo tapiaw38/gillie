@@ -10,7 +10,7 @@ logger = logging.getLogger(__name__)
 
 class ListEmailsUseCase:
     def __init__(self, context_factory: Factory):
-        self.context_factory = context_factory()
+        self.context_factory = context_factory
 
     def execute(
         self,
@@ -20,7 +20,8 @@ class ListEmailsUseCase:
         label_ids: Optional[List[str]] = None,
     ) -> List[Dict[str, Any]]:
         try:
-            return self.context_factory.integrations.gmail.list_emails(
+            context = self.context_factory()
+            return context.integrations.gmail.list_emails(
                 user_id=user_id,
                 query=query,
                 max_results=max_results,

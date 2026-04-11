@@ -8,11 +8,12 @@ logger = logging.getLogger(__name__)
 
 class GetAuthorizationUrlUseCase:
     def __init__(self, context_factory: Factory):
-        self.context_factory = context_factory()
+        self.context_factory = context_factory
 
     def execute(self, user_id: str) -> str:
         try:
-            url = self.context_factory.integrations.google_drive.get_authorization_url(user_id)
+            context = self.context_factory()
+            url = context.integrations.google_drive.get_authorization_url(user_id)
             if not url:
                 raise NewApplicationError(DriveOAuthError)
             return url

@@ -16,15 +16,15 @@ from uuid import uuid4
 
 class CreateUseCase:
     def __init__(self, context_factory: Factory):
-        self.context_factory = context_factory()
+        self.context_factory = context_factory
 
     def execute(self, conversation: ConversationInput, user_id: str) -> Conversation:
-        # Validation
         if not conversation.title or conversation.title.strip() == "":
             raise NewApplicationError(ConversationCreateTitleRequiredError)
 
         try:
-            profile = self.context_factory.repositories.profile.find_by_user_id(user_id)
+            context = self.context_factory()
+            profile = context.repositories.profile.find_by_user_id(user_id)
             if not profile:
                 raise NewApplicationError(ConversationCreateProfileNotFoundError)
 
@@ -48,12 +48,12 @@ class CreateUseCase:
                 is_sandbox=conversation.is_sandbox,
             )
 
-            conversation_id = self.context_factory.repositories.conversation.create(
+            conversation_id = context.repositories.conversation.create(
                 new_conversation
             )
 
             created_conversation = (
-                self.context_factory.repositories.conversation.find_by_id(
+                context.repositories.conversation.find_by_id(
                     conversation_id
                 )
             )

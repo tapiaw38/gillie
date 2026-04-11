@@ -13,11 +13,12 @@ from src.core.platform.errors.mappings.common import DatabaseQueryError
 
 class ListOptionsUseCase:
     def __init__(self, context_factory: Factory):
-        self.context_factory = context_factory()
+        self.context_factory = context_factory
 
     def execute(self, user_id: str = "") -> ListOptionsOutput:
         try:
-            roles = self.context_factory.repositories.role.get_all_roles()
+            context = self.context_factory()
+            roles = context.repositories.role.get_all_roles()
 
             role_data = []
             for role in roles:
@@ -30,7 +31,7 @@ class ListOptionsUseCase:
 
             profile = None
             if user_id:
-                profile = self.context_factory.repositories.profile.find_by_user_id(user_id)
+                profile = context.repositories.profile.find_by_user_id(user_id)
 
             provider_keys = (profile.provider_keys or {}) if profile else None
             custom_providers = (profile.custom_providers or {}) if profile else None

@@ -22,7 +22,7 @@ class FindByUserIdUseCase:
         Args:
             context_factory: Factory for creating context instances
         """
-        self.context_factory = context_factory()
+        self.context_factory = context_factory
 
     def execute(self, user_id: str, include_sandbox: bool = False):
         """
@@ -36,7 +36,8 @@ class FindByUserIdUseCase:
         Returns:
             ConversationListOutput with matching conversations
         """
-        conversations = self.context_factory.repositories.conversation.find_user_id(
+        context = self.context_factory()
+        conversations = context.repositories.conversation.find_user_id(
             user_id, include_sandbox
         )
         return ConversationListOutput.from_output(conversations)

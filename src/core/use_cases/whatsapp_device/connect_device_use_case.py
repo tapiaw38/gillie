@@ -19,7 +19,7 @@ class ConnectDeviceUseCase:
     """
 
     def __init__(self, context_factory: Factory):
-        self.context_factory = context_factory()
+        self.context_factory = context_factory
 
     async def execute(
         self,
@@ -27,13 +27,14 @@ class ConnectDeviceUseCase:
         neonize_integration,
         message_handler: Optional[Callable] = None,
     ) -> None:
-        device = self.context_factory.repositories.whatsapp_device.find_by_id(device_id)
+        context = self.context_factory()
+        device = context.repositories.whatsapp_device.find_by_id(device_id)
         if not device:
             raise NewApplicationError(WhatsAppDeviceNotFoundError)
 
         try:
             await neonize_integration.connect(device_id, message_handler)
-            self.context_factory.repositories.whatsapp_device.update_status(
+            context.repositories.whatsapp_device.update_status(
                 device_id,
                 "authenticated",
                 last_connected_at=datetime.now(timezone.utc),
@@ -43,5 +44,5 @@ class ConnectDeviceUseCase:
             logger.info(f"Device {device_id} connected and listening")
         except Exception as e:
             logger.error(f"Error connecting device {device_id}: {e}", exc_info=True)
-            self.context_factory.repositories.whatsapp_device.update_status(device_id, "disconnected")
+            context.repositories.whatsapp_device.update_status(device_id, "disconnected")
             raise NewApplicationError(WhatsAppDeviceConnectError, e)
