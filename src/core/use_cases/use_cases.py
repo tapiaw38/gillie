@@ -5,8 +5,9 @@ from src.core.use_cases.conversation import (
     FindByUserIdUseCase as ConversationFindByUserIdUseCase,
     FindByIdUseCase as ConversationFindByIdUseCase,
     AddMessageUseCase as ConversationAddMessageUseCase,
+    CompactConversationUseCase as ConversationCompactUseCase,
     DeleteAllMessagesUseCase as ConversationDeleteAllMessagesUseCase,
-    DeleteUseCase as ConversationDeleteUseCase
+    DeleteUseCase as ConversationDeleteUseCase,
 )
 from src.core.use_cases.profile import (
     CreateUseCase as ProfileCreateUseCase,
@@ -127,6 +128,7 @@ class Conversation:
     find_by_user_id_usecase: ConversationFindByUserIdUseCase
     find_by_id_usecase: ConversationFindByIdUseCase
     add_message_usecase: ConversationAddMessageUseCase
+    compact_usecase: ConversationCompactUseCase
     delete_all_messages_usecase: ConversationDeleteAllMessagesUseCase
     delete_usecase: ConversationDeleteUseCase
 
@@ -265,6 +267,7 @@ def create_usecases(context_factory: Factory) -> Usecases:
             find_by_user_id_usecase=ConversationFindByUserIdUseCase(context_factory),
             find_by_id_usecase=ConversationFindByIdUseCase(context_factory),
             add_message_usecase=ConversationAddMessageUseCase(context_factory),
+            compact_usecase=ConversationCompactUseCase(context_factory),
             delete_all_messages_usecase=ConversationDeleteAllMessagesUseCase(context_factory),
             delete_usecase=ConversationDeleteUseCase(context_factory),
         ),
