@@ -39,11 +39,11 @@ from .providers import (
 # Legacy imports removed - use ConfigurationService instead
 
 # Services
-from .services import (
-    ConversationService,
+from .circuit_breaker import (
     CircuitBreakerService,
     CircuitBreakerConfig,
 )
+from .conversation_service import ConversationService
 
 # Memory
 from .memory.manager import ConversationMemoryManager

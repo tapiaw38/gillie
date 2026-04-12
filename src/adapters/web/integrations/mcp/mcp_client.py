@@ -5,7 +5,7 @@ Replaces the former HTTP client to the mcp-context-server microservice.
 import logging
 from typing import Dict, Any, Optional
 
-from src.services.datetime.tools import DatetimeTools
+from src.core.platform.utils.datetime_tools import DatetimeTools
 
 logger = logging.getLogger(__name__)
 

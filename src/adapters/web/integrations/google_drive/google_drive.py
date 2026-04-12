@@ -2,7 +2,7 @@ import logging
 from datetime import datetime, timezone
 from typing import Optional, Dict, Any, List
 
-from src.services.gdrive.client import GoogleDriveClient
+from src.adapters.services.google_drive.client import GoogleDriveClient
 
 logger = logging.getLogger(__name__)
 

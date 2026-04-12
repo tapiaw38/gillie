@@ -187,7 +187,7 @@ async def compact_conversation(
 ):
     """Force-compact a conversation immediately, regardless of message count."""
     user_id = request.state.user.get("user_id")
-    result = await usecases.conversation.add_message_usecase.compact_now(conversation_id, user_id)
+    result = await usecases.conversation.compact_usecase.execute(conversation_id, user_id)
     return result
 
 

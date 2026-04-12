@@ -3,7 +3,7 @@ from datetime import datetime, timezone
 from typing import Optional, Dict, List, Any
 
 from src.core.domain.gmail import GmailSession, GmailCredentials
-from src.services.gmail.client import GoogleGmailClient
+from src.adapters.services.gmail.client import GoogleGmailClient
 
 logger = logging.getLogger(__name__)
 
