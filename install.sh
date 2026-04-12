@@ -46,11 +46,12 @@ check_dep ffmpeg          "needed for audio processing (TTS/STT)"
 echo ""
 cd "$SCRIPT_DIR"
 
-if [ -d ".venv" ]; then
+if [ -d ".venv" ] && [ -f ".venv/bin/activate" ]; then
     echo "✓ Virtual environment exists (.venv)"
     CREATED_VENV=false
 else
     echo "Creating virtual environment..."
+    rm -rf .venv
     "$PYTHON" -m venv .venv
     echo "✓ Virtual environment created (.venv)"
     CREATED_VENV=true
