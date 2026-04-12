@@ -403,28 +403,36 @@ class LangChainService:
 
                 pty_callback = None
                 if has_pty and shell_output_queue is not None:
+                    _pty_cache: dict = {}
+
                     async def _pty_callback(command: str) -> dict:
                         import uuid as _uuid
                         from src.core.platform.ai.tools.pty_manager import (
                             create_pending, get_result, cleanup,
                         )
+                        if command in _pty_cache:
+                            logger.info(f"PTY dedup: returning cached result for: {command!r}")
+                            return _pty_cache[command]
+
                         request_id = str(_uuid.uuid4())
+                        event = create_pending(request_id)
                         await shell_output_queue.put({
                             "type": "pty_command",
                             "request_id": request_id,
                             "command": command,
                         })
-                        event = create_pending(request_id)
                         try:
                             await asyncio.wait_for(event.wait(), timeout=120)
                             output = get_result(request_id)
-                            return {
+                            result = {
                                 "exit_code": 0,
                                 "stdout": output,
                                 "stderr": "",
                                 "truncated": False,
                                 "via_pty": True,
                             }
+                            _pty_cache[command] = result
+                            return result
                         except asyncio.TimeoutError:
                             logger.warning(
                                 f"PTY command request {request_id} timed out after 120s"
