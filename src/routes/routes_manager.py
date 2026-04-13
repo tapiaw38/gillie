@@ -17,22 +17,18 @@ from src.adapters.web.controllers.job.controllers import (
     router as job_router,
     set_scheduler as set_job_scheduler,
 )
-from src.adapters.web.controllers.system.controllers import (
-    router as system_router,
-    set_openai_integration,
-)
+from src.adapters.web.controllers.system.controllers import router as system_router
 from src.core.use_cases.use_cases import Usecases
 from src.core.platform.config.service import ConfigurationService
 
 
 class RoutesManager:
-    def __init__(self, app: FastAPI, usecases: Usecases, config_service=ConfigurationService, neonize_integration=None, scheduler=None, openai_integration=None):
+    def __init__(self, app: FastAPI, usecases: Usecases, config_service=ConfigurationService, neonize_integration=None, scheduler=None):
         self.app = app
         self.usecases = usecases
         self.config_service = config_service
         self.neonize_integration = neonize_integration
         self.scheduler = scheduler
-        self.openai_integration = openai_integration
 
     def include_routes(self):
         self.app.state.usecases = self.usecases
@@ -42,8 +38,6 @@ class RoutesManager:
             set_whatsapp_device_neonize(self.neonize_integration)
         if self.scheduler is not None:
             set_job_scheduler(self.scheduler)
-        if self.openai_integration is not None:
-            set_openai_integration(self.openai_integration)
 
         self.app.dependency_overrides[ConfigurationService] = lambda: self.config_service
 

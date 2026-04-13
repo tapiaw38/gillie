@@ -115,7 +115,7 @@ async def add_message_stream(
     user_id = request.state.user.get("user_id")
     client_workspace = request.headers.get("X-Gillie-Workspace", "")
     plan_mode = request.headers.get("X-Gillie-Mode", "") == "plan"
-    has_pty = request.headers.get("X-GTerm-Session", "") == "1"
+    has_pty = request.headers.get("X-OHTerm-Session", "") == "1"
 
     async def event_generator():
         try:
@@ -161,9 +161,9 @@ async def approve_tool(request: Request):
 
 @router.post("/{conversation_id}/pty-result", status_code=status.HTTP_200_OK)
 async def submit_pty_result(conversation_id: str, request: Request):  # noqa: ARG001
-    """Receive PTY command output from a GTerm session.
+    """Receive PTY command output from a OHTerm session.
 
-    GTerm sends this after capturing the output of a command it ran in the
+    OHTerm sends this after capturing the output of a command it ran in the
     active PTY on behalf of the AI. The waiting LLM tool coroutine is
     unblocked with the captured output.
 

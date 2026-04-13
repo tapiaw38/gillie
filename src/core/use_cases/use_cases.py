@@ -82,6 +82,7 @@ from src.core.use_cases.gmail import (
 )
 from src.core.use_cases.slack import ProcessSlackMessageUseCase
 from src.core.use_cases.telegram import ProcessTelegramMessageUseCase
+from src.core.use_cases.system import ShellCompleteUseCase
 from src.core.use_cases.job import (
     CreateJobUseCase,
     ListJobsUseCase,
@@ -227,6 +228,11 @@ class Telegram:
 
 
 @dataclass
+class System:
+    shell_complete_usecase: ShellCompleteUseCase
+
+
+@dataclass
 class Usecases:
     profile: Profile
     conversation: Conversation
@@ -239,6 +245,7 @@ class Usecases:
     jobs: Jobs
     slack: Slack
     telegram: Telegram
+    system: System
 
 
 def create_usecases(context_factory: Factory) -> Usecases:
@@ -345,5 +352,8 @@ def create_usecases(context_factory: Factory) -> Usecases:
         ),
         telegram=Telegram(
             process_message_usecase=ProcessTelegramMessageUseCase(context_factory),
+        ),
+        system=System(
+            shell_complete_usecase=ShellCompleteUseCase(context_factory),
         ),
     )
