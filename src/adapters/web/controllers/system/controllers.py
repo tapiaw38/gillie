@@ -60,6 +60,7 @@ async def add_provider(
 
 class CompleteInput(BaseModel):
     prefix: str
+    context: str = ""
 
 
 @router.post("/complete", status_code=status.HTTP_200_OK)
@@ -67,5 +68,8 @@ async def shell_complete(
     body: CompleteInput,
     usecases: Usecases = Depends(get_usecases),
 ):
-    suggestion = await usecases.system.shell_complete_usecase.execute(body.prefix)
+    suggestion = await usecases.system.shell_complete_usecase.execute(
+        prefix=body.prefix,
+        terminal_context=body.context,
+    )
     return {"suggestion": suggestion}

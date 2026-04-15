@@ -33,11 +33,21 @@ def _extract_text(content) -> str:
     return str(content) if content else ""
 
 
+from src.core.platform.ai.ollama_adapter import (
+    is_ollama_url as _is_ollama_url,
+    build_ollama_llm as _build_ollama_llm,
+    route_tools as _route_tools_ollama,
+    resolve_tool_name as _resolve_tool_name,
+    normalize_tool_args as _normalize_tool_args,
+)
+
+
 def _build_llm(model: str, api_key: str, base_url: str, auth_type: str = "api_key"):
     """Build the appropriate LLM based on provider URL and auth type.
 
     - Anthropic + api_key → ChatAnthropic (x-api-key, /v1/messages)
     - Anthropic + bearer  → ChatOpenAI   (Authorization: Bearer, /v1/chat/completions)
+    - Ollama              → ChatOllama   (native tool calling support)
     - Everything else     → ChatOpenAI
     """
     if _is_anthropic_url(base_url) and auth_type == "api_key":
@@ -50,6 +60,8 @@ def _build_llm(model: str, api_key: str, base_url: str, auth_type: str = "api_ke
             timeout=300.0,
             max_retries=2,
         )
+    if _is_ollama_url(base_url):
+        return _build_ollama_llm(model)
     return ChatOpenAI(
         model=model,
         api_key=api_key,
@@ -182,6 +194,10 @@ class LangChainService:
         self.llm = _build_llm(model=model, api_key=api_key, base_url=base_url, auth_type=auth_type)
         logger.info(f"LangChainService LLM reloaded: model={model}")
 
+    async def _route_tools(self, user_message: str, all_tools: list) -> list:
+        """For Ollama: run a fast routing call to select only relevant tool groups."""
+        return await _route_tools_ollama(self.llm, user_message, all_tools)
+
     def _setup_langsmith(self):
         """Configure LangSmith tracing"""
         try:
@@ -281,7 +297,7 @@ class LangChainService:
                     conversation_id, profile.user_id
                 )
                 messages = self.memory_manager.optimize_message_history(
-                    messages, system_prompt=None  # Already included
+                    messages, system_prompt=system_prompt
                 )
 
                 tools = None
@@ -294,6 +310,8 @@ class LangChainService:
                         job_usecases=self.job_usecases,
                         client_workspace=client_workspace,
                     )
+                    if _is_ollama_url(self.config.base_url):
+                        tools = await self._route_tools(question, tools)
                     llm_with_tools = self.llm.bind_tools(tools)
                     logger.debug(f"Bound {len(tools)} tools to LLM")
                 else:
@@ -360,7 +378,7 @@ class LangChainService:
                     current_question=question,
                 )
                 thread_id = self.memory_manager.create_thread_id(conversation_id, profile.user_id)
-                messages = self.memory_manager.optimize_message_history(messages, system_prompt=None)
+                messages = self.memory_manager.optimize_message_history(messages, system_prompt=system_prompt)
 
                 shell_output_callback = None
                 if shell_output_queue is not None:
@@ -464,6 +482,8 @@ class LangChainService:
                         plan_mode=plan_mode,
                         pty_callback=pty_callback,
                     )
+                    if _is_ollama_url(self.config.base_url):
+                        tools = await self._route_tools(question, tools)
                     llm_with_tools = self.llm.bind_tools(tools)
 
                 accumulated_chunks = []
@@ -568,6 +588,14 @@ class LangChainService:
                 tool_name = tool_call.get("name", "unknown")
                 tool_args = tool_call.get("args", {})
                 tool_id = tool_call.get("id", "unknown")
+
+                # Resolve tool name aliases and normalize args for Ollama
+                resolved_name = _resolve_tool_name(tool_name)
+                if resolved_name != tool_name:
+                    logger.info(f"Tool alias: {tool_name} → {resolved_name}")
+                    tool_name = resolved_name
+                tool_args = _normalize_tool_args(tool_name, tool_args)
+
                 logger.info(f"Executing tool: {tool_name} with args: {tool_args}")
 
                 tool_result = f"Tool {tool_name} not found"

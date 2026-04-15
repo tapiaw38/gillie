@@ -104,7 +104,7 @@ class ConversationMemoryManager:
         if system_prompt:
             optimized.append(SystemMessage(content=system_prompt))
 
-        history = messages
+        history = [m for m in messages if not isinstance(m, SystemMessage)]
         if len(history) > self.max_messages:
             logger.info(
                 f"Optimizing message history: {len(history)} -> {self.max_messages} messages"
