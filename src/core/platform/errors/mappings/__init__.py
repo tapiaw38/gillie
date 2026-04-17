@@ -49,6 +49,7 @@ __all__ = [
     "ProfileIntegrationCreateError",
     "ProfileIntegrationUpdateError",
     "ProfileIntegrationNotFoundError",
+    "ProfileProviderUnknownError",
 
     # Conversation errors
     "ConversationCreateQueryError",

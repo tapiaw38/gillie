@@ -107,6 +107,41 @@ def _check_installed(dep: dict) -> bool:
     return True  # can't check, assume ok
 
 
+def _resolve_pip() -> list[str]:
+    """
+    Return a pip invocation that will actually work.
+
+    Priority:
+    1. Already inside a venv → use current interpreter
+    2. Project .venv exists → use its pip
+    3. Not in a venv on a PEP-668 system → create .venv first, then use it
+    """
+    import venv as _venv
+
+    project_root = Path(__file__).parents[2]
+    venv_dir = project_root / ".venv"
+    pip_bin = venv_dir / "bin" / "pip"
+
+    if sys.prefix != sys.base_prefix:
+        return [sys.executable, "-m", "pip"]
+
+    if pip_bin.exists():
+        return [str(pip_bin)]
+
+    probe = subprocess.run(
+        [sys.executable, "-m", "pip", "install", "--dry-run", "--quiet", "pip"],
+        capture_output=True,
+    )
+    if probe.returncode == 0:
+        return [sys.executable, "-m", "pip"]
+
+    console.print("[yellow]⚠[/yellow]  System pip is externally managed (PEP 668).")
+    console.print(f"[cyan]Creating[/cyan] virtual environment at [bold]{venv_dir}[/bold]...")
+    _venv.create(str(venv_dir), with_pip=True, clear=False)
+    console.print(f"[green]✓[/green] venv created. Activate it anytime with: [bold]source {venv_dir}/bin/activate[/bold]")
+    return [str(pip_bin)]
+
+
 @app.callback(invoke_without_command=True)
 def install(
     package: str = typer.Argument(None, help="Optional: install a specific package instead of requirements.txt"),
@@ -127,8 +162,7 @@ def install(
         _install_system_deps()
         return
 
-    pip = [sys.executable, "-m", "pip", "install"]
-
+    pip = _resolve_pip() + ["install"]
     if upgrade:
         pip.append("--upgrade")
 

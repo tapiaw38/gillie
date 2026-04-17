@@ -18,7 +18,7 @@ from src.core.platform.config.service import (
     _PROVIDER_PRESETS,
     get_available_providers,
 )
-from cli.config.db import update_provider, save_custom_provider, get_provider_data
+from cli.config.db import update_provider, save_custom_provider, delete_custom_provider, get_provider_data
 
 app = typer.Typer(help="Manage AI provider (DeepSeek, OpenRouter, Anthropic, OpenAI, etc.)")
 vision_app = typer.Typer(help="Configure vision AI provider for image description")
@@ -327,6 +327,128 @@ def provider_add(
     console.print(f"  Model    : {model}")
     console.print()
     console.print(f"[dim]Run [bold]gillie provider use {name}[/bold] to activate it.[/dim]")
+    console.print()
+
+
+@app.command("edit")
+def provider_edit(
+    name: Optional[str] = typer.Argument(None, help="Custom provider name to edit"),
+):
+    """Edit a custom provider (base_url, model, auth_type, api_key)."""
+    from InquirerPy import inquirer as _inquirer
+    from cli.config.manager import config_exists
+
+    if not config_exists():
+        console.print("[red]Not initialized.[/red] Run [bold cyan]gillie init[/bold cyan] first.")
+        raise typer.Exit(1)
+
+    profile_data = get_provider_data()
+    custom = profile_data.get("custom_providers") or {}
+
+    if not custom:
+        console.print("[yellow]No custom providers found.[/yellow] Add one with [bold cyan]gillie provider add[/bold cyan].")
+        raise typer.Exit(0)
+
+    if name is None:
+        try:
+            name = _inquirer.select(
+                message="Select provider to edit:",
+                choices=list(custom.keys()),
+                pointer="❯",
+                qmark="",
+            ).execute()
+        except KeyboardInterrupt:
+            raise typer.Exit(0)
+
+    if name not in custom:
+        console.print(f"[red]Custom provider not found:[/red] {name}")
+        raise typer.Exit(1)
+
+    current = custom[name]
+    console.print(f"\n[dim]Editing [bold]{name}[/bold] — press Enter to keep current value[/dim]\n")
+
+    new_base_url = typer.prompt("Base URL", default=current.get("base_url", ""))
+    new_model = typer.prompt("Model", default=current.get("model", ""))
+    new_auth_type = typer.prompt("Auth type (none | api_key | bearer)", default=current.get("auth_type", "api_key"))
+
+    provider_keys = profile_data.get("provider_keys") or {}
+    current_key = provider_keys.get(name, current.get("api_key", ""))
+    if new_auth_type == "api_key":
+        masked = (current_key[:8] + "..." + current_key[-4:]) if len(current_key) > 12 else current_key
+        hint = f" [{masked}]" if masked else ""
+        new_key = typer.prompt(f"API key{hint} (Enter to keep)", default=current_key, hide_input=True)
+    else:
+        new_key = current_key
+
+    save_custom_provider(
+        name=name,
+        base_url=new_base_url,
+        model=new_model,
+        auth_type=new_auth_type,
+        api_key=new_key,
+    )
+
+    console.print(f"\n[green]Provider[/green] [bold cyan]{name}[/bold cyan] [green]updated.[/green]")
+    console.print(f"  Base URL : {new_base_url}")
+    console.print(f"  Model    : {new_model}")
+    console.print()
+    _restart_service_if_running()
+
+
+@app.command("delete")
+def provider_delete(
+    name: Optional[str] = typer.Argument(None, help="Custom provider name to delete"),
+    yes: bool = typer.Option(False, "--yes", "-y", help="Skip confirmation prompt"),
+):
+    """Delete a custom provider."""
+    from InquirerPy import inquirer as _inquirer
+    from cli.config.manager import config_exists
+
+    if not config_exists():
+        console.print("[red]Not initialized.[/red] Run [bold cyan]gillie init[/bold cyan] first.")
+        raise typer.Exit(1)
+
+    profile_data = get_provider_data()
+    custom = profile_data.get("custom_providers") or {}
+
+    if not custom:
+        console.print("[yellow]No custom providers found.[/yellow]")
+        raise typer.Exit(0)
+
+    if name is None:
+        try:
+            name = _inquirer.select(
+                message="Select provider to delete:",
+                choices=list(custom.keys()),
+                pointer="❯",
+                qmark="",
+            ).execute()
+        except KeyboardInterrupt:
+            raise typer.Exit(0)
+
+    if name not in custom:
+        console.print(f"[red]Custom provider not found:[/red] {name}")
+        raise typer.Exit(1)
+
+    if not yes:
+        try:
+            confirmed = _inquirer.confirm(
+                message=f"Delete provider '{name}'?",
+                default=False,
+            ).execute()
+        except KeyboardInterrupt:
+            raise typer.Exit(0)
+        if not confirmed:
+            console.print("[dim]Cancelled.[/dim]")
+            raise typer.Exit(0)
+
+    delete_custom_provider(name)
+
+    active = profile_data.get("active_provider", "")
+    if active == name:
+        console.print(f"[yellow]⚠[/yellow]  Deleted the active provider. Run [bold cyan]gillie provider use[/bold cyan] to switch.")
+
+    console.print(f"[green]Provider[/green] [bold cyan]{name}[/bold cyan] [green]deleted.[/green]")
     console.print()
 
 

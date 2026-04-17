@@ -64,6 +64,12 @@ ProfileUpdateValidationError = ErrorDetails(
     message="invalid update data"
 )
 
+ProfileProviderUnknownError = ErrorDetails(
+    internal_code="profile:provider:unknown",
+    status_code=400,
+    message="unknown provider"
+)
+
 # Profile Delete Errors
 ProfileDeleteQueryError = ErrorDetails(
     internal_code="profile:delete:query-error",

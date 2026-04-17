@@ -96,6 +96,30 @@ def save_custom_provider(
         return False
 
 
+def delete_custom_provider(name: str) -> bool:
+    """Remove a custom provider entry from the profile."""
+    user_id = _get_user_id()
+    if not user_id:
+        return False
+
+    col = _get_profiles_collection()
+    if col is None:
+        return False
+
+    try:
+        result = col.update_one(
+            {"user_id": user_id},
+            {
+                "$unset": {f"custom_providers.{name}": "", f"provider_keys.{name}": ""},
+                "$set": {"updated_at": datetime.now(timezone.utc)},
+            },
+        )
+        return result.matched_count > 0
+    except Exception as e:
+        logger.warning(f"Could not delete custom provider from MongoDB: {e}")
+        return False
+
+
 def get_provider_data() -> Dict[str, Any]:
     """Return provider_keys and custom_providers from the profile."""
     user_id = _get_user_id()

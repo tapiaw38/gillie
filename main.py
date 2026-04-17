@@ -211,7 +211,7 @@ neonize_integration = NeonizeIntegration(
 )
 
 
-routes_manager = RoutesManager(app, usecases, config_service, neonize_integration=neonize_integration, scheduler=scheduler, openai_integration=integrations.openai)
+routes_manager = RoutesManager(app, usecases, config_service, neonize_integration=neonize_integration, scheduler=scheduler)
 routes_manager.include_routes()
 
 app.add_middleware(SingleUserMiddleware, user_id=user_id, profile_client=profiles_client)
