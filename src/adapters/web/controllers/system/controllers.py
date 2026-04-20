@@ -1,10 +1,12 @@
 from fastapi import APIRouter, status, HTTPException, Request, Depends
 from pydantic import BaseModel
-from typing import Optional
+from typing import Any, Optional
+import logging
 from src.core.use_cases.use_cases import Usecases
 from src.adapters.web.dependencies import get_usecases
 
 router = APIRouter(prefix="/system", tags=["system"])
+logger = logging.getLogger(__name__)
 
 
 class ProviderInput(BaseModel):
@@ -60,7 +62,13 @@ async def add_provider(
 
 class CompleteInput(BaseModel):
     prefix: str
-    context: str = ""
+    context: Any = ""
+
+
+class InlineAssistInput(BaseModel):
+    command: str
+    context: Any = ""
+    exit_code: Optional[int] = None
 
 
 @router.post("/complete", status_code=status.HTTP_200_OK)
@@ -68,8 +76,32 @@ async def shell_complete(
     body: CompleteInput,
     usecases: Usecases = Depends(get_usecases),
 ):
+    logger.info(
+        "[system.complete] prefix=%r context_type=%s",
+        body.prefix,
+        type(body.context).__name__,
+    )
     suggestion = await usecases.system.shell_complete_usecase.execute(
         prefix=body.prefix,
         terminal_context=body.context,
     )
     return {"suggestion": suggestion}
+
+
+@router.post("/inline-assist", status_code=status.HTTP_200_OK)
+async def shell_inline_assist(
+    body: InlineAssistInput,
+    usecases: Usecases = Depends(get_usecases),
+):
+    logger.info(
+        "[system.inline_assist] command=%r exit_code=%r context_type=%s",
+        body.command,
+        body.exit_code,
+        type(body.context).__name__,
+    )
+    result = await usecases.system.shell_inline_assist_usecase.execute(
+        command=body.command,
+        terminal_context=body.context,
+        exit_code=body.exit_code,
+    )
+    return result

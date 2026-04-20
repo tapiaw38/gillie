@@ -11,12 +11,15 @@ from src.core.domain import (
 from src.core.use_cases.use_cases import Usecases
 from src.adapters.web.dependencies import get_usecases
 from typing import Optional
+import logging
+from src.core.use_cases.system.terminal_context_formatter import format_terminal_context
 
 
 router = APIRouter(
     prefix="/conversation",
     tags=["Conversation"],
 )
+logger = logging.getLogger(__name__)
 
 @router.post("/", status_code=status.HTTP_201_CREATED)
 async def create_conversation(
@@ -169,12 +172,24 @@ async def submit_pty_result(conversation_id: str, request: Request):  # noqa: AR
 
     Body:
         request_id (str): The UUID from the pty_command SSE event.
-        output     (str): The captured stdout from the PTY.
+        output     (str|dict|list): The captured stdout or structured digest from the PTY.
     """
     from src.core.platform.ai.tools.pty_manager import submit_result
     body = await request.json()
     request_id = body.get("request_id", "")
-    output = str(body.get("output", "") or "")
+    raw_output = body.get("output", "")
+    logger.info(
+        "[conversation.pty_result] request_id=%s output_type=%s",
+        request_id,
+        type(raw_output).__name__,
+    )
+    output = format_terminal_context(raw_output)
+    logger.info(
+        "[conversation.pty_result] request_id=%s normalized_chars=%d preview=%r",
+        request_id,
+        len(output),
+        output[:240],
+    )
     found = submit_result(request_id, output)
     return {"ok": found}
 
