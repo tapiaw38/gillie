@@ -1159,7 +1159,7 @@ import atexit as _atexit
 _atexit.register(_browser_cleanup_sync)
 
 
-def create_langchain_tools(openai_integration, profile, skill_manager=None, store_service=None, job_usecases=None, shell_output_callback=None, client_workspace: str = "", approval_callback=None, plan_mode: bool = False, pty_callback=None) -> List[StructuredTool]:
+def create_langchain_tools(openai_integration, profile, skill_manager=None, store_service=None, job_usecases=None, shell_output_callback=None, client_workspace: str = "", approval_callback=None, plan_mode: bool = False) -> List[StructuredTool]:
     """
     Create LangChain StructuredTool instances with Pydantic validation.
 
@@ -3620,11 +3620,6 @@ If data is not found, say so clearly."""
                 "would_do": f"Run: {command}",
                 "working_dir": working_dir,
             }
-
-        # PTY routing: when a GTerm session is active, delegate to the user's
-        # real PTY (e.g. an SSH session) instead of spawning a local process.
-        if pty_callback is not None:
-            return await pty_callback(command)
 
         resolved_dir, err = _resolve_safe_path(working_dir)
         if err:

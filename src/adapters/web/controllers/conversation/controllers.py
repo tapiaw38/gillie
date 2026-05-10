@@ -12,7 +12,6 @@ from src.core.use_cases.use_cases import Usecases
 from src.adapters.web.dependencies import get_usecases
 from typing import Optional
 import logging
-from src.core.use_cases.system.terminal_context_formatter import format_terminal_context
 
 
 router = APIRouter(
@@ -118,8 +117,6 @@ async def add_message_stream(
     user_id = request.state.user.get("user_id")
     client_workspace = request.headers.get("X-Gillie-Workspace", "")
     plan_mode = request.headers.get("X-Gillie-Mode", "") == "plan"
-    has_pty = request.headers.get("X-OHTerm-Session", "") == "1"
-
     async def event_generator():
         try:
             async for token in usecases.conversation.add_message_usecase.execute_stream(
@@ -128,7 +125,6 @@ async def add_message_stream(
                 user_id=user_id,
                 client_workspace=client_workspace,
                 plan_mode=plan_mode,
-                has_pty=has_pty,
             ):
                 yield f"data: {json.dumps(token)}\n\n"
         except Exception as e:
@@ -161,37 +157,6 @@ async def approve_tool(request: Request):
     found = submit_decision(request_id, approved, feedback)
     return {"ok": found}
 
-
-@router.post("/{conversation_id}/pty-result", status_code=status.HTTP_200_OK)
-async def submit_pty_result(conversation_id: str, request: Request):  # noqa: ARG001
-    """Receive PTY command output from a OHTerm session.
-
-    OHTerm sends this after capturing the output of a command it ran in the
-    active PTY on behalf of the AI. The waiting LLM tool coroutine is
-    unblocked with the captured output.
-
-    Body:
-        request_id (str): The UUID from the pty_command SSE event.
-        output     (str|dict|list): The captured stdout or structured digest from the PTY.
-    """
-    from src.core.platform.ai.tools.pty_manager import submit_result
-    body = await request.json()
-    request_id = body.get("request_id", "")
-    raw_output = body.get("output", "")
-    logger.info(
-        "[conversation.pty_result] request_id=%s output_type=%s",
-        request_id,
-        type(raw_output).__name__,
-    )
-    output = format_terminal_context(raw_output)
-    logger.info(
-        "[conversation.pty_result] request_id=%s normalized_chars=%d preview=%r",
-        request_id,
-        len(output),
-        output[:240],
-    )
-    found = submit_result(request_id, output)
-    return {"ok": found}
 
 
 @router.post("/{conversation_id}/compact", status_code=status.HTTP_200_OK)
