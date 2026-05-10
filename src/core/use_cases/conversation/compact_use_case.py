@@ -18,7 +18,7 @@ class CompactConversationUseCase:
     async def execute(self, conversation_id: str, user_id: str) -> dict:
         """Force-compact a conversation immediately, regardless of message count."""
         context = self.context_factory()
-        conversation = self._get_and_validate(conversation_id, user_id, context)
+        conversation = await self._get_and_validate(conversation_id, user_id, context)
 
         keep_recent = int(os.environ.get("COMPACTION_KEEP_RECENT", "20"))
         messages_to_summarize = (
@@ -42,7 +42,7 @@ class CompactConversationUseCase:
         )
         recent = conversation.messages[-keep_recent:] if len(conversation.messages) > keep_recent else []
         conversation.messages = [summary_message] + recent
-        context.repositories.conversation.update_messages_by_id(conversation_id, conversation.messages)
+        await context.repositories.conversation.update_messages_by_id(conversation_id, conversation.messages)
 
         logger.info(f"Manual compaction: {len(messages_to_summarize)} messages → 1 summary")
         return {"compacted": True, "summarized": len(messages_to_summarize)}
@@ -72,7 +72,7 @@ class CompactConversationUseCase:
             created_at=datetime.now(timezone.utc),
         )
         conversation.messages = [summary_message] + recent_messages
-        context.repositories.conversation.update_messages_by_id(conversation_id, conversation.messages)
+        await context.repositories.conversation.update_messages_by_id(conversation_id, conversation.messages)
 
         logger.info(
             f"Conversation {conversation_id} compacted: "
@@ -113,8 +113,8 @@ class CompactConversationUseCase:
             logger.error(f"Failed to generate conversation summary: {e}")
             return ""
 
-    def _get_and_validate(self, conversation_id: str, user_id: str, context):
-        conversation = context.repositories.conversation.find_by_id(conversation_id)
+    async def _get_and_validate(self, conversation_id: str, user_id: str, context):
+        conversation = await context.repositories.conversation.find_by_id(conversation_id)
         if not conversation:
             raise NewApplicationError(ConversationGetNotFoundError)
         if user_id != conversation.profile.user_id:

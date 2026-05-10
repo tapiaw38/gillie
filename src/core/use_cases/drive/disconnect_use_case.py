@@ -11,9 +11,9 @@ class DisconnectUseCase:
     def __init__(self, context_factory: Factory):
         self.context_factory = context_factory
 
-    def execute(self, user_id: str) -> None:
+    async def execute(self, user_id: str) -> None:
         context = self.context_factory()
-        profile = context.repositories.profile.find_by_user_id(user_id)
+        profile = await context.repositories.profile.find_by_user_id(user_id)
         if not profile:
             return
         now = datetime.now(timezone.utc)
@@ -22,5 +22,5 @@ class DisconnectUseCase:
             if i.name == INTEGRATION_NAME else i
             for i in (profile.integrations or [])
         ]
-        context.repositories.profile.update_integrations(user_id, updated)
+        await context.repositories.profile.update_integrations(user_id, updated)
         logger.info(f"Google Drive integration disconnected for user_id={user_id}")

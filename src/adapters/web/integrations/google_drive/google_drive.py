@@ -26,10 +26,10 @@ class GoogleDriveIntegration:
         self.fallback_client = fallback_client
         self._pending_verifiers: Dict[str, str] = {}  # user_id -> code_verifier (PKCE)
 
-    def _get_client(self) -> GoogleDriveClient:
+    async def _get_client(self) -> GoogleDriveClient:
         """Load credentials from DB or fall back to env-var client."""
         if self.repository:
-            creds = self.repository.find_credentials()
+            creds = await self.repository.find_credentials()
             if creds:
                 return GoogleDriveClient(
                     client_id=creds.client_id,
@@ -43,17 +43,17 @@ class GoogleDriveIntegration:
             "Save credentials first via POST /api/v1/drive/credentials."
         )
 
-    def get_authorization_url(self, user_id: str) -> str:
+    async def get_authorization_url(self, user_id: str) -> str:
         """Return the Google OAuth2 authorization URL (Drive scope)."""
-        auth_url, code_verifier = self._get_client().get_authorization_url(state=user_id)
+        auth_url, code_verifier = (await self._get_client()).get_authorization_url(state=user_id)
         if code_verifier:
             self._pending_verifiers[user_id] = code_verifier
         return auth_url
 
-    def handle_oauth_callback(self, user_id: str, code: str) -> Dict[str, Any]:
+    async def handle_oauth_callback(self, user_id: str, code: str) -> Dict[str, Any]:
         """Exchange authorization code for tokens, using stored PKCE verifier if available."""
         code_verifier = self._pending_verifiers.pop(user_id, None)
-        tokens = self._get_client().exchange_code(code, code_verifier=code_verifier)
+        tokens = (await self._get_client()).exchange_code(code, code_verifier=code_verifier)
         return {
             "access_token": tokens["access_token"],
             "refresh_token": tokens["refresh_token"],
@@ -61,7 +61,7 @@ class GoogleDriveIntegration:
             "scopes": tokens["scopes"],
         }
 
-    def refresh_if_needed(self, config: Dict[str, Any]) -> Dict[str, Any]:
+    async def refresh_if_needed(self, config: Dict[str, Any]) -> Dict[str, Any]:
         """Check token expiry. If expired, refresh and return updated config dict."""
         expiry_raw = config.get("token_expiry")
         if not expiry_raw:
@@ -82,14 +82,14 @@ class GoogleDriveIntegration:
         if expiry > now:
             return config  # still valid
 
-        refreshed = self._get_client().refresh_access_token(config["refresh_token"])
+        refreshed = (await self._get_client()).refresh_access_token(config["refresh_token"])
         updated = dict(config)
         updated["access_token"] = refreshed["access_token"]
         updated["token_expiry"] = refreshed["expiry"].isoformat() if refreshed["expiry"] else None
         logger.info("Drive access token refreshed")
         return updated
 
-    def build_service(self, config: Dict[str, Any]):
+    async def build_service(self, config: Dict[str, Any]):
         """Build an authenticated Google Drive service from a config dict."""
         expiry_raw = config.get("token_expiry")
         if isinstance(expiry_raw, str):
@@ -100,7 +100,7 @@ class GoogleDriveIntegration:
         else:
             expiry = expiry_raw
 
-        return self._get_client().build_service(
+        return (await self._get_client()).build_service(
             access_token=config["access_token"],
             refresh_token=config["refresh_token"],
             expiry=expiry,

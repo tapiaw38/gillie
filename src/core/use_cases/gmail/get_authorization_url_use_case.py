@@ -11,10 +11,10 @@ class GetAuthorizationUrlUseCase:
     def __init__(self, context_factory: Factory):
         self.context_factory = context_factory
 
-    def execute(self, user_id: str) -> str:
+    async def execute(self, user_id: str) -> str:
         try:
             context = self.context_factory()
-            auth_url = context.integrations.gmail.get_authorization_url(user_id)
+            auth_url = await context.integrations.gmail.get_authorization_url(user_id)
             if not auth_url:
                 raise NewApplicationError(GmailOAuthError)
             return auth_url

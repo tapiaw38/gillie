@@ -12,10 +12,10 @@ class FindByUserIdUseCase:
     def __init__(self, context_factory: Factory):
         self.context_factory = context_factory
 
-    def execute(self, user_id: str):
+    async def execute(self, user_id: str):
         try:
             context = self.context_factory()
-            profile = context.repositories.profile.find_by_user_id(user_id)
+            profile = await context.repositories.profile.find_by_user_id(user_id)
             if not profile:
                 raise NewApplicationError(ProfileGetNotFoundError)
             return ProfileOutput.from_output(profile)

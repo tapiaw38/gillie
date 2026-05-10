@@ -18,13 +18,13 @@ class RunJobUseCase:
 
     async def execute(self, job_id: str) -> JobRunOutput:
         context = self.context_factory()
-        job = context.repositories.job.find_by_id(job_id)
+        job = await context.repositories.job.find_by_id(job_id)
         if not job:
             raise NewApplicationError(JobGetNotFoundError)
 
         job.status = "running"
         job.updated_at = datetime.now(timezone.utc)
-        context.repositories.job.update(job)
+        await context.repositories.job.update(job)
 
         output = ""
         try:
@@ -35,7 +35,7 @@ class RunJobUseCase:
             job.last_run_at = datetime.now(timezone.utc)
             job.last_result = str(e)[:500]
             job.updated_at = datetime.now(timezone.utc)
-            context.repositories.job.update(job)
+            await context.repositories.job.update(job)
             return JobRunOutput(status="failed", result=str(e)[:500])
 
         formatted_message = job.message_template.replace("{{output}}", output)
@@ -48,14 +48,14 @@ class RunJobUseCase:
             job.last_run_at = datetime.now(timezone.utc)
             job.last_result = f"Source OK, destination failed: {e}"[:500]
             job.updated_at = datetime.now(timezone.utc)
-            context.repositories.job.update(job)
+            await context.repositories.job.update(job)
             return JobRunOutput(status="failed", result=job.last_result)
 
         job.status = "idle"
         job.last_run_at = datetime.now(timezone.utc)
         job.last_result = output[:500]
         job.updated_at = datetime.now(timezone.utc)
-        context.repositories.job.update(job)
+        await context.repositories.job.update(job)
 
         return JobRunOutput(status="success", result=output[:500])
 
@@ -112,7 +112,7 @@ class RunJobUseCase:
                 return text[:2000]
 
     async def _run_db_query(self, params: dict, profile_id: str, context) -> str:
-        profile = context.repositories.profile.find_by_user_id(profile_id)
+        profile = await context.repositories.profile.find_by_user_id(profile_id)
         if not profile:
             raise ValueError(f"Profile not found for profile_id={profile_id}")
 
@@ -151,7 +151,7 @@ class RunJobUseCase:
         if dest_type == "none":
             return
 
-        profile = context.repositories.profile.find_by_user_id(job.profile_id)
+        profile = await context.repositories.profile.find_by_user_id(job.profile_id)
         if not profile:
             logger.warning(f"[job:{job.id}] Profile not found, skipping destination delivery")
             return

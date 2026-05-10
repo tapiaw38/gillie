@@ -24,7 +24,7 @@ class FindByUserIdUseCase:
         """
         self.context_factory = context_factory
 
-    def execute(self, user_id: str, include_sandbox: bool = False):
+    async def execute(self, user_id: str, include_sandbox: bool = False):
         """
         Executes the find by user ID workflow.
 
@@ -37,7 +37,7 @@ class FindByUserIdUseCase:
             ConversationListOutput with matching conversations
         """
         context = self.context_factory()
-        conversations = context.repositories.conversation.find_user_id(
+        conversations = await context.repositories.conversation.find_user_id(
             user_id, include_sandbox
         )
         return ConversationListOutput.from_output(conversations)

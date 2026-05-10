@@ -3,15 +3,17 @@ import { ref, onMounted } from 'vue'
 import Message from 'primevue/message'
 import InlineMessage from 'primevue/inlinemessage'
 import Button from 'primevue/button'
+import { useStorage } from '@/composables/useStorage'
 import { useI18n } from 'vue-i18n'
 
 const { t } = useI18n()
+const { getItem, setItem } = useStorage()
 
 const STORAGE_KEY = 'sandbox-banner-closed'
 const isBannerVisible = ref(true)
 
 onMounted(() => {
-  const isClosed = localStorage.getItem(STORAGE_KEY)
+  const isClosed = getItem(STORAGE_KEY)
   if (isClosed === 'true') {
     isBannerVisible.value = false
   }
@@ -19,7 +21,7 @@ onMounted(() => {
 
 const closeBanner = () => {
   isBannerVisible.value = false
-  localStorage.setItem(STORAGE_KEY, 'true')
+  setItem(STORAGE_KEY, 'true')
 }
 </script>
 

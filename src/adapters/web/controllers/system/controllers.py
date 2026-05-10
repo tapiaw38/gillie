@@ -2,6 +2,7 @@ from fastapi import APIRouter, status, HTTPException, Request, Depends
 from pydantic import BaseModel
 from typing import Any, Optional
 import logging
+from starlette.concurrency import run_in_threadpool
 from src.core.use_cases.use_cases import Usecases
 from src.adapters.web.dependencies import get_usecases
 
@@ -29,10 +30,11 @@ async def set_provider(
     usecases: Usecases = Depends(get_usecases),
 ):
     user_id = request.state.user.get("user_id", "")
-    result = usecases.profile.update_provider_usecase.execute(
-        user_id=user_id,
-        provider_name=body.provider,
-        api_key=body.api_key or "",
+    result = await run_in_threadpool(
+        usecases.profile.update_provider_usecase.execute,
+        user_id,
+        body.provider,
+        body.api_key or "",
     )
     return {"data": result}
 
@@ -48,13 +50,14 @@ async def add_provider(
 
     user_id = request.state.user.get("user_id", "")
     if user_id:
-        usecases.profile.update_provider_usecase.save_custom(
-            user_id=user_id,
-            name=body.name,
-            base_url=body.base_url,
-            model=body.model,
-            auth_type=body.auth_type,
-            api_key=body.api_key or "",
+        await run_in_threadpool(
+            usecases.profile.update_provider_usecase.save_custom,
+            user_id,
+            body.name,
+            body.base_url,
+            body.model,
+            body.auth_type,
+            body.api_key or "",
         )
 
     return {"data": {"name": body.name, "model": body.model}}

@@ -15,7 +15,7 @@ class ChangeStatusUseCase:
     def __init__(self, context_factory: Factory):
         self.context_factory = context_factory
 
-    def execute(self, user_id: str, status: bool):
+    async def execute(self, user_id: str, status: bool):
         try:
             context = self.context_factory()
             updated_profile = Profile(
@@ -23,19 +23,19 @@ class ChangeStatusUseCase:
                 is_active=status,
             )
 
-            search_profile = context.repositories.profile.find_by_user_id(
+            search_profile = await context.repositories.profile.find_by_user_id(
                 user_id
             )
             if not search_profile:
                 raise NewApplicationError(ProfileGetNotFoundError)
 
-            profile_updated_id = context.repositories.profile.update(
+            profile_updated_id = await context.repositories.profile.update(
                 search_profile.id, updated_profile
             )
             if not profile_updated_id:
                 raise NewApplicationError(ProfileUpdateNotFoundError)
 
-            profile_updated = context.repositories.profile.find_by_id(
+            profile_updated = await context.repositories.profile.find_by_id(
                 profile_updated_id
             )
             if not profile_updated:

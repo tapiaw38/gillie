@@ -9,9 +9,8 @@ from src.schemas import (
     MessageInput,
 )
 from src.core.domain import SenderEnum
-from typing import Dict, Any, List, Deque, Optional
+from typing import Dict, Any, Deque, Optional
 import logging
-import os
 import json
 from collections import deque
 from datetime import datetime
@@ -73,7 +72,7 @@ async def test_send_message(
     try:
         logger.info(f"Test send request to {phone_number}: {message}")
 
-        profile = usecases.profile.find_with_active_whatsapp_integration_usecase.execute()
+        profile = await usecases.profile.find_with_active_whatsapp_integration_usecase.execute()
 
         if not profile:
             return JSONResponse(
@@ -173,9 +172,7 @@ async def process_external_message(
         if request.conversation_id:
             # Verify the conversation exists
             try:
-                conversation = usecases.conversation.find_by_id_usecase.execute(
-                    request.conversation_id
-                )
+                conversation = await usecases.conversation.find_by_id_usecase.execute(request.conversation_id)
                 conversation_id = request.conversation_id
                 logger.info(
                     f"Using existing conversation: {conversation_id}"
@@ -189,9 +186,7 @@ async def process_external_message(
                     raise
 
         if not conversation_id:
-            conversation_list = usecases.conversation.find_by_user_id_usecase.execute(
-                request.user_id
-            )
+            conversation_list = await usecases.conversation.find_by_user_id_usecase.execute(request.user_id)
 
             for conversation_data in conversation_list.data:
                 if conversation_title == conversation_data.title:
@@ -208,9 +203,7 @@ async def process_external_message(
                 title=conversation_title
             )
 
-            new_conversation = usecases.conversation.create_usecase.execute(
-                conversation_input, request.user_id
-            )
+            new_conversation = await usecases.conversation.create_usecase.execute(conversation_input, request.user_id)
 
             conversation_id = new_conversation.data.id
             logger.info(f"Created new conversation: {conversation_id}")
@@ -235,9 +228,7 @@ async def process_external_message(
 
         logger.info("User message added successfully")
 
-        updated_conversation = usecases.conversation.find_by_id_usecase.execute(
-            conversation_id
-        )
+        updated_conversation = await usecases.conversation.find_by_id_usecase.execute(conversation_id)
 
         assistant_response = ""
 
@@ -414,10 +405,13 @@ async def whatsapp_webhook(
                 logger.info(
                     "Looking for a profile with any active WhatsApp integration"
                 )
-                profile = usecases.profile.find_with_active_whatsapp_integration_usecase.execute()
+                profile = await run_in_threadpool(
+                    usecases.profile.find_with_active_whatsapp_integration_usecase.execute,
+                )
             else:
-                profile = usecases.profile.find_by_whatsapp_business_id_usecase.execute(
-                    business_account_id
+                profile = await run_in_threadpool(
+                    usecases.profile.find_by_whatsapp_business_id_usecase.execute,
+                    business_account_id,
                 )
 
             if not profile:
@@ -425,7 +419,9 @@ async def whatsapp_webhook(
                     logger.warning(
                         f"No profile found with business_account_id: {business_account_id}, searching for profiles with active WhatsApp"
                     )
-                    profile = usecases.profile.find_with_active_whatsapp_integration_usecase.execute()
+                    profile = await run_in_threadpool(
+                        usecases.profile.find_with_active_whatsapp_integration_usecase.execute,
+                    )
 
                 if not profile:
                     logger.warning(

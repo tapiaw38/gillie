@@ -35,17 +35,17 @@ class AddMessageUseCase:
         client_workspace: str = "",
     ) -> list[Message]:
         context = self.context_factory()
-        profile = context.repositories.profile.find_by_user_id(user_id)
+        profile = await context.repositories.profile.find_by_user_id(user_id)
 
         enhanced_content = await self._process_voice_content(message, profile, context)
 
         if message.voice_content and not enhanced_content.strip():
             logger.warning("Voice content provided but transcription returned no text — skipping")
-            conversation = self._get_and_validate_conversation(conversation_id, user_id, context)
+            conversation = await self._get_and_validate_conversation(conversation_id, user_id, context)
             return MessageListOutput.from_output(conversation.messages)
 
         user_message = self._create_user_message(enhanced_content, sender)
-        conversation = self._get_and_validate_conversation(conversation_id, user_id, context)
+        conversation = await self._get_and_validate_conversation(conversation_id, user_id, context)
 
         compact_uc = CompactConversationUseCase(self.context_factory)
         await compact_uc.compact_if_needed(conversation, conversation_id, context)
@@ -86,7 +86,7 @@ class AddMessageUseCase:
             assistant_message.content = f"{ai_response_text}\n\n{formatted_images}"
 
         self._add_message_to_conversation(conversation, assistant_message)
-        context.repositories.conversation.update_messages_by_id(conversation_id, conversation.messages)
+        await context.repositories.conversation.update_messages_by_id(conversation_id, conversation.messages)
 
         return MessageListOutput.from_output(conversation.messages)
 
@@ -100,8 +100,8 @@ class AddMessageUseCase:
     ):
         """Streaming variant for CLI. Yields str tokens, shell_output dicts, and audio dicts."""
         context = self.context_factory()
-        profile = context.repositories.profile.find_by_user_id(user_id)
-        conversation = self._get_and_validate_conversation(conversation_id, user_id, context)
+        profile = await context.repositories.profile.find_by_user_id(user_id)
+        conversation = await self._get_and_validate_conversation(conversation_id, user_id, context)
 
         compact_uc = CompactConversationUseCase(self.context_factory)
         compaction_event = await compact_uc.compact_if_needed(conversation, conversation_id, context)
@@ -149,16 +149,16 @@ class AddMessageUseCase:
 
         assistant_message = self._create_assistant_message(content=full_text, audio_url=audio_url)
         self._add_message_to_conversation(conversation, assistant_message)
-        context.repositories.conversation.update_messages_by_id(conversation_id, conversation.messages)
+        await context.repositories.conversation.update_messages_by_id(conversation_id, conversation.messages)
 
-    def _get_and_validate_conversation(self, conversation_id: str, user_id: str, context):
-        conversation = context.repositories.conversation.find_by_id(conversation_id)
+    async def _get_and_validate_conversation(self, conversation_id: str, user_id: str, context):
+        conversation = await context.repositories.conversation.find_by_id(conversation_id)
         if not conversation:
             raise NewApplicationError(ConversationGetNotFoundError)
         if user_id != conversation.profile.user_id:
             raise NewApplicationError(ForbiddenError)
 
-        full_profile = context.repositories.profile.find_by_id(conversation.profile.id)
+        full_profile = await context.repositories.profile.find_by_id(conversation.profile.id)
         if full_profile:
             conversation.profile = full_profile
 

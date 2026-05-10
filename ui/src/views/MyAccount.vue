@@ -4,6 +4,7 @@ import Card from 'primevue/card'
 import Toast from 'primevue/toast'
 import { useAssistant } from '@/composables/useAssistant'
 import { useErrorToast } from '@/composables/useErrorToast'
+import { useClipboard } from '@/composables/useClipboard'
 import LoadingSpinner from '@/components/core/LoadingSpinner/LoadingSpinner.vue'
 import Button from 'primevue/button'
 import DefaultModal from '@/components/core/shared/DefaultModal/DefaultModal.vue'
@@ -15,6 +16,7 @@ import type { ApiKeyParams } from '@/types/assistant.ts'
 import { useI18n } from 'vue-i18n'
 
 const { t } = useI18n()
+const { copyText } = useClipboard()
 
 const { toogleValue: isVisibleAddApiKey } = useToogle(false)
 const { toogleValue: isVisibleRemoveApiKey } = useToogle(false)
@@ -177,8 +179,18 @@ const removeApiKeyHandler = async () => {
   }
 }
 
-const copyApiKey = (apiKey: string) => {
-  navigator.clipboard.writeText(apiKey)
+const copyApiKey = async (apiKey: string) => {
+  const copied = await copyText(apiKey)
+  if (!copied) {
+    toast.add({
+      severity: 'error',
+      summary: t('common.error'),
+      detail: t('common.unknownError'),
+      life: 3000,
+    })
+    return
+  }
+
   toast.add({
     severity: 'success',
     summary: t('myAccount.keyCopied'),

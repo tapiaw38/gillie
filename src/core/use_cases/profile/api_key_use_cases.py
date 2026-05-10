@@ -37,7 +37,7 @@ class AddApiKeyUseCase:
                 created_at=datetime.now(timezone.utc),
             )
 
-            profile = context.repositories.profile.find_by_user_id(user_id)
+            profile = await context.repositories.profile.find_by_user_id(user_id)
             if not profile:
                 raise NewApplicationError(ProfileGetNotFoundError)
 
@@ -49,11 +49,11 @@ class AddApiKeyUseCase:
 
             profile.api_keys.append(new_api_key)
 
-            context.repositories.profile.update_api_keys(
+            await context.repositories.profile.update_api_keys(
                 user_id, profile.api_keys
             )
 
-            context.repositories.conversation.update_profile_by_user_id(
+            await context.repositories.conversation.update_profile_by_user_id(
                 user_id,
                 profile=profile,
             )
@@ -71,20 +71,20 @@ class DeleteApiKeyUseCase:
     async def execute(self, user_id: str, api_key_id: str):
         try:
             context = self.context_factory()
-            profile = context.repositories.profile.find_by_user_id(user_id)
+            profile = await context.repositories.profile.find_by_user_id(user_id)
             if not profile:
                 raise NewApplicationError(ProfileGetNotFoundError)
 
             if profile.api_keys is None or not any(k.id == api_key_id for k in profile.api_keys):
                 raise NewApplicationError(ProfileApiKeyNotFoundError)
 
-            context.repositories.profile.deactivate_api_key(
+            await context.repositories.profile.deactivate_api_key(
                 user_id, api_key_id
             )
 
-            updated_profile = context.repositories.profile.find_by_user_id(user_id)
+            updated_profile = await context.repositories.profile.find_by_user_id(user_id)
 
-            context.repositories.conversation.update_profile_by_user_id(
+            await context.repositories.conversation.update_profile_by_user_id(
                 user_id,
                 profile=updated_profile,
             )

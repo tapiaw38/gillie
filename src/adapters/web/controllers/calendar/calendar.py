@@ -26,7 +26,7 @@ async def get_calendar_credentials(
     usecases: Usecases = Depends(get_usecases),
 ):
     """Get saved Google Calendar OAuth credentials (client_id only, secret never returned)."""
-    return usecases.calendar.get_credentials_usecase.execute() or {}
+    return await usecases.calendar.get_credentials_usecase.execute() or {}
 
 
 @router.post("/credentials", status_code=status.HTTP_200_OK)
@@ -36,10 +36,10 @@ async def set_calendar_credentials(
 ):
     """Save Google OAuth2 app credentials (client_id / client_secret) to MongoDB."""
     redirect_uri = creds.redirect_uri or "http://localhost:8000/api/v1/calendar/oauth/callback"
-    usecases.calendar.set_credentials_usecase.execute(
-        client_id=creds.client_id,
-        client_secret=creds.client_secret,
-        redirect_uri=redirect_uri,
+    await usecases.calendar.set_credentials_usecase.execute(
+        creds.client_id,
+        creds.client_secret,
+        redirect_uri,
     )
     return {"message": "Credentials saved successfully"}
 
@@ -51,7 +51,7 @@ async def get_authorization_url(
 ):
     """Get Google Calendar OAuth authorization URL for the current user."""
     user_id = request.state.user.get("user_id")
-    auth_url = usecases.calendar.get_authorization_url_usecase.execute(user_id)
+    auth_url = await usecases.calendar.get_authorization_url_usecase.execute(user_id)
     return CalendarAuthorizationOutput(
         authorization_url=auth_url,
         user_id=user_id,
@@ -73,7 +73,7 @@ async def oauth_callback(
     Returns an HTML page that closes the popup window.
     """
     user_id = state or request.state.user.get("user_id")
-    usecases.calendar.handle_oauth_callback_usecase.execute(user_id=user_id, code=code)
+    await usecases.calendar.handle_oauth_callback_usecase.execute(user_id, code)
     return HTMLResponse(content="""
 <!DOCTYPE html>
 <html>
@@ -98,7 +98,7 @@ async def check_calendar_status(
 ):
     """Check if the user has an active Google Calendar session."""
     user_id = request.state.user.get("user_id")
-    is_active = usecases.calendar.check_session_status_usecase.execute(user_id)
+    is_active = await usecases.calendar.check_session_status_usecase.execute(user_id)
     return CalendarStatusOutput(
         is_active=is_active,
         user_id=user_id,
@@ -113,7 +113,7 @@ async def disconnect_calendar(
 ):
     """Disconnect (revoke) the Google Calendar OAuth session."""
     user_id = request.state.user.get("user_id")
-    usecases.calendar.disconnect_usecase.execute(user_id)
+    await usecases.calendar.disconnect_usecase.execute(user_id)
 
 
 @router.post("/events", response_model=CalendarEventOutput, status_code=status.HTTP_201_CREATED)
@@ -133,15 +133,15 @@ async def create_calendar_event(
     if event.reminders:
         reminders = [{"method": r.method, "minutes": r.minutes} for r in event.reminders]
 
-    created_event = usecases.calendar.create_event_usecase.execute(
-        user_id=user_id,
-        title=event.title,
-        start_time=event.start_time,
-        end_time=event.end_time,
-        description=event.description,
-        location=event.location,
-        attendees=attendees,
-        reminders=reminders,
+    created_event = await usecases.calendar.create_event_usecase.execute(
+        user_id,
+        event.title,
+        event.start_time,
+        event.end_time,
+        event.description,
+        event.location,
+        attendees,
+        reminders,
     )
 
     return CalendarEventOutput(**created_event)
@@ -158,11 +158,11 @@ async def list_calendar_events(
     """List calendar events for the user."""
     user_id = request.state.user.get("user_id")
 
-    events = usecases.calendar.list_events_usecase.execute(
-        user_id=user_id,
-        start_date=start_date,
-        end_date=end_date,
-        limit=limit,
+    events = await usecases.calendar.list_events_usecase.execute(
+        user_id,
+        start_date,
+        end_date,
+        limit,
     )
 
     event_outputs = [CalendarEventOutput(**e) for e in events]
@@ -179,14 +179,14 @@ async def update_calendar_event(
     """Update an existing calendar event. event_id is the Google Calendar event ID."""
     user_id = request.state.user.get("user_id")
 
-    updated_event = usecases.calendar.update_event_usecase.execute(
-        user_id=user_id,
-        event_id=event_id,
-        title=event.title,
-        start_time=event.start_time,
-        end_time=event.end_time,
-        description=event.description,
-        location=event.location,
+    updated_event = await usecases.calendar.update_event_usecase.execute(
+        user_id,
+        event_id,
+        event.title,
+        event.start_time,
+        event.end_time,
+        event.description,
+        event.location,
     )
 
     return CalendarEventOutput(**updated_event)
@@ -201,9 +201,6 @@ async def delete_calendar_event(
     """Delete a calendar event by its Google Calendar event ID."""
     user_id = request.state.user.get("user_id")
 
-    usecases.calendar.delete_event_usecase.execute(
-        event_id=event_id,
-        user_id=user_id,
-    )
+    await usecases.calendar.delete_event_usecase.execute(user_id, event_id)
 
     return {"message": "Event deleted successfully", "event_id": event_id}

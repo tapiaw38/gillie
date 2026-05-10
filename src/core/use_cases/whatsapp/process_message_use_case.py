@@ -112,7 +112,7 @@ class ProcessWhatsAppMessageUseCase:
                     logger.warning(f"No text content for message {message_id}")
                     continue
 
-                conversation_list = context.repositories.conversation.find_user_id(
+                conversation_list = await context.repositories.conversation.find_user_id(
                     profile.user_id
                 )
 
@@ -124,15 +124,14 @@ class ProcessWhatsAppMessageUseCase:
                         break
 
                 if not conversation_id:
-                    conversation_input = ConversationInput(
-                        title=f"WhatsApp-{sender_phone}"
-                    )
+                    from src.core.use_cases.conversation import CreateUseCase
 
-                    new_conversation = context.repositories.conversation.create(
-                        conversation_input.model_dump(), profile.user_id
+                    create_usecase = CreateUseCase(self.context_factory)
+                    new_conversation = await create_usecase.execute(
+                        ConversationInput(title=f"WhatsApp-{sender_phone}", is_sandbox=False),
+                        profile.user_id,
                     )
-
-                    conversation_id = new_conversation
+                    conversation_id = new_conversation.data.id
 
                 from src.core.use_cases.conversation import AddMessageUseCase
 
@@ -154,7 +153,7 @@ class ProcessWhatsAppMessageUseCase:
                     auth_token=auth_token,
                 )
 
-                updated_conversation = context.repositories.conversation.find_by_id(
+                updated_conversation = await context.repositories.conversation.find_by_id(
                     conversation_id
                 )
 

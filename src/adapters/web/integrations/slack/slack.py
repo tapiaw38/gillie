@@ -172,12 +172,9 @@ class SlackIntegration:
     def verify_signature(self, raw_body: bytes, timestamp: str, signature: str) -> bool:
         """
         Verify a Slack request signature using HMAC-SHA256.
-
-        When signing_secret is empty, verification is skipped and True is returned.
-        This is intentional for local development environments without a secret configured.
         """
-        if not self.signing_secret:
-            return True
+        if not self.signing_secret or not timestamp or not signature:
+            return False
 
         base = f"v0:{timestamp}:{raw_body.decode('utf-8')}"
         computed = "v0=" + hmac.new(

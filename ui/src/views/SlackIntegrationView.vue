@@ -2,6 +2,7 @@
 import type { IntegrationParams, SlackIntegrationConfig } from '@/types/assistant'
 import { onMounted, reactive, computed, watch } from 'vue'
 import { useAssistant } from '@/composables/useAssistant'
+import { useClipboard } from '@/composables/useClipboard'
 import { useErrorToast } from '@/composables/useErrorToast'
 import { useI18n } from 'vue-i18n'
 import Toast from 'primevue/toast'
@@ -21,6 +22,7 @@ const {
 } = useAssistant()
 
 const { t } = useI18n()
+const { copyText } = useClipboard()
 
 const errorWatchers = [
   {
@@ -107,7 +109,10 @@ const webhookUrl = computed(() => `${API_BASE}/api/slack/events`)
 
 const copyWebhookUrl = async () => {
   try {
-    await navigator.clipboard.writeText(webhookUrl.value)
+    const copied = await copyText(webhookUrl.value)
+    if (!copied) {
+      throw new Error('clipboard_unavailable')
+    }
     toast.add({
       severity: 'success',
       summary: t('integrations.copyUrl'),

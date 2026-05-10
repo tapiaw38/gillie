@@ -15,7 +15,7 @@ class UpdateProviderUseCase:
     def __init__(self, context_factory: Factory):
         self.context_factory = context_factory
 
-    def execute(
+    async def execute(
         self,
         user_id: str,
         provider_name: str,
@@ -24,7 +24,7 @@ class UpdateProviderUseCase:
         """Validate provider, persist the selection, and reload the integration."""
         try:
             context = self.context_factory()
-            profile = context.repositories.profile.find_by_user_id(user_id) if user_id else None
+            profile = await context.repositories.profile.find_by_user_id(user_id) if user_id else None
 
             profile_keys = (profile.provider_keys if profile else None) or {}
             profile_custom = (profile.custom_providers if profile else None) or {}
@@ -49,7 +49,7 @@ class UpdateProviderUseCase:
                     provider_keys=provider_keys or None,
                     updated_at=datetime.now(timezone.utc),
                 )
-                context.repositories.profile.update(profile.id, updated)
+                await context.repositories.profile.update(profile.id, updated)
 
             config = context.config_service
             config.openai_config.base_url = preset["base_url"]
@@ -69,7 +69,7 @@ class UpdateProviderUseCase:
         except PyMongoError as e:
             raise NewApplicationError(ProfileUpdateQueryError, e)
 
-    def save_custom(
+    async def save_custom(
         self,
         user_id: str,
         name: str,
@@ -81,7 +81,7 @@ class UpdateProviderUseCase:
         """Add or update a custom provider without changing the active provider."""
         try:
             context = self.context_factory()
-            profile = context.repositories.profile.find_by_user_id(user_id)
+            profile = await context.repositories.profile.find_by_user_id(user_id)
             if not profile:
                 raise NewApplicationError(ProfileUpdateNotFoundError)
 
@@ -103,7 +103,7 @@ class UpdateProviderUseCase:
                 updated_at=datetime.now(timezone.utc),
             )
 
-            context.repositories.profile.update(profile.id, updated)
+            await context.repositories.profile.update(profile.id, updated)
 
         except PyMongoError as e:
             raise NewApplicationError(ProfileUpdateQueryError, e)

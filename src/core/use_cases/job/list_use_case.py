@@ -12,10 +12,10 @@ class ListJobsUseCase:
     def __init__(self, context_factory: Factory):
         self.context_factory = context_factory
 
-    def execute(self, profile_id: str) -> JobListOutput:
+    async def execute(self, profile_id: str) -> JobListOutput:
         try:
             context = self.context_factory()
-            jobs = context.repositories.job.find_all(profile_id)
+            jobs = await context.repositories.job.find_all(profile_id)
             return JobListOutput(data=[JobData.from_domain(j) for j in jobs])
         except Exception as e:
             logger.error(f"Error listing jobs: {e}", exc_info=True)

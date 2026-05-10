@@ -34,25 +34,25 @@ class StartupService:
         self.profile_repository = profile_repository
         self.openai_integration = openai_integration
 
-    def initialize(
+    async def initialize(
         self,
         user_id: str,
         cli_config: Optional["AssistantConfig"] = None,
     ) -> None:
         try:
-            self._ensure_profile(user_id, cli_config)
-            self._sync_provider(user_id, cli_config)
+            await self._ensure_profile(user_id, cli_config)
+            await self._sync_provider(user_id, cli_config)
         except Exception as e:
             logger.warning(f"Startup initialization failed: {e}")
 
 
-    def _ensure_profile(
+    async def _ensure_profile(
         self,
         user_id: str,
         cli_config: Optional["AssistantConfig"],
     ) -> None:
         """Create the profile on first run when using the CLI."""
-        profile = self.profile_repository.find_by_user_id(user_id)
+        profile = await self.profile_repository.find_by_user_id(user_id)
         if profile is None and cli_config:
             from src.schemas import ProfileInput
 
@@ -62,25 +62,25 @@ class StartupService:
                 functions=cli_config.profile.functions,
                 response_language=cli_config.profile.response_language,
             )
-            self.usecases.profile.create_usecase.execute(profile_input, user_id)
+            await self.usecases.profile.create_usecase.execute(profile_input, user_id)
             logger.info(f"Auto-created profile for user_id={user_id}")
 
-    def _sync_provider(
+    async def _sync_provider(
         self,
         user_id: str,
         cli_config: Optional["AssistantConfig"],
     ) -> None:
         """Sync active_provider between profile, config, and the LLM client."""
-        profile = self.profile_repository.find_by_user_id(user_id)
+        profile = await self.profile_repository.find_by_user_id(user_id)
         if profile is None:
             return
 
         if not profile.active_provider:
-            self._write_provider_to_profile(user_id, cli_config)
+            await self._write_provider_to_profile(user_id, cli_config)
         else:
             self._restore_provider_from_profile(profile)
 
-    def _write_provider_to_profile(
+    async def _write_provider_to_profile(
         self,
         user_id: str,
         cli_config: Optional["AssistantConfig"],
@@ -95,9 +95,9 @@ class StartupService:
             return
 
         api_key = self.config_service.openai_config.api_key or ""
-        self.usecases.profile.update_provider_usecase.execute(
+        await self.usecases.profile.update_provider_usecase.execute(
             user_id=user_id,
-            active_provider=active,
+            provider_name=active,
             api_key=api_key,
         )
         logger.info(f"Synced active_provider={active} to profile")

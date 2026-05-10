@@ -29,7 +29,7 @@ async def get_gmail_credentials(
     usecases: Usecases = Depends(get_usecases),
 ):
     """Get saved Gmail OAuth credentials (client_id only, secret never returned)."""
-    return usecases.gmail.get_credentials_usecase.execute() or {}
+    return await usecases.gmail.get_credentials_usecase.execute() or {}
 
 
 @router.post("/credentials", status_code=status.HTTP_200_OK)
@@ -40,10 +40,10 @@ async def set_gmail_credentials(
 ):
     """Save Google OAuth2 app credentials (client_id / client_secret) to MongoDB."""
     redirect_uri = creds.redirect_uri or "http://localhost:8000/api/v1/gmail/oauth/callback"
-    usecases.gmail.set_credentials_usecase.execute(
-        client_id=creds.client_id,
-        client_secret=creds.client_secret,
-        redirect_uri=redirect_uri,
+    await usecases.gmail.set_credentials_usecase.execute(
+        creds.client_id,
+        creds.client_secret,
+        redirect_uri,
     )
     return {"message": "Credentials saved successfully"}
 
@@ -55,7 +55,7 @@ async def get_authorization_url(
 ):
     """Get Gmail OAuth authorization URL for the current user."""
     user_id = request.state.user.get("user_id")
-    auth_url = usecases.gmail.get_authorization_url_usecase.execute(user_id)
+    auth_url = await usecases.gmail.get_authorization_url_usecase.execute(user_id)
     return GmailAuthorizationOutput(
         authorization_url=auth_url,
         user_id=user_id,
@@ -76,7 +76,7 @@ async def oauth_callback(
     Returns an HTML page that closes the popup window.
     """
     user_id = state or request.state.user.get("user_id")
-    usecases.gmail.handle_oauth_callback_usecase.execute(user_id=user_id, code=code)
+    await usecases.gmail.handle_oauth_callback_usecase.execute(user_id, code)
     return HTMLResponse(content="""
 <!DOCTYPE html>
 <html>
@@ -101,7 +101,7 @@ async def check_gmail_status(
 ):
     """Check if the user has an active Gmail session."""
     user_id = request.state.user.get("user_id")
-    is_active = usecases.gmail.check_session_status_usecase.execute(user_id)
+    is_active = await usecases.gmail.check_session_status_usecase.execute(user_id)
     return GmailStatusOutput(
         is_active=is_active,
         user_id=user_id,
@@ -115,7 +115,7 @@ async def disconnect_gmail(
 ):
     """Disconnect (revoke) the Gmail OAuth session."""
     user_id = request.state.user.get("user_id")
-    usecases.gmail.disconnect_usecase.execute(user_id)
+    await usecases.gmail.disconnect_usecase.execute(user_id)
 
 
 @router.get("/emails", response_model=GmailEmailListOutput, status_code=status.HTTP_200_OK)
@@ -129,11 +129,11 @@ async def list_emails(
     """List emails for the current user. Use `label_ids` as a comma-separated string (e.g. INBOX,UNREAD)."""
     user_id = request.state.user.get("user_id")
     parsed_label_ids = [l.strip() for l in label_ids.split(",")] if label_ids else None
-    emails = usecases.gmail.list_emails_usecase.execute(
-        user_id=user_id,
-        query=query,
-        max_results=max_results,
-        label_ids=parsed_label_ids,
+    emails = await usecases.gmail.list_emails_usecase.execute(
+        user_id,
+        query,
+        max_results,
+        parsed_label_ids,
     )
     email_outputs = [GmailEmailOutput(**e) for e in emails]
     return GmailEmailListOutput(data=email_outputs, total=len(email_outputs))
@@ -147,7 +147,7 @@ async def get_email(
 ):
     """Get a single email by its Gmail message ID."""
     user_id = request.state.user.get("user_id")
-    email = usecases.gmail.get_email_usecase.execute(user_id=user_id, message_id=message_id)
+    email = await usecases.gmail.get_email_usecase.execute(user_id, message_id)
     return GmailEmailOutput(**email)
 
 
@@ -159,14 +159,14 @@ async def send_email(
 ):
     """Send a new email."""
     user_id = request.state.user.get("user_id")
-    result = usecases.gmail.send_email_usecase.execute(
-        user_id=user_id,
-        to=email_input.to,
-        subject=email_input.subject,
-        body=email_input.body,
-        body_html=email_input.body_html,
-        cc=email_input.cc,
-        bcc=email_input.bcc,
+    result = await usecases.gmail.send_email_usecase.execute(
+        user_id,
+        email_input.to,
+        email_input.subject,
+        email_input.body,
+        email_input.body_html,
+        email_input.cc,
+        email_input.bcc,
     )
     return result
 
@@ -180,12 +180,7 @@ async def reply_email(
 ):
     """Reply to an existing email thread."""
     user_id = request.state.user.get("user_id")
-    result = usecases.gmail.reply_email_usecase.execute(
-        user_id=user_id,
-        message_id=message_id,
-        body=reply_input.body,
-        body_html=reply_input.body_html,
-    )
+    result = await usecases.gmail.reply_email_usecase.execute(user_id, message_id, reply_input.body, reply_input.body_html)
     return result
 
 
@@ -197,7 +192,7 @@ async def delete_email(
 ):
     """Move an email to Trash."""
     user_id = request.state.user.get("user_id")
-    usecases.gmail.delete_email_usecase.execute(user_id=user_id, message_id=message_id)
+    await usecases.gmail.delete_email_usecase.execute(user_id, message_id)
     return {"message": "Email moved to trash", "message_id": message_id}
 
 
@@ -209,7 +204,7 @@ async def mark_as_read(
 ):
     """Mark an email as read."""
     user_id = request.state.user.get("user_id")
-    usecases.gmail.mark_email_read_usecase.execute(user_id=user_id, message_id=message_id)
+    await usecases.gmail.mark_email_read_usecase.execute(user_id, message_id)
     return {"message": "Email marked as read", "message_id": message_id}
 
 
@@ -221,5 +216,5 @@ async def mark_as_unread(
 ):
     """Mark an email as unread."""
     user_id = request.state.user.get("user_id")
-    usecases.gmail.mark_email_unread_usecase.execute(user_id=user_id, message_id=message_id)
+    await usecases.gmail.mark_email_unread_usecase.execute(user_id, message_id)
     return {"message": "Email marked as unread", "message_id": message_id}

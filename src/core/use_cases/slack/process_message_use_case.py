@@ -81,7 +81,7 @@ class ProcessSlackMessageUseCase:
                     )
                     continue
 
-                conversation_list = context.repositories.conversation.find_user_id(
+                conversation_list = await context.repositories.conversation.find_user_id(
                     profile.user_id
                 )
 
@@ -94,10 +94,14 @@ class ProcessSlackMessageUseCase:
                         break
 
                 if not conversation_id:
-                    conversation_input = ConversationInput(title=conversation_title)
-                    conversation_id = context.repositories.conversation.create(
-                        conversation_input.dict(), profile.user_id
+                    from src.core.use_cases.conversation import CreateUseCase
+
+                    create_usecase = CreateUseCase(self.context_factory)
+                    new_conversation = await create_usecase.execute(
+                        ConversationInput(title=conversation_title, is_sandbox=False),
+                        profile.user_id,
                     )
+                    conversation_id = new_conversation.data.id
 
                 from src.core.use_cases.conversation import AddMessageUseCase
 
@@ -118,7 +122,7 @@ class ProcessSlackMessageUseCase:
                     user_id=profile.user_id,
                 )
 
-                updated_conversation = context.repositories.conversation.find_by_id(
+                updated_conversation = await context.repositories.conversation.find_by_id(
                     conversation_id
                 )
 

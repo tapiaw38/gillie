@@ -6,11 +6,11 @@ class FindAllUseCase:
     def __init__(self, context_factory: Factory):
         self.context_factory = context_factory
 
-    def execute(self) -> List[Profile]:
+    async def execute(self) -> List[Profile]:
         """
         Encuentra todos los perfiles
         """
         context = self.context_factory()
         repository = context.repositories.profile
-        profiles = repository.find_all()
+        profiles = await repository.find_all()
         return profiles

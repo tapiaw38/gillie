@@ -11,7 +11,7 @@ class SetCredentialsUseCase:
     def __init__(self, context_factory: Factory):
         self.context_factory = context_factory
 
-    def execute(self, client_id: str, client_secret: str, redirect_uri: str) -> None:
+    async def execute(self, client_id: str, client_secret: str, redirect_uri: str) -> None:
         try:
             context = self.context_factory()
             creds = CalendarCredentials(
@@ -19,7 +19,7 @@ class SetCredentialsUseCase:
                 client_secret=client_secret,
                 redirect_uri=redirect_uri,
             )
-            context.repositories.calendar.save_credentials(creds)
+            await context.repositories.calendar.save_credentials(creds)
             logger.info("Google Calendar credentials saved to MongoDB")
         except Exception as e:
             logger.error(f"Error saving calendar credentials: {e}", exc_info=True)

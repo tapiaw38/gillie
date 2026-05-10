@@ -13,10 +13,10 @@ class CreateFolderUseCase:
     def __init__(self, context_factory: Factory):
         self.context_factory = context_factory
 
-    def execute(self, user_id: str, name: str, parent_id: Optional[str] = None) -> dict:
+    async def execute(self, user_id: str, name: str, parent_id: Optional[str] = None) -> dict:
         try:
             ctx = self.context_factory()
-            service = get_drive_service(ctx, user_id)
+            service = await get_drive_service(ctx, user_id)
             result = ctx.integrations.google_drive.create_folder(service, name, parent_id)
             return {
                 "id": result.get("id", ""),

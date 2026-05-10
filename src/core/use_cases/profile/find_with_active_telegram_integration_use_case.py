@@ -9,9 +9,9 @@ class FindWithActiveTelegramIntegrationUseCase:
     def __init__(self, context_factory: Factory):
         self.context_factory = context_factory
 
-    def execute(self) -> Optional[Profile]:
+    async def execute(self) -> Optional[Profile]:
         context = self.context_factory()
-        profiles = context.repositories.profile.find_all()
+        profiles = await context.repositories.profile.find_all()
         for profile in profiles:
             if profile.integrations:
                 for integration in profile.integrations:

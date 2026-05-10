@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { onMounted, ref, watch } from 'vue'
+import { useClipboard } from '@/composables/useClipboard'
 import Card from 'primevue/card'
 import Toast from 'primevue/toast'
 import { useToast } from 'primevue/usetoast'
@@ -8,10 +9,14 @@ import Prism from 'prismjs'
 const codeConfigBlock = ref<HTMLElement | null>(null)
 const codeMethodsBlock = ref<HTMLElement | null>(null)
 const toast = useToast()
+const { copyText } = useClipboard()
 
 const copyToClipboard = async (text: string, type: string) => {
   try {
-    await navigator.clipboard.writeText(text)
+    const copied = await copyText(text)
+    if (!copied) {
+      throw new Error('clipboard_unavailable')
+    }
     toast.add({
       severity: 'success',
       summary: 'Código copiado',

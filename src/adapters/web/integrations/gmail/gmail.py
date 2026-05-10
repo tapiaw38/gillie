@@ -14,8 +14,8 @@ class GmailIntegration:
         self._fallback_client = fallback_client
         self._pending_verifiers: Dict[str, str] = {}
 
-    def _get_client(self) -> GoogleGmailClient:
-        creds = self.repository.find_credentials()
+    async def _get_client(self) -> GoogleGmailClient:
+        creds = await self.repository.find_credentials()
         if creds:
             return GoogleGmailClient(
                 client_id=creds.client_id,
@@ -29,15 +29,15 @@ class GmailIntegration:
             "Use POST /api/v1/gmail/credentials to save client_id and client_secret."
         )
 
-    def get_authorization_url(self, user_id: str) -> str:
-        auth_url, code_verifier = self._get_client().get_authorization_url(state=user_id)
+    async def get_authorization_url(self, user_id: str) -> str:
+        auth_url, code_verifier = (await self._get_client()).get_authorization_url(state=user_id)
         if code_verifier:
             self._pending_verifiers[user_id] = code_verifier
         return auth_url
 
-    def handle_oauth_callback(self, user_id: str, code: str) -> GmailSession:
+    async def handle_oauth_callback(self, user_id: str, code: str) -> GmailSession:
         code_verifier = self._pending_verifiers.pop(user_id, None)
-        client = self._get_client()
+        client = await self._get_client()
         tokens = client.exchange_code(code, code_verifier=code_verifier)
         session = GmailSession(
             user_id=user_id,
@@ -58,11 +58,11 @@ class GmailIntegration:
             logger.info(f"Gmail authorized for user_id={user_id}, email={email}")
         except Exception as e:
             logger.warning(f"Could not get Gmail user email for user_id={user_id}: {e}")
-        self.repository.upsert_session(session)
+        await self.repository.upsert_session(session)
         return session
 
-    def check_session_status(self, user_id: str) -> bool:
-        session = self.repository.find_active_session(user_id)
+    async def check_session_status(self, user_id: str) -> bool:
+        session = await self.repository.find_active_session(user_id)
         if not session:
             return False
         now = datetime.now(timezone.utc)
@@ -71,35 +71,35 @@ class GmailIntegration:
             expiry = expiry.replace(tzinfo=timezone.utc)
         return expiry > now
 
-    def _get_service(self, user_id: str):
-        session = self.repository.find_active_session(user_id)
+    async def _get_service(self, user_id: str):
+        session = await self.repository.find_active_session(user_id)
         if not session:
             raise RuntimeError(f"No active Gmail session for user_id={user_id}")
         now = datetime.now(timezone.utc)
         expiry = session.token_expiry
         if expiry.tzinfo is None:
             expiry = expiry.replace(tzinfo=timezone.utc)
-        client = self._get_client()
+        client = await self._get_client()
         if expiry <= now:
             refreshed = client.refresh_access_token(session.refresh_token)
             session.access_token = refreshed["access_token"]
             session.token_expiry = refreshed["expiry"]
-            self.repository.upsert_session(session)
+            await self.repository.upsert_session(session)
         return client.build_service(
             access_token=session.access_token,
             refresh_token=session.refresh_token,
             expiry=session.token_expiry,
         )
 
-    def list_emails(
+    async def list_emails(
         self,
         user_id: str,
         query: str = "",
         max_results: int = 20,
         label_ids: Optional[List[str]] = None,
     ) -> List[Dict[str, Any]]:
-        service = self._get_service(user_id)
-        client = self._get_client()
+        service = await self._get_service(user_id)
+        client = await self._get_client()
         message_refs = client.list_messages(service, query=query, max_results=max_results, label_ids=label_ids)
         result = []
         for ref in message_refs:
@@ -110,13 +110,13 @@ class GmailIntegration:
                 logger.warning(f"Could not fetch Gmail message {ref['id']}: {e}")
         return result
 
-    def get_email(self, user_id: str, message_id: str) -> Dict[str, Any]:
-        service = self._get_service(user_id)
-        client = self._get_client()
+    async def get_email(self, user_id: str, message_id: str) -> Dict[str, Any]:
+        service = await self._get_service(user_id)
+        client = await self._get_client()
         msg = client.get_message(service, message_id)
         return GoogleGmailClient.parse_message(msg)
 
-    def send_email(
+    async def send_email(
         self,
         user_id: str,
         to: str,
@@ -126,8 +126,8 @@ class GmailIntegration:
         cc: Optional[str] = None,
         bcc: Optional[str] = None,
     ) -> Dict[str, Any]:
-        service = self._get_service(user_id)
-        sent = self._get_client().send_message(
+        service = await self._get_service(user_id)
+        sent = (await self._get_client()).send_message(
             service,
             to=to,
             subject=subject,
@@ -138,15 +138,15 @@ class GmailIntegration:
         )
         return {"id": sent.get("id", ""), "thread_id": sent.get("threadId", ""), "status": "sent"}
 
-    def reply_email(
+    async def reply_email(
         self,
         user_id: str,
         message_id: str,
         body: str,
         body_html: Optional[str] = None,
     ) -> Dict[str, Any]:
-        service = self._get_service(user_id)
-        client = self._get_client()
+        service = await self._get_service(user_id)
+        client = await self._get_client()
         original = client.get_message(service, message_id, format="metadata")
         parsed = GoogleGmailClient.parse_message(original)
         thread_id = parsed["thread_id"]
@@ -163,14 +163,14 @@ class GmailIntegration:
         )
         return {"id": sent.get("id", ""), "thread_id": sent.get("threadId", ""), "status": "sent"}
 
-    def delete_email(self, user_id: str, message_id: str) -> None:
-        service = self._get_service(user_id)
-        self._get_client().delete_message(service, message_id)
+    async def delete_email(self, user_id: str, message_id: str) -> None:
+        service = await self._get_service(user_id)
+        (await self._get_client()).delete_message(service, message_id)
 
-    def mark_as_read(self, user_id: str, message_id: str) -> None:
-        service = self._get_service(user_id)
-        self._get_client().mark_as_read(service, message_id)
+    async def mark_as_read(self, user_id: str, message_id: str) -> None:
+        service = await self._get_service(user_id)
+        (await self._get_client()).mark_as_read(service, message_id)
 
-    def mark_as_unread(self, user_id: str, message_id: str) -> None:
-        service = self._get_service(user_id)
-        self._get_client().mark_as_unread(service, message_id)
+    async def mark_as_unread(self, user_id: str, message_id: str) -> None:
+        service = await self._get_service(user_id)
+        (await self._get_client()).mark_as_unread(service, message_id)

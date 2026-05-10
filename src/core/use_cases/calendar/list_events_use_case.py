@@ -11,7 +11,7 @@ class ListEventsUseCase:
     def __init__(self, context_factory: Factory):
         self.context_factory = context_factory
 
-    def execute(
+    async def execute(
         self,
         user_id: str,
         start_date: Optional[str] = None,
@@ -21,7 +21,7 @@ class ListEventsUseCase:
     ) -> List[Dict]:
         try:
             context = self.context_factory()
-            return context.integrations.google_calendar.list_events(
+            return await context.integrations.google_calendar.list_events(
                 user_id=user_id,
                 start_date=start_date,
                 end_date=end_date,

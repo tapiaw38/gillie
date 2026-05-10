@@ -12,10 +12,10 @@ class DownloadFileUseCase:
     def __init__(self, context_factory: Factory):
         self.context_factory = context_factory
 
-    def execute(self, user_id: str, file_id: str) -> dict:
+    async def execute(self, user_id: str, file_id: str) -> dict:
         try:
             ctx = self.context_factory()
-            service = get_drive_service(ctx, user_id)
+            service = await get_drive_service(ctx, user_id)
             meta = ctx.integrations.google_drive.get_file_metadata(service, file_id)
             mime_type = meta.get("mimeType", "")
             file_bytes = ctx.integrations.google_drive.download_file(service, file_id, mime_type)

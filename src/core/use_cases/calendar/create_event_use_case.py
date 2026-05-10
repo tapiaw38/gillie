@@ -11,7 +11,7 @@ class CreateEventUseCase:
     def __init__(self, context_factory: Factory):
         self.context_factory = context_factory
 
-    def execute(
+    async def execute(
         self,
         user_id: str,
         title: str,
@@ -26,7 +26,7 @@ class CreateEventUseCase:
     ) -> Dict:
         try:
             context = self.context_factory()
-            return context.integrations.google_calendar.create_event(
+            return await context.integrations.google_calendar.create_event(
                 user_id=user_id,
                 title=title,
                 start_time=start_time,

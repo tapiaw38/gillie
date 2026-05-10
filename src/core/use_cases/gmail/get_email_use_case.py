@@ -12,10 +12,10 @@ class GetEmailUseCase:
     def __init__(self, context_factory: Factory):
         self.context_factory = context_factory
 
-    def execute(self, user_id: str, message_id: str) -> Dict[str, Any]:
+    async def execute(self, user_id: str, message_id: str) -> Dict[str, Any]:
         try:
             context = self.context_factory()
-            return context.integrations.gmail.get_email(
+            return await context.integrations.gmail.get_email(
                 user_id=user_id,
                 message_id=message_id,
             )

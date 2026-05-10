@@ -16,7 +16,7 @@ class CreateUseCase:
     def __init__(self, context_factory: Factory):
         self.context_factory = context_factory
 
-    def execute(self, profile: ProfileInput, user_id: str):
+    async def execute(self, profile: ProfileInput, user_id: str):
         if not profile.assistant_name or profile.assistant_name.strip() == "":
             raise NewApplicationError(ProfileCreateNameRequiredError)
 
@@ -33,8 +33,8 @@ class CreateUseCase:
                 created_at=datetime.now(timezone.utc),
             )
 
-            profile_id = context.repositories.profile.create(new_profile)
-            created_profile = context.repositories.profile.find_by_id(
+            profile_id = await context.repositories.profile.create(new_profile)
+            created_profile = await context.repositories.profile.find_by_id(
                 profile_id
             )
 

@@ -15,7 +15,7 @@ class ListOptionsUseCase:
     def __init__(self, context_factory: Factory):
         self.context_factory = context_factory
 
-    def execute(self, user_id: str = "") -> ListOptionsOutput:
+    async def execute(self, user_id: str = "") -> ListOptionsOutput:
         try:
             context = self.context_factory()
             roles = context.repositories.role.get_all_roles()
@@ -31,7 +31,7 @@ class ListOptionsUseCase:
 
             profile = None
             if user_id:
-                profile = context.repositories.profile.find_by_user_id(user_id)
+                profile = await context.repositories.profile.find_by_user_id(user_id)
 
             provider_keys = (profile.provider_keys or {}) if profile else None
             custom_providers = (profile.custom_providers or {}) if profile else None

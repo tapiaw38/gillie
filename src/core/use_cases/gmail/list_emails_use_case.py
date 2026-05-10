@@ -12,7 +12,7 @@ class ListEmailsUseCase:
     def __init__(self, context_factory: Factory):
         self.context_factory = context_factory
 
-    def execute(
+    async def execute(
         self,
         user_id: str,
         query: str = "",
@@ -21,7 +21,7 @@ class ListEmailsUseCase:
     ) -> List[Dict[str, Any]]:
         try:
             context = self.context_factory()
-            return context.integrations.gmail.list_emails(
+            return await context.integrations.gmail.list_emails(
                 user_id=user_id,
                 query=query,
                 max_results=max_results,

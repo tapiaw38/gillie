@@ -11,10 +11,10 @@ class DeleteEmailUseCase:
     def __init__(self, context_factory: Factory):
         self.context_factory = context_factory
 
-    def execute(self, user_id: str, message_id: str) -> None:
+    async def execute(self, user_id: str, message_id: str) -> None:
         try:
             context = self.context_factory()
-            context.integrations.gmail.delete_email(
+            await context.integrations.gmail.delete_email(
                 user_id=user_id,
                 message_id=message_id,
             )

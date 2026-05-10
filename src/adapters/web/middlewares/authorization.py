@@ -1,6 +1,7 @@
 from fastapi import Request
 from fastapi.responses import JSONResponse
 from starlette.middleware.base import BaseHTTPMiddleware
+from starlette.concurrency import run_in_threadpool
 import logging
 
 logger = logging.getLogger(__name__)
@@ -25,28 +26,36 @@ class SingleUserMiddleware(BaseHTTPMiddleware):
     user can create the first key from the UI.
     """
 
-    def __init__(self, app, user_id: str, profile_client=None):
+    def __init__(self, app, user_id: str | None = None, profile_client=None):
         super().__init__(app)
         self.user_id = user_id
         self.profile_client = profile_client
 
     async def dispatch(self, request: Request, call_next):
+        user_id = self.user_id or getattr(request.app.state, "user_id", "default-user")
+        profile_client = self.profile_client or getattr(request.app.state, "profile_client", None)
+
         # Always inject the user context
-        request.state.user = {"user_id": self.user_id}
+        request.state.user = {"user_id": user_id}
 
         path = request.url.path
         if any(path.startswith(prefix) for prefix in _PUBLIC_PREFIXES):
             return await call_next(request)
 
-        if self.profile_client is None:
+        if profile_client is None:
             return await call_next(request)
 
         try:
-            has_any_key = self.profile_client.find_one(
-                {"user_id": self.user_id, "api_keys": {"$elemMatch": {"is_active": True}}}
+            has_any_key = await run_in_threadpool(
+                profile_client.find_one,
+                {"user_id": user_id, "api_keys": {"$elemMatch": {"is_active": True}}},
             )
         except Exception:
-            return await call_next(request)
+            logger.error("Failed to validate API key state", exc_info=True)
+            return JSONResponse(
+                status_code=503,
+                content={"code": "auth:backend-unavailable", "message": "Authentication backend unavailable"},
+            )
 
         if not has_any_key:
             return await call_next(request)
@@ -59,14 +68,19 @@ class SingleUserMiddleware(BaseHTTPMiddleware):
             )
 
         try:
-            match = self.profile_client.find_one(
+            match = await run_in_threadpool(
+                profile_client.find_one,
                 {
-                    "user_id": self.user_id,
+                    "user_id": user_id,
                     "api_keys": {"$elemMatch": {"value": api_key, "is_active": True}},
-                }
+                },
             )
         except Exception:
-            return await call_next(request)
+            logger.error("Failed to validate incoming API key", exc_info=True)
+            return JSONResponse(
+                status_code=503,
+                content={"code": "auth:backend-unavailable", "message": "Authentication backend unavailable"},
+            )
 
         if not match:
             return JSONResponse(

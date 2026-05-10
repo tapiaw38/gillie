@@ -79,13 +79,13 @@ class NeonizeIntegration:
 
     _LANG_MAP = {"en": "en-US", "es": "es-ES", "fr": "fr-FR", "de": "de-DE", "pt": "pt-BR", "it": "it-IT"}
 
-    def _get_stt_language(self, device_id: str) -> str:
+    async def _get_stt_language(self, device_id: str) -> str:
         """Resolve the STT language from the device owner's profile response_language."""
         try:
             if self._whatsapp_device_repository and self._profile_repository:
-                device = self._whatsapp_device_repository.find_by_id(device_id)
+                device = await self._whatsapp_device_repository.find_by_id(device_id)
                 if device:
-                    profile = self._profile_repository.find_by_user_id(device.user_id)
+                    profile = await self._profile_repository.find_by_user_id(device.user_id)
                     if profile:
                         lang = getattr(profile, "response_language", None) or "en"
                         return self._LANG_MAP.get(lang, f"{lang}-{lang.upper()}")
@@ -542,7 +542,7 @@ class NeonizeIntegration:
                 f"[neonize] Transcribing audio ({duration}s, {audio_format}) for device {device_id}"
             )
 
-            stt_language = self._get_stt_language(device_id)
+            stt_language = await self._get_stt_language(device_id)
             logger.info(f"[neonize] STT language for device {device_id}: {stt_language}")
             result = await self._stt_integration.audio_bytes_to_text(
                 audio_bytes=audio_bytes,

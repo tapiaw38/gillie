@@ -12,7 +12,7 @@ class FindByWhatsAppBusinessIdUseCase:
     def __init__(self, context_factory: Factory):
         self.context_factory = context_factory
 
-    def execute(self, business_account_id: str) -> Optional[Profile]:
+    async def execute(self, business_account_id: str) -> Optional[Profile]:
         """
         Execute the use case to find a profile by WhatsApp business account ID.
 
@@ -24,7 +24,7 @@ class FindByWhatsAppBusinessIdUseCase:
         """
         context = self.context_factory()
 
-        profiles = context.repositories.profile.find_all()
+        profiles = await context.repositories.profile.find_all()
 
         for profile in profiles:
             if profile.integrations:
