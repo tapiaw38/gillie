@@ -285,7 +285,7 @@ class LangChainService:
 
         async with self.semaphore:
             try:
-                system_prompt = self._build_system_prompt(profile, context, client_workspace, has_pty=False)
+                system_prompt = self._build_system_prompt(profile, context, client_workspace)
 
                 messages = self._convert_messages_to_langchain(
                     previous_messages=previous_messages,
@@ -357,7 +357,6 @@ class LangChainService:
         shell_output_queue: Optional[asyncio.Queue] = None,
         client_workspace: str = "",
         plan_mode: bool = False,
-        has_pty: bool = False,
     ):
         """
         Stream AI response tokens. Uses astream() for direct responses and
@@ -371,7 +370,7 @@ class LangChainService:
 
         async with self.semaphore:
             try:
-                system_prompt = self._build_system_prompt(profile, context, client_workspace, has_pty=has_pty)
+                system_prompt = self._build_system_prompt(profile, context, client_workspace)
                 messages = self._convert_messages_to_langchain(
                     previous_messages=previous_messages,
                     system_prompt=system_prompt,
@@ -419,54 +418,6 @@ class LangChainService:
 
                     approval_callback = _approval_callback
 
-                pty_callback = None
-                if has_pty and shell_output_queue is not None:
-                    _pty_cache: dict = {}
-
-                    async def _pty_callback(command: str) -> dict:
-                        import uuid as _uuid
-                        from src.core.platform.ai.tools.pty_manager import (
-                            create_pending, get_result, cleanup,
-                        )
-                        if command in _pty_cache:
-                            logger.info(f"PTY dedup: returning cached result for: {command!r}")
-                            return _pty_cache[command]
-
-                        request_id = str(_uuid.uuid4())
-                        event = create_pending(request_id)
-                        await shell_output_queue.put({
-                            "type": "pty_command",
-                            "request_id": request_id,
-                            "command": command,
-                        })
-                        try:
-                            await asyncio.wait_for(event.wait(), timeout=120)
-                            output = get_result(request_id)
-                            result = {
-                                "exit_code": 0,
-                                "stdout": output,
-                                "stderr": "",
-                                "truncated": False,
-                                "via_pty": True,
-                            }
-                            _pty_cache[command] = result
-                            return result
-                        except asyncio.TimeoutError:
-                            logger.warning(
-                                f"PTY command request {request_id} timed out after 120s"
-                            )
-                            return {
-                                "exit_code": -1,
-                                "stdout": "",
-                                "stderr": f"PTY command timed out after 120s: {command}",
-                                "truncated": False,
-                                "via_pty": True,
-                            }
-                        finally:
-                            cleanup(request_id)
-
-                    pty_callback = _pty_callback
-
                 tools = None
                 llm_with_tools = self.llm
                 if use_tools:
@@ -480,7 +431,6 @@ class LangChainService:
                         client_workspace=client_workspace,
                         approval_callback=approval_callback,
                         plan_mode=plan_mode,
-                        pty_callback=pty_callback,
                     )
                     if _is_ollama_url(self.config.base_url):
                         tools = await self._route_tools(question, tools)
@@ -782,7 +732,6 @@ class LangChainService:
         profile: Profile,
         context: Optional[str],
         client_workspace: str = "",
-        has_pty: bool = False,
     ) -> str:
         """
         Build system prompt from profile and context.
@@ -865,21 +814,6 @@ class LangChainService:
                 )
             except Exception as e:
                 logger.warning(f"Could not build workspace map: {e}")
-
-        if has_pty:
-            system_prompt += (
-                "\n\n## GTerm Session — Remote PTY Active\n"
-                "You are running inside GTerm. The user's terminal is connected to a "
-                "REMOTE machine (e.g. a VPS via SSH). The `run_command` tool routes "
-                "commands through that remote PTY.\n"
-                "CRITICAL RULES:\n"
-                "- NEVER use `read_file` to read system paths such as /proc, /sys, "
-                "/var/log, /run, /etc (these paths exist on the LOCAL machine, not the remote).\n"
-                "- To check RAM, CPU, disk, processes, or logs on the remote machine, "
-                "ALWAYS use `run_command` (e.g. `free -h`, `df -h`, `journalctl -n 50`, "
-                "`top -bn1`, `cat /proc/meminfo`).\n"
-                "- `read_file` is only safe for workspace project files.\n"
-            )
 
         return system_prompt
 
