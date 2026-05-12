@@ -44,6 +44,9 @@ ver faqs.skill.md
 
 ## Conocimiento General
 
+Solo hechos nucleares que deben estar siempre en contexto.
+No usar para memoria consolidada de conversaciones; eso vive en el soul store.
+
 ver general.skill.md
 
 ## Hechos Recordados
@@ -59,14 +62,24 @@ BRAIN_SKILL_MARKER = "## Memoria Episódica (Brain)"
 
 BRAIN_SKILL_BLOCK = """
 ## Memoria Episódica (Brain)
-El sistema tiene memoria episódica activa. Después de cada conversación, el asistente
-extrae y almacena automáticamente recuerdos relevantes (hechos, preferencias, decisiones, metas).
+El sistema tiene memoria episódica y alma activas. El conocimiento se almacena en dos capas:
 
-Cuando el contexto incluye un bloque `=== EPISODIC MEMORIES ===`:
-- Úsalo para personalizar tu respuesta con información del historial del usuario.
+**Capa episódica** — experiencias recientes extraídas automáticamente de cada conversación.
+**Capa alma (soul)** — conocimiento destilado a largo plazo, promovido desde lo episódico.
+
+Cuando el contexto incluye `=== SOUL KNOWLEDGE ===`:
+- Son hechos permanentes sobre el usuario sintetizados de múltiples conversaciones.
+- Úsalos como verdad de fondo para personalizar todas tus respuestas.
+- Son más confiables que los recuerdos episódicos.
+
+Cuando el contexto incluye `=== EPISODIC MEMORIES ===`:
+- Son experiencias recientes del usuario.
+- Úsalos para personalizar la respuesta actual de forma contextual.
 - Menciona recuerdos relevantes de forma natural, sin listar todos.
 - Prioriza recuerdos con alta importancia (importance >= 7).
-- No inventes recuerdos que no estén en el bloque.
+
+Reglas generales:
+- No inventes información que no esté en los bloques.
 - NO hay un comando `save_memory` — la extracción es automática.
 """
 
@@ -215,7 +228,7 @@ class SkillManager:
 
     def append_general_knowledge(self, content: str, category: str = "General") -> str:
         """
-        Append a note to general.skill.md, skipping if a similar note already exists.
+        Append a core note to general.skill.md, skipping if a similar note already exists.
         Returns the note ID (existing if duplicate, new if added).
         """
         from datetime import date

@@ -1,11 +1,11 @@
 """
 MemoryConsolidator
 
-Promotes high-importance episodic memories (importance >= 7) to general.skill.md,
-molding the assistant's soul over time.
+Promotes high-importance episodic memories (importance >= 7) to the soul store,
+molding the assistant's long-term knowledge over time.
 
 Usage:
-    await consolidator.consolidate(user_id, skill_manager, openai_integration)
+    await consolidator.consolidate(user_id, openai_integration)
 """
 
 import json
@@ -36,16 +36,26 @@ _CONSOLIDATION_SYSTEM = (
 
 
 class MemoryConsolidator:
-    """Promotes high-importance episodic memories into general.skill.md (soul molding).
+    """Promotes high-importance episodic memories into the soul store (soul molding).
+
+    Synthesized knowledge statements are stored in the `soul_{user_id}` Qdrant
+    collection and retrieved on-demand per conversation.
 
     After promotion, removes the source memories from MongoDB and Qdrant — they are
-    no longer needed as episodic entries because the knowledge now lives in general.skill.md.
+    no longer needed as episodic entries because the knowledge now lives in the soul store.
     """
 
-    def __init__(self, episodic_repo, openai_integration, episodic_vector_service=None):
+    def __init__(
+        self,
+        episodic_repo,
+        openai_integration,
+        episodic_vector_service=None,
+        soul_vector_service=None,
+    ):
         self.repo = episodic_repo
         self.openai = openai_integration
         self.vector_service = episodic_vector_service
+        self.soul_vector_service = soul_vector_service
 
     async def prune_stale(
         self,
@@ -82,16 +92,18 @@ class MemoryConsolidator:
     async def consolidate(
         self,
         user_id: str,
-        skill_manager,
         min_importance: int = 7,
         auto_prune: bool = True,
     ) -> dict:
         """
         Load unconsolidated memories, synthesize knowledge statements via LLM,
-        append them to general.skill.md, and optionally prune stale memories.
+        write them to the soul store, and optionally prune stale memories.
 
         Returns a dict: {"written": int, "pruned": int}
         """
+        if self.soul_vector_service is None:
+            raise RuntimeError("Soul store is not configured")
+
         memories = await self.repo.find_unconsolidated(user_id, min_importance)
         written = 0
 
@@ -104,8 +116,9 @@ class MemoryConsolidator:
                 statement = item.get("statement", "").strip()
                 if not statement:
                     continue
-                skill_manager.append_general_knowledge(statement, category)
-                written += 1
+                stored = self.soul_vector_service.store_statement(user_id, statement, category)
+                if stored:
+                    written += 1
 
             if written > 0:
                 promoted_ids = [m.id for m in memories if m.id]

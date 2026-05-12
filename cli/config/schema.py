@@ -204,15 +204,8 @@ class LoggingConfig:
 
 
 @dataclass
-class SoulConfig:
-    """Identity of the assistant — stored in soul.json."""
-    user_id: str
-    profile: ProfileConfig
-
-
-@dataclass
 class AssistantConfig:
-    """Full in-memory configuration (soul + technical config merged)."""
+    """Full assistant configuration stored in config.json."""
     user_id: str
     profile: ProfileConfig
     server: ServerConfig = field(default_factory=ServerConfig)

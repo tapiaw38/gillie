@@ -55,7 +55,7 @@ The API will be available at `http://localhost:8000`. Swagger UI at `http://loca
 
 ### `./gillie init`
 
-Interactive setup wizard. Configures the assistant profile, database, AI provider, and all optional services. Saves configuration to `~/.gillie/soul.json` and `~/.gillie/config.json`.
+Interactive setup wizard. Configures the assistant profile, database, AI provider, and all optional services. Saves configuration to `~/.gillie/config.json`.
 
 ```bash
 ./gillie init           # run wizard
@@ -80,7 +80,7 @@ Interactive setup wizard. Configures the assistant profile, database, AI provide
 
 ### `./gillie start`
 
-Start the API server. Reads `~/.gillie/soul.json` and `~/.gillie/config.json`.
+Start the API server. Reads `~/.gillie/config.json`.
 
 ```bash
 ./gillie start
@@ -93,7 +93,7 @@ Start the API server. Reads `~/.gillie/soul.json` and `~/.gillie/config.json`.
 
 ### `./gillie status`
 
-Show current configuration summary, including both file paths.
+Show current configuration summary.
 
 ```bash
 ./gillie status
@@ -103,7 +103,6 @@ Example output:
 
 ```sh
 ✨🐙 Gillie — Sofia
-Soul:   /home/user/.gillie/soul.json
 Config: /home/user/.gillie/config.json
 
  User ID    a1b2c3d4-...
@@ -162,17 +161,17 @@ Manages the API as a systemd service. By default, installs as a **user service**
 
 ---
 
-### `./gillie soul` — soul management
+### `./gillie config` — identity and profile management
 
-The soul is the assistant's identity: its `user_id` (UUID) and full profile. Stored in `~/.gillie/soul.json`.
+This command manages the assistant identity: its `user_id` (UUID) and profile fields. Stored in `~/.gillie/config.json`.
 
 ```bash
-./gillie soul show       # display user_id + full profile
-./gillie soul edit       # edit profile fields + optional ID regeneration
-./gillie soul reset-id   # regenerate the user_id with confirmation
+./gillie config show       # display user_id + full profile
+./gillie config edit       # edit profile fields + optional ID regeneration
+./gillie config reset-id   # regenerate the user_id with confirmation
 ```
 
-`soul edit` prompts for all profile fields and offers to regenerate the User ID at the end. `soul reset-id` is a focused command just for replacing the UUID.
+`config edit` prompts for all profile fields and offers to regenerate the User ID at the end. `config reset-id` is a focused command just for replacing the UUID.
 
 ---
 
@@ -206,7 +205,7 @@ The memory system gives the assistant persistent knowledge. All files live in `~
 ~/.gillie/memory/
 ├── memory.md            ← root (auto-created, always loaded)
 ├── faqs.skill.md        ← referenced from memory.md
-├── general.skill.md     ← updated automatically by memory extraction
+├── general.skill.md     ← only always-on core facts
 └── *.skill.md           ← any additional skills
 ```
 
@@ -222,6 +221,9 @@ The memory system gives the assistant persistent knowledge. All files live in `~
 ver faqs.skill.md
 
 ## Conocimiento General
+
+Solo hechos nucleares que deben estar siempre en contexto.
+No usar para memoria consolidada de conversaciones; eso vive en el soul store.
 
 ver general.skill.md
 ```
@@ -246,7 +248,7 @@ Open `memory.md` in `$EDITOR` (falls back to `nano`). Changes are saved back to 
 
 #### `./gillie memory extract`
 
-Run memory extraction: summarize recent unextracted conversations and append the result to `general.skill.md`.
+Run the legacy conversation summarization job. It summarizes recent unextracted conversations and stores those summaries on the conversation records only.
 
 ```bash
 ./gillie memory extract
@@ -273,16 +275,15 @@ FAQs are stored as structured blocks inside `faqs.skill.md` and referenced autom
 
 ## Configuration
 
-Configuration is split into two files under `~/.gillie/`, both created by `./gillie init`:
+Configuration is stored in a single file under `~/.gillie/`, created by `./gillie init`:
 
-| File                    | Contents                                           |
-| ----------------------- | -------------------------------------------------- |
-| `~/.gillie/soul.json`   | Assistant identity: `user_id` (UUID) and `profile` |
-| `~/.gillie/config.json` | Technical settings: server, services, logging      |
+| File                    | Contents                                                           |
+| ----------------------- | ------------------------------------------------------------------ |
+| `~/.gillie/config.json` | Assistant identity, profile, server settings, services, and logging |
 
-They can be edited manually or interactively via `./gillie soul edit`, `./gillie profile edit`, and `./gillie services edit`.
+They can be edited manually or interactively via `./gillie config edit`, `./gillie profile edit`, and `./gillie services edit`.
 
-### `~/.gillie/soul.json`
+### `~/.gillie/config.json`
 
 ```json
 {
@@ -290,17 +291,9 @@ They can be edited manually or interactively via `./gillie soul edit`, `./gillie
   "profile": {
     "assistant_name": "Sofia",
     "business_name": "My Store",
-    "business_context": "...",
     "functions": "...",
-    "role": "seller"
-  }
-}
-```
-
-### `~/.gillie/config.json`
-
-```json
-{
+    "response_language": "en"
+  },
   "server": {
     "host": "0.0.0.0",
     "port": 8000,
@@ -389,14 +382,14 @@ All endpoints are prefixed according to the domain. Authentication is handled au
 | GET    | `/api/v1/memory`            | Return `memory.md` with all skill refs inlined |
 | GET    | `/api/v1/memory/root`       | Return raw `memory.md`                         |
 | PUT    | `/api/v1/memory/root`       | Overwrite `memory.md` (`{"content": "..."}`)   |
-| GET    | `/api/v1/memory/general`    | Return raw `general.skill.md`                  |
+| GET    | `/api/v1/memory/general`    | Return raw `general.skill.md` core facts       |
 | GET    | `/api/v1/memory/faqs`       | List all FAQs                                  |
 | POST   | `/api/v1/memory/faqs`       | Add a FAQ                                      |
 | PUT    | `/api/v1/memory/faqs/{id}`  | Update a FAQ                                   |
 | DELETE | `/api/v1/memory/faqs/{id}`  | Delete a FAQ                                   |
 | GET    | `/api/v1/memory/skills`     | List all `.skill.md` files                     |
 | GET    | `/api/v1/memory/skills/{n}` | Return content of a specific skill             |
-| POST   | `/api/v1/memory/extract`    | Run memory extraction from conversations       |
+| POST   | `/api/v1/memory/extract`    | Run legacy conversation summarization          |
 
 Full interactive documentation: `http://localhost:8000/docs`
 

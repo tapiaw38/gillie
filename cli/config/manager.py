@@ -6,7 +6,6 @@ from typing import Optional
 
 from cli.config.schema import (
     AssistantConfig,
-    SoulConfig,
     ProfileConfig,
     ServerConfig,
     ServicesConfig,
@@ -30,7 +29,6 @@ from cli.config.schema import (
 )
 
 CONFIG_DIR = Path.home() / ".gillie"
-SOUL_FILE = CONFIG_DIR / "soul.json"
 CONFIG_FILE = CONFIG_DIR / "config.json"
 
 
@@ -43,20 +41,9 @@ def get_config_path() -> Path:
     return CONFIG_FILE
 
 
-def get_soul_path() -> Path:
-    """Return the soul config path (always ~/.gillie/soul.json)."""
-    return SOUL_FILE
-
-
-
-def soul_exists() -> bool:
-    """Return True if soul.json has been created."""
-    return get_soul_path().exists()
-
-
 def config_exists() -> bool:
-    """Return True if both soul.json and config.json exist."""
-    return soul_exists() and get_config_path().exists()
+    """Return True if config.json exists."""
+    return get_config_path().exists()
 
 
 
@@ -81,38 +68,23 @@ def _build_services(services_data: dict) -> ServicesConfig:
 
 
 
-def load_soul() -> SoulConfig:
-    """Load soul.json (user_id + profile)."""
-    path = get_soul_path()
-    if not path.exists():
-        raise FileNotFoundError(
-            f"Soul not found at {path}. Run `gillie init` first."
-        )
-    with open(path, "r") as f:
-        data = json.load(f)
+def _parse_profile(data: dict) -> ProfileConfig:
     known_fields = {f.name for f in ProfileConfig.__dataclass_fields__.values()}
-    profile_data = {k: v for k, v in data["profile"].items() if k in known_fields}
-    return SoulConfig(
-        user_id=data["user_id"],
-        profile=ProfileConfig(**profile_data),
-    )
+    profile_data = {k: v for k, v in data.items() if k in known_fields}
+    return ProfileConfig(**profile_data)
 
 
-def save_soul(soul: SoulConfig) -> None:
-    """Save soul.json."""
-    path = get_soul_path()
+def _persist_single_file_config(path: Path, payload: dict) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     with open(path, "w") as f:
-        json.dump(asdict(soul), f, indent=2)
+        json.dump(payload, f, indent=2)
 
 
 
 def load_config() -> AssistantConfig:
     """
-    Load the full in-memory config by merging soul.json + config.json.
+    Load the full in-memory config from config.json.
     """
-    soul = load_soul()
-
     path = get_config_path()
     if not path.exists():
         raise FileNotFoundError(
@@ -121,9 +93,16 @@ def load_config() -> AssistantConfig:
     with open(path, "r") as f:
         data = json.load(f)
 
+    if "user_id" not in data or "profile" not in data:
+        raise FileNotFoundError(
+            "Config does not contain user_id/profile. Run `gillie init --force` to recreate configuration."
+        )
+    user_id = data["user_id"]
+    profile = _parse_profile(data["profile"])
+
     return AssistantConfig(
-        user_id=soul.user_id,
-        profile=soul.profile,
+        user_id=user_id,
+        profile=profile,
         server=ServerConfig(**data.get("server", {})),
         services=_build_services(data.get("services", {})),
         logging=LoggingConfig(**data.get("logging", {})),
@@ -135,17 +114,15 @@ def load_config() -> AssistantConfig:
 
 def save_config(config: AssistantConfig) -> None:
     """
-    Persist the full config by splitting it into:
-      - soul.json  (user_id + profile)
-      - config.json (server + services + logging)
+    Persist the full config into a single config.json file.
     """
-    save_soul(SoulConfig(user_id=config.user_id, profile=config.profile))
-
     path = get_config_path()
     path.parent.mkdir(parents=True, exist_ok=True)
     services_dict = asdict(config.services)
     services_dict["provider_keys"] = config.services.provider_keys
-    technical = {
+    payload = {
+        "user_id": config.user_id,
+        "profile": asdict(config.profile),
         "server": asdict(config.server),
         "services": services_dict,
         "logging": asdict(config.logging),
@@ -153,13 +130,12 @@ def save_config(config: AssistantConfig) -> None:
         "expose": asdict(config.expose),
         "workspace": config.workspace,
     }
-    with open(path, "w") as f:
-        json.dump(technical, f, indent=2)
+    _persist_single_file_config(path, payload)
 
 
 
 def get_user_id() -> Optional[str]:
     """Return the configured user_id, or None if not initialised."""
-    if not soul_exists():
+    if not config_exists():
         return None
-    return load_soul().user_id
+    return load_config().user_id

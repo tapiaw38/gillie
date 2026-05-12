@@ -1,9 +1,9 @@
 import typer
 from rich.console import Console
 
+from cli.commands.config import app as config_app
 from cli.commands.init import app as init_app
 from cli.commands.start import app as start_app
-from cli.commands.soul import app as soul_app
 from cli.commands.profile import app as profile_app
 from cli.commands.services import app as services_app
 from cli.commands.db import app as db_app
@@ -31,7 +31,7 @@ app = typer.Typer(
 
 app.add_typer(init_app, name="init", help="Interactive setup wizard")
 app.add_typer(start_app, name="start", help="Start the API server")
-app.add_typer(soul_app, name="soul", help="Manage assistant soul (identity + profile)")
+app.add_typer(config_app, name="config", help="Manage assistant identity and profile")
 app.add_typer(profile_app, name="profile", help="Manage profile configuration")
 app.add_typer(services_app, name="services", help="Manage service configurations")
 app.add_typer(db_app, name="db", help="Manage MongoDB database (Docker)")
@@ -60,13 +60,11 @@ def status():
         console.print("[red]✗[/red] Not initialized. Run [bold cyan]gillie init[/bold cyan]")
         raise typer.Exit(1)
 
-    from cli.config.manager import get_soul_path
     config = load_config()
     s = config.services
 
     console.print()
     console.print(f"✨🐙 [bold cyan]Gillie[/bold cyan] — {config.profile.assistant_name}")
-    console.print(f"[dim]Soul:   {get_soul_path()}[/dim]")
     console.print(f"[dim]Config: {get_config_path()}[/dim]")
     console.print()
 

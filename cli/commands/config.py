@@ -9,16 +9,13 @@ from InquirerPy import inquirer
 from cli.config.manager import (
     load_config,
     save_config,
-    load_soul,
-    save_soul,
     config_exists,
-    get_soul_path,
+    get_config_path,
 )
-from cli.config.schema import SoulConfig
 
 console = Console()
 
-app = typer.Typer(help="Manage the assistant soul (identity + profile).")
+app = typer.Typer(help="Manage assistant configuration identity and profile.")
 
 
 def _require_config():
@@ -29,21 +26,21 @@ def _require_config():
 
 @app.command("show")
 def show():
-    """Show the current soul (user_id + profile)."""
+    """Show the current config identity (user_id + profile)."""
     _require_config()
-    soul = load_soul()
-    p = soul.profile
+    config = load_config()
+    p = config.profile
 
     table = Table(
-        title="✨🐙 Soul",
+        title="✨🐙 Config",
         box=box.ROUNDED,
         border_style="cyan",
-        caption=str(get_soul_path()),
+        caption=str(get_config_path()),
     )
     table.add_column("Field", style="bold")
     table.add_column("Value")
 
-    table.add_row("User ID", soul.user_id)
+    table.add_row("User ID", config.user_id)
     table.add_row("Assistant Name", p.assistant_name)
     table.add_row("Business Name", p.business_name or "[dim]not set[/dim]")
     table.add_row("Functions", p.functions or "[dim]not set[/dim]")
@@ -56,14 +53,14 @@ def show():
 
 @app.command("edit")
 def edit():
-    """Edit the soul interactively (profile fields + optional ID regeneration)."""
+    """Edit config identity fields interactively (profile + optional ID regeneration)."""
     _require_config()
     config = load_config()
     p = config.profile
 
     console.print()
     console.print(Panel(
-        "✨🐙 [bold]Edit Soul[/bold] — press Enter to keep current value",
+        "✨🐙 [bold]Edit Config[/bold] — press Enter to keep current value",
         border_style="cyan",
     ))
     console.print()
@@ -106,7 +103,7 @@ def edit():
 
     save_config(config)
     console.print()
-    console.print("✨🐙 [green]✓[/green] Soul updated.")
+    console.print("✨🐙 [green]✓[/green] Config updated.")
     console.print()
 
 
@@ -114,8 +111,8 @@ def edit():
 def reset_id():
     """Regenerate the User ID (creates a new UUID)."""
     _require_config()
-    soul = load_soul()
-    old_id = soul.user_id
+    config = load_config()
+    old_id = config.user_id
 
     console.print()
     console.print(f"[yellow]Current User ID:[/yellow] {old_id}")
@@ -128,8 +125,8 @@ def reset_id():
         console.print("[dim]Cancelled.[/dim]")
         raise typer.Exit(0)
 
-    soul.user_id = str(uuid.uuid4())
-    save_soul(soul)
+    config.user_id = str(uuid.uuid4())
+    save_config(config)
     console.print()
-    console.print(f"✨🐙 [green]✓[/green] New User ID: [bold]{soul.user_id}[/bold]")
+    console.print(f"✨🐙 [green]✓[/green] New User ID: [bold]{config.user_id}[/bold]")
     console.print()

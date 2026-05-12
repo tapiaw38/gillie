@@ -5,8 +5,8 @@ gillie brain edit        — enable/disable episodic memory, configure Qdrant
 gillie brain status      — config + Qdrant connection + memory count
 gillie brain stats       — memory distribution by importance, type, and age
 gillie brain list        — recent episodic memories from MongoDB
-gillie brain clear       — delete all episodic memories for current user
-gillie brain consolidate — promote high-importance memories to general.skill.md (+ auto-prune)
+gillie brain clear       — delete all episodic memories and soul knowledge
+gillie brain consolidate — promote high-importance memories to the soul store (+ auto-prune)
 gillie brain prune       — delete stale low-importance memories
 """
 
@@ -22,6 +22,14 @@ from cli.config.manager import config_exists, load_config
 console = Console()
 
 app = typer.Typer(help="Manage episodic memory (brain).")
+
+
+def _qdrant_collection_points(qc, collection_name: str):
+    try:
+        info = qc.get_collection(collection_name)
+        return str(info.points_count or 0)
+    except Exception:
+        return "[dim]collection not yet created[/dim]"
 
 
 def _require_config():
@@ -130,9 +138,9 @@ def stats():
     total = len(docs)
     by_importance = {i: 0 for i in range(1, 11)}
     by_type: dict = {}
-    promoted = 0
     age_7d = age_30d = age_90d = age_older = 0
     stale_candidates = 0
+    soul_count = "-"
 
     for doc in docs:
         imp = doc.get("importance", 5)
@@ -140,9 +148,6 @@ def stats():
 
         mtype = doc.get("type", "episode")
         by_type[mtype] = by_type.get(mtype, 0) + 1
-
-        if doc.get("promoted_to_soul"):
-            promoted += 1
 
         created = doc.get("created_at")
         if created:
@@ -169,7 +174,13 @@ def stats():
     summary.add_column("Key", style="bold dim")
     summary.add_column("Value")
     summary.add_row("Total memories", str(total))
-    summary.add_row("Promoted to soul", str(promoted))
+    if config.services.qdrant.enabled:
+        try:
+            qc = _qdrant_client(config)
+            soul_count = _qdrant_collection_points(qc, f"soul_{config.user_id}")
+        except Exception as e:
+            soul_count = f"[red]✗ {e}[/red]"
+    summary.add_row("Soul knowledge", soul_count)
     summary.add_row("Consolidate candidates", f"[green]{consolidate_candidates}[/green] (importance >= 7)")
     summary.add_row("Prune candidates", f"[yellow]{stale_candidates}[/yellow] (stale low-importance)")
     console.print(summary)
@@ -234,31 +245,30 @@ def status():
 
     table.add_row("Brain", "[green]✓ enabled[/green]")
 
-    qdrant_ok = False
     qdrant_status = "[dim]not checked[/dim]"
-    collection_name = f"episodic_{config.user_id}"
-    vector_count = "-"
+    episodic_collection = f"episodic_{config.user_id}"
+    soul_collection = f"soul_{config.user_id}"
+    episodic_vectors = "-"
+    soul_vectors = "-"
 
     if config.services.qdrant.enabled:
         try:
             qc = _qdrant_client(config)
             qc.get_collections()
-            qdrant_ok = True
             qdrant_status = f"[green]✓ connected[/green]  ({config.services.qdrant.host}:{config.services.qdrant.port})"
 
-            try:
-                info = qc.get_collection(collection_name)
-                vector_count = str(info.points_count or 0)
-            except Exception:
-                vector_count = "[dim]collection not yet created[/dim]"
+            episodic_vectors = _qdrant_collection_points(qc, episodic_collection)
+            soul_vectors = _qdrant_collection_points(qc, soul_collection)
         except Exception as e:
             qdrant_status = f"[red]✗ unreachable[/red]  ({e})"
     else:
         qdrant_status = "[yellow]✗ disabled[/yellow]"
 
     table.add_row("Qdrant", qdrant_status)
-    table.add_row("Collection", collection_name)
-    table.add_row("Vectors", vector_count)
+    table.add_row("Episodic collection", episodic_collection)
+    table.add_row("Episodic vectors", episodic_vectors)
+    table.add_row("Soul collection", soul_collection)
+    table.add_row("Soul vectors", soul_vectors)
 
     memory_count = "-"
     try:
@@ -268,7 +278,7 @@ def status():
     except Exception as e:
         memory_count = f"[red]✗ {e}[/red]"
 
-    table.add_row("Memories (MongoDB)", memory_count)
+    table.add_row("Episodic memories (MongoDB)", memory_count)
 
     console.print(table)
     console.print()
@@ -344,19 +354,22 @@ def list_memories(
 def clear(
     yes: bool = typer.Option(False, "--yes", "-y", help="Skip confirmation prompt"),
 ):
-    """Delete all episodic memories for the current user (MongoDB + Qdrant collection)."""
+    """Delete all episodic memories and soul knowledge for the current user."""
     _require_config()
     config = load_config()
     _require_brain(config)
 
     if not yes:
-        console.print(f"[red]⚠[/red]  This will delete [bold]all episodic memories[/bold] for user [bold]{config.user_id}[/bold].")
+        console.print(
+            f"[red]⚠[/red]  This will delete [bold]all episodic memories and soul knowledge[/bold] "
+            f"for user [bold]{config.user_id}[/bold]."
+        )
         try:
             confirm = inquirer.select(
                 message="Are you sure?",
                 choices=[
                     {"name": "  No, cancel", "value": False},
-                    {"name": "  Yes, delete all memories", "value": True},
+                    {"name": "  Yes, delete all brain data", "value": True},
                 ],
                 pointer="❯", qmark="",
             ).execute()
@@ -380,17 +393,21 @@ def clear(
         console.print(f"  [yellow]⚠[/yellow]  {msg}")
         errors.append(msg)
 
-    console.print("[bold]Clearing Qdrant collection...[/bold]")
+    console.print("[bold]Clearing Qdrant collections...[/bold]")
     if config.services.qdrant.enabled:
-        collection_name = f"episodic_{config.user_id}"
+        collection_names = [
+            f"episodic_{config.user_id}",
+            f"soul_{config.user_id}",
+        ]
         try:
             qc = _qdrant_client(config)
             collections = [c.name for c in qc.get_collections().collections]
-            if collection_name in collections:
-                qc.delete_collection(collection_name)
-                console.print(f"  [green]✓[/green] Collection [bold]{collection_name}[/bold] deleted")
-            else:
-                console.print(f"  [dim]Collection {collection_name} not found — skipped[/dim]")
+            for collection_name in collection_names:
+                if collection_name in collections:
+                    qc.delete_collection(collection_name)
+                    console.print(f"  [green]✓[/green] Collection [bold]{collection_name}[/bold] deleted")
+                else:
+                    console.print(f"  [dim]Collection {collection_name} not found — skipped[/dim]")
         except Exception as e:
             msg = f"Qdrant clear failed: {e}"
             console.print(f"  [yellow]⚠[/yellow]  {msg}")
@@ -402,7 +419,7 @@ def clear(
     if errors:
         console.print(f"[yellow]Done with {len(errors)} warning(s).[/yellow]")
     else:
-        console.print("[green]✓[/green] All episodic memories cleared.")
+        console.print("[green]✓[/green] All brain data cleared.")
     console.print()
 
 
@@ -412,7 +429,7 @@ def consolidate(
     dry_run: bool = typer.Option(False, "--dry-run", help="Preview memories without writing to soul"),
     no_prune: bool = typer.Option(False, "--no-prune", help="Skip automatic stale memory pruning after consolidation"),
 ):
-    """Promote high-importance episodic memories to general.skill.md (soul molding)."""
+    """Promote high-importance episodic memories to the soul store (soul molding)."""
     import asyncio
     _require_config()
     config = load_config()
@@ -423,7 +440,6 @@ def consolidate(
         docs = list(col.find({
             "user_id": config.user_id,
             "importance": {"$gte": min_importance},
-            "$or": [{"promoted_to_soul": {"$exists": False}}, {"promoted_to_soul": False}],
         }).sort("importance", -1))
         mongo_client.close()
     except Exception as e:
@@ -464,7 +480,7 @@ def consolidate(
         console.print("[dim]Dry run — no changes written.[/dim]")
         return
 
-    # Use LLM to synthesize and write to general.skill.md
+    # Use LLM to synthesize and write to the soul store
     from cli.config.manager import get_config_path
     import os
     os.environ["GILLIE_CONFIG"] = str(get_config_path())
@@ -475,12 +491,31 @@ def consolidate(
     try:
         from src.core.platform.config.service import init_config_from_json
         from src.adapters.web.integrations.openapi.openai_integration import OpenAIIntegration
+        from src.core.platform.ai.embeddings.embedding_service import (
+            EmbeddingService,
+            create_huggingface_embeddings,
+            create_openai_embeddings,
+        )
+        from src.core.platform.brain.episodic_vector_service import EpisodicVectorService
         from src.core.platform.brain.memory_consolidator import MemoryConsolidator
-        from src.core.platform.managers.skill_manager import SkillManager
+        from src.core.platform.brain.soul_vector_service import SoulVectorService
 
         svc_config = init_config_from_json(config)
         openai_integration = OpenAIIntegration(svc_config)
-        skill_manager = SkillManager()
+        emb_cfg = svc_config.embeddings_config
+
+        if emb_cfg.provider == "openai":
+            raw_embeddings = create_openai_embeddings(
+                api_key=svc_config.openai_config.api_key,
+                model=emb_cfg.openai_model,
+            )
+        else:
+            raw_embeddings = create_huggingface_embeddings(
+                model_name=emb_cfg.hf_model,
+                device=emb_cfg.device,
+            )
+
+        embedding_service = EmbeddingService(raw_embeddings)
 
         class _SyncRepo:
             """Thin sync wrapper used only in CLI context."""
@@ -492,9 +527,6 @@ def consolidate(
             async def find_unconsolidated(self, user_id, min_importance=7):
                 from src.core.domain.brain.episodic_memory import EpisodicMemory
                 return [EpisodicMemory(**d) for d in self._docs]
-
-            async def mark_promoted(self, memory_ids):
-                pass  # handled by delete_many_by_ids
 
             async def delete_many_by_ids(self, memory_ids):
                 if not memory_ids:
@@ -527,27 +559,38 @@ def consolidate(
                 except Exception:
                     return []
 
-        # Build vector service for Qdrant cleanup
-        vector_service = None
+        episodic_vector_service = None
+        soul_vector_service = None
         if config.services.qdrant.enabled:
             try:
                 from src.adapters.vectorstore.qdrant_adapter import QdrantVectorStoreAdapter
-                vector_service = QdrantVectorStoreAdapter(svc_config)
+                qdrant_adapter = QdrantVectorStoreAdapter(svc_config, raw_embeddings)
+                episodic_vector_service = EpisodicVectorService(qdrant_adapter, embedding_service)
+                soul_vector_service = SoulVectorService(qdrant_adapter, embedding_service)
             except Exception:
                 pass
 
         mongo_client3, col3 = _mongo_collection(config)
         repo = _SyncRepo(col3, config.user_id, docs)
-        consolidator = MemoryConsolidator(repo, openai_integration, vector_service)
+        consolidator = MemoryConsolidator(
+            repo,
+            openai_integration,
+            episodic_vector_service,
+            soul_vector_service,
+        )
 
-        result = asyncio.run(consolidator.consolidate(config.user_id, skill_manager, min_importance, auto_prune=not no_prune))
+        if soul_vector_service is None:
+            console.print("[red]✗[/red] Soul store is not available. Configure Qdrant correctly before consolidating.")
+            raise typer.Exit(1)
+
+        result = asyncio.run(consolidator.consolidate(config.user_id, min_importance, auto_prune=not no_prune))
         mongo_client3.close()
 
         written = result.get("written", 0)
         pruned = result.get("pruned", 0)
 
         if written:
-            console.print(f"  [green]✓[/green] Wrote [bold]{written}[/bold] knowledge statement(s) to [dim]general.skill.md[/dim]")
+            console.print("  [green]✓[/green] Wrote [bold]%d[/bold] knowledge statement(s) to [dim]Qdrant soul store[/dim]" % written)
             console.print(f"  [green]✓[/green] Removed [bold]{len(docs)}[/bold] promoted memories from MongoDB + Qdrant")
         else:
             console.print("  [dim]No new statements written (all may already exist).[/dim]")

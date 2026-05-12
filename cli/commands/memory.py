@@ -23,7 +23,6 @@ from rich.table import Table
 from rich.panel import Panel
 from rich import box
 from InquirerPy import inquirer
-from InquirerPy import inquirer
 from pathlib import Path
 
 from cli.config.manager import config_exists, load_config
@@ -328,9 +327,9 @@ def skills_rename(
 
 @app.command("extract")
 def extract():
-    """Run memory extraction: summarize conversations → update general.skill.md."""
+    """Run legacy conversation summarization for unextracted conversations."""
     _require_config()
-    console.print("[dim]Running memory extraction (this may take a moment)...[/dim]")
+    console.print("[dim]Running conversation summarization (this may take a moment)...[/dim]")
     result = _api_post("/api/v1/memory/extract", {})
     extracted = result.get("extracted", 0)
     status = result.get("status", "")
@@ -338,8 +337,8 @@ def extract():
     if status == "no_new_conversations":
         console.print("[yellow]•[/yellow] No new conversations to extract.")
     else:
-        console.print(f"[green]✓[/green] Extracted memory from [bold]{extracted}[/bold] conversation(s).")
-        console.print(f"[dim]general.skill.md has been updated.[/dim]")
+        console.print(f"[green]✓[/green] Summarized [bold]{extracted}[/bold] conversation(s).")
+        console.print("[dim]Conversation summaries were stored on the conversation records.[/dim]")
 
 
 

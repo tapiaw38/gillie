@@ -46,11 +46,6 @@ class ConsolidateOutput(BaseModel):
 def _get_brain(request: Request):
     return getattr(request.app.state, "brain", None)
 
-
-def _get_skill_manager(request: Request):
-    return getattr(request.app.state, "skill_manager", None)
-
-
 def _get_user_id(request: Request) -> str:
     return request.state.user.get("user_id", "")
 
@@ -156,17 +151,15 @@ async def list_memories(
 
 @router.post("/consolidate", response_model=ConsolidateOutput, status_code=status.HTTP_200_OK)
 async def consolidate(request: Request):
-    """Promote high-importance episodic memories to general.skill.md and prune stale ones."""
+    """Promote high-importance episodic memories to the soul store and prune stale ones."""
     brain = _get_brain(request)
-    skill_manager = _get_skill_manager(request)
 
-    if brain is None or skill_manager is None:
+    if brain is None or getattr(brain, "soul_vector", None) is None:
         return ConsolidateOutput(written=0, pruned=0)
 
     user_id = _get_user_id(request)
     result = await brain.consolidator.consolidate(
         user_id=user_id,
-        skill_manager=skill_manager,
         auto_prune=True,
     )
 
