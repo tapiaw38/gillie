@@ -21,6 +21,7 @@ from src.core.platform.appcontext.appcontext import new_factory
 from src.core.platform.errors.exception_handler import register_exception_handlers
 from src.core.platform.managers.platform_manager import PlatformServices
 from src.core.platform.managers.skill_manager import SkillManager
+from src.core.platform.brain import BrainServices
 from src.core.platform.nosql.client import MongoDBClient
 from src.core.platform.nosql.migrations import execute_migrations
 from src.core.platform.objectstorange.s3_session import get_s3_session
@@ -52,6 +53,8 @@ class AppRuntime:
     profile_client: MongoDBClient
     migrations_client: MongoDBClient
     mongo_clients: list[MongoDBClient]
+    brain: Optional[object] = None
+    skill_manager: Optional[object] = None
 
 
 def _load_runtime_config() -> tuple[Optional["AssistantConfig"], ConfigurationService]:
@@ -113,6 +116,10 @@ async def _build_runtime(
         if config_service.nosql_config.notion_sessions:
             notion_sessions_client = _new_client(config_service.nosql_config.notion_sessions)
 
+        episodic_memories_client = None
+        if config_service.nosql_config.episodic_memories:
+            episodic_memories_client = _new_client(config_service.nosql_config.episodic_memories)
+
         storage_cfg = config_service.storage_config
         if storage_cfg and storage_cfg.backend == "local":
             store_service = LocalStoreService(
@@ -135,6 +142,7 @@ async def _build_runtime(
             no_sql_jobs_client=jobs_client,
             no_sql_gmail_sessions_client=gmail_sessions_client,
             no_sql_notion_sessions_client=notion_sessions_client,
+            no_sql_episodic_memories_client=episodic_memories_client,
         )
         repositories = Repositories.create_repositories(datasources)
         skill_manager = SkillManager()
@@ -148,11 +156,45 @@ async def _build_runtime(
         integrations.openai.set_skill_manager(skill_manager)
         integrations.openai.set_store_service(store_service)
 
+        brain = None
+        if repositories.episodic_memory is not None:
+            try:
+                from src.adapters.vectorstore.qdrant_adapter import QdrantVectorStoreAdapter
+                from src.core.platform.ai.embeddings.embedding_service import (
+                    EmbeddingService,
+                    create_openai_embeddings,
+                    create_huggingface_embeddings,
+                )
+
+                emb_cfg = config_service.embeddings_config
+                if emb_cfg.provider == "openai":
+                    raw_embeddings = create_openai_embeddings(
+                        api_key=config_service.openai_config.api_key,
+                        model=emb_cfg.openai_model,
+                    )
+                else:
+                    raw_embeddings = create_huggingface_embeddings(
+                        model_name=emb_cfg.hf_model,
+                        device=emb_cfg.device,
+                    )
+                embedding_service = EmbeddingService(raw_embeddings)
+                qdrant_adapter = QdrantVectorStoreAdapter(config_service, raw_embeddings)
+                brain = BrainServices.create(
+                    episodic_repo=repositories.episodic_memory,
+                    qdrant_adapter=qdrant_adapter,
+                    embedding_service=embedding_service,
+                    openai_integration=integrations.openai,
+                )
+                logger.info("Brain services initialized")
+            except Exception as exc:
+                logger.warning("Brain services could not be initialized: %s", exc)
+
         platform_services = PlatformServices.create_services(
             integrations=integrations,
             store_service=store_service,
             config_service=config_service,
             skill_manager=skill_manager,
+            brain=brain,
         )
         context_factory = new_factory(
             datasources,
@@ -197,6 +239,8 @@ async def _build_runtime(
             profile_client=profiles_client,
             migrations_client=migrations_client,
             mongo_clients=mongo_clients,
+            brain=brain,
+            skill_manager=skill_manager,
         )
         return runtime
     except Exception:
@@ -304,6 +348,8 @@ def create_app() -> FastAPI:
         app.state.profile_client = runtime.profile_client
         app.state.migrations_client = runtime.migrations_client
         app.state.mongo_clients = runtime.mongo_clients
+        app.state.brain = runtime.brain
+        app.state.skill_manager = runtime.skill_manager
 
         try:
             await app.state.profile_client.run_migrations(
@@ -327,6 +373,8 @@ def create_app() -> FastAPI:
                 await app.state.repositories.job.ensure_indexes()
             if app.state.repositories.whatsapp_device is not None:
                 await app.state.repositories.whatsapp_device.ensure_indexes()
+            if app.state.repositories.episodic_memory is not None:
+                await app.state.repositories.episodic_memory.ensure_indexes()
         except Exception:
             logger.debug("Failed to ensure async indexes", exc_info=True)
 
@@ -340,6 +388,8 @@ def create_app() -> FastAPI:
                 config_service=app.state.config_service,
                 profile_repository=app.state.repositories.profile,
                 openai_integration=app.state.openai_integration,
+                brain=getattr(app.state, "brain", None),
+                skill_manager=runtime.skill_manager,
             ).initialize(
                 user_id=app.state.user_id,
                 cli_config=app.state.cli_config,

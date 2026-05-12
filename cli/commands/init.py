@@ -17,6 +17,7 @@ from cli.config.schema import (
     OpenAIServiceConfig,
     LangChainServiceConfig,
     QdrantServiceConfig,
+    BrainServiceConfig,
     StorageServiceConfig,
     S3ServiceConfig,
     TTSServiceConfig,
@@ -174,6 +175,38 @@ def init(
             )
 
     console.print()
+    console.print("[bold]Brain / Episodic Memory[/bold]")
+    console.print("[dim]Enables persistent memory across conversations using Qdrant[/dim]")
+    console.print()
+
+    enable_brain = _prompt_confirm("Enable episodic memory (brain)?", default=False)
+    brain_cfg = BrainServiceConfig(enabled=enable_brain)
+
+    if enable_brain:
+        if enable_qdrant:
+            console.print(f"  [dim]Qdrant already configured — brain will use [bold]{qdrant_cfg.host}:{qdrant_cfg.port}[/bold][/dim]")
+        else:
+            console.print("  [dim]Qdrant is required for episodic memory.[/dim]")
+            qdrant_mode = _prompt_select(
+                "Qdrant setup",
+                choices=["Docker (local, recommended)", "External instance"],
+                default="Docker (local, recommended)",
+            )
+            qdrant_host = "localhost" if "Docker" in qdrant_mode else _prompt_text("Qdrant host", required=True)
+            qdrant_port = int(_prompt_text("Qdrant port", default="6333"))
+            qdrant_api_key = _prompt_text("Qdrant API key (optional)", default="")
+            qdrant_cfg = QdrantServiceConfig(
+                enabled=True,
+                host=qdrant_host,
+                port=qdrant_port,
+                api_key=qdrant_api_key or None,
+                mode="docker" if "Docker" in qdrant_mode else "external",
+            )
+            enable_qdrant = True
+            if "Docker" in qdrant_mode:
+                console.print("  [dim]Run [bold cyan]./gillie qdrant start[/bold cyan] to start Qdrant[/dim]")
+
+    console.print()
     console.print("[bold]File Storage[/bold]")
     storage_backend = _prompt_select(
         "Storage backend",
@@ -249,6 +282,7 @@ def init(
             ),
             langchain=langchain_cfg,
             qdrant=qdrant_cfg,
+            brain=brain_cfg,
             storage=storage_cfg,
             s3=s3_cfg,
             tts=TTSServiceConfig(enabled=enable_tts),
@@ -283,6 +317,7 @@ def _print_summary(config: AssistantConfig) -> None:
     table.add_row("AI model", f"{config.services.openai.model} ({config.services.openai.base_url})")
     table.add_row("LangChain", "✓ enabled" if config.services.langchain.enabled else "✗ disabled")
     table.add_row("Qdrant", "✓ enabled" if config.services.qdrant.enabled else "✗ disabled")
+    table.add_row("Brain / Memory", "✓ enabled" if config.services.brain.enabled else "✗ disabled")
     _storage = config.services.storage if hasattr(config.services, "storage") else None
     _storage_display = _storage.backend if _storage else "s3"
     if _storage and _storage.backend == "local":

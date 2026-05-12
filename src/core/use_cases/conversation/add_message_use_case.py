@@ -88,6 +88,14 @@ class AddMessageUseCase:
         self._add_message_to_conversation(conversation, assistant_message)
         await context.repositories.conversation.update_messages_by_id(conversation_id, conversation.messages)
 
+        self._schedule_memory_extraction(
+            user_id=user_id,
+            user_message=user_message.content,
+            assistant_response=ai_response_text,
+            conversation_id=conversation_id,
+            context=context,
+        )
+
         return MessageListOutput.from_output(conversation.messages)
 
     async def execute_stream(
@@ -111,7 +119,9 @@ class AddMessageUseCase:
         user_message = self._create_user_message(content, SenderEnum.user)
         self._add_message_to_conversation(conversation, user_message)
 
-        enhanced_context = self._inject_skill_context(None, content, context)
+        enhanced_context = await self._inject_skill_context(
+            None, content, context, user_id=conversation.profile.user_id or ""
+        )
         conversation_history = (
             context.platform_managers.message_history.convert_messages_to_string(conversation.messages[-20:])
             if context.platform_managers
@@ -150,6 +160,14 @@ class AddMessageUseCase:
         assistant_message = self._create_assistant_message(content=full_text, audio_url=audio_url)
         self._add_message_to_conversation(conversation, assistant_message)
         await context.repositories.conversation.update_messages_by_id(conversation_id, conversation.messages)
+
+        self._schedule_memory_extraction(
+            user_id=user_id,
+            user_message=content,
+            assistant_response=full_text,
+            conversation_id=conversation_id,
+            context=context,
+        )
 
     async def _get_and_validate_conversation(self, conversation_id: str, user_id: str, context):
         conversation = await context.repositories.conversation.find_by_id(conversation_id)
@@ -212,7 +230,9 @@ class AddMessageUseCase:
                 user_message, conversation, message_context, client_workspace, context
             ))
         try:
-            enhanced_context = self._inject_skill_context(message_context, user_message.content, context)
+            enhanced_context = await self._inject_skill_context(
+                message_context, user_message.content, context, user_id=conversation.profile.user_id or ""
+            )
             chat_history = context.platform_managers.message_history.build_chat_history(
                 messages=conversation.messages, max_messages=20
             )
@@ -237,7 +257,7 @@ class AddMessageUseCase:
         client_workspace: str, context,
     ) -> str:
         try:
-            enhanced_context = self._inject_skill_context(message_context, context=context)
+            enhanced_context = await self._inject_skill_context(message_context, context=context)
             conversation_history = " - ".join(
                 f"{msg.sender}: {msg.content}" for msg in conversation.messages
             )
@@ -249,25 +269,61 @@ class AddMessageUseCase:
             logger.error(f"Error in fallback AI response: {e}")
             return self._get_fallback_error_message(conversation.profile)
 
-    def _inject_skill_context(self, message_context: Optional[str], user_query: str = "", context=None) -> str:
+    async def _inject_skill_context(
+        self,
+        message_context: Optional[str],
+        user_query: str = "",
+        context=None,
+        user_id: str = "",
+    ) -> str:
         if not context or not context.platform_managers:
             return message_context
         skill_manager = getattr(context.platform_managers, "skill_manager", None)
-        if not skill_manager:
-            return message_context
-        try:
-            skill_context = skill_manager.get_base_context()
-            if not skill_context:
-                return message_context
-            enhanced = f"{skill_context}\n\n{message_context}" if message_context else skill_context
-            if user_query:
-                results = skill_manager.search_memory(user_query)
-                if results and "No se encontraron resultados" not in results:
-                    enhanced = f"{enhanced}\n\n=== RELEVANT CONTEXT FOR THIS QUERY ===\n{results}"
-            return enhanced
-        except Exception as e:
-            logger.warning(f"Error getting skill context: {e}")
-            return message_context
+        enhanced = message_context
+        if skill_manager:
+            try:
+                skill_context = skill_manager.get_base_context()
+                if skill_context:
+                    enhanced = f"{skill_context}\n\n{message_context}" if message_context else skill_context
+                    if user_query:
+                        results = skill_manager.search_memory(user_query)
+                        if results and "No se encontraron resultados" not in results:
+                            enhanced = f"{enhanced}\n\n=== RELEVANT CONTEXT FOR THIS QUERY ===\n{results}"
+            except Exception as e:
+                logger.warning(f"Error getting skill context: {e}")
+
+        brain = getattr(context.platform_managers, "brain", None)
+        if brain and user_id and user_query:
+            try:
+                enhanced = await brain.working_memory.assemble(
+                    user_id=user_id,
+                    query=user_query,
+                    skill_context=enhanced,
+                )
+            except Exception as e:
+                logger.warning(f"Error assembling working memory: {e}")
+
+        return enhanced
+
+    def _schedule_memory_extraction(
+        self,
+        user_id: str,
+        user_message: str,
+        assistant_response: str,
+        conversation_id: str,
+        context,
+    ) -> None:
+        brain = getattr(context.platform_managers, "brain", None) if context.platform_managers else None
+        if not brain:
+            return
+        asyncio.create_task(
+            brain.memory_writer.extract_and_store(
+                user_id=user_id,
+                user_message=user_message,
+                assistant_response=assistant_response,
+                conversation_id=conversation_id,
+            )
+        )
 
     async def _process_images_if_enabled(
         self, has_image_processor: Optional[str], user_message: Message,

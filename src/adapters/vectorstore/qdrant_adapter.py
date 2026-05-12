@@ -226,7 +226,11 @@ class QdrantVectorStoreAdapter:
             return results
 
         except Exception as e:
-            logger.error(f"Error searching in '{collection_name}': {e}", exc_info=True)
+            msg = str(e).lower()
+            if "not found" in msg or "doesn't exist" in msg or "collection" in msg:
+                logger.debug("Collection '%s' not found or unavailable: %s", collection_name, e)
+            else:
+                logger.error(f"Error searching in '{collection_name}': {e}", exc_info=True)
             return []
 
     def delete_collection(self, collection_name: str) -> bool:
@@ -345,6 +349,50 @@ class QdrantVectorStoreAdapter:
 
         except Exception as e:
             logger.error(f"Error deleting documents from '{collection_name}': {e}")
+            return False
+
+    def ensure_payload_index(self, collection_name: str, field_name: str) -> bool:
+        """Create a keyword payload index on the given field (idempotent)."""
+        try:
+            self.client.create_payload_index(
+                collection_name=collection_name,
+                field_name=field_name,
+                field_schema=models.PayloadSchemaType.KEYWORD,
+            )
+            logger.debug("Payload index ensured on %s.%s", collection_name, field_name)
+            return True
+        except Exception as e:
+            logger.debug("Payload index on %s.%s: %s", collection_name, field_name, e)
+            return False
+
+    def delete_points_by_memory_ids(
+        self,
+        collection_name: str,
+        memory_ids: List[str],
+    ) -> bool:
+        """Delete Qdrant points whose metadata.memory_id is in the given list."""
+        if not memory_ids:
+            return True
+        try:
+            conditions = [
+                models.FieldCondition(
+                    key="metadata.memory_id",
+                    match=models.MatchValue(value=mid),
+                )
+                for mid in memory_ids
+            ]
+            self.client.delete(
+                collection_name=collection_name,
+                points_selector=models.FilterSelector(
+                    filter=models.Filter(should=conditions)
+                ),
+            )
+            logger.info(
+                "Deleted %d vectors from '%s' by memory_id", len(memory_ids), collection_name
+            )
+            return True
+        except Exception as e:
+            logger.error("Error deleting points by memory_id from '%s': %s", collection_name, e)
             return False
 
     def health_check(self) -> bool:

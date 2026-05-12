@@ -98,6 +98,11 @@ class VisionServiceConfig:
 
 
 @dataclass
+class BrainServiceConfig:
+    enabled: bool = False
+
+
+@dataclass
 class TTSServiceConfig:
     enabled: bool = False
 
@@ -160,6 +165,7 @@ class ServicesConfig:
     provider_keys: dict = field(default_factory=dict)  # {base_url: api_key}
     langchain: LangChainServiceConfig = field(default_factory=LangChainServiceConfig)
     qdrant: QdrantServiceConfig = field(default_factory=QdrantServiceConfig)
+    brain: BrainServiceConfig = field(default_factory=BrainServiceConfig)
     embeddings: EmbeddingsServiceConfig = field(default_factory=EmbeddingsServiceConfig)
     storage: StorageServiceConfig = field(default_factory=StorageServiceConfig)
     s3: S3ServiceConfig = field(default_factory=S3ServiceConfig)

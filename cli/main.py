@@ -17,6 +17,7 @@ from cli.commands.install import app as install_app
 from cli.commands.agent import app as agent_app
 from cli.commands.reset import app as reset_app
 from cli.commands.provider import app as provider_app
+from cli.commands.brain import app as brain_app
 from cli.commands.build import app as build_app
 
 console = Console()
@@ -43,6 +44,7 @@ app.add_typer(expose_app, name="expose", help="Expose API via nginx (HTTP/HTTPS)
 app.add_typer(install_app, name="install", help="Install Python dependencies")
 app.add_typer(agent_app, name="agent", help="Interactive chat with the assistant")
 app.add_typer(reset_app, name="reset", help="Reset Gillie to factory state")
+app.add_typer(brain_app, name="brain", help="Manage episodic memory (brain)")
 app.add_typer(provider_app, name="provider", help="Manage AI provider (DeepSeek, OpenRouter, Claude, etc.)")
 app.add_typer(build_app, name="build", hidden=True)
 
@@ -80,6 +82,7 @@ def status():
     table.add_row("Server", f"{config.server.host}:{config.server.port}")
     table.add_row("LangChain", "on" if s.langchain.enabled else "off")
     table.add_row("Qdrant", "on" if s.qdrant.enabled else "off")
+    table.add_row("Brain", "on" if s.brain.enabled else "off")
     table.add_row("S3", "on" if s.s3.enabled else "off")
     table.add_row("TTS", "on" if s.tts.enabled else "off")
     table.add_row("STT", "on" if s.stt.enabled else "off")

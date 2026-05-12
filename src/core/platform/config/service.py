@@ -32,6 +32,7 @@ class NoSQLConfig:
     jobs: Optional[NoSQLCollectionConfig] = None
     gmail_sessions: Optional[NoSQLCollectionConfig] = None
     notion_sessions: Optional[NoSQLCollectionConfig] = None
+    episodic_memories: Optional[NoSQLCollectionConfig] = None
 
 @dataclass
 class ServerConfig:
@@ -295,6 +296,11 @@ def read_config() -> ConfigurationService:
             database=get_env("DB_NAME", "gillie-db"),
             collection=get_env("DB_COLLECTION_NOTION_SESSIONS", "notion_sessions"),
         ),
+        episodic_memories=NoSQLCollectionConfig(
+            database_uri=database_uri,
+            database=get_env("DB_NAME", "gillie-db"),
+            collection=get_env("DB_COLLECTION_EPISODIC_MEMORIES", "episodic_memories"),
+        ) if get_env("BRAIN_ENABLED", "false").lower() == "true" else None,
     )
 
     provider = get_env("AI_PROVIDER", "")
@@ -546,6 +552,11 @@ def init_config_from_json(config_data: "AssistantConfig") -> None:
             database=db_name,
             collection="notion_sessions",
         ),
+        episodic_memories=NoSQLCollectionConfig(
+            database_uri=db_uri,
+            database=db_name,
+            collection="episodic_memories",
+        ) if getattr(s, "brain", None) and s.brain.enabled else None,
     )
 
     config = ConfigurationService(

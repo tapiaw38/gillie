@@ -8,6 +8,7 @@ from src.adapters.datasources.repositories.whatsapp_device.repository import Rep
 from src.adapters.datasources.repositories.job.repository import Repository as JobRepository
 from src.adapters.datasources.repositories.gmail.repository import Repository as GmailRepository
 from src.adapters.datasources.repositories.notion.repository import Repository as NotionRepository
+from src.adapters.datasources.repositories.episodic_memory.repository import Repository as EpisodicMemoryRepository
 from src.adapters.datasources.repositories.inmemory.role_repository import RoleRepository, role_repository
 
 
@@ -23,6 +24,7 @@ class Repositories:
             job: Optional[JobRepository] = None,
             gmail: Optional[GmailRepository] = None,
             notion: Optional[NotionRepository] = None,
+            episodic_memory: Optional[EpisodicMemoryRepository] = None,
     ):
         self.conversation = conversation
         self.profile = profile
@@ -33,6 +35,7 @@ class Repositories:
         self.job = job
         self.gmail = gmail
         self.notion = notion
+        self.episodic_memory = episodic_memory
 
     @staticmethod
     def create_repositories(datasources: Datasources):
@@ -60,6 +63,10 @@ class Repositories:
         if datasources.no_sql_notion_sessions_client is not None:
             notion = NotionRepository(datasources)
 
+        episodic_memory = None
+        if datasources.no_sql_episodic_memories_client is not None:
+            episodic_memory = EpisodicMemoryRepository(datasources)
+
         return Repositories(
             conversation=ConversationRepository(datasources),
             profile=ProfileRepository(datasources),
@@ -70,4 +77,5 @@ class Repositories:
             job=job,
             gmail=gmail,
             notion=notion,
+            episodic_memory=episodic_memory,
         )
