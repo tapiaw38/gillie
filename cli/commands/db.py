@@ -1,3 +1,15 @@
+"""
+DB CLI commands
+
+gillie db edit     — edit MongoDB URI and database name
+gillie db start    — start MongoDB via Docker Compose
+gillie db stop     — stop MongoDB Docker container
+gillie db restart  — restart MongoDB Docker container
+gillie db status   — show container status
+gillie db reset    — drop all data from the database
+gillie db logs     — view container logs
+"""
+
 import shutil
 import subprocess
 import typer
@@ -11,7 +23,7 @@ from cli.config.manager import config_exists, load_config
 
 console = Console()
 
-app = typer.Typer(help="Manage the local MongoDB database (Docker).")
+app = typer.Typer(help="Manage MongoDB database (Docker).")
 
 PROJECT_DIR = Path(__file__).parent.parent.parent.resolve()
 COMPOSE_FILE = PROJECT_DIR / "docker-compose.mongo.yml"
@@ -188,6 +200,27 @@ def reset(
     except Exception as e:
         console.print(f"[red]✗[/red] Failed to reset database: {e}")
         raise typer.Exit(1)
+
+
+@app.command("edit")
+def edit():
+    """Edit MongoDB configuration."""
+    from cli.config.manager import save_config
+    if not config_exists():
+        console.print("[red]✗[/red] No config found. Run [bold cyan]gillie init[/bold cyan] first.")
+        raise typer.Exit(1)
+
+    config = load_config()
+    s = config.services
+
+    console.print()
+    s.mongodb.uri = inquirer.text("MongoDB URI", default=s.mongodb.uri).execute()
+    s.mongodb.database = inquirer.text("Database name", default=s.mongodb.database).execute()
+
+    save_config(config)
+    console.print()
+    console.print("✨🐙 [green]✓[/green] MongoDB configuration updated.")
+    console.print()
 
 
 @app.command("logs")

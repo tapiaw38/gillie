@@ -91,7 +91,7 @@ class ProcessTelegramMessageUseCase:
                 if not message_text:
                     continue
 
-                conversation_list = context.repositories.conversation.find_user_id(profile.user_id)
+                conversation_list = await context.repositories.conversation.find_user_id(profile.user_id)
 
                 conversation_id = None
                 for conv in conversation_list:
@@ -102,7 +102,7 @@ class ProcessTelegramMessageUseCase:
                 if not conversation_id:
                     from src.core.use_cases.conversation import CreateUseCase
                     create_usecase = CreateUseCase(self.context_factory)
-                    new_conv = create_usecase.execute(
+                    new_conv = await create_usecase.execute(
                         ConversationInput(title=f"Telegram-{chat_id}"),
                         profile.user_id,
                     )
@@ -128,7 +128,7 @@ class ProcessTelegramMessageUseCase:
                     user_id=profile.user_id,
                 )
 
-                updated_conversation = context.repositories.conversation.find_by_id(conversation_id)
+                updated_conversation = await context.repositories.conversation.find_by_id(conversation_id)
                 all_messages = updated_conversation.messages
 
                 last_user_idx = next(

@@ -11,7 +11,7 @@ class FindWithActiveWhatsAppIntegrationUseCase:
     def __init__(self, context_factory: Factory):
         self.context_factory = context_factory
 
-    def execute(self) -> Optional[Profile]:
+    async def execute(self) -> Optional[Profile]:
         """
         Execute the use case to find a profile with active WhatsApp integration.
 
@@ -20,7 +20,7 @@ class FindWithActiveWhatsAppIntegrationUseCase:
         """
         context = self.context_factory()
 
-        profiles = context.repositories.profile.find_all()
+        profiles = await context.repositories.profile.find_all()
 
         for profile in profiles:
             if profile.integrations:

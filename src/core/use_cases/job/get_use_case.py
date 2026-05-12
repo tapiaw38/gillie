@@ -15,10 +15,10 @@ class GetJobUseCase:
     def __init__(self, context_factory: Factory):
         self.context_factory = context_factory
 
-    def execute(self, job_id: str) -> JobOutput:
+    async def execute(self, job_id: str) -> JobOutput:
         try:
             context = self.context_factory()
-            job = context.repositories.job.find_by_id(job_id)
+            job = await context.repositories.job.find_by_id(job_id)
         except Exception as e:
             logger.error(f"Error getting job: {e}", exc_info=True)
             raise NewApplicationError(JobGetQueryError, e)

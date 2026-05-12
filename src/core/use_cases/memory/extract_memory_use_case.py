@@ -15,7 +15,7 @@ class ExtractMemoryUseCase:
     async def execute(self, user_id: str) -> dict:
         ctx = self.context_factory()
         try:
-            conversations = ctx.repositories.conversation.find_unextracted(user_id)
+            conversations = await ctx.repositories.conversation.find_unextracted(user_id)
             if not conversations:
                 return {"extracted": 0, "status": "no_new_conversations"}
 
@@ -26,7 +26,9 @@ class ExtractMemoryUseCase:
             for conv in conversations:
                 summary = await self.extraction_service.summarize_conversation(conv, openai_client)
                 if summary:
-                    ctx.repositories.conversation.update_summary(conv.id, summary, memory_extracted=True)
+                    await ctx.repositories.conversation.update_summary(
+                        conv.id, summary, memory_extracted=True
+                    )
                     summaries.append(summary)
                     logger.info(f"Summarized conversation {conv.id}")
 

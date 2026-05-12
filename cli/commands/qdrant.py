@@ -1,3 +1,15 @@
+"""
+Qdrant CLI commands
+
+gillie qdrant edit     — enable/disable Qdrant, configure host/port/mode
+gillie qdrant start    — start Qdrant via Docker Compose
+gillie qdrant stop     — stop Qdrant Docker container
+gillie qdrant restart  — restart Qdrant Docker container
+gillie qdrant status   — show container status and connection info
+gillie qdrant reset    — delete all Qdrant collections
+gillie qdrant logs     — view container logs
+"""
+
 import shutil
 import subprocess
 import typer
@@ -11,7 +23,7 @@ from cli.config.manager import config_exists, load_config
 
 console = Console()
 
-app = typer.Typer(help="Manage the local Qdrant vector store (Docker).")
+app = typer.Typer(help="Manage Qdrant vector store (Docker).")
 
 PROJECT_DIR = Path(__file__).parent.parent.parent.resolve()
 COMPOSE_FILE = PROJECT_DIR / "docker-compose.qdrant.yml"
@@ -73,7 +85,18 @@ def start():
         raise typer.Exit(1)
 
     console.print("✨🐙 Starting Qdrant...")
-    result = _compose(["up", "-d"])
+
+    existing = subprocess.run(
+        ["docker", "ps", "-a", "--filter", f"name=^/{CONTAINER_NAME}$", "--format", "{{.Names}}"],
+        capture_output=True, text=True,
+    )
+    if CONTAINER_NAME in (existing.stdout or ""):
+        result = subprocess.run(["docker", "start", CONTAINER_NAME], capture_output=True)
+        if result.returncode == 0:
+            console.print("[green]✓[/green] Qdrant running at [bold]http://localhost:6333[/bold]")
+            return
+
+    result = _compose(["up", "-d", "--force-recreate"])
     if result.returncode == 0:
         console.print("[green]✓[/green] Qdrant running at [bold]http://localhost:6333[/bold]")
     else:
@@ -219,6 +242,34 @@ def reset(
     except Exception as e:
         console.print(f"[red]✗[/red] Failed to reset Qdrant: {e}")
         raise typer.Exit(1)
+
+
+@app.command("edit")
+def edit():
+    """Edit Qdrant configuration."""
+    from cli.config.manager import save_config
+    if not config_exists():
+        console.print("[red]✗[/red] No config found. Run [bold cyan]gillie init[/bold cyan] first.")
+        raise typer.Exit(1)
+
+    config = load_config()
+    s = config.services
+
+    console.print()
+    s.qdrant.enabled = inquirer.confirm("Enable Qdrant?", default=s.qdrant.enabled).execute()
+    if s.qdrant.enabled:
+        s.qdrant.mode = inquirer.select(
+            "Mode", choices=["docker", "external"], default=s.qdrant.mode
+        ).execute()
+        s.qdrant.host = inquirer.text("Host", default=s.qdrant.host).execute()
+        s.qdrant.port = int(inquirer.text("Port", default=str(s.qdrant.port)).execute())
+        api_key = inquirer.text("API key (optional)", default=s.qdrant.api_key or "").execute()
+        s.qdrant.api_key = api_key or None
+
+    save_config(config)
+    console.print()
+    console.print("✨🐙 [green]✓[/green] Qdrant configuration updated.")
+    console.print()
 
 
 @app.command("logs")

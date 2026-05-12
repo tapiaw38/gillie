@@ -10,10 +10,10 @@ class GetAuthorizationUrlUseCase:
     def __init__(self, context_factory: Factory):
         self.context_factory = context_factory
 
-    def execute(self, user_id: str) -> str:
+    async def execute(self, user_id: str) -> str:
         try:
             context = self.context_factory()
-            url = context.integrations.google_drive.get_authorization_url(user_id)
+            url = await context.integrations.google_drive.get_authorization_url(user_id)
             if not url:
                 raise NewApplicationError(DriveOAuthError)
             return url

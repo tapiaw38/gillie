@@ -16,10 +16,10 @@ class GetDeviceUseCase:
     def __init__(self, context_factory: Factory):
         self.context_factory = context_factory
 
-    def execute(self, device_id: str) -> WhatsAppDevice:
+    async def execute(self, device_id: str) -> WhatsAppDevice:
         try:
             context = self.context_factory()
-            device = context.repositories.whatsapp_device.find_by_id(device_id)
+            device = await context.repositories.whatsapp_device.find_by_id(device_id)
         except Exception as e:
             logger.error(f"Error getting WhatsApp device: {e}", exc_info=True)
             raise NewApplicationError(WhatsAppDeviceGetQueryError, e)

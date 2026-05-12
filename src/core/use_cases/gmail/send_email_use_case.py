@@ -17,7 +17,7 @@ class SendEmailUseCase:
     def __init__(self, context_factory: Factory):
         self.context_factory = context_factory
 
-    def execute(
+    async def execute(
         self,
         user_id: str,
         to: str,
@@ -35,7 +35,7 @@ class SendEmailUseCase:
             raise NewApplicationError(GmailBodyRequiredError)
         try:
             context = self.context_factory()
-            return context.integrations.gmail.send_email(
+            return await context.integrations.gmail.send_email(
                 user_id=user_id,
                 to=to,
                 subject=subject,

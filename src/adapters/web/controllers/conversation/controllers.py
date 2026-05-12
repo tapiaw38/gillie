@@ -1,5 +1,4 @@
-
-from fastapi import APIRouter, status, Depends, Request, Query, HTTPException, Form, File, UploadFile
+from fastapi import APIRouter, status, Depends, Request, Query, Form, File, UploadFile
 from fastapi.responses import StreamingResponse
 from src.schemas import (
     ConversationInput,
@@ -24,10 +23,13 @@ logger = logging.getLogger(__name__)
 async def create_conversation(
     conversation: ConversationInput,
     request: Request,
-    usecases: Usecases = Depends(get_usecases)
+    usecases: Usecases = Depends(get_usecases),
 ):
     user_id = request.state.user.get("user_id")
-    conversation = usecases.conversation.create_usecase.execute(conversation, user_id)
+    conversation = await usecases.conversation.create_usecase.execute(
+        conversation,
+        user_id,
+    )
     return conversation
 
 @router.get("/user", status_code=status.HTTP_200_OK)
@@ -40,18 +42,18 @@ async def find_conversations_by_user_id(
     )
 ):
     user_id = request.state.user.get("user_id")
-    conversations = usecases.conversation.find_by_user_id_usecase.execute(user_id, include_sandbox)
+    conversations = await usecases.conversation.find_by_user_id_usecase.execute(
+        user_id,
+        include_sandbox,
+    )
     return conversations
 
 @router.get("/{conversation_id}", status_code=status.HTTP_200_OK)
 async def find_conversation_by_id(
     conversation_id: str,
-    usecases: Usecases = Depends(get_usecases)
+    usecases: Usecases = Depends(get_usecases),
 ):
-    conversation = usecases.conversation.find_by_id_usecase.execute(conversation_id)
-    if conversation is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Conversation not found")
-    return conversation
+    return await usecases.conversation.find_by_id_usecase.execute(conversation_id)
 
 @router.post("/{conversation_id}/message", status_code=status.HTTP_200_OK)
 async def add_message(

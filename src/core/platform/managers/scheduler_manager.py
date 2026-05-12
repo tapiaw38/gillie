@@ -13,7 +13,7 @@ class SchedulerManager:
 
     async def start(self):
         """Load all enabled jobs and start the scheduler."""
-        jobs = self.job_repository.find_all_enabled()
+        jobs = await self.job_repository.find_all_enabled()
         for job in jobs:
             self._schedule_job(job)
         self.scheduler.start()

@@ -24,7 +24,7 @@ class CreateJobUseCase:
     def __init__(self, context_factory: Factory):
         self.context_factory = context_factory
 
-    def execute(self, job_input: JobInput, profile_id: str) -> JobOutput:
+    async def execute(self, job_input: JobInput, profile_id: str) -> JobOutput:
         if not job_input.name or not job_input.name.strip():
             raise NewApplicationError(JobNameRequiredError)
 
@@ -57,7 +57,7 @@ class CreateJobUseCase:
 
         try:
             context = self.context_factory()
-            context.repositories.job.create(job)
+            await context.repositories.job.create(job)
             return JobOutput(data=JobData.from_domain(job))
         except Exception as e:
             logger.error(f"Error creating job: {e}", exc_info=True)

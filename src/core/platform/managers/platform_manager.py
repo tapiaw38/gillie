@@ -12,6 +12,7 @@ from src.core.platform.managers.image_processing_manager import ImageProcessingS
 from src.core.platform.managers.ai_response_manager import AIResponseService
 from src.core.platform.managers.message_history_manager import MessageHistoryService
 from src.core.platform.managers.skill_manager import SkillManager
+from typing import Optional
 
 
 class PlatformServices:
@@ -23,6 +24,7 @@ class PlatformServices:
         ai_response: AIResponseService,
         message_history: MessageHistoryService,
         skill_manager: SkillManager = None,
+        brain=None,
     ):
         self.voice_transcription = voice_transcription
         self.text_to_speech = text_to_speech
@@ -30,9 +32,10 @@ class PlatformServices:
         self.ai_response = ai_response
         self.message_history = message_history
         self.skill_manager = skill_manager
+        self.brain = brain
 
     @staticmethod
-    def create_services(integrations, store_service, config_service, skill_manager: SkillManager = None) -> "PlatformServices":
+    def create_services(integrations, store_service, config_service, skill_manager: SkillManager = None, brain=None) -> "PlatformServices":
         voice_transcription = VoiceTranscriptionService(
             stt_integration=integrations.stt
         )
@@ -63,4 +66,5 @@ class PlatformServices:
             ai_response=ai_response,
             message_history=message_history,
             skill_manager=skill_manager,
+            brain=brain,
         )

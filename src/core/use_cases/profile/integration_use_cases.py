@@ -19,7 +19,7 @@ class AddIntegrationUseCase:
 
     async def execute(self, user_id: str, integration: IntegrationInput):
         context = self.context_factory()
-        profile = context.repositories.profile.find_by_user_id(user_id)
+        profile = await context.repositories.profile.find_by_user_id(user_id)
         if not profile:
             raise NewApplicationError(ProfileGetNotFoundError)
 
@@ -45,10 +45,10 @@ class AddIntegrationUseCase:
                 integ.activated = new_integration.activated
                 integ.config = new_integration.config
                 integ.updated_at = datetime.now(timezone.utc)
-                context.repositories.profile.update_integrations(
+                await context.repositories.profile.update_integrations(
                     user_id, profile.integrations
                 )
-                context.repositories.conversation.update_profile_by_user_id(
+                await context.repositories.conversation.update_profile_by_user_id(
                     user_id,
                     profile=profile,
                 )
@@ -56,11 +56,11 @@ class AddIntegrationUseCase:
 
         profile.integrations.append(new_integration)
 
-        context.repositories.profile.update_integrations(
+        await context.repositories.profile.update_integrations(
             user_id, profile.integrations
         )
 
-        context.repositories.conversation.update_profile_by_user_id(
+        await context.repositories.conversation.update_profile_by_user_id(
             user_id,
             profile=profile,
         )
@@ -74,7 +74,7 @@ class DeleteIntegrationUseCase:
 
     async def execute(self, user_id: str, integration_id: str):
         context = self.context_factory()
-        profile = context.repositories.profile.find_by_user_id(user_id)
+        profile = await context.repositories.profile.find_by_user_id(user_id)
         if not profile:
             raise NewApplicationError(ProfileGetNotFoundError)
 
@@ -90,6 +90,6 @@ class DeleteIntegrationUseCase:
         if len(profile.integrations) == original_len:
             raise NewApplicationError(ProfileIntegrationNotFoundError)
 
-        context.repositories.profile.update_integrations(user_id, profile.integrations)
-        context.repositories.conversation.update_profile_by_user_id(user_id, profile=profile)
+        await context.repositories.profile.update_integrations(user_id, profile.integrations)
+        await context.repositories.conversation.update_profile_by_user_id(user_id, profile=profile)
         return IntegrationListOutput.from_output(profile.integrations)

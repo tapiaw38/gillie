@@ -6,9 +6,9 @@ class GetCredentialsUseCase:
     def __init__(self, context_factory: Factory):
         self.context_factory = context_factory
 
-    def execute(self) -> Optional[dict]:
+    async def execute(self) -> Optional[dict]:
         context = self.context_factory()
-        creds = context.repositories.drive.find_credentials()
+        creds = await context.repositories.drive.find_credentials()
         if not creds:
             return None
         return {

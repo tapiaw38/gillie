@@ -132,7 +132,7 @@ class AddFilesUseCase:
             if errors:
                 raise NewApplicationError(ProfileFileUploadError, errors[0])
 
-            profile = app.repositories.profile.find_by_user_id(user_id)
+            profile = await app.repositories.profile.find_by_user_id(user_id)
             if not profile:
                 raise NewApplicationError(ProfileGetNotFoundError)
 
@@ -141,13 +141,13 @@ class AddFilesUseCase:
 
             profile.files.extend(results)
 
-            app.repositories.profile.update_files(user_id, profile.files)
+            await app.repositories.profile.update_files(user_id, profile.files)
 
-            updated_profile = app.repositories.profile.find_by_user_id(user_id)
+            updated_profile = await app.repositories.profile.find_by_user_id(user_id)
             if not updated_profile:
                 raise NewApplicationError(ProfileGetNotFoundError)
 
-            app.repositories.conversation.update_profile_by_user_id(
+            await app.repositories.conversation.update_profile_by_user_id(
                 user_id,
                 profile=updated_profile,
             )
@@ -165,13 +165,13 @@ class DeleteFileByIdUseCase:
     async def execute(self, user_id: str, file_id: str):
         try:
             context = self.context_factory()
-            file = context.repositories.profile.get_file_by_id(
+            file = await context.repositories.profile.get_file_by_id(
                 user_id, file_id
             )
             if not file:
                 raise NewApplicationError(ProfileFileNotFoundError)
 
-            context.repositories.profile.delete_file_by_id(
+            await context.repositories.profile.delete_file_by_id(
                 user_id, file_id
             )
 
@@ -179,11 +179,11 @@ class DeleteFileByIdUseCase:
             create_task(_delete_from_qdrant(context.config_service, file.url, file_id, user_id))
             logger.info(f"[Delete] background tasks queued for file {file_id} (S3 + Qdrant)")
 
-            profile = context.repositories.profile.find_by_user_id(user_id)
+            profile = await context.repositories.profile.find_by_user_id(user_id)
             if not profile:
                 raise NewApplicationError(ProfileGetNotFoundError)
 
-            context.repositories.conversation.update_profile_by_user_id(
+            await context.repositories.conversation.update_profile_by_user_id(
                 user_id,
                 profile=profile,
             )

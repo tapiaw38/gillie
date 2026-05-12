@@ -13,10 +13,10 @@ class ListFilesUseCase:
     def __init__(self, context_factory: Factory):
         self.context_factory = context_factory
 
-    def execute(self, user_id: str, folder_id: Optional[str] = None) -> List[Dict]:
+    async def execute(self, user_id: str, folder_id: Optional[str] = None) -> List[Dict]:
         try:
             context = self.context_factory()
-            service = get_drive_service(context, user_id)
+            service = await get_drive_service(context, user_id)
             return context.integrations.google_drive.list_files(
                 service, folder_id
             )

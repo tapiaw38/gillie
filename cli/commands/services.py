@@ -12,10 +12,8 @@ console = Console()
 app = typer.Typer(help="Manage service configurations.")
 
 SERVICE_NAMES = [
-    "mongodb",
     "openai",
     "langchain",
-    "qdrant",
     "embeddings",
     "s3",
     "tts",
@@ -49,14 +47,15 @@ def show():
     table.add_column("Status")
     table.add_column("Details")
 
-    table.add_row("mongodb", "[green]✓ always on[/green]", s.mongodb.uri)
+    table.add_row("mongodb", "[green]✓ always on[/green]", f"{s.mongodb.uri}  [dim](gillie db edit)[/dim]")
     table.add_row(
         "openai",
         "[green]✓ always on[/green]",
         f"{s.openai.model} @ {s.openai.base_url}",
     )
     table.add_row("langchain", _status(s.langchain.enabled), f"vector_store={s.langchain.vector_store}" if s.langchain.enabled else "")
-    table.add_row("qdrant", _status(s.qdrant.enabled), f"{s.qdrant.host}:{s.qdrant.port}" if s.qdrant.enabled else "")
+    table.add_row("qdrant", _status(s.qdrant.enabled), f"{s.qdrant.host}:{s.qdrant.port}  [dim](gillie qdrant edit)[/dim]" if s.qdrant.enabled else "[dim](gillie qdrant edit)[/dim]")
+    table.add_row("brain", _status(s.brain.enabled), "episodic memory  [dim](gillie brain edit)[/dim]" if s.brain.enabled else "[dim](gillie brain edit)[/dim]")
     table.add_row("embeddings", "[green]✓ always on[/green]", f"provider={s.embeddings.provider}")
     table.add_row("s3", _status(s.s3.enabled), f"bucket={s.s3.bucket_name}" if s.s3.enabled else "")
     table.add_row("tts", _status(s.tts.enabled), "")
@@ -72,9 +71,14 @@ def show():
 
 @app.command("edit")
 def edit(
-    service: str = typer.Argument(None, help="Service name to edit (mongodb, openai, langchain, ...)"),
+    service: str = typer.Argument(None, help="Service to edit (openai, langchain, embeddings, s3, tts, stt, whatsapp, mercadolibre, langsmith, llm)"),
 ):
-    """Edit a specific service configuration interactively."""
+    """Edit service configuration (openai, langchain, s3, tts, stt...).
+
+    For mongodb use [bold cyan]gillie db edit[/bold cyan],
+    for qdrant use [bold cyan]gillie qdrant edit[/bold cyan],
+    for brain use [bold cyan]gillie brain edit[/bold cyan].
+    """
     _require_config()
     config = load_config()
 
@@ -95,11 +99,7 @@ def edit(
 
     s = config.services
 
-    if service == "mongodb":
-        s.mongodb.uri = inquirer.text("MongoDB URI", default=s.mongodb.uri).execute()
-        s.mongodb.database = inquirer.text("Database name", default=s.mongodb.database).execute()
-
-    elif service == "openai":
+    if service == "openai":
         s.openai.api_key = inquirer.secret("API key", validate=lambda x: len(x) > 0 or "Required").execute() or s.openai.api_key
         s.openai.base_url = inquirer.text("Base URL", default=s.openai.base_url).execute()
         s.openai.model = inquirer.text("Model", default=s.openai.model).execute()
@@ -116,14 +116,6 @@ def edit(
             s.langchain.chunk_size = int(inquirer.text("Chunk size", default=str(s.langchain.chunk_size)).execute())
             s.langchain.chunk_overlap = int(inquirer.text("Chunk overlap", default=str(s.langchain.chunk_overlap)).execute())
             s.langchain.similarity_k = int(inquirer.text("Similarity k", default=str(s.langchain.similarity_k)).execute())
-
-    elif service == "qdrant":
-        s.qdrant.enabled = inquirer.confirm("Enable Qdrant?", default=s.qdrant.enabled).execute()
-        if s.qdrant.enabled:
-            s.qdrant.host = inquirer.text("Host", default=s.qdrant.host).execute()
-            s.qdrant.port = int(inquirer.text("Port", default=str(s.qdrant.port)).execute())
-            api_key = inquirer.text("API key (optional)", default=s.qdrant.api_key or "").execute()
-            s.qdrant.api_key = api_key or None
 
     elif service == "embeddings":
         s.embeddings.provider = inquirer.select(

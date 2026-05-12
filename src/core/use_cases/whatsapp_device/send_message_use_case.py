@@ -23,7 +23,7 @@ class SendMessageUseCase:
         neonize_integration,
     ) -> str:
         context = self.context_factory()
-        device = context.repositories.whatsapp_device.find_by_id(device_id)
+        device = await context.repositories.whatsapp_device.find_by_id(device_id)
         if not device:
             raise NewApplicationError(WhatsAppDeviceNotFoundError)
 

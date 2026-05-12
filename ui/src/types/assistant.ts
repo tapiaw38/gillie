@@ -140,6 +140,13 @@ export interface GoogleGmailIntegrationConfig {
   is_connected?: boolean
 }
 
+export interface NotionIntegrationConfig {
+  profile_id: string
+  is_connected?: boolean
+  workspace_name?: string
+  owner_name?: string
+}
+
 export interface SQLDatabaseTableEntry {
   name: string
   description: string
@@ -162,6 +169,7 @@ export interface IntegrationParams {
     | GoogleCalendarIntegrationConfig
     | GoogleDriveIntegrationConfig
     | GoogleGmailIntegrationConfig
+    | NotionIntegrationConfig
     | SQLDatabaseIntegrationConfig
     | SystemCommandsIntegrationConfig
     | SlackIntegrationConfig
@@ -215,4 +223,3 @@ export interface TelegramIntegrationConfig {
 export interface IntegrationResponse {
   data: Integration[]
 }
-

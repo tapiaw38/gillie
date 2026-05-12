@@ -61,12 +61,11 @@ async def slack_events(request: Request):
             content={"challenge": payload.get("challenge", "")},
         )
 
-    # Verify request authenticity using the signing secret from the active profile
-    # We resolve the profile first (needed for the signing_secret) but fall back to
-    # a no-secret instance when the profile is missing, which skips verification.
+    # Resolve the active profile first so we can verify the request signature
+    # against the configured signing secret.
     usecases = get_usecases(request)
 
-    profile = usecases.profile.find_with_active_slack_integration_usecase.execute()
+    profile = await usecases.profile.find_with_active_slack_integration_usecase.execute()
 
     signing_secret = ""
     if profile:
@@ -75,13 +74,23 @@ async def slack_events(request: Request):
                 signing_secret = integration.config.get("signing_secret", "")
                 break
 
+    app_mode = getattr(request.app.state.config_service.server_config, "mode", "release")
+    allow_insecure_dev = str(app_mode) == "debug"
+
+    if not signing_secret and not allow_insecure_dev:
+        logger.error("Slack signing secret is not configured; refusing to process webhook")
+        return JSONResponse(status_code=200, content={"status": "ignored"})
+
     timestamp = request.headers.get("X-Slack-Request-Timestamp", "")
     signature = request.headers.get("X-Slack-Signature", "")
 
-    verifier = SlackIntegration(bot_token="", signing_secret=signing_secret)
-    if not verifier.verify_signature(raw_body, timestamp, signature):
-        logger.warning("Slack signature verification failed; ignoring request")
-        return JSONResponse(status_code=200, content={"status": "ignored"})
+    if allow_insecure_dev and not signing_secret:
+        logger.warning("Slack webhook accepted without signature verification in debug mode")
+    else:
+        verifier = SlackIntegration(bot_token="", signing_secret=signing_secret)
+        if not verifier.verify_signature(raw_body, timestamp, signature):
+            logger.warning("Slack signature verification failed; ignoring request")
+            return JSONResponse(status_code=200, content={"status": "ignored"})
 
     if payload.get("type") != "event_callback":
         logger.debug(f"Ignoring non-event_callback payload type: {payload.get('type')}")

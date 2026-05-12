@@ -2,6 +2,7 @@
 import type { IntegrationParams, TelegramIntegrationConfig } from '@/types/assistant'
 import { onMounted, reactive, computed, watch, ref } from 'vue'
 import { useAssistant } from '@/composables/useAssistant'
+import { useClipboard } from '@/composables/useClipboard'
 import { useTelegram } from '@/composables/useTelegram'
 import { useErrorToast } from '@/composables/useErrorToast'
 import { useI18n } from 'vue-i18n'
@@ -22,6 +23,7 @@ const {
 } = useAssistant()
 
 const { t } = useI18n()
+const { copyText } = useClipboard()
 const { registerWebhook: registerTelegramWebhook, isRegisterWebhookPending: isRegisteringWebhook } =
   useTelegram()
 
@@ -132,7 +134,15 @@ const registerWebhook = async () => {
 }
 
 const copyWebhookUrl = async () => {
-  await navigator.clipboard.writeText(webhookUrl.value)
+  const copied = await copyText(webhookUrl.value)
+  if (!copied) {
+    toast.add({
+      severity: 'error',
+      summary: t('common.error'),
+      detail: t('common.unknownError'),
+      life: 3000,
+    })
+  }
 }
 
 onMounted(async () => {

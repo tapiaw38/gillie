@@ -29,7 +29,7 @@ async def get_drive_credentials(
     usecases: Usecases = Depends(get_usecases),
 ):
     """Get saved Google Drive OAuth credentials (client_id only, secret never returned)."""
-    return usecases.drive.get_credentials_usecase.execute() or {}
+    return await usecases.drive.get_credentials_usecase.execute() or {}
 
 
 @router.post("/credentials", status_code=status.HTTP_204_NO_CONTENT)
@@ -40,7 +40,11 @@ async def save_credentials(
 ):
     """Save Google Drive OAuth app credentials to MongoDB."""
     redirect_uri = body.redirect_uri or "http://localhost:8000/api/v1/drive/oauth/callback"
-    usecases.drive.set_credentials_usecase.execute(body.client_id, body.client_secret, redirect_uri)
+    await usecases.drive.set_credentials_usecase.execute(
+        body.client_id,
+        body.client_secret,
+        redirect_uri,
+    )
 
 
 @router.get("/authorize", response_model=DriveAuthorizationOutput, status_code=status.HTTP_200_OK)
@@ -50,7 +54,7 @@ async def get_authorization_url(
 ):
     """Get Google Drive OAuth authorization URL."""
     user_id = request.state.user.get("user_id")
-    auth_url = usecases.drive.get_authorization_url_usecase.execute(user_id)
+    auth_url = await usecases.drive.get_authorization_url_usecase.execute(user_id)
     return DriveAuthorizationOutput(authorization_url=auth_url, user_id=user_id)
 
 
@@ -64,7 +68,7 @@ async def oauth_callback(
     """Handle Google Drive OAuth2 callback. `state` carries the user_id.
     Returns an HTML page that closes the popup window."""
     user_id = state or request.state.user.get("user_id")
-    usecases.drive.handle_oauth_callback_usecase.execute(user_id=user_id, code=code)
+    await usecases.drive.handle_oauth_callback_usecase.execute(user_id, code)
     return HTMLResponse(content="""
 <!DOCTYPE html>
 <html>
@@ -89,7 +93,7 @@ async def check_drive_status(
 ):
     """Check if the user has an active Google Drive session."""
     user_id = request.state.user.get("user_id")
-    is_active = usecases.drive.check_session_status_usecase.execute(user_id)
+    is_active = await usecases.drive.check_session_status_usecase.execute(user_id)
     return DriveStatusOutput(is_active=is_active, user_id=user_id)
 
 
@@ -100,7 +104,7 @@ async def disconnect_drive(
 ):
     """Disconnect (revoke) the Google Drive OAuth session."""
     user_id = request.state.user.get("user_id")
-    usecases.drive.disconnect_usecase.execute(user_id)
+    await usecases.drive.disconnect_usecase.execute(user_id)
 
 
 @router.get("/files", response_model=DriveFileListOutput, status_code=status.HTTP_200_OK)
@@ -111,7 +115,7 @@ async def list_files(
 ):
     """List all files and folders in Google Drive."""
     user_id = request.state.user.get("user_id")
-    files = usecases.drive.list_files_usecase.execute(user_id, folder_id)
+    files = await usecases.drive.list_files_usecase.execute(user_id, folder_id)
     return DriveFileListOutput(
         files=[DriveFileOutput(**f) for f in files],
         total=len(files),
@@ -125,14 +129,12 @@ async def get_file_metadata(
     usecases: Usecases = Depends(get_usecases),
 ):
     """Get metadata for a specific file in Google Drive."""
-    from src.core.platform.errors import NewApplicationError
-    from src.core.platform.errors.mappings.drive import DriveOperationError
     from src.core.use_cases.drive._helpers import get_drive_service
 
     user_id = request.state.user.get("user_id")
     # Access context via any use case that holds it
-    ctx = usecases.drive.list_files_usecase.context_factory
-    service = get_drive_service(ctx, user_id)
+    ctx = usecases.drive.list_files_usecase.context_factory()
+    service = await get_drive_service(ctx, user_id)
     meta = ctx.integrations.google_drive.get_file_metadata(service, file_id)
     return DriveFileOutput(**meta)
 
@@ -145,7 +147,7 @@ async def download_file(
 ):
     """Download a file from Google Drive."""
     user_id = request.state.user.get("user_id")
-    result = usecases.drive.download_file_usecase.execute(user_id, file_id)
+    result = await usecases.drive.download_file_usecase.execute(user_id, file_id)
     file_name = result["file_name"]
     mime_type = result["mime_type"] or "application/octet-stream"
     return Response(
@@ -165,12 +167,12 @@ async def upload_file(
     """Upload a file to Google Drive."""
     user_id = request.state.user.get("user_id")
     file_bytes = await file.read()
-    result = usecases.drive.upload_file_usecase.execute(
-        user_id=user_id,
-        file_bytes=file_bytes,
-        file_name=file.filename,
-        mime_type=file.content_type or "application/octet-stream",
-        folder_id=folder_id,
+    result = await usecases.drive.upload_file_usecase.execute(
+        user_id,
+        file_bytes,
+        file.filename,
+        file.content_type or "application/octet-stream",
+        folder_id,
     )
     return DriveUploadOutput(**result)
 
@@ -183,11 +185,7 @@ async def create_folder(
 ):
     """Create a new folder in Google Drive."""
     user_id = request.state.user.get("user_id")
-    result = usecases.drive.create_folder_usecase.execute(
-        user_id=user_id,
-        name=body.name,
-        parent_id=body.parent_id,
-    )
+    result = await usecases.drive.create_folder_usecase.execute(user_id, body.name, body.parent_id)
     return DriveFolderOutput(**result)
 
 
@@ -200,9 +198,5 @@ async def move_file(
 ):
     """Move a file to a different folder in Google Drive."""
     user_id = request.state.user.get("user_id")
-    result = usecases.drive.move_file_usecase.execute(
-        user_id=user_id,
-        file_id=file_id,
-        new_folder_id=body.new_folder_id,
-    )
+    result = await usecases.drive.move_file_usecase.execute(user_id, file_id, body.new_folder_id)
     return DriveMoveFileOutput(**result)

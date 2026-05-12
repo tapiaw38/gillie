@@ -10,10 +10,10 @@ class DeleteEventUseCase:
     def __init__(self, context_factory: Factory):
         self.context_factory = context_factory
 
-    def execute(self, user_id: str, event_id: str, **kwargs) -> None:
+    async def execute(self, user_id: str, event_id: str, **kwargs) -> None:
         try:
             context = self.context_factory()
-            context.integrations.google_calendar.delete_event(
+            await context.integrations.google_calendar.delete_event(
                 user_id=user_id, event_id=event_id
             )
         except Exception as e:

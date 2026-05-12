@@ -55,6 +55,21 @@ ver facts.skill.md
 ver solutions.skill.md
 """
 
+BRAIN_SKILL_MARKER = "## Memoria Episódica (Brain)"
+
+BRAIN_SKILL_BLOCK = """
+## Memoria Episódica (Brain)
+El sistema tiene memoria episódica activa. Después de cada conversación, el asistente
+extrae y almacena automáticamente recuerdos relevantes (hechos, preferencias, decisiones, metas).
+
+Cuando el contexto incluye un bloque `=== EPISODIC MEMORIES ===`:
+- Úsalo para personalizar tu respuesta con información del historial del usuario.
+- Menciona recuerdos relevantes de forma natural, sin listar todos.
+- Prioriza recuerdos con alta importancia (importance >= 7).
+- No inventes recuerdos que no estén en el bloque.
+- NO hay un comando `save_memory` — la extracción es automática.
+"""
+
 _RULES_SKILL_TEMPLATE = """\
 # Reglas del Asistente
 

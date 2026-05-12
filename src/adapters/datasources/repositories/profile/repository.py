@@ -8,66 +8,175 @@ from src.core.domain import (
 )
 from typing import List, Optional
 from pymongo.errors import PyMongoError, DuplicateKeyError
-
-from .create import create_profile
-from .find_by_id import find_profile_by_id
-from .find_by_user_id import find_profile_by_user_id
-from .find_all_user_ids import find_all_user_ids
-from .find_all import find_all
-from .update import update_profile
-from .update_api_keys import update_api_keys
-from .deactivate_api_key import deactivate_api_key
-from .find_by_api_key_value import find_by_api_key_value
-from .update_iteration_limit import update_iteration_limit
-from .update_files import update_files
-from .delete_file_by_id import delete_file_by_id
-from .get_file_by_id import get_file_by_id
-from .update_integrations import update_integrations
+from src.core.platform.errors import NewApplicationError
+from src.core.platform.errors.mappings.profile import (
+    ProfileApiKeyCreateError,
+    ProfileApiKeyDeleteError,
+    ProfileApiKeyNotFoundError,
+    ProfileCreateDuplicateError,
+    ProfileCreateQueryError,
+    ProfileFileDeleteError,
+    ProfileFileUploadError,
+    ProfileGetQueryError,
+    ProfileIntegrationUpdateError,
+    ProfileIterationLimitUpdateError,
+    ProfileUpdateNotFoundError,
+    ProfileUpdateQueryError,
+)
 
 
 class Repository(RepositoryInterface):
     def __init__(self, datasources: Datasources):
         self.client = datasources.no_sql_profiles_client
-        self.client.create_index("user_id", unique=True)
 
-    def create(self, profile: Profile) -> str:
-        return create_profile(self.client, profile)
+    async def ensure_indexes(self) -> None:
+        await self.client.create_index("user_id", unique=True)
 
-    def find_by_id(self, id: str) -> Optional[Profile]:
-        return find_profile_by_id(self.client, id)
+    async def create(self, profile: Profile) -> str:
+        try:
+            profile_dict = profile.dict(by_alias=True, exclude_none=True)
+            result = await self.client.insert_one(profile_dict)
+            return str(result.inserted_id)
+        except DuplicateKeyError as exc:
+            raise NewApplicationError(ProfileCreateDuplicateError, exc)
+        except PyMongoError as exc:
+            raise NewApplicationError(ProfileCreateQueryError, exc)
 
-    def find_by_user_id(self, user_id: str) -> Profile:
-        return find_profile_by_user_id(self.client, user_id)
+    async def find_by_id(self, id: str) -> Optional[Profile]:
+        try:
+            document = await self.client.find_one({"_id": id})
+            if not document:
+                return None
+            return Profile(**document)
+        except PyMongoError as exc:
+            raise NewApplicationError(ProfileGetQueryError, exc)
 
-    def find_all_user_ids(self) -> List[str]:
-        return find_all_user_ids(self.client)
+    async def find_by_user_id(self, user_id: str) -> Profile:
+        try:
+            document = await self.client.find_one({"user_id": user_id})
+            if not document:
+                return None
+            if "role" not in document or not document["role"]:
+                document["role"] = "seller"
+            return Profile(**document)
+        except PyMongoError as exc:
+            raise NewApplicationError(ProfileGetQueryError, exc)
 
-    def find_all(self) -> List[Profile]:
-        return find_all(self.client)
+    async def find_all_user_ids(self) -> List[str]:
+        try:
+            documents = await self.client.find({}).to_list(length=None)
+            return [doc["user_id"] for doc in documents if doc.get("user_id")]
+        except PyMongoError as exc:
+            raise NewApplicationError(ProfileGetQueryError, exc)
 
-    def update(self, id: str, profile: Profile) -> str:
-        return update_profile(self.client, id, profile)
+    async def find_all(self) -> List[Profile]:
+        try:
+            documents = await self.client.find({}).to_list(length=None)
+            return [Profile(**doc) for doc in documents]
+        except PyMongoError as exc:
+            raise NewApplicationError(ProfileGetQueryError, exc)
 
-    def update_api_keys(self, user_id: str, api_keys: List[ApiKey]) -> None:
-        update_api_keys(self.client, user_id, api_keys)
+    async def update(self, id: str, profile: Profile) -> str:
+        try:
+            profile_dict = profile.dict(by_alias=True, exclude_none=True)
+            result = await self.client.update_one({"_id": id}, {"$set": profile_dict})
+            if result.matched_count == 0:
+                raise NewApplicationError(ProfileUpdateNotFoundError)
+            return id
+        except PyMongoError as exc:
+            raise NewApplicationError(ProfileUpdateQueryError, exc)
 
-    def deactivate_api_key(self, user_id: str, api_key_id: str) -> Optional[str]:
-        return deactivate_api_key(self.client, user_id, api_key_id)
+    async def update_api_keys(self, user_id: str, api_keys: List[ApiKey]) -> None:
+        try:
+            api_keys_dict = [api_key.dict(by_alias=True, exclude_none=True) for api_key in api_keys]
+            result = await self.client.update_one(
+                {"user_id": user_id},
+                {"$set": {"api_keys": api_keys_dict}},
+            )
+            if result.matched_count == 0:
+                raise NewApplicationError(ProfileUpdateNotFoundError)
+        except PyMongoError as exc:
+            raise NewApplicationError(ProfileApiKeyCreateError, exc)
 
-    def find_by_api_key_value(self, user_id: str, api_key_value: str) -> ApiKey:
-        return find_by_api_key_value(self.client, user_id, api_key_value)
+    async def deactivate_api_key(self, user_id: str, api_key_id: str) -> Optional[str]:
+        try:
+            result = await self.client.update_one(
+                {
+                    "user_id": user_id,
+                    "api_keys._id": api_key_id,
+                },
+                {
+                    "$set": {
+                        "api_keys.$.is_active": False,
+                    }
+                },
+            )
+            if result.modified_count == 0:
+                raise NewApplicationError(ProfileApiKeyNotFoundError)
+            return api_key_id
+        except PyMongoError as exc:
+            raise NewApplicationError(ProfileApiKeyDeleteError, exc)
 
-    def update_iteration_limit(self, user_id: str, iteration_limit: int) -> str:
-        return update_iteration_limit(self.client, user_id, iteration_limit)
+    async def find_by_api_key_value(self, user_id: str, api_key_value: str) -> ApiKey:
+        profile = await self.find_by_user_id(user_id)
+        if not profile or not profile.api_keys:
+            return None
+        for api_key in profile.api_keys:
+            if api_key.value == api_key_value and api_key.is_active:
+                return api_key
+        return None
 
-    def update_files(self, user_id: str, files: List[File]) -> None:
-        update_files(self.client, user_id, files)
+    async def update_iteration_limit(self, user_id: str, iteration_limit: int) -> str:
+        try:
+            result = await self.client.update_one(
+                {"user_id": user_id},
+                {"$set": {"iteration_limit": iteration_limit}},
+            )
+            if result.matched_count == 0:
+                raise NewApplicationError(ProfileUpdateNotFoundError)
+            return user_id
+        except PyMongoError as exc:
+            raise NewApplicationError(ProfileIterationLimitUpdateError, exc)
 
-    def delete_file_by_id(self, user_id: str, file_id: str) -> None:
-        delete_file_by_id(self.client, user_id, file_id)
+    async def update_files(self, user_id: str, files: List[File]) -> None:
+        try:
+            files_dict = [file.dict(by_alias=True, exclude_none=True) for file in files]
+            result = await self.client.update_one(
+                {"user_id": user_id},
+                {"$set": {"files": files_dict}},
+            )
+            if result.matched_count == 0:
+                raise NewApplicationError(ProfileUpdateNotFoundError)
+        except PyMongoError as exc:
+            raise NewApplicationError(ProfileFileUploadError, exc)
 
-    def get_file_by_id(self, user_id: str, file_id: str) -> Optional[File]:
-        return get_file_by_id(self.client, user_id, file_id)
+    async def delete_file_by_id(self, user_id: str, file_id: str) -> None:
+        try:
+            profile = await self.find_by_user_id(user_id)
+            if not profile:
+                raise NewApplicationError(ProfileUpdateNotFoundError)
+            remaining = [file for file in (profile.files or []) if file.id != file_id]
+            await self.update_files(user_id, remaining)
+        except PyMongoError as exc:
+            raise NewApplicationError(ProfileFileDeleteError, exc)
 
-    def update_integrations(self, user_id: str, integrations: List[Integration]) -> None:
-        update_integrations(self.client, user_id, integrations)
+    async def get_file_by_id(self, user_id: str, file_id: str) -> Optional[File]:
+        profile = await self.find_by_user_id(user_id)
+        if not profile or not profile.files:
+            return None
+        for file in profile.files:
+            if file.id == file_id:
+                return file
+        return None
+
+    async def update_integrations(self, user_id: str, integrations: List[Integration]) -> None:
+        try:
+            integrations_dict = [integration.dict(by_alias=True, exclude_none=True) for integration in integrations]
+            result = await self.client.update_one(
+                {"user_id": user_id},
+                {"$set": {"integrations": integrations_dict}},
+            )
+            if result.matched_count == 0:
+                raise NewApplicationError(ProfileUpdateNotFoundError)
+        except PyMongoError as exc:
+            raise NewApplicationError(ProfileIntegrationUpdateError, exc)

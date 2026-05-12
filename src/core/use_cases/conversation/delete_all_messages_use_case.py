@@ -11,18 +11,14 @@ class DeleteAllMessagesUseCase:
 
     async def execute(self, conversation_id: str, user_id: str):
         context = self.context_factory()
-        search_conversation = (
-            context.repositories.conversation.find_by_id(
-                conversation_id
-            )
-        )
+        search_conversation = await context.repositories.conversation.find_by_id(conversation_id)
         if not search_conversation:
             raise NewApplicationError(ConversationGetNotFoundError)
 
         if user_id != search_conversation.profile.user_id:
             raise NewApplicationError(ForbiddenError)
 
-        context.repositories.conversation.update_messages_by_id(
+        await context.repositories.conversation.update_messages_by_id(
             conversation_id,
             [],
         )

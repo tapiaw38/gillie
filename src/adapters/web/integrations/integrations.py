@@ -5,6 +5,7 @@ from src.adapters.web.integrations.stt.stt import STTIntegration
 from src.adapters.web.integrations.mercadolibre.mercadolibre import MercadoLibreIntegration
 from src.adapters.web.integrations.google_calendar.google_calendar import GoogleCalendarIntegration
 from src.adapters.web.integrations.google_drive.google_drive import GoogleDriveIntegration
+from src.adapters.web.integrations.notion.notion import NotionIntegration
 from src.adapters.web.integrations.mcp.mcp_client import MCPClient
 from src.core.platform.config.service import ConfigurationService
 
@@ -20,6 +21,7 @@ class Integrations:
         calendar_repository=None,
         drive_repository=None,
         gmail_repository=None,
+        notion_repository=None,
     ):
         if Integrations._instance is not None:
             raise Exception("This class is a singleton! Use `Integrations.get_instance()` to access it.")
@@ -85,6 +87,22 @@ class Integrations:
         else:
             logger.info("Gmail integration disabled (no repository)")
 
+        notion_cfg = getattr(config_service, "notion_config", None)
+        notion_fallback_client = None
+        if notion_cfg and notion_cfg.client_id:
+            from src.adapters.services.notion.client import NotionClient
+
+            notion_fallback_client = NotionClient(
+                client_id=notion_cfg.client_id,
+                client_secret=notion_cfg.client_secret,
+                redirect_uri=notion_cfg.redirect_uri,
+            )
+        self.notion = NotionIntegration(
+            repository=notion_repository,
+            fallback_client=notion_fallback_client,
+        )
+        logger.info("Notion integration initialized")
+
         self.mcp = MCPClient()
         logger.info("MCPClient (in-process) initialized")
 
@@ -131,6 +149,7 @@ def create_integrations(
     calendar_repository=None,
     drive_repository=None,
     gmail_repository=None,
+    notion_repository=None,
 ) -> Integrations:
     if Integrations._instance is None:
         return Integrations(
@@ -138,5 +157,6 @@ def create_integrations(
             calendar_repository=calendar_repository,
             drive_repository=drive_repository,
             gmail_repository=gmail_repository,
+            notion_repository=notion_repository,
         )
     return Integrations.get_instance()

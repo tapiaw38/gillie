@@ -41,6 +41,10 @@ def start(
     console.print(f"  Docs:    [bold]http://{actual_host}:{actual_port}/docs[/bold]")
     console.print(f"  Model:   [dim]{config.services.openai.model}[/dim]")
     console.print(f"  MongoDB: [dim]{config.services.mongodb.uri}[/dim]")
+    if config.services.qdrant.enabled:
+        console.print(f"  Qdrant:  [dim]{config.services.qdrant.host}:{config.services.qdrant.port}[/dim]")
+    if config.services.brain.enabled:
+        console.print(f"  Brain:   [green]✓ episodic memory active[/green]")
     console.print()
 
     import uvicorn

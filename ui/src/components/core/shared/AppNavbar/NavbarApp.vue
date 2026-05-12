@@ -3,18 +3,20 @@ import { RouterLink, useRoute, useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import gillieIcon from '@/assets/icons/gillie-logo.png'
 import { useBackendStatus } from '@/composables/useBackendStatus'
+import { useStorage } from '@/composables/useStorage'
 
 const route = useRoute()
 const router = useRouter()
 const { isActive, cause } = useBackendStatus()
 const { t, locale } = useI18n()
+const { setItem } = useStorage()
 
 const isActiveLink = (path: string) => route.path === path
 const canGoBack = () => route.path !== '/app/dashboard'
 
 const setLocale = (lang: string) => {
   locale.value = lang
-  localStorage.setItem('gillie-lang', lang)
+  setItem('gillie-lang', lang)
 }
 
 const routerLinks: { icon: string; label: string; url: string }[] = []

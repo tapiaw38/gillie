@@ -87,7 +87,7 @@ class ResponseMeliQuestionsUseCase:
             )
 
             context = self.context_factory()
-            profiles = context.repositories.profile.find_all()
+            profiles = await context.repositories.profile.find_all()
             logger.info(f"Found {len(profiles)} total profiles")
 
             processed_profiles = 0

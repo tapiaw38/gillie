@@ -13,7 +13,7 @@ class UploadFileUseCase:
     def __init__(self, context_factory: Factory):
         self.context_factory = context_factory
 
-    def execute(
+    async def execute(
         self,
         user_id: str,
         file_bytes: bytes,
@@ -23,7 +23,7 @@ class UploadFileUseCase:
     ) -> dict:
         try:
             ctx = self.context_factory()
-            service = get_drive_service(ctx, user_id)
+            service = await get_drive_service(ctx, user_id)
             result = ctx.integrations.google_drive.upload_file(
                 service, file_bytes, file_name, mime_type, folder_id
             )

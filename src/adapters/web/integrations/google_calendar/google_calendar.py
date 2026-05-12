@@ -21,9 +21,9 @@ class GoogleCalendarIntegration:
         self._fallback_client = fallback_client
         self._pending_verifiers: Dict[str, str] = {}  # user_id -> code_verifier (PKCE)
 
-    def _get_client(self) -> GoogleCalendarClient:
+    async def _get_client(self) -> GoogleCalendarClient:
         """Return a GoogleCalendarClient built from DB credentials, falling back to env-var client."""
-        creds = self.repository.find_credentials()
+        creds = await self.repository.find_credentials()
         if creds:
             return GoogleCalendarClient(
                 client_id=creds.client_id,
@@ -37,15 +37,15 @@ class GoogleCalendarIntegration:
             "Use POST /api/v1/calendar/credentials to save client_id and client_secret."
         )
 
-    def get_authorization_url(self, user_id: str) -> str:
-        auth_url, code_verifier = self._get_client().get_authorization_url(state=user_id)
+    async def get_authorization_url(self, user_id: str) -> str:
+        auth_url, code_verifier = (await self._get_client()).get_authorization_url(state=user_id)
         if code_verifier:
             self._pending_verifiers[user_id] = code_verifier
         return auth_url
 
-    def handle_oauth_callback(self, user_id: str, code: str) -> CalendarSession:
+    async def handle_oauth_callback(self, user_id: str, code: str) -> CalendarSession:
         code_verifier = self._pending_verifiers.pop(user_id, None)
-        client = self._get_client()
+        client = await self._get_client()
         tokens = client.exchange_code(code, code_verifier=code_verifier)
         session = CalendarSession(
             user_id=user_id,
@@ -69,12 +69,12 @@ class GoogleCalendarIntegration:
         except Exception as e:
             logger.warning(f"Could not read calendar timezone for user_id={user_id}: {e}")
 
-        self.repository.upsert_session(session)
+        await self.repository.upsert_session(session)
         logger.info(f"OAuth session stored for user_id={user_id}")
         return session
 
-    def check_session_status(self, user_id: str) -> bool:
-        session = self.repository.find_active_session(user_id)
+    async def check_session_status(self, user_id: str) -> bool:
+        session = await self.repository.find_active_session(user_id)
         if not session:
             return False
         now = datetime.now(timezone.utc)
@@ -83,9 +83,9 @@ class GoogleCalendarIntegration:
             expiry = expiry.replace(tzinfo=timezone.utc)
         return expiry > now
 
-    def _get_service(self, user_id: str):
+    async def _get_service(self, user_id: str):
         """Return an authenticated Google Calendar service, refreshing token if needed."""
-        session = self.repository.find_active_session(user_id)
+        session = await self.repository.find_active_session(user_id)
         if not session:
             raise RuntimeError(f"No active Google Calendar session for user_id={user_id}")
 
@@ -94,13 +94,13 @@ class GoogleCalendarIntegration:
         if expiry.tzinfo is None:
             expiry = expiry.replace(tzinfo=timezone.utc)
 
-        client = self._get_client()
+        client = await self._get_client()
 
         if expiry <= now:
             refreshed = client.refresh_access_token(session.refresh_token)
             session.access_token = refreshed["access_token"]
             session.token_expiry = refreshed["expiry"]
-            self.repository.upsert_session(session)
+            await self.repository.upsert_session(session)
 
         return client.build_service(
             access_token=session.access_token,
@@ -108,7 +108,7 @@ class GoogleCalendarIntegration:
             expiry=session.token_expiry,
         )
 
-    def list_events(
+    async def list_events(
         self,
         user_id: str,
         start_date: Optional[str] = None,
@@ -116,8 +116,8 @@ class GoogleCalendarIntegration:
         limit: int = 50,
         **kwargs,
     ) -> List[Dict[str, Any]]:
-        service = self._get_service(user_id)
-        client = self._get_client()
+        service = await self._get_service(user_id)
+        client = await self._get_client()
         time_min = datetime.fromisoformat(start_date) if start_date else None
         time_max = datetime.fromisoformat(end_date) if end_date else None
         events = client.list_events(service, time_min=time_min, time_max=time_max, limit=limit)
@@ -133,7 +133,7 @@ class GoogleCalendarIntegration:
             return dt, None  # isoformat() will include the offset — no timeZone field needed
         return dt, fallback_tz
 
-    def _session_timezone(self, user_id: str) -> str:
+    async def _session_timezone(self, user_id: str) -> str:
         """Return the stored IANA timezone for the user's session.
 
         If the stored value is 'UTC' (the default/unset value), it tries to
@@ -141,18 +141,18 @@ class GoogleCalendarIntegration:
         real timezone so future calls are fast.
         """
         try:
-            session = self.repository.find_active_session(user_id)
+            session = await self.repository.find_active_session(user_id)
             if session and session.time_zone and session.time_zone != "UTC":
                 return session.time_zone
 
             # Stored as default "UTC" — try to fetch the real timezone from Google
             if session:
                 try:
-                    service = self._get_service(user_id)
+                    service = await self._get_service(user_id)
                     tz = service.settings().get(setting="timezone").execute().get("value", "UTC")
                     if tz and tz != "UTC":
                         session.time_zone = tz
-                        self.repository.upsert_session(session)
+                        await self.repository.upsert_session(session)
                         logger.info(f"Refreshed timezone for user_id={user_id}: {tz}")
                         return tz
                 except Exception as e:
@@ -161,7 +161,7 @@ class GoogleCalendarIntegration:
             pass
         return "UTC"
 
-    def create_event(
+    async def create_event(
         self,
         user_id: str,
         title: str,
@@ -174,9 +174,9 @@ class GoogleCalendarIntegration:
         time_zone: Optional[str] = None,
         **kwargs,
     ) -> Dict[str, Any]:
-        service = self._get_service(user_id)
-        client = self._get_client()
-        effective_tz = time_zone or self._session_timezone(user_id)
+        service = await self._get_service(user_id)
+        client = await self._get_client()
+        effective_tz = time_zone or await self._session_timezone(user_id)
         start_dt, start_tz = self._resolve_datetime_and_tz(start_time, effective_tz)
         end_dt, end_tz = self._resolve_datetime_and_tz(end_time, effective_tz)
         body = GoogleCalendarClient.build_event_body(
@@ -192,7 +192,7 @@ class GoogleCalendarIntegration:
         google_event = client.create_event(service, body)
         return self._google_event_to_dict(google_event, user_id)
 
-    def update_event(
+    async def update_event(
         self,
         user_id: str,
         event_id: str,
@@ -203,15 +203,15 @@ class GoogleCalendarIntegration:
         location: Optional[str] = None,
         **kwargs,
     ) -> Dict[str, Any]:
-        service = self._get_service(user_id)
-        client = self._get_client()
+        service = await self._get_service(user_id)
+        client = await self._get_client()
 
         current = client.get_event(service, event_id)
         current_start = current.get("start", {})
         current_end = current.get("end", {})
         time_zone = current_start.get("timeZone", "UTC")
 
-        effective_tz = time_zone or self._session_timezone(user_id)
+        effective_tz = time_zone or await self._session_timezone(user_id)
         raw_start = start_time or (current_start.get("dateTime") or current_start.get("date", "")).replace("Z", "+00:00")
         raw_end = end_time or (current_end.get("dateTime") or current_end.get("date", "")).replace("Z", "+00:00")
         start_dt, start_tz = self._resolve_datetime_and_tz(raw_start, effective_tz)
@@ -227,9 +227,9 @@ class GoogleCalendarIntegration:
         updated = client.update_event(service, event_id, body)
         return self._google_event_to_dict(updated, user_id)
 
-    def delete_event(self, user_id: str, event_id: str, **kwargs) -> None:
-        service = self._get_service(user_id)
-        self._get_client().delete_event(service, event_id)
+    async def delete_event(self, user_id: str, event_id: str, **kwargs) -> None:
+        service = await self._get_service(user_id)
+        (await self._get_client()).delete_event(service, event_id)
 
     @staticmethod
     def _google_event_to_dict(google_event: Dict[str, Any], user_id: str) -> Dict[str, Any]:

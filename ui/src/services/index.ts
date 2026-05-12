@@ -5,6 +5,7 @@ import { whatsappService } from './whatsapp'
 import { calendarService } from './calendar'
 import { driveService } from './drive'
 import { gmailService } from './gmail'
+import { notionService } from './notion'
 import { cronJobsService } from './cronJobs'
 import { telegramService } from './telegram'
 
@@ -16,6 +17,7 @@ class Services {
   calendarService: typeof calendarService
   driveService: typeof driveService
   gmailService: typeof gmailService
+  notionService: typeof notionService
   cronJobsService: typeof cronJobsService
   telegramService: typeof telegramService
 
@@ -27,6 +29,7 @@ class Services {
     this.calendarService = calendarService
     this.driveService = driveService
     this.gmailService = gmailService
+    this.notionService = notionService
     this.cronJobsService = cronJobsService
     this.telegramService = telegramService
   }

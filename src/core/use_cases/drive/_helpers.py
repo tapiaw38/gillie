@@ -6,13 +6,13 @@ from src.core.platform.errors.mappings.drive import DriveSessionNotFoundError
 INTEGRATION_NAME = "google_drive"
 
 
-def get_drive_service(context, user_id: str):
+async def get_drive_service(context, user_id: str):
     """Get an authenticated Google Drive service from stored profile tokens.
 
     Refreshes the access token if expired and saves updated tokens back.
     Raises DriveSessionNotFoundError if no active Drive integration found.
     """
-    profile = context.repositories.profile.find_by_user_id(user_id)
+    profile = await context.repositories.profile.find_by_user_id(user_id)
     if not profile:
         raise NewApplicationError(DriveSessionNotFoundError)
 
@@ -24,7 +24,7 @@ def get_drive_service(context, user_id: str):
         raise NewApplicationError(DriveSessionNotFoundError)
 
     config = drive_integration.config
-    updated_config = context.integrations.google_drive.refresh_if_needed(config)
+    updated_config = await context.integrations.google_drive.refresh_if_needed(config)
 
     if updated_config is not config:
         now = datetime.now(timezone.utc)
@@ -33,6 +33,6 @@ def get_drive_service(context, user_id: str):
             if i.name == INTEGRATION_NAME else i
             for i in profile.integrations
         ]
-        context.repositories.profile.update_integrations(user_id, updated_integrations)
+        await context.repositories.profile.update_integrations(user_id, updated_integrations)
 
-    return context.integrations.google_drive.build_service(updated_config)
+    return await context.integrations.google_drive.build_service(updated_config)

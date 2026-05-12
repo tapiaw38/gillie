@@ -19,10 +19,10 @@ router = APIRouter(
 @router.get("/", status_code=status.HTTP_200_OK)
 async def find_profile(
     request: Request,
-    usecases: Usecases = Depends(get_usecases)
+    usecases: Usecases = Depends(get_usecases),
 ):
     user_id = request.state.user.get("user_id")
-    profile = usecases.profile.find_by_user_id_usecase.execute(user_id)
+    profile = await usecases.profile.find_by_user_id_usecase.execute(user_id)
     return profile
 
 
@@ -30,10 +30,10 @@ async def find_profile(
 async def update_profile(
     profile: ProfileInput,
     request: Request,
-    usecases: Usecases = Depends(get_usecases)
+    usecases: Usecases = Depends(get_usecases),
 ):
     user_id = request.state.user.get("user_id")
-    profile = usecases.profile.update_usecase.execute(user_id, profile)
+    profile = await usecases.profile.update_usecase.execute(user_id, profile)
     return profile
 
 
@@ -107,7 +107,7 @@ async def delete_integration(
 @router.get("/options", status_code=status.HTTP_200_OK)
 async def list_options(
     request: Request,
-    usecases: Usecases = Depends(get_usecases)
+    usecases: Usecases = Depends(get_usecases),
 ):
     user_id = request.state.user.get("user_id", "")
-    return usecases.profile.list_options_usecase.execute(user_id=user_id)
+    return await usecases.profile.list_options_usecase.execute(user_id)

@@ -33,7 +33,7 @@ async def telegram_webhook(
         payload: Dict[str, Any] = await req.json()
         logger.info(f"[telegram] Webhook received update_id={payload.get('update_id')}")
 
-        profile = usecases.profile.find_with_active_telegram_integration_usecase.execute()
+        profile = await usecases.profile.find_with_active_telegram_integration_usecase.execute()
 
         if not profile:
             logger.warning("[telegram] No profile found with active Telegram integration")
@@ -77,7 +77,7 @@ async def set_webhook(
         if not webhook_url:
             return JSONResponse(status_code=400, content={"error": "webhook_url is required"})
 
-        profile = usecases.profile.find_with_active_telegram_integration_usecase.execute()
+        profile = await usecases.profile.find_with_active_telegram_integration_usecase.execute()
         if not profile:
             return JSONResponse(status_code=404, content={"error": "No active Telegram integration found"})
 

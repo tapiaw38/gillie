@@ -9,37 +9,37 @@ from src.core.domain import (
 
 class RepositoryInterface(ABC):
     @abstractmethod
-    def create(self, conversation: Conversation) -> str:
+    async def create(self, conversation: Conversation) -> str:
         pass
 
     @abstractmethod
-    def find_by_id(self, id: str) -> Conversation:
+    async def find_by_id(self, id: str) -> Conversation:
         pass
 
     @abstractmethod
-    def find_user_id(self, user_id: str, include_sandbox: bool = False) -> List[Conversation]:
+    async def find_user_id(self, user_id: str, include_sandbox: bool = False) -> List[Conversation]:
         pass
 
     @abstractmethod
-    def find_sandbox_by_user_id(self, user_id: str) -> List[Conversation]:
+    async def find_sandbox_by_user_id(self, user_id: str) -> List[Conversation]:
         pass
 
     @abstractmethod
-    def update_profile_by_user_id(self, user_id: str, profile: Profile) -> str:
+    async def update_profile_by_user_id(self, user_id: str, profile: Profile) -> str:
         pass
 
     @abstractmethod
-    def update_messages_by_id(self, id: str, messages: List[Message]) -> None:
+    async def update_messages_by_id(self, id: str, messages: List[Message]) -> None:
         pass
 
     @abstractmethod
-    def delete_by_id(self, id: str) -> None:
+    async def delete_by_id(self, id: str) -> None:
         pass
 
     @abstractmethod
-    def update_summary(self, conversation_id: str, summary: str, memory_extracted: bool = True) -> None:
+    async def update_summary(self, conversation_id: str, summary: str, memory_extracted: bool = True) -> None:
         pass
 
     @abstractmethod
-    def find_unextracted(self, user_id: str) -> List[Conversation]:
+    async def find_unextracted(self, user_id: str) -> List[Conversation]:
         pass
