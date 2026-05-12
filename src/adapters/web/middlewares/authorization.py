@@ -1,7 +1,6 @@
 from fastapi import Request
 from fastapi.responses import JSONResponse
 from starlette.middleware.base import BaseHTTPMiddleware
-from starlette.concurrency import run_in_threadpool
 import logging
 
 logger = logging.getLogger(__name__)
@@ -46,8 +45,7 @@ class SingleUserMiddleware(BaseHTTPMiddleware):
             return await call_next(request)
 
         try:
-            has_any_key = await run_in_threadpool(
-                profile_client.find_one,
+            has_any_key = await profile_client.find_one(
                 {"user_id": user_id, "api_keys": {"$elemMatch": {"is_active": True}}},
             )
         except Exception:
@@ -68,8 +66,7 @@ class SingleUserMiddleware(BaseHTTPMiddleware):
             )
 
         try:
-            match = await run_in_threadpool(
-                profile_client.find_one,
+            match = await profile_client.find_one(
                 {
                     "user_id": user_id,
                     "api_keys": {"$elemMatch": {"value": api_key, "is_active": True}},

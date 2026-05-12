@@ -7,7 +7,6 @@ from typing import Any
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import RedirectResponse
-from starlette.concurrency import run_in_threadpool
 
 from src.adapters.bootstrap.startup_service import StartupService
 from src.adapters.datasources.datasources import Datasources
@@ -21,7 +20,7 @@ from src.core.platform.appcontext.appcontext import new_factory
 from src.core.platform.errors.exception_handler import register_exception_handlers
 from src.core.platform.managers.platform_manager import PlatformServices
 from src.core.platform.managers.skill_manager import SkillManager
-from src.core.platform.nosql.client import AsyncMongoDBClient, MongoDBClient
+from src.core.platform.nosql.client import MongoDBClient
 from src.core.platform.nosql.migrations import execute_migrations
 from src.core.platform.objectstorange.s3_session import get_s3_session
 from src.core.platform.config.service import (
@@ -45,9 +44,9 @@ class AppRuntime:
     user_id: str
     neonize_integration: NeonizeIntegration
     openai_integration: Any
-    profiles_client: MongoDBClient
+    profile_client: MongoDBClient
+    migrations_client: MongoDBClient
     mongo_clients: list[MongoDBClient]
-    async_mongo_clients: list[AsyncMongoDBClient]
 
 
 def _load_runtime_config() -> tuple[Any, Any]:
@@ -73,11 +72,6 @@ def _load_runtime_config() -> tuple[Any, Any]:
 def _build_runtime() -> AppRuntime:
     cli_config, config_service = _load_runtime_config()
 
-    migrations_client = MongoDBClient(
-        config_service.nosql_config.migrations.database_uri,
-        config_service.nosql_config.migrations.database,
-        config_service.nosql_config.migrations.collection,
-    )
     conversations_client = MongoDBClient(
         config_service.nosql_config.conversations.database_uri,
         config_service.nosql_config.conversations.database,
@@ -87,6 +81,11 @@ def _build_runtime() -> AppRuntime:
         config_service.nosql_config.profiles.database_uri,
         config_service.nosql_config.profiles.database,
         config_service.nosql_config.profiles.collection,
+    )
+    migrations_client = MongoDBClient(
+        config_service.nosql_config.migrations.database_uri,
+        config_service.nosql_config.migrations.database,
+        config_service.nosql_config.migrations.collection,
     )
     faqs_client = MongoDBClient(
         config_service.nosql_config.faqs.database_uri,
@@ -104,104 +103,50 @@ def _build_runtime() -> AppRuntime:
         config_service.nosql_config.jobs.collection,
     )
 
-    async_conversations_client = AsyncMongoDBClient(
-        config_service.nosql_config.conversations.database_uri,
-        config_service.nosql_config.conversations.database,
-        config_service.nosql_config.conversations.collection,
-    )
-    async_profiles_client = AsyncMongoDBClient(
-        config_service.nosql_config.profiles.database_uri,
-        config_service.nosql_config.profiles.database,
-        config_service.nosql_config.profiles.collection,
-    )
-
     mongo_clients = [
-        migrations_client,
         conversations_client,
         profiles_client,
+        migrations_client,
         faqs_client,
         whatsapp_devices_client,
         jobs_client,
     ]
-    async_mongo_clients = [async_conversations_client, async_profiles_client]
 
     calendar_sessions_client = None
-    async_calendar_sessions_client = None
     if config_service.nosql_config.calendar_sessions:
         calendar_sessions_client = MongoDBClient(
             config_service.nosql_config.calendar_sessions.database_uri,
             config_service.nosql_config.calendar_sessions.database,
             config_service.nosql_config.calendar_sessions.collection,
         )
-        async_calendar_sessions_client = AsyncMongoDBClient(
-            config_service.nosql_config.calendar_sessions.database_uri,
-            config_service.nosql_config.calendar_sessions.database,
-            config_service.nosql_config.calendar_sessions.collection,
-        )
         mongo_clients.append(calendar_sessions_client)
-        async_mongo_clients.append(async_calendar_sessions_client)
 
     drive_sessions_client = None
-    async_drive_sessions_client = None
     if config_service.nosql_config.drive_sessions:
         drive_sessions_client = MongoDBClient(
             config_service.nosql_config.drive_sessions.database_uri,
             config_service.nosql_config.drive_sessions.database,
             config_service.nosql_config.drive_sessions.collection,
         )
-        async_drive_sessions_client = AsyncMongoDBClient(
-            config_service.nosql_config.drive_sessions.database_uri,
-            config_service.nosql_config.drive_sessions.database,
-            config_service.nosql_config.drive_sessions.collection,
-        )
         mongo_clients.append(drive_sessions_client)
-        async_mongo_clients.append(async_drive_sessions_client)
 
     gmail_sessions_client = None
-    async_gmail_sessions_client = None
     if config_service.nosql_config.gmail_sessions:
         gmail_sessions_client = MongoDBClient(
             config_service.nosql_config.gmail_sessions.database_uri,
             config_service.nosql_config.gmail_sessions.database,
             config_service.nosql_config.gmail_sessions.collection,
         )
-        async_gmail_sessions_client = AsyncMongoDBClient(
-            config_service.nosql_config.gmail_sessions.database_uri,
-            config_service.nosql_config.gmail_sessions.database,
-            config_service.nosql_config.gmail_sessions.collection,
-        )
         mongo_clients.append(gmail_sessions_client)
-        async_mongo_clients.append(async_gmail_sessions_client)
 
     notion_sessions_client = None
-    async_notion_sessions_client = None
     if config_service.nosql_config.notion_sessions:
         notion_sessions_client = MongoDBClient(
             config_service.nosql_config.notion_sessions.database_uri,
             config_service.nosql_config.notion_sessions.database,
             config_service.nosql_config.notion_sessions.collection,
         )
-        async_notion_sessions_client = AsyncMongoDBClient(
-            config_service.nosql_config.notion_sessions.database_uri,
-            config_service.nosql_config.notion_sessions.database,
-            config_service.nosql_config.notion_sessions.collection,
-        )
         mongo_clients.append(notion_sessions_client)
-        async_mongo_clients.append(async_notion_sessions_client)
-
-    async_whatsapp_devices_client = AsyncMongoDBClient(
-        config_service.nosql_config.whatsapp_devices.database_uri,
-        config_service.nosql_config.whatsapp_devices.database,
-        config_service.nosql_config.whatsapp_devices.collection,
-    )
-    async_jobs_client = AsyncMongoDBClient(
-        config_service.nosql_config.jobs.database_uri,
-        config_service.nosql_config.jobs.database,
-        config_service.nosql_config.jobs.collection,
-    )
-    async_mongo_clients.extend([async_whatsapp_devices_client, async_jobs_client])
-
-    profiles_client.run_migrations(migrations_client.get_collection(), execute_migrations())
 
     storage_cfg = config_service.storage_config
     if storage_cfg and storage_cfg.backend == "local":
@@ -216,15 +161,15 @@ def _build_runtime() -> AppRuntime:
         logger.info("Storage: S3")
 
     datasources = Datasources.create_datasources(
-        no_sql_conversations_client=async_conversations_client,
-        no_sql_profiles_client=async_profiles_client,
+        no_sql_conversations_client=conversations_client,
+        no_sql_profiles_client=profiles_client,
         no_sql_faqs_client=faqs_client,
-        no_sql_calendar_sessions_client=async_calendar_sessions_client,
-        no_sql_drive_sessions_client=async_drive_sessions_client,
-        no_sql_whatsapp_devices_client=async_whatsapp_devices_client,
-        no_sql_jobs_client=async_jobs_client,
-        no_sql_gmail_sessions_client=async_gmail_sessions_client,
-        no_sql_notion_sessions_client=async_notion_sessions_client,
+        no_sql_calendar_sessions_client=calendar_sessions_client,
+        no_sql_drive_sessions_client=drive_sessions_client,
+        no_sql_whatsapp_devices_client=whatsapp_devices_client,
+        no_sql_jobs_client=jobs_client,
+        no_sql_gmail_sessions_client=gmail_sessions_client,
+        no_sql_notion_sessions_client=notion_sessions_client,
     )
     repositories = Repositories.create_repositories(datasources)
     skill_manager = SkillManager()
@@ -284,9 +229,9 @@ def _build_runtime() -> AppRuntime:
         user_id=user_id,
         neonize_integration=neonize_integration,
         openai_integration=integrations.openai,
-        profiles_client=profiles_client,
+        profile_client=profiles_client,
+        migrations_client=migrations_client,
         mongo_clients=mongo_clients,
-        async_mongo_clients=async_mongo_clients,
     )
     return runtime
 
@@ -373,6 +318,14 @@ def create_app() -> FastAPI:
     @asynccontextmanager
     async def lifespan(app: FastAPI):
         try:
+            await app.state.profile_client.run_migrations(
+                app.state.migrations_client.get_collection(),
+                execute_migrations(),
+            )
+        except Exception:
+            logger.warning("Failed to run migrations", exc_info=True)
+
+        try:
             await app.state.repositories.profile.ensure_indexes()
             if app.state.repositories.calendar is not None:
                 await app.state.repositories.calendar.ensure_indexes()
@@ -410,14 +363,9 @@ def create_app() -> FastAPI:
             yield
         finally:
             await _close_browser_sessions()
-            for client in app.state.async_mongo_clients:
-                try:
-                    await client.disconnect()
-                except Exception:
-                    logger.debug("Failed to disconnect async Mongo client", exc_info=True)
             for client in app.state.mongo_clients:
                 try:
-                    client.disconnect()
+                    await client.disconnect()
                 except Exception:
                     logger.debug("Failed to disconnect Mongo client", exc_info=True)
 
@@ -438,9 +386,9 @@ def create_app() -> FastAPI:
     app.state.scheduler = runtime.scheduler
     app.state.neonize_integration = runtime.neonize_integration
     app.state.openai_integration = runtime.openai_integration
-    app.state.profile_client = runtime.profiles_client
+    app.state.profile_client = runtime.profile_client
+    app.state.migrations_client = runtime.migrations_client
     app.state.mongo_clients = runtime.mongo_clients
-    app.state.async_mongo_clients = runtime.async_mongo_clients
     app.state.user_id = runtime.user_id
 
     RoutesManager(
