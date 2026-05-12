@@ -107,15 +107,20 @@ class MemoryConsolidator:
                 skill_manager.append_general_knowledge(statement, category)
                 written += 1
 
-            promoted_ids = [m.id for m in memories if m.id]
-            await self.repo.delete_many_by_ids(promoted_ids)
-            if self.vector_service:
-                self.vector_service.delete_episodes(user_id, promoted_ids)
-
-            logger.info(
-                "Consolidated %d statements from %d memories for user %s",
-                written, len(memories), user_id,
-            )
+            if written > 0:
+                promoted_ids = [m.id for m in memories if m.id]
+                await self.repo.delete_many_by_ids(promoted_ids)
+                if self.vector_service:
+                    self.vector_service.delete_episodes(user_id, promoted_ids)
+                logger.info(
+                    "Consolidated %d statements from %d memories for user %s",
+                    written, len(memories), user_id,
+                )
+            else:
+                logger.warning(
+                    "Synthesis returned no statements for user %s — source memories preserved",
+                    user_id,
+                )
         else:
             logger.info("No unconsolidated memories for user %s (min_importance=%d)", user_id, min_importance)
 
