@@ -405,12 +405,9 @@ async def whatsapp_webhook(
                 logger.info(
                     "Looking for a profile with any active WhatsApp integration"
                 )
-                profile = await run_in_threadpool(
-                    usecases.profile.find_with_active_whatsapp_integration_usecase.execute,
-                )
+                profile = await usecases.profile.find_with_active_whatsapp_integration_usecase.execute()
             else:
-                profile = await run_in_threadpool(
-                    usecases.profile.find_by_whatsapp_business_id_usecase.execute,
+                profile = await usecases.profile.find_by_whatsapp_business_id_usecase.execute(
                     business_account_id,
                 )
 
@@ -419,9 +416,7 @@ async def whatsapp_webhook(
                     logger.warning(
                         f"No profile found with business_account_id: {business_account_id}, searching for profiles with active WhatsApp"
                     )
-                    profile = await run_in_threadpool(
-                        usecases.profile.find_with_active_whatsapp_integration_usecase.execute,
-                    )
+                    profile = await usecases.profile.find_with_active_whatsapp_integration_usecase.execute()
 
                 if not profile:
                     logger.warning(

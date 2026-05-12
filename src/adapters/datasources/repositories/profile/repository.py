@@ -10,6 +10,7 @@ from typing import List, Optional
 from pymongo.errors import PyMongoError, DuplicateKeyError
 from src.core.platform.errors import NewApplicationError
 from src.core.platform.errors.mappings.profile import (
+    ProfileCreateDuplicateError,
     ProfileCreateQueryError,
     ProfileGetQueryError,
     ProfileUpdateNotFoundError,
@@ -29,6 +30,8 @@ class Repository(RepositoryInterface):
             profile_dict = profile.dict(by_alias=True, exclude_none=True)
             result = await self.client.insert_one(profile_dict)
             return str(result.inserted_id)
+        except DuplicateKeyError as exc:
+            raise NewApplicationError(ProfileCreateDuplicateError, exc)
         except PyMongoError as exc:
             raise NewApplicationError(ProfileCreateQueryError, exc)
 
