@@ -664,7 +664,10 @@
       "errorGetProfileId": "No se pudo obtener el ID del perfil",
       "errorGetAuthUrlMsg": "No se pudo obtener la URL de autorización",
       "disconnected": "Desconectado",
-      "disconnectedDesc": "La sesión de Notion fue desconectada correctamente"
+      "disconnectedDesc": "La sesión de Notion fue desconectada correctamente",
+      "statusConnected": "Conectado",
+      "statusConfigured": "Configurado",
+      "statusNoConnection": "Sin conexión"
     },
     "store": {
       "title": "Integración de Almacenamiento",

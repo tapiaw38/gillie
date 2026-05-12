@@ -664,7 +664,10 @@
       "errorGetProfileId": "Could not get profile ID",
       "errorGetAuthUrlMsg": "Could not get authorization URL",
       "disconnected": "Disconnected",
-      "disconnectedDesc": "Notion session disconnected successfully"
+      "disconnectedDesc": "Notion session disconnected successfully",
+      "statusConnected": "Connected",
+      "statusConfigured": "Configured",
+      "statusNoConnection": "No connection"
     },
     "store": {
       "title": "Storage Integration",
