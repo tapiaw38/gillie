@@ -80,6 +80,17 @@ from src.core.use_cases.gmail import (
     MarkEmailUnreadUseCase as GmailMarkEmailUnreadUseCase,
     DisconnectUseCase as GmailDisconnectUseCase,
 )
+from src.core.use_cases.notion import (
+    GetAuthorizationUrlUseCase as NotionGetAuthorizationUrlUseCase,
+    HandleOAuthCallbackUseCase as NotionHandleOAuthCallbackUseCase,
+    CheckSessionStatusUseCase as NotionCheckSessionStatusUseCase,
+    SetCredentialsUseCase as NotionSetCredentialsUseCase,
+    GetCredentialsUseCase as NotionGetCredentialsUseCase,
+    DisconnectUseCase as NotionDisconnectUseCase,
+    SearchPagesUseCase as NotionSearchPagesUseCase,
+    GetPageUseCase as NotionGetPageUseCase,
+    GetPageContentUseCase as NotionGetPageContentUseCase,
+)
 from src.core.use_cases.slack import ProcessSlackMessageUseCase
 from src.core.use_cases.telegram import ProcessTelegramMessageUseCase
 from src.core.use_cases.system import ShellCompleteUseCase, ShellInlineAssistUseCase
@@ -197,6 +208,19 @@ class Gmail:
 
 
 @dataclass
+class Notion:
+    get_authorization_url_usecase: NotionGetAuthorizationUrlUseCase
+    handle_oauth_callback_usecase: NotionHandleOAuthCallbackUseCase
+    check_session_status_usecase: NotionCheckSessionStatusUseCase
+    set_credentials_usecase: NotionSetCredentialsUseCase
+    get_credentials_usecase: NotionGetCredentialsUseCase
+    disconnect_usecase: NotionDisconnectUseCase
+    search_pages_usecase: NotionSearchPagesUseCase
+    get_page_usecase: NotionGetPageUseCase
+    get_page_content_usecase: NotionGetPageContentUseCase
+
+
+@dataclass
 class WhatsAppDevice:
     create_usecase: WhatsAppDeviceCreateUseCase
     list_usecase: WhatsAppDeviceListUseCase
@@ -242,6 +266,7 @@ class Usecases:
     calendar: Calendar
     drive: Drive
     gmail: Gmail
+    notion: Notion
     whatsapp_device: WhatsAppDevice
     jobs: Jobs
     slack: Slack
@@ -330,6 +355,17 @@ def create_usecases(context_factory: Factory) -> Usecases:
             mark_email_read_usecase=GmailMarkEmailReadUseCase(context_factory),
             mark_email_unread_usecase=GmailMarkEmailUnreadUseCase(context_factory),
             disconnect_usecase=GmailDisconnectUseCase(context_factory),
+        ),
+        notion=Notion(
+            get_authorization_url_usecase=NotionGetAuthorizationUrlUseCase(context_factory),
+            handle_oauth_callback_usecase=NotionHandleOAuthCallbackUseCase(context_factory),
+            check_session_status_usecase=NotionCheckSessionStatusUseCase(context_factory),
+            set_credentials_usecase=NotionSetCredentialsUseCase(context_factory),
+            get_credentials_usecase=NotionGetCredentialsUseCase(context_factory),
+            disconnect_usecase=NotionDisconnectUseCase(context_factory),
+            search_pages_usecase=NotionSearchPagesUseCase(context_factory),
+            get_page_usecase=NotionGetPageUseCase(context_factory),
+            get_page_content_usecase=NotionGetPageContentUseCase(context_factory),
         ),
         whatsapp_device=WhatsAppDevice(
             create_usecase=WhatsAppDeviceCreateUseCase(context_factory),

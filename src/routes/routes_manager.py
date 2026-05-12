@@ -13,6 +13,7 @@ from src.adapters.web.controllers.whatsapp.device_controllers import (
 )
 from src.adapters.web.controllers.slack.controllers import router as slack_router
 from src.adapters.web.controllers.telegram.controllers import router as telegram_router
+from src.adapters.web.controllers.notion.notion import router as notion_router
 from src.adapters.web.controllers.job.controllers import (
     router as job_router,
     set_scheduler as set_job_scheduler,
@@ -63,5 +64,6 @@ class RoutesManager:
         self.app.include_router(memory_router)
         self.app.include_router(slack_router)
         self.app.include_router(telegram_router)
+        self.app.include_router(notion_router)
         self.app.include_router(job_router)
         self.app.include_router(system_router)

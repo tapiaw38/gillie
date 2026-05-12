@@ -135,6 +135,10 @@
         "name": "Gmail",
         "description": "Integración Gmail, enviá, leé y gestioná correos desde el asistente"
       },
+      "notion": {
+        "name": "Notion",
+        "description": "Conecta Notion para buscar páginas y leer contenido desde el asistente"
+      },
       "sqlDatabase": {
         "name": "Base de Datos SQL",
         "description": "Conecta el asistente a una tabla de PostgreSQL para consultar datos en tiempo real"
@@ -622,6 +626,45 @@
       "errorGetAuthUrlMsg": "No se pudo obtener la URL de autorización",
       "disconnected": "Desconectado",
       "disconnectedDesc": "La sesión de Gmail fue desconectada correctamente"
+    },
+    "notion": {
+      "title": "Notion",
+      "subtitle": "Conecta tu asistente con Notion para buscar páginas y leer contenido",
+      "oauthCredentials": "Credenciales OAuth",
+      "oauthSubtitle": "Configurá tu conexión pública de Notion desde el Creator dashboard",
+      "credentialsSaved": "Credenciales guardadas — Client ID:",
+      "credentialsSavedMsg": "Las credenciales de Notion se guardaron correctamente",
+      "clientIdRequired": "Client ID y Client Secret son obligatorios",
+      "clientSecretPlaceholder": "Ingresá tu Client Secret de Notion",
+      "saveCredentials": "Guardar Credenciales",
+      "saved": "Guardado",
+      "connectAccount": "Conectar workspace de Notion",
+      "connectAccountSubtitle": "Autoriza acceso mediante OAuth 2.0 para el usuario actual",
+      "connected": "Conectado a Notion",
+      "connectedDesc": "La conexión está activa y lista para buscar páginas y leer bloques.",
+      "notConnected": "No conectado",
+      "notConnectedDesc": "Autoriza el acceso a Notion para empezar a usar la integración.",
+      "connectNotion": "Conectar con Notion",
+      "verify": "Verificar",
+      "capabilities": "Capacidades disponibles",
+      "capabilitiesSubtitle": "Lo que queda habilitado una vez conectado",
+      "capSearchPages": "Buscar páginas compartidas con la integración",
+      "capReadPages": "Leer propiedades de páginas",
+      "capReadBlocks": "Leer contenido de bloques y jerarquía de páginas",
+      "capSecureAccess": "Acceso seguro mediante OAuth 2.0",
+      "connectedSuccess": "¡Conectado!",
+      "connectedSuccessDesc": "Notion conectado correctamente",
+      "connectionError": "Error de conexión",
+      "connectionErrorDefault": "Ocurrió un error al conectar con Notion",
+      "errorSaveCredentials": "Error al guardar credenciales",
+      "errorSaveConfig": "Error al guardar configuración",
+      "errorLoadProfile": "Error al cargar perfil",
+      "errorGetAuthUrl": "Error al obtener URL de autorización",
+      "errorCheckStatus": "Error al verificar estado",
+      "errorGetProfileId": "No se pudo obtener el ID del perfil",
+      "errorGetAuthUrlMsg": "No se pudo obtener la URL de autorización",
+      "disconnected": "Desconectado",
+      "disconnectedDesc": "La sesión de Notion fue desconectada correctamente"
     },
     "store": {
       "title": "Integración de Almacenamiento",

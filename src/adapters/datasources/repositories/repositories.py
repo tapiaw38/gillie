@@ -7,6 +7,7 @@ from src.adapters.datasources.repositories.drive.repository import Repository as
 from src.adapters.datasources.repositories.whatsapp_device.repository import Repository as WhatsAppDeviceRepository
 from src.adapters.datasources.repositories.job.repository import Repository as JobRepository
 from src.adapters.datasources.repositories.gmail.repository import Repository as GmailRepository
+from src.adapters.datasources.repositories.notion.repository import Repository as NotionRepository
 from src.adapters.datasources.repositories.inmemory.role_repository import RoleRepository, role_repository
 
 
@@ -21,6 +22,7 @@ class Repositories:
             whatsapp_device: Optional[WhatsAppDeviceRepository] = None,
             job: Optional[JobRepository] = None,
             gmail: Optional[GmailRepository] = None,
+            notion: Optional[NotionRepository] = None,
     ):
         self.conversation = conversation
         self.profile = profile
@@ -30,6 +32,7 @@ class Repositories:
         self.whatsapp_device = whatsapp_device
         self.job = job
         self.gmail = gmail
+        self.notion = notion
 
     @staticmethod
     def create_repositories(datasources: Datasources):
@@ -53,6 +56,10 @@ class Repositories:
         if datasources.no_sql_gmail_sessions_client is not None:
             gmail = GmailRepository(datasources)
 
+        notion = None
+        if datasources.no_sql_notion_sessions_client is not None:
+            notion = NotionRepository(datasources)
+
         return Repositories(
             conversation=ConversationRepository(datasources),
             profile=ProfileRepository(datasources),
@@ -62,4 +69,5 @@ class Repositories:
             whatsapp_device=whatsapp_device,
             job=job,
             gmail=gmail,
+            notion=notion,
         )

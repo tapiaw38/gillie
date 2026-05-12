@@ -31,6 +31,7 @@ class NoSQLConfig:
     whatsapp_devices: Optional[NoSQLCollectionConfig] = None
     jobs: Optional[NoSQLCollectionConfig] = None
     gmail_sessions: Optional[NoSQLCollectionConfig] = None
+    notion_sessions: Optional[NoSQLCollectionConfig] = None
 
 @dataclass
 class ServerConfig:
@@ -160,6 +161,13 @@ class GoogleGmailConfig:
 
 
 @dataclass
+class NotionConfig:
+    client_id: str = ""
+    client_secret: str = ""
+    redirect_uri: str = "http://localhost:8000/api/v1/notion/oauth/callback"
+
+
+@dataclass
 class StorageConfig:
     backend: str = "local"  # "s3" | "local"
     local_path: str = ""
@@ -199,6 +207,7 @@ class ConfigurationService:
     google_calendar_config: Optional[GoogleCalendarConfig] = None
     google_drive_config: Optional[GoogleDriveConfig] = None
     google_gmail_config: Optional[GoogleGmailConfig] = None
+    notion_config: Optional[NotionConfig] = None
     storage_config: Optional[StorageConfig] = None
     vision_config: Optional[VisionConfig] = None
 
@@ -280,6 +289,11 @@ def read_config() -> ConfigurationService:
             database_uri=database_uri,
             database=get_env("DB_NAME", "gillie-db"),
             collection=get_env("DB_COLLECTION_GMAIL_SESSIONS", "gmail_sessions"),
+        ),
+        notion_sessions=NoSQLCollectionConfig(
+            database_uri=database_uri,
+            database=get_env("DB_NAME", "gillie-db"),
+            collection=get_env("DB_COLLECTION_NOTION_SESSIONS", "notion_sessions"),
         ),
     )
 
@@ -405,6 +419,12 @@ def read_config() -> ConfigurationService:
         redirect_uri=get_env("GOOGLE_GMAIL_REDIRECT_URI", "http://localhost:8000/api/v1/gmail/oauth/callback"),
     )
 
+    notion_config = NotionConfig(
+        client_id=get_env("NOTION_CLIENT_ID", ""),
+        client_secret=get_env("NOTION_CLIENT_SECRET", ""),
+        redirect_uri=get_env("NOTION_REDIRECT_URI", "http://localhost:8000/api/v1/notion/oauth/callback"),
+    )
+
     return ConfigurationService(
         server_config=server_config,
         nosql_config=nosql_config,
@@ -421,6 +441,7 @@ def read_config() -> ConfigurationService:
         google_calendar_config=google_calendar_config,
         google_drive_config=google_drive_config,
         google_gmail_config=google_gmail_config,
+        notion_config=notion_config,
         storage_config=storage_config,
         vision_config=vision_config,
     )
@@ -519,6 +540,11 @@ def init_config_from_json(config_data: "AssistantConfig") -> None:
             database_uri=db_uri,
             database=db_name,
             collection="gmail_sessions",
+        ),
+        notion_sessions=NoSQLCollectionConfig(
+            database_uri=db_uri,
+            database=db_name,
+            collection="notion_sessions",
         ),
     )
 
@@ -620,6 +646,11 @@ def init_config_from_json(config_data: "AssistantConfig") -> None:
             client_id=s.google_gmail.client_id if hasattr(s, "google_gmail") else "",
             client_secret=s.google_gmail.client_secret if hasattr(s, "google_gmail") else "",
             redirect_uri=s.google_gmail.redirect_uri if hasattr(s, "google_gmail") else "http://localhost:8000/api/v1/gmail/oauth/callback",
+        ),
+        notion_config=NotionConfig(
+            client_id=s.notion.client_id if hasattr(s, "notion") else "",
+            client_secret=s.notion.client_secret if hasattr(s, "notion") else "",
+            redirect_uri=s.notion.redirect_uri if hasattr(s, "notion") else "http://localhost:8000/api/v1/notion/oauth/callback",
         ),
         storage_config=StorageConfig(
             backend=s.storage.backend if hasattr(s, "storage") else "local",

@@ -66,6 +66,13 @@ from .whatsapp import (
     AuthenticateResponse,
     SendMessageResponse,
 )
+from .notion import (
+    NotionCredentialsInput,
+    NotionAuthorizationOutput,
+    NotionStatusOutput,
+    NotionSearchResponse,
+    NotionPageResponse,
+)
 
 __all__ = [
     # Profile schemas
@@ -131,4 +138,9 @@ __all__ = [
     "DeviceListResponse",
     "AuthenticateResponse",
     "SendMessageResponse",
+    "NotionCredentialsInput",
+    "NotionAuthorizationOutput",
+    "NotionStatusOutput",
+    "NotionSearchResponse",
+    "NotionPageResponse",
 ]

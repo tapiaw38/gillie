@@ -346,6 +346,14 @@ const integrations = computed<IntegrationItem[]>(() => [
     enabled: true,
   },
   {
+    name: t('dashboard.integrations.notion.name'),
+    description: t('dashboard.integrations.notion.description'),
+    icon: 'pi pi-book',
+    tone: 'contrast',
+    to: 'notion-integration',
+    enabled: true,
+  },
+  {
     name: t('dashboard.integrations.sqlDatabase.name'),
     description: t('dashboard.integrations.sqlDatabase.description'),
     icon: 'pi pi-database',
@@ -431,6 +439,7 @@ const PRODUCTIVITY_ROUTES = [
   'google-calendar-integration',
   'google-drive-integration',
   'google-gmail-integration',
+  'notion-integration',
   'store-integration',
   'sqldatabase-integration',
 ]

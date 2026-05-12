@@ -70,6 +70,11 @@ const router = createRouter({
           component: () => import('../views/GoogleGmailIntegrationView.vue'),
         },
         {
+          path: '/app/notion-integration',
+          name: 'notion-integration',
+          component: () => import('../views/NotionIntegrationView.vue'),
+        },
+        {
           path: '/app/sqldatabase-integration',
           name: 'sqldatabase-integration',
           component: () => import('../views/SQLDatabaseIntegrationView.vue'),

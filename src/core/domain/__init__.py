@@ -3,6 +3,7 @@ from .profile import Profile, ApiKey
 from .conversation import Conversation, Message
 from .file import File
 from .integration import Integration
+from .notion import NotionCredentials
 from .whatsapp import WhatsAppDevice
 
 __all__ = [
@@ -10,6 +11,7 @@ __all__ = [
     "ApiKey",
     "File",
     "Integration",
+    "NotionCredentials",
     "Profile",
     "Message",
     "Conversation",

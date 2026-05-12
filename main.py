@@ -173,6 +173,22 @@ def _build_runtime() -> AppRuntime:
         mongo_clients.append(gmail_sessions_client)
         async_mongo_clients.append(async_gmail_sessions_client)
 
+    notion_sessions_client = None
+    async_notion_sessions_client = None
+    if config_service.nosql_config.notion_sessions:
+        notion_sessions_client = MongoDBClient(
+            config_service.nosql_config.notion_sessions.database_uri,
+            config_service.nosql_config.notion_sessions.database,
+            config_service.nosql_config.notion_sessions.collection,
+        )
+        async_notion_sessions_client = AsyncMongoDBClient(
+            config_service.nosql_config.notion_sessions.database_uri,
+            config_service.nosql_config.notion_sessions.database,
+            config_service.nosql_config.notion_sessions.collection,
+        )
+        mongo_clients.append(notion_sessions_client)
+        async_mongo_clients.append(async_notion_sessions_client)
+
     async_whatsapp_devices_client = AsyncMongoDBClient(
         config_service.nosql_config.whatsapp_devices.database_uri,
         config_service.nosql_config.whatsapp_devices.database,
@@ -208,6 +224,7 @@ def _build_runtime() -> AppRuntime:
         no_sql_whatsapp_devices_client=async_whatsapp_devices_client,
         no_sql_jobs_client=async_jobs_client,
         no_sql_gmail_sessions_client=async_gmail_sessions_client,
+        no_sql_notion_sessions_client=async_notion_sessions_client,
     )
     repositories = Repositories.create_repositories(datasources)
     skill_manager = SkillManager()
@@ -216,6 +233,7 @@ def _build_runtime() -> AppRuntime:
         calendar_repository=repositories.calendar,
         drive_repository=repositories.drive,
         gmail_repository=repositories.gmail,
+        notion_repository=repositories.notion,
     )
     integrations.openai.set_skill_manager(skill_manager)
     integrations.openai.set_store_service(store_service)
@@ -362,6 +380,8 @@ def create_app() -> FastAPI:
                 await app.state.repositories.drive.ensure_indexes()
             if app.state.repositories.gmail is not None:
                 await app.state.repositories.gmail.ensure_indexes()
+            if app.state.repositories.notion is not None:
+                await app.state.repositories.notion.ensure_indexes()
             if app.state.repositories.job is not None:
                 await app.state.repositories.job.ensure_indexes()
             if app.state.repositories.whatsapp_device is not None:
