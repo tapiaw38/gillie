@@ -12,6 +12,7 @@ _PUBLIC_PREFIXES = (
     "/api/v1/calendar/oauth/callback",
     "/api/v1/drive/oauth/callback",
     "/api/v1/gmail/oauth/callback",
+    "/api/v1/notion/oauth/callback",
 )
 
 

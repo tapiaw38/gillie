@@ -19,24 +19,23 @@ logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/whatsapp", tags=["WhatsApp Device"])
 
-_neonize_integration = None
-_app = None
-
-
-def set_neonize(neonize_integration):
-    global _neonize_integration
-    _neonize_integration = neonize_integration
-
 
 def set_app(app):
-    global _app
-    _app = app
+    router.app = app
 
 
-def get_neonize():
-    if _neonize_integration is None:
+def _get_app():
+    app = getattr(router, "app", None)
+    if app is None:
+        raise RuntimeError("FastAPI app not initialized. Call set_app first.")
+    return app
+
+
+def _get_neonize_from_app(app):
+    neonize = getattr(app.state, "neonize_integration", None)
+    if neonize is None:
         raise RuntimeError("NeonizeIntegration not initialized. Call set_neonize first.")
-    return _neonize_integration
+    return neonize
 
 
 def _get_user_id(request: Request) -> str:
@@ -48,8 +47,9 @@ async def _handle_incoming_message(device_id: str, sender_jid: str, text: str):
     Called by neonize when an incoming WhatsApp message is received.
     Processes the message via AI and replies.
     """
-    usecases = _app.state.usecases
-    neonize = get_neonize()
+    app = _get_app()
+    usecases = app.state.usecases
+    neonize = _get_neonize_from_app(app)
 
     try:
         device = await usecases.whatsapp_device.get_usecase.execute(device_id)
@@ -159,13 +159,13 @@ async def get_device(device_id: str, request: Request, usecases: Usecases = Depe
 
 @router.delete("/device/{device_id}", status_code=status.HTTP_204_NO_CONTENT)
 async def delete_device(device_id: str, request: Request, usecases: Usecases = Depends(get_usecases)):
-    neonize = get_neonize()
+    neonize = _get_neonize_from_app(request.app)
     await usecases.whatsapp_device.delete_usecase.execute(device_id, neonize)
 
 
 @router.post("/device/{device_id}/authenticate", response_model=DeviceResponse)
 async def authenticate_device(device_id: str, body: AuthenticateDeviceRequest, request: Request, usecases: Usecases = Depends(get_usecases)):
-    neonize = get_neonize()
+    neonize = _get_neonize_from_app(request.app)
     await usecases.whatsapp_device.authenticate_usecase.execute(
         device_id=device_id,
         auth_method=body.auth_method,
@@ -179,7 +179,7 @@ async def authenticate_device(device_id: str, body: AuthenticateDeviceRequest, r
 
 @router.post("/device/{device_id}/connect", status_code=status.HTTP_204_NO_CONTENT)
 async def connect_device(device_id: str, request: Request, usecases: Usecases = Depends(get_usecases)):
-    neonize = get_neonize()
+    neonize = _get_neonize_from_app(request.app)
     await usecases.whatsapp_device.connect_usecase.execute(
         device_id=device_id,
         neonize_integration=neonize,
@@ -189,13 +189,13 @@ async def connect_device(device_id: str, request: Request, usecases: Usecases = 
 
 @router.post("/device/{device_id}/disconnect", status_code=status.HTTP_204_NO_CONTENT)
 async def disconnect_device(device_id: str, request: Request, usecases: Usecases = Depends(get_usecases)):
-    neonize = get_neonize()
+    neonize = _get_neonize_from_app(request.app)
     await usecases.whatsapp_device.disconnect_usecase.execute(device_id, neonize)
 
 
 @router.post("/device/{device_id}/send", response_model=SendMessageResponse)
 async def send_message(device_id: str, body: SendMessageRequest, request: Request, usecases: Usecases = Depends(get_usecases)):
-    neonize = get_neonize()
+    neonize = _get_neonize_from_app(request.app)
     message_id = await usecases.whatsapp_device.send_message_usecase.execute(
         device_id=device_id,
         recipient_jid=body.recipient_jid,
@@ -211,7 +211,7 @@ async def send_message_by_phone(body: SendMessageByPhoneRequest, request: Reques
     UI-compatible send endpoint.
     Accepts { device_id, recipient_phone, content } and converts phone → JID.
     """
-    neonize = get_neonize()
+    neonize = _get_neonize_from_app(request.app)
 
     phone = body.recipient_phone.lstrip("+")
     recipient_jid = f"{phone}@s.whatsapp.net"

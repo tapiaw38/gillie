@@ -10,17 +10,6 @@ logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/v1/jobs", tags=["Jobs"])
 
-_scheduler_instance = None
-
-
-def set_scheduler(scheduler):
-    global _scheduler_instance
-    _scheduler_instance = scheduler
-
-
-def get_scheduler():
-    return _scheduler_instance
-
 
 def _get_user_id(request: Request) -> str:
     return request.state.user.get("user_id", "default-user")
@@ -39,8 +28,7 @@ async def create_job(request: Request, body: JobInput, usecases: Usecases = Depe
     user_id = _get_user_id(request)
     result = await usecases.jobs.create_usecase.execute(body, user_id)
 
-    # Schedule the job if enabled and scheduler is available
-    scheduler = get_scheduler()
+    scheduler = getattr(request.app.state, "scheduler", None)
     if scheduler and result.data.enabled:
         context = usecases.jobs.create_usecase.context_factory()
         domain_job = await context.repositories.job.find_by_id(result.data.id)
@@ -57,22 +45,21 @@ async def get_job(job_id: str, usecases: Usecases = Depends(get_usecases)):
 
 
 @router.delete("/{job_id}", status_code=status.HTTP_204_NO_CONTENT)
-async def delete_job(job_id: str, usecases: Usecases = Depends(get_usecases)):
+async def delete_job(job_id: str, request: Request, usecases: Usecases = Depends(get_usecases)):
     """Delete a job by ID."""
     await usecases.jobs.delete_usecase.execute(job_id)
 
-    scheduler = get_scheduler()
+    scheduler = getattr(request.app.state, "scheduler", None)
     if scheduler:
         scheduler.unschedule_job(job_id)
 
 
 @router.post("/{job_id}/run", response_model=JobRunOutput)
-async def run_job(job_id: str, usecases: Usecases = Depends(get_usecases)):
+async def run_job(job_id: str, request: Request, usecases: Usecases = Depends(get_usecases)):
     """Run a job immediately."""
     result = await usecases.jobs.run_usecase.execute(job_id)
 
-    # Reschedule the job if enabled and scheduler is available
-    scheduler = get_scheduler()
+    scheduler = getattr(request.app.state, "scheduler", None)
     if scheduler:
         context = usecases.jobs.get_usecase.context_factory()
         domain_job = await context.repositories.job.find_by_id(job_id)

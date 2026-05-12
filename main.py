@@ -2,7 +2,7 @@ import logging
 import os
 from contextlib import asynccontextmanager
 from dataclasses import dataclass
-from typing import Any
+from typing import Optional, TYPE_CHECKING
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
@@ -13,9 +13,10 @@ from src.adapters.datasources.datasources import Datasources
 from src.adapters.datasources.repositories.repositories import Repositories
 from src.adapters.storeservice.local_storeservice import LocalStoreService
 from src.adapters.storeservice.s3_storeservice import S3StoreService
-from src.adapters.web.integrations.integrations import create_integrations
+from src.adapters.web.integrations.integrations import Integrations, create_integrations
 from src.adapters.web.integrations.neonize.neonize_integration import NeonizeIntegration
 from src.adapters.web.middlewares.authorization import SingleUserMiddleware
+from src.core.platform.config.service import ConfigurationService
 from src.core.platform.appcontext.appcontext import new_factory
 from src.core.platform.errors.exception_handler import register_exception_handlers
 from src.core.platform.managers.platform_manager import PlatformServices
@@ -28,29 +29,33 @@ from src.core.platform.config.service import (
     init_config,
     init_config_from_json,
 )
-from src.core.use_cases.use_cases import create_usecases
+from src.core.use_cases.use_cases import Usecases, create_usecases
 from src.routes.routes_manager import RoutesManager
+
+if TYPE_CHECKING:
+    from cli.config.schema import AssistantConfig
+    from src.core.platform.managers.scheduler_manager import SchedulerManager
 
 logger = logging.getLogger(__name__)
 
 
 @dataclass
 class AppRuntime:
-    cli_config: Any
-    config_service: Any
-    usecases: Any
-    repositories: Any
-    scheduler: Any
+    cli_config: Optional["AssistantConfig"]
+    config_service: ConfigurationService
+    usecases: Usecases
+    repositories: Repositories
+    scheduler: Optional["SchedulerManager"]
     user_id: str
     neonize_integration: NeonizeIntegration
-    openai_integration: Any
+    integrations: Integrations
     profile_client: MongoDBClient
     migrations_client: MongoDBClient
     mongo_clients: list[MongoDBClient]
 
 
-def _load_runtime_config() -> tuple[Any, Any]:
-    cli_config = None
+def _load_runtime_config() -> tuple[Optional["AssistantConfig"], ConfigurationService]:
+    cli_config: Optional["AssistantConfig"] = None
 
     try:
         from cli.config.manager import config_exists, load_config
@@ -69,171 +74,138 @@ def _load_runtime_config() -> tuple[Any, Any]:
     return cli_config, get_config_service()
 
 
-def _build_runtime() -> AppRuntime:
-    cli_config, config_service = _load_runtime_config()
+async def _build_runtime(
+    cli_config: Optional["AssistantConfig"],
+    config_service: ConfigurationService,
+) -> AppRuntime:
+    mongo_clients: list[MongoDBClient] = []
 
-    conversations_client = MongoDBClient(
-        config_service.nosql_config.conversations.database_uri,
-        config_service.nosql_config.conversations.database,
-        config_service.nosql_config.conversations.collection,
-    )
-    profiles_client = MongoDBClient(
-        config_service.nosql_config.profiles.database_uri,
-        config_service.nosql_config.profiles.database,
-        config_service.nosql_config.profiles.collection,
-    )
-    migrations_client = MongoDBClient(
-        config_service.nosql_config.migrations.database_uri,
-        config_service.nosql_config.migrations.database,
-        config_service.nosql_config.migrations.collection,
-    )
-    faqs_client = MongoDBClient(
-        config_service.nosql_config.faqs.database_uri,
-        config_service.nosql_config.faqs.database,
-        config_service.nosql_config.faqs.collection,
-    )
-    whatsapp_devices_client = MongoDBClient(
-        config_service.nosql_config.whatsapp_devices.database_uri,
-        config_service.nosql_config.whatsapp_devices.database,
-        config_service.nosql_config.whatsapp_devices.collection,
-    )
-    jobs_client = MongoDBClient(
-        config_service.nosql_config.jobs.database_uri,
-        config_service.nosql_config.jobs.database,
-        config_service.nosql_config.jobs.collection,
-    )
-
-    mongo_clients = [
-        conversations_client,
-        profiles_client,
-        migrations_client,
-        faqs_client,
-        whatsapp_devices_client,
-        jobs_client,
-    ]
-
-    calendar_sessions_client = None
-    if config_service.nosql_config.calendar_sessions:
-        calendar_sessions_client = MongoDBClient(
-            config_service.nosql_config.calendar_sessions.database_uri,
-            config_service.nosql_config.calendar_sessions.database,
-            config_service.nosql_config.calendar_sessions.collection,
+    def _new_client(collection_config) -> MongoDBClient:
+        client = MongoDBClient(
+            collection_config.database_uri,
+            collection_config.database,
+            collection_config.collection,
         )
-        mongo_clients.append(calendar_sessions_client)
+        mongo_clients.append(client)
+        return client
 
-    drive_sessions_client = None
-    if config_service.nosql_config.drive_sessions:
-        drive_sessions_client = MongoDBClient(
-            config_service.nosql_config.drive_sessions.database_uri,
-            config_service.nosql_config.drive_sessions.database,
-            config_service.nosql_config.drive_sessions.collection,
+    try:
+        conversations_client = _new_client(config_service.nosql_config.conversations)
+        profiles_client = _new_client(config_service.nosql_config.profiles)
+        migrations_client = _new_client(config_service.nosql_config.migrations)
+        faqs_client = _new_client(config_service.nosql_config.faqs)
+        whatsapp_devices_client = _new_client(config_service.nosql_config.whatsapp_devices)
+        jobs_client = _new_client(config_service.nosql_config.jobs)
+
+        calendar_sessions_client = None
+        if config_service.nosql_config.calendar_sessions:
+            calendar_sessions_client = _new_client(config_service.nosql_config.calendar_sessions)
+
+        drive_sessions_client = None
+        if config_service.nosql_config.drive_sessions:
+            drive_sessions_client = _new_client(config_service.nosql_config.drive_sessions)
+
+        gmail_sessions_client = None
+        if config_service.nosql_config.gmail_sessions:
+            gmail_sessions_client = _new_client(config_service.nosql_config.gmail_sessions)
+
+        notion_sessions_client = None
+        if config_service.nosql_config.notion_sessions:
+            notion_sessions_client = _new_client(config_service.nosql_config.notion_sessions)
+
+        storage_cfg = config_service.storage_config
+        if storage_cfg and storage_cfg.backend == "local":
+            store_service = LocalStoreService(
+                base_path=storage_cfg.local_path,
+                base_url=storage_cfg.local_base_url,
+            )
+            logger.info("Storage: local — %s", storage_cfg.local_path)
+        else:
+            s3_session = get_s3_session()
+            store_service = S3StoreService(session=s3_session, config=config_service)
+            logger.info("Storage: S3")
+
+        datasources = Datasources.create_datasources(
+            no_sql_conversations_client=conversations_client,
+            no_sql_profiles_client=profiles_client,
+            no_sql_faqs_client=faqs_client,
+            no_sql_calendar_sessions_client=calendar_sessions_client,
+            no_sql_drive_sessions_client=drive_sessions_client,
+            no_sql_whatsapp_devices_client=whatsapp_devices_client,
+            no_sql_jobs_client=jobs_client,
+            no_sql_gmail_sessions_client=gmail_sessions_client,
+            no_sql_notion_sessions_client=notion_sessions_client,
         )
-        mongo_clients.append(drive_sessions_client)
-
-    gmail_sessions_client = None
-    if config_service.nosql_config.gmail_sessions:
-        gmail_sessions_client = MongoDBClient(
-            config_service.nosql_config.gmail_sessions.database_uri,
-            config_service.nosql_config.gmail_sessions.database,
-            config_service.nosql_config.gmail_sessions.collection,
+        repositories = Repositories.create_repositories(datasources)
+        skill_manager = SkillManager()
+        integrations = create_integrations(
+            config_service,
+            calendar_repository=repositories.calendar,
+            drive_repository=repositories.drive,
+            gmail_repository=repositories.gmail,
+            notion_repository=repositories.notion,
         )
-        mongo_clients.append(gmail_sessions_client)
+        integrations.openai.set_skill_manager(skill_manager)
+        integrations.openai.set_store_service(store_service)
 
-    notion_sessions_client = None
-    if config_service.nosql_config.notion_sessions:
-        notion_sessions_client = MongoDBClient(
-            config_service.nosql_config.notion_sessions.database_uri,
-            config_service.nosql_config.notion_sessions.database,
-            config_service.nosql_config.notion_sessions.collection,
+        platform_services = PlatformServices.create_services(
+            integrations=integrations,
+            store_service=store_service,
+            config_service=config_service,
+            skill_manager=skill_manager,
         )
-        mongo_clients.append(notion_sessions_client)
-
-    storage_cfg = config_service.storage_config
-    if storage_cfg and storage_cfg.backend == "local":
-        store_service = LocalStoreService(
-            base_path=storage_cfg.local_path,
-            base_url=storage_cfg.local_base_url,
+        context_factory = new_factory(
+            datasources,
+            integrations,
+            store_service,
+            config_service,
+            platform_services,
         )
-        logger.info("Storage: local — %s", storage_cfg.local_path)
-    else:
-        s3_session = get_s3_session()
-        store_service = S3StoreService(session=s3_session, config=config_service)
-        logger.info("Storage: S3")
+        usecases = create_usecases(context_factory)
+        integrations.openai.set_job_usecases(usecases.jobs)
 
-    datasources = Datasources.create_datasources(
-        no_sql_conversations_client=conversations_client,
-        no_sql_profiles_client=profiles_client,
-        no_sql_faqs_client=faqs_client,
-        no_sql_calendar_sessions_client=calendar_sessions_client,
-        no_sql_drive_sessions_client=drive_sessions_client,
-        no_sql_whatsapp_devices_client=whatsapp_devices_client,
-        no_sql_jobs_client=jobs_client,
-        no_sql_gmail_sessions_client=gmail_sessions_client,
-        no_sql_notion_sessions_client=notion_sessions_client,
-    )
-    repositories = Repositories.create_repositories(datasources)
-    skill_manager = SkillManager()
-    integrations = create_integrations(
-        config_service,
-        calendar_repository=repositories.calendar,
-        drive_repository=repositories.drive,
-        gmail_repository=repositories.gmail,
-        notion_repository=repositories.notion,
-    )
-    integrations.openai.set_skill_manager(skill_manager)
-    integrations.openai.set_store_service(store_service)
+        scheduler = None
+        if repositories.job is not None:
+            from src.core.platform.managers.scheduler_manager import SchedulerManager
 
-    platform_services = PlatformServices.create_services(
-        integrations=integrations,
-        store_service=store_service,
-        config_service=config_service,
-        skill_manager=skill_manager,
-    )
-    context_factory = new_factory(
-        datasources,
-        integrations,
-        store_service,
-        config_service,
-        platform_services,
-    )
-    usecases = create_usecases(context_factory)
-    integrations.openai.set_job_usecases(usecases.jobs)
+            scheduler = SchedulerManager(
+                job_repository=repositories.job,
+                context_factory=context_factory,
+            )
 
-    scheduler = None
-    if repositories.job is not None:
-        from src.core.platform.managers.scheduler_manager import SchedulerManager
+        if config_service.single_user_config:
+            user_id = config_service.single_user_config.user_id
+        else:
+            user_id = "default-user"
 
-        scheduler = SchedulerManager(
-            job_repository=repositories.job,
-            context_factory=context_factory,
+        neonize_integration = NeonizeIntegration(
+            sessions_dir="./data/whatsapp",
+            stt_integration=integrations.stt,
+            whatsapp_device_repository=repositories.whatsapp_device,
+            profile_repository=repositories.profile,
         )
 
-    if config_service.single_user_config:
-        user_id = config_service.single_user_config.user_id
-    else:
-        user_id = "default-user"
-
-    neonize_integration = NeonizeIntegration(
-        sessions_dir="./data/whatsapp",
-        stt_integration=integrations.stt,
-        whatsapp_device_repository=repositories.whatsapp_device,
-        profile_repository=repositories.profile,
-    )
-
-    runtime = AppRuntime(
-        cli_config=cli_config,
-        config_service=config_service,
-        usecases=usecases,
-        repositories=repositories,
-        scheduler=scheduler,
-        user_id=user_id,
-        neonize_integration=neonize_integration,
-        openai_integration=integrations.openai,
-        profile_client=profiles_client,
-        migrations_client=migrations_client,
-        mongo_clients=mongo_clients,
-    )
-    return runtime
+        runtime = AppRuntime(
+            cli_config=cli_config,
+            config_service=config_service,
+            usecases=usecases,
+            repositories=repositories,
+            scheduler=scheduler,
+            user_id=user_id,
+            neonize_integration=neonize_integration,
+            integrations=integrations,
+            profile_client=profiles_client,
+            migrations_client=migrations_client,
+            mongo_clients=mongo_clients,
+        )
+        return runtime
+    except Exception:
+        for client in mongo_clients:
+            try:
+                await client.disconnect()
+            except Exception:
+                logger.debug("Failed to disconnect Mongo client during startup rollback", exc_info=True)
+        raise
 
 
 async def _close_browser_sessions() -> None:
@@ -313,10 +285,26 @@ def _configure_cors(app: FastAPI) -> None:
 
 
 def create_app() -> FastAPI:
-    runtime = _build_runtime()
+    cli_config, config_service = _load_runtime_config()
+    user_id = (
+        config_service.single_user_config.user_id
+        if config_service.single_user_config
+        else "default-user"
+    )
 
     @asynccontextmanager
     async def lifespan(app: FastAPI):
+        runtime = await _build_runtime(app.state.cli_config, app.state.config_service)
+        app.state.usecases = runtime.usecases
+        app.state.repositories = runtime.repositories
+        app.state.scheduler = runtime.scheduler
+        app.state.neonize_integration = runtime.neonize_integration
+        app.state.integrations = runtime.integrations
+        app.state.openai_integration = runtime.integrations.openai
+        app.state.profile_client = runtime.profile_client
+        app.state.migrations_client = runtime.migrations_client
+        app.state.mongo_clients = runtime.mongo_clients
+
         try:
             await app.state.profile_client.run_migrations(
                 app.state.migrations_client.get_collection(),
@@ -379,25 +367,20 @@ def create_app() -> FastAPI:
     register_exception_handlers(app)
     _configure_cors(app)
 
-    app.state.cli_config = runtime.cli_config
-    app.state.config_service = runtime.config_service
-    app.state.usecases = runtime.usecases
-    app.state.repositories = runtime.repositories
-    app.state.scheduler = runtime.scheduler
-    app.state.neonize_integration = runtime.neonize_integration
-    app.state.openai_integration = runtime.openai_integration
-    app.state.profile_client = runtime.profile_client
-    app.state.migrations_client = runtime.migrations_client
-    app.state.mongo_clients = runtime.mongo_clients
-    app.state.user_id = runtime.user_id
+    app.state.cli_config = cli_config
+    app.state.config_service = config_service
+    app.state.usecases = None
+    app.state.repositories = None
+    app.state.scheduler = None
+    app.state.neonize_integration = None
+    app.state.integrations = None
+    app.state.openai_integration = None
+    app.state.profile_client = None
+    app.state.migrations_client = None
+    app.state.mongo_clients = []
+    app.state.user_id = user_id
 
-    RoutesManager(
-        app,
-        runtime.usecases,
-        runtime.config_service,
-        neonize_integration=runtime.neonize_integration,
-        scheduler=runtime.scheduler,
-    ).include_routes()
+    RoutesManager(app, config_service).include_routes()
 
     app.add_middleware(SingleUserMiddleware)
 
