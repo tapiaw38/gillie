@@ -1,3 +1,4 @@
+from datetime import datetime, timezone
 from typing import Awaitable, Callable, List, Any
 from uuid import uuid4
 
@@ -57,6 +58,12 @@ def execute_migrations() -> List[Migration]:
             {"$set": {"tts_enabled": False}}
         )
 
+    async def backfill_episodic_memory_created_at(db):
+        return await db["episodic_memories"].update_many(
+            {"created_at": {"$exists": False}},
+            {"$set": {"created_at": datetime.now(timezone.utc)}}
+        )
+
     return [
         Migration(
             version=1,
@@ -89,5 +96,9 @@ def execute_migrations() -> List[Migration]:
         Migration(
             version=8,
             up=add_tts_enabled,
+        ),
+        Migration(
+            version=9,
+            up=backfill_episodic_memory_created_at,
         ),
     ]
