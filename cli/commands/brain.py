@@ -35,24 +35,24 @@ def _qdrant_collection_points(qc, collection_name: str):
 
 
 def _soul_scroll_all(qc, collection_name: str) -> list:
-    """Return all points from a soul Qdrant collection via pagination."""
-    try:
-        points, offset = [], None
-        while True:
-            batch, next_offset = qc.scroll(
-                collection_name=collection_name,
-                limit=100,
-                offset=offset,
-                with_payload=True,
-                with_vectors=False,
-            )
-            points.extend(batch)
-            if next_offset is None:
-                break
-            offset = next_offset
-        return points
-    except Exception:
-        return []
+    """Return all points from a soul Qdrant collection via pagination.
+
+    Raises any Qdrant exception so callers can surface the actual failure.
+    """
+    points, offset = [], None
+    while True:
+        batch, next_offset = qc.scroll(
+            collection_name=collection_name,
+            limit=100,
+            offset=offset,
+            with_payload=True,
+            with_vectors=False,
+        )
+        points.extend(batch)
+        if next_offset is None:
+            break
+        offset = next_offset
+    return points
 
 
 def _require_config():
