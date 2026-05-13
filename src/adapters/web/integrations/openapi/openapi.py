@@ -44,6 +44,7 @@ class OpenAIIntegration:
         self.skill_manager = None
         self.store_service = None
         self.job_usecases = None
+        self.brain = None
 
         langchain_config = config_service.langchain_config
         if langchain_config.service_enabled:
@@ -55,6 +56,7 @@ class OpenAIIntegration:
                     openai_integration=self,
                     max_concurrent_requests=langchain_config.max_concurrent_requests,
                     enable_langsmith=config_service.langsmith_config.tracing_enabled,
+                    brain=self.brain,
                 )
                 self.logger.info(f"LangChain service enabled with LangSmith={config_service.langsmith_config.tracing_enabled}")
             except Exception as e:
@@ -134,6 +136,12 @@ class OpenAIIntegration:
         self.job_usecases = job_usecases
         if self.langchain_service is not None:
             self.langchain_service.job_usecases = job_usecases
+
+    def set_brain(self, brain) -> None:
+        """Inject brain services after construction."""
+        self.brain = brain
+        if self.langchain_service is not None:
+            self.langchain_service.brain = brain
 
 
     @log_function_call
@@ -780,4 +788,3 @@ class OpenAIIntegration:
             return []
 
         return messages
-

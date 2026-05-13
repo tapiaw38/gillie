@@ -113,7 +113,7 @@ async def get_skill(name: str, request: Request, usecases: Usecases = Depends(ge
 
 @router.post("/extract", status_code=status.HTTP_200_OK)
 async def extract_memory(request: Request, usecases: Usecases = Depends(get_usecases)):
-    """Run memory extraction job: summarize unextracted conversations → update general.skill.md."""
+    """Run legacy conversation summarization for unextracted conversations."""
     user_id = request.state.user.get("user_id")
     result = await usecases.memory.extract_memory_usecase.execute(user_id)
     return ExtractMemoryOutput(**result)

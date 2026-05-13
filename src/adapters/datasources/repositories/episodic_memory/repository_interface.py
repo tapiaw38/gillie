@@ -30,10 +30,6 @@ class RepositoryInterface(ABC):
         pass
 
     @abstractmethod
-    async def mark_promoted(self, memory_ids: List[str]) -> None:
-        pass
-
-    @abstractmethod
     async def delete_many_by_ids(self, memory_ids: List[str]) -> int:
         pass
 

@@ -27,7 +27,7 @@ from cli.config.schema import (
     LLMExtendedServiceConfig,
     LoggingConfig,
 )
-from cli.config.manager import save_config, load_config, config_exists, get_config_path, get_soul_path
+from cli.config.manager import save_config, load_config, config_exists, get_config_path
 
 console = Console()
 
@@ -299,8 +299,7 @@ def init(
     console.print()
     _print_summary(config)
     console.print()
-    console.print(f"✨🐙 [green]✓[/green] Soul saved to   [bold]{get_soul_path()}[/bold]")
-    console.print(f"   [green]✓[/green] Config saved to [bold]{get_config_path()}[/bold]")
+    console.print(f"✨🐙 [green]✓[/green] Config saved to [bold]{get_config_path()}[/bold]")
     console.print()
     console.print(f"Start the server with: [bold cyan]./gillie start[/bold cyan]")
     console.print()

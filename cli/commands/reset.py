@@ -5,7 +5,7 @@ from rich.console import Console
 from rich.panel import Panel
 from InquirerPy import inquirer
 
-from cli.config.manager import config_exists, load_config, get_config_path, get_soul_path
+from cli.config.manager import config_exists, load_config, get_config_path
 
 console = Console()
 
@@ -135,7 +135,7 @@ def reset(
 
     if not keep_config:
         console.print("[bold]Removing CLI config...[/bold]")
-        for path in [get_soul_path(), get_config_path()]:
+        for path in [get_config_path()]:
             if path.exists():
                 try:
                     path.unlink()

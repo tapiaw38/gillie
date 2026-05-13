@@ -20,7 +20,6 @@ class ExtractMemoryUseCase:
                 return {"extracted": 0, "status": "no_new_conversations"}
 
             openai_client = ctx.integrations.openai
-            skill_manager = ctx.platform_managers.skill_manager
 
             summaries = []
             for conv in conversations:
@@ -31,9 +30,6 @@ class ExtractMemoryUseCase:
                     )
                     summaries.append(summary)
                     logger.info(f"Summarized conversation {conv.id}")
-
-            if summaries:
-                await self.extraction_service.update_general_memory(summaries, skill_manager, openai_client)
 
             return {"extracted": len(summaries), "status": "ok"}
 

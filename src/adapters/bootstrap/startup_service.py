@@ -169,7 +169,6 @@ class StartupService:
         try:
             result = await self.brain.consolidator.consolidate(
                 user_id=user_id,
-                skill_manager=self.skill_manager,
                 auto_prune=True,
             )
             self._write_last_maintenance()

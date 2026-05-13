@@ -66,23 +66,11 @@ class Repository(RepositoryInterface):
             cursor = self.client.find({
                 "user_id": user_id,
                 "importance": {"$gte": min_importance},
-                "promoted_to_soul": {"$ne": True},
             }).sort("importance", -1)
             documents = await cursor.to_list(length=None)
             return [EpisodicMemory(**doc) for doc in documents]
         except PyMongoError as exc:
             raise NewApplicationError(CommonDatabaseQueryError, exc)
-
-    async def mark_promoted(self, memory_ids: List[str]) -> None:
-        if not memory_ids:
-            return
-        try:
-            await self.client.update_many(
-                {"_id": {"$in": memory_ids}},
-                {"$set": {"promoted_to_soul": True}},
-            )
-        except PyMongoError as exc:
-            logger.warning("Failed to mark memories as promoted: %s", exc)
 
     async def delete_many_by_ids(self, memory_ids: List[str]) -> int:
         if not memory_ids:
@@ -96,7 +84,7 @@ class Repository(RepositoryInterface):
     async def ensure_indexes(self) -> None:
         try:
             await self.client.create_index([("user_id", 1), ("created_at", -1)])
-            await self.client.create_index([("user_id", 1), ("importance", -1), ("promoted_to_soul", 1)])
+            await self.client.create_index([("user_id", 1), ("importance", -1)])
             logger.info("Episodic memory indexes ensured")
         except Exception as exc:
             logger.warning("Failed to ensure episodic memory indexes: %s", exc)

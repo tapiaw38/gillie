@@ -30,75 +30,120 @@ logger = logging.getLogger(__name__)
 MEMORY_DIR = Path.home() / ".gillie" / "memory"
 
 _MEMORY_ROOT_TEMPLATE = """\
-# Memoria del Asistente
+# Assistant Memory
 
-Árbol de conocimiento del asistente. Cada sección puede referenciar skills específicas.
+Assistant knowledge tree. Each section can reference specific skills.
 
-## Reglas y comportamiento
+## Rules and Behavior
 
 ver rules.skill.md
 
-## Preguntas Frecuentes
+## Frequently Asked Questions
 
 ver faqs.skill.md
 
-## Conocimiento General
+## General Knowledge
+
+Only core facts that must always stay in context.
+Do not use this for consolidated conversation memory; that belongs in the soul store.
 
 ver general.skill.md
 
-## Hechos Recordados
+## Remembered Facts
 
 ver facts.skill.md
 
-## Soluciones Registradas
+## Recorded Solutions
 
 ver solutions.skill.md
 """
 
-BRAIN_SKILL_MARKER = "## Memoria Episódica (Brain)"
+BRAIN_SKILL_MARKER = "## Episodic Memory (Brain)"
 
 BRAIN_SKILL_BLOCK = """
-## Memoria Episódica (Brain)
-El sistema tiene memoria episódica activa. Después de cada conversación, el asistente
-extrae y almacena automáticamente recuerdos relevantes (hechos, preferencias, decisiones, metas).
+## Episodic Memory (Brain)
+The system has episodic memory and soul memory enabled. Knowledge is stored in two layers:
 
-Cuando el contexto incluye un bloque `=== EPISODIC MEMORIES ===`:
-- Úsalo para personalizar tu respuesta con información del historial del usuario.
-- Menciona recuerdos relevantes de forma natural, sin listar todos.
-- Prioriza recuerdos con alta importancia (importance >= 7).
-- No inventes recuerdos que no estén en el bloque.
-- NO hay un comando `save_memory` — la extracción es automática.
+**Episodic layer** — recent experiences extracted automatically from each conversation.
+**Soul layer** — distilled long-term knowledge promoted from episodic memory.
+
+When the context includes `=== SOUL KNOWLEDGE ===`:
+- These are permanent facts about the user synthesized from multiple conversations.
+- Use them as background truth to personalize all responses.
+- They are more reliable than episodic memories.
+
+When the context includes `=== EPISODIC MEMORIES ===`:
+- These are recent user experiences.
+- Use them to personalize the current response contextually.
+- Mention relevant memories naturally without listing everything.
+- Prioritize high-importance memories (importance >= 7).
+
+General rules:
+- Do not invent information that is not present in these blocks.
+- There is NO `save_memory` command here; extraction is automatic.
 """
 
 _RULES_SKILL_TEMPLATE = """\
-# Reglas del Asistente
+# Assistant Rules
 
-## Formato y lenguaje
-- Responde siempre en español, de forma clara y concisa.
-- Usa texto plano en las respuestas; no uses Markdown innecesario.
-- Las URLs deben ir limpias, sin paréntesis, comillas ni corchetes antes o después.
+## Format and Language
+- Always respond in Spanish, clearly and concisely.
+- Use plain text in responses; avoid unnecessary Markdown.
+- URLs must be clean, with no parentheses, quotes, or brackets before or after them.
 
-## Archivos Office (Word, Excel, PowerPoint) — REGLA CRÍTICA
-NUNCA escribas sintaxis Markdown dentro de documentos .docx, .xlsx o .pptx.
-Estos formatos NO interpretan Markdown — `![alt](url)`, `**texto**`, `*texto*`, `# Título`, etc.
-se insertan como texto literal y rompen el documento.
-- Para imágenes: usa `insert_image_docx`, `insert_image_excel` o `insert_image_pptx`.
-- Para contenido: usa `write_docx`, `modify_docx` y herramientas equivalentes.
-- NUNCA escribas una URL de imagen como texto en el documento; eso inserta un enlace roto, no una imagen.
+## Office Files (Word, Excel, PowerPoint) — CRITICAL RULE
+NEVER write Markdown syntax inside `.docx`, `.xlsx`, or `.pptx` documents.
+These formats do NOT interpret Markdown — `![alt](url)`, `**text**`, `*text*`, `# Title`, etc.
+will be inserted as literal text and break the document.
+- For images: use `insert_image_docx`, `insert_image_excel`, or `insert_image_pptx`.
+- For content: use `write_docx`, `modify_docx`, and equivalent tools.
+- NEVER write an image URL as plain text in the document; that inserts a broken link, not an image.
 
-## Automatización de browser — REGLA CRÍTICA
-Ante CUALQUIER tarea que involucre un navegador (abrir URL, hacer clic, llenar formularios,
-enviar mensajes, hacer scraping, etc.) DEBES llamar a `browser_connect` como PRIMER tool, siempre.
-- NUNCA uses `run_shell` ni ningún otro tool para abrir Chrome/Chromium/Firefox.
-- NUNCA ejecutes `google-chrome`, `xdg-open` ni ningún comando de navegador por shell.
-- `browser_connect` relanza Chrome con depuración remota usando el perfil real, preservando sesiones.
-- Flujo: `browser_connect` → `browser_switch_tab` → `browser_navigate` / `browser_evaluate` / `browser_click` / `browser_type`.
-- Nunca le pidas al usuario que haga algo manualmente en el navegador.
+## Browser Automation — CRITICAL RULE
+For ANY task involving a browser (open URL, click, fill forms, send messages, scraping, etc.)
+you MUST call `browser_connect` as the FIRST tool, always.
+- NEVER use `run_shell` or any other tool to open Chrome/Chromium/Firefox.
+- NEVER execute `google-chrome`, `xdg-open`, or any browser command via shell.
+- `browser_connect` relaunches Chrome with remote debugging using the real profile, preserving sessions.
+- Flow: `browser_connect` → `browser_switch_tab` → `browser_navigate` / `browser_evaluate` / `browser_click` / `browser_type`.
+- Never ask the user to do something manually in the browser.
 
-## Comportamiento general
-- Actúa como asistente personal: empático, directo y eficiente.
-- Prefiere usar herramientas disponibles antes de pedir información al usuario.
-- Ante tareas de archivos, workspace o shell: actúa directamente sin pedir confirmación innecesaria.
+## General Behavior
+- Act as a personal assistant: empathetic, direct, and efficient.
+- Prefer using available tools before asking the user for information.
+- For file, workspace, or shell tasks: act directly without unnecessary confirmation.
+"""
+
+_FAQS_SKILL_TEMPLATE = """\
+# Frequently Asked Questions
+
+Use this file for stable question/answer pairs that should be reused often.
+
+Example format:
+
+## General
+**Q:** Example question
+**A:** Example answer
+"""
+
+_GENERAL_SKILL_TEMPLATE = """\
+# General Knowledge
+
+Use this file only for core facts that must always remain in context.
+Do not use it for consolidated conversation memory; that belongs in the soul store.
+"""
+
+_FACTS_SKILL_TEMPLATE = """\
+# Remembered Facts
+
+This file stores manually remembered facts when the soul store is not available.
+Entries may be added automatically by the `save_memory` tool fallback.
+"""
+
+_SOLUTIONS_SKILL_TEMPLATE = """\
+# Recorded Solutions
+
+Use this file to store recurring fixes, troubleshooting notes, and problem/solution pairs.
 """
 
 
@@ -152,13 +197,37 @@ class SkillManager:
         if not path.exists():
             path.write_text(_MEMORY_ROOT_TEMPLATE, encoding="utf-8")
             logger.info("Created default memory.md at %s", path)
+        self._ensure_faqs_skill()
+        self._ensure_general_skill()
+        self._ensure_facts_skill()
         self._ensure_solutions_skill()
+
+    def _ensure_faqs_skill(self) -> None:
+        """Create faqs.skill.md with a default header if it does not exist yet."""
+        path = self._skill_path("faqs")
+        if not path.exists():
+            path.write_text(_FAQS_SKILL_TEMPLATE, encoding="utf-8")
+            logger.info("Created default faqs.skill.md at %s", path)
+
+    def _ensure_general_skill(self) -> None:
+        """Create general.skill.md with a default header if it does not exist yet."""
+        path = self._skill_path("general")
+        if not path.exists():
+            path.write_text(_GENERAL_SKILL_TEMPLATE, encoding="utf-8")
+            logger.info("Created default general.skill.md at %s", path)
+
+    def _ensure_facts_skill(self) -> None:
+        """Create facts.skill.md with a default header if it does not exist yet."""
+        path = self._skill_path("facts")
+        if not path.exists():
+            path.write_text(_FACTS_SKILL_TEMPLATE, encoding="utf-8")
+            logger.info("Created default facts.skill.md at %s", path)
 
     def _ensure_solutions_skill(self) -> None:
         """Create solutions.skill.md with a default header if it does not exist yet."""
         path = self._skill_path("solutions")
         if not path.exists():
-            path.write_text("# Soluciones Registradas\n", encoding="utf-8")
+            path.write_text(_SOLUTIONS_SKILL_TEMPLATE, encoding="utf-8")
             logger.info("Created default solutions.skill.md at %s", path)
 
     def _ensure_rules_skill(self) -> None:
@@ -180,7 +249,7 @@ class SkillManager:
             skill_content = self.load_skill(name)
             if skill_content.strip():
                 return skill_content.strip()
-            return f"*(sin contenido en {name}.skill.md)*"
+            return f"*(no content in {name}.skill.md)*"
 
         return pattern.sub(replace_match, content)
 
@@ -215,7 +284,7 @@ class SkillManager:
 
     def append_general_knowledge(self, content: str, category: str = "General") -> str:
         """
-        Append a note to general.skill.md, skipping if a similar note already exists.
+        Append a core note to general.skill.md, skipping if a similar note already exists.
         Returns the note ID (existing if duplicate, new if added).
         """
         from datetime import date
@@ -248,8 +317,8 @@ class SkillManager:
 
     def _find_similar_note(self, content: str, existing_raw: str, threshold: float = 0.45) -> Optional[str]:
         """
-        Return the ID of an existing note that is semantically similar to content,
-        based on keyword overlap. Returns None if no similar note is found.
+        Return the ID of an existing memory block that is semantically similar to
+        content, based on keyword overlap. Returns None if no similar block is found.
         """
         _STOP = {
             "el", "la", "los", "las", "de", "en", "y", "a", "que", "es", "un",
@@ -267,11 +336,11 @@ class SkillManager:
             return None
 
         pattern = re.compile(
-            r"<!--\s*note:\s*([a-f0-9]+)\s*-->\n\*\*\[.+?\]\*\*\s*(.+?)(?=\n<!--\s*note:|\Z)",
+            r"<!--\s*(note|fact|solution):\s*([a-f0-9]+)\s*-->\n(.+?)(?=\n<!--\s*(?:note|fact|solution):|\Z)",
             re.DOTALL,
         )
         for m in pattern.finditer(existing_raw):
-            note_id, note_text = m.group(1), m.group(2)
+            note_id, note_text = m.group(2), m.group(3)
             note_kw = _keywords(note_text)
             if not note_kw:
                 continue
