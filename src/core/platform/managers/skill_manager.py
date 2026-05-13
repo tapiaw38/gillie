@@ -249,7 +249,7 @@ class SkillManager:
             skill_content = self.load_skill(name)
             if skill_content.strip():
                 return skill_content.strip()
-            return f"*(sin contenido en {name}.skill.md)*"
+            return f"*(no content in {name}.skill.md)*"
 
         return pattern.sub(replace_match, content)
 
