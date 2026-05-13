@@ -110,25 +110,33 @@ class MemoryConsolidator:
         if memories:
             logger.info("Consolidating %d memories for user %s", len(memories), user_id)
             statements = await self._synthesize(memories)
+            attempted_statements = 0
 
             for item in statements:
                 category = item.get("category", "General")
                 statement = item.get("statement", "").strip()
                 if not statement:
                     continue
+                attempted_statements += 1
                 stored = self.soul_vector_service.store_statement(user_id, statement, category)
                 if stored:
                     written += 1
 
-            if written > 0:
+            if attempted_statements > 0:
                 promoted_ids = [m.id for m in memories if m.id]
                 await self.repo.delete_many_by_ids(promoted_ids)
                 if self.vector_service:
                     self.vector_service.delete_episodes(user_id, promoted_ids)
-                logger.info(
-                    "Consolidated %d statements from %d memories for user %s",
-                    written, len(memories), user_id,
-                )
+                if written > 0:
+                    logger.info(
+                        "Consolidated %d statements from %d memories for user %s",
+                        written, len(memories), user_id,
+                    )
+                else:
+                    logger.info(
+                        "Consolidation produced %d duplicate soul statements from %d memories for user %s; source episodes deleted",
+                        attempted_statements, len(memories), user_id,
+                    )
             else:
                 logger.warning(
                     "Synthesis returned no statements for user %s — source memories preserved",

@@ -32,6 +32,11 @@ CONFIG_DIR = Path.home() / ".gillie"
 CONFIG_FILE = CONFIG_DIR / "config.json"
 
 
+def _config_has_required_identity(data: dict) -> bool:
+    """Return True when config.json includes the fields needed to load AssistantConfig."""
+    return "user_id" in data and "profile" in data
+
+
 
 def get_config_path() -> Path:
     """Return the technical config path (env override or default)."""
@@ -42,8 +47,18 @@ def get_config_path() -> Path:
 
 
 def config_exists() -> bool:
-    """Return True if config.json exists."""
-    return get_config_path().exists()
+    """Return True if config.json exists and contains the minimum required identity fields."""
+    path = get_config_path()
+    if not path.exists():
+        return False
+
+    try:
+        with open(path, "r") as f:
+            data = json.load(f)
+    except (OSError, json.JSONDecodeError):
+        return False
+
+    return _config_has_required_identity(data)
 
 
 
@@ -93,7 +108,7 @@ def load_config() -> AssistantConfig:
     with open(path, "r") as f:
         data = json.load(f)
 
-    if "user_id" not in data or "profile" not in data:
+    if not _config_has_required_identity(data):
         raise FileNotFoundError(
             "Config does not contain user_id/profile. Run `gillie init --force` to recreate configuration."
         )

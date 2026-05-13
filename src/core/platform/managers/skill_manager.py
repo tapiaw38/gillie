@@ -317,8 +317,8 @@ class SkillManager:
 
     def _find_similar_note(self, content: str, existing_raw: str, threshold: float = 0.45) -> Optional[str]:
         """
-        Return the ID of an existing note that is semantically similar to content,
-        based on keyword overlap. Returns None if no similar note is found.
+        Return the ID of an existing memory block that is semantically similar to
+        content, based on keyword overlap. Returns None if no similar block is found.
         """
         _STOP = {
             "el", "la", "los", "las", "de", "en", "y", "a", "que", "es", "un",
@@ -336,11 +336,11 @@ class SkillManager:
             return None
 
         pattern = re.compile(
-            r"<!--\s*note:\s*([a-f0-9]+)\s*-->\n\*\*\[.+?\]\*\*\s*(.+?)(?=\n<!--\s*note:|\Z)",
+            r"<!--\s*(note|fact|solution):\s*([a-f0-9]+)\s*-->\n(.+?)(?=\n<!--\s*(?:note|fact|solution):|\Z)",
             re.DOTALL,
         )
         for m in pattern.finditer(existing_raw):
-            note_id, note_text = m.group(1), m.group(2)
+            note_id, note_text = m.group(2), m.group(3)
             note_kw = _keywords(note_text)
             if not note_kw:
                 continue
