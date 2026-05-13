@@ -5,6 +5,8 @@ gillie brain edit        — enable/disable episodic memory, configure Qdrant
 gillie brain status      — config + Qdrant connection + memory count
 gillie brain stats       — memory distribution by importance, type, and age
 gillie brain list        — recent episodic memories from MongoDB
+gillie brain search      — search across episodic memories and soul knowledge
+gillie brain feedback    — review and remove incorrect soul knowledge statements
 gillie brain clear       — delete all episodic memories and soul knowledge
 gillie brain consolidate — promote high-importance memories to the soul store (+ auto-prune)
 gillie brain prune       — delete stale low-importance memories
@@ -30,6 +32,27 @@ def _qdrant_collection_points(qc, collection_name: str):
         return str(info.points_count or 0)
     except Exception:
         return "[dim]collection not yet created[/dim]"
+
+
+def _soul_scroll_all(qc, collection_name: str) -> list:
+    """Return all points from a soul Qdrant collection via pagination.
+
+    Raises any Qdrant exception so callers can surface the actual failure.
+    """
+    points, offset = [], None
+    while True:
+        batch, next_offset = qc.scroll(
+            collection_name=collection_name,
+            limit=100,
+            offset=offset,
+            with_payload=True,
+            with_vectors=False,
+        )
+        points.extend(batch)
+        if next_offset is None:
+            break
+        offset = next_offset
+    return points
 
 
 def _require_config():
@@ -170,17 +193,24 @@ def stats():
 
     console.print()
 
-    summary = Table(box=box.SIMPLE, show_header=False, padding=(0, 1))
-    summary.add_column("Key", style="bold dim")
-    summary.add_column("Value")
-    summary.add_row("Total memories", str(total))
+    soul_points = []
+    soul_by_category: dict = {}
     if config.services.qdrant.enabled:
         try:
             qc = _qdrant_client(config)
             soul_count = _qdrant_collection_points(qc, f"soul_{config.user_id}")
+            soul_points = _soul_scroll_all(qc, f"soul_{config.user_id}")
+            for pt in soul_points:
+                cat = (pt.payload or {}).get("metadata", {}).get("category", "General")
+                soul_by_category[cat] = soul_by_category.get(cat, 0) + 1
         except Exception as e:
             soul_count = f"[red]✗ {e}[/red]"
-    summary.add_row("Soul knowledge", soul_count)
+
+    summary = Table(box=box.SIMPLE, show_header=False, padding=(0, 1))
+    summary.add_column("Key", style="bold dim")
+    summary.add_column("Value")
+    summary.add_row("Total episodic memories", str(total))
+    summary.add_row("Soul knowledge statements", soul_count)
     summary.add_row("Consolidate candidates", f"[green]{consolidate_candidates}[/green] (importance >= 7)")
     summary.add_row("Prune candidates", f"[yellow]{stale_candidates}[/yellow] (stale low-importance)")
     console.print(summary)
@@ -223,10 +253,21 @@ def stats():
     console.print(age_table)
     console.print()
 
+    if soul_by_category:
+        soul_table = Table(title="Soul Knowledge by Category", box=box.SIMPLE, padding=(0, 1))
+        soul_table.add_column("Category")
+        soul_table.add_column("Count", justify="right")
+        for cat, count in sorted(soul_by_category.items(), key=lambda x: -x[1]):
+            soul_table.add_row(f"[cyan]{cat}[/cyan]", str(count))
+        console.print(soul_table)
+        console.print()
+
     if consolidate_candidates > 0:
         console.print(f"[dim]Run [bold cyan]gillie brain consolidate[/bold cyan] to promote {consolidate_candidates} high-importance memories[/dim]")
     if stale_candidates > 0:
         console.print(f"[dim]Run [bold cyan]gillie brain prune[/bold cyan] to remove {stale_candidates} stale memories[/dim]")
+    if soul_points:
+        console.print(f"[dim]Run [bold cyan]gillie brain feedback[/bold cyan] to review and correct soul knowledge[/dim]")
     console.print()
 
 
@@ -347,6 +388,184 @@ def list_memories(
         table.add_row(date_str, mem_type, imp_str, emotion, content, tags)
 
     console.print(table)
+    console.print()
+
+
+@app.command("search")
+def search(
+    query: str = typer.Argument(..., help="Search query"),
+    layer: str = typer.Option("all", "--layer", "-l", help="Layer to search: all, episodic, soul"),
+    limit: int = typer.Option(10, "--limit", "-n", help="Max results per layer"),
+):
+    """Search across episodic memories (MongoDB) and soul knowledge (Qdrant)."""
+    _require_config()
+    config = load_config()
+    _require_brain(config)
+
+    query_lower = query.lower()
+    found_any = False
+
+    # ── Episodic layer (MongoDB regex) ────────────────────────────────────────
+    if layer in ("all", "episodic"):
+        try:
+            import re as _re
+            mongo_client, col = _mongo_collection(config)
+            docs = list(col.find({
+                "user_id": config.user_id,
+                "content": {"$regex": _re.escape(query), "$options": "i"},
+            }).sort("importance", -1).limit(limit))
+            mongo_client.close()
+        except Exception as e:
+            console.print(f"[red]✗[/red] MongoDB error: {e}")
+            docs = []
+
+        if docs:
+            found_any = True
+            console.print()
+            ep_table = Table(
+                title=f"Episodic Memories — \"{query}\"",
+                box=box.ROUNDED, border_style="cyan", show_lines=True,
+            )
+            ep_table.add_column("Date", style="dim", width=11)
+            ep_table.add_column("Type", width=10)
+            ep_table.add_column("Imp", justify="center", width=4)
+            ep_table.add_column("Content")
+            ep_table.add_column("Tags", style="dim")
+
+            for doc in docs:
+                created = doc.get("created_at", "")
+                date_str = created.strftime("%Y-%m-%d") if hasattr(created, "strftime") else str(created)[:10]
+                importance = doc.get("importance", 5)
+                imp_color = "green" if importance >= 7 else ("yellow" if importance >= 4 else "dim")
+                content = doc.get("content", "")
+                if len(content) > 80:
+                    content = content[:77] + "..."
+                ep_table.add_row(
+                    date_str,
+                    doc.get("type", "episode"),
+                    f"[{imp_color}]{importance}[/{imp_color}]",
+                    content,
+                    ", ".join(doc.get("tags", [])),
+                )
+            console.print(ep_table)
+
+    # ── Soul layer (Qdrant keyword scan) ─────────────────────────────────────
+    if layer in ("all", "soul") and config.services.qdrant.enabled:
+        try:
+            qc = _qdrant_client(config)
+            all_soul = _soul_scroll_all(qc, f"soul_{config.user_id}")
+            soul_hits = [
+                pt for pt in all_soul
+                if query_lower in (pt.payload or {}).get("page_content", "").lower()
+            ][:limit]
+        except Exception as e:
+            console.print(f"[yellow]⚠[/yellow]  Qdrant error: {e}")
+            soul_hits = []
+
+        if soul_hits:
+            found_any = True
+            console.print()
+            soul_table = Table(
+                title=f"Soul Knowledge — \"{query}\"",
+                box=box.ROUNDED, border_style="magenta", show_lines=True,
+            )
+            soul_table.add_column("ID", style="dim", width=10)
+            soul_table.add_column("Category", width=14)
+            soul_table.add_column("Statement")
+
+            for pt in soul_hits:
+                payload = pt.payload or {}
+                meta = payload.get("metadata", {})
+                soul_id = meta.get("soul_id", str(pt.id)[:8])
+                category = meta.get("category", "General")
+                statement = payload.get("page_content", "")
+                if len(statement) > 90:
+                    statement = statement[:87] + "..."
+                soul_table.add_row(soul_id, f"[cyan]{category}[/cyan]", statement)
+
+            console.print(soul_table)
+
+    if not found_any:
+        console.print()
+        console.print(f"[dim]No results found for \"{query}\".[/dim]")
+    console.print()
+
+
+@app.command("feedback")
+def feedback(
+    query: str = typer.Argument(None, help="Optional query to pre-filter soul knowledge"),
+):
+    """Review soul knowledge and remove incorrect or outdated statements."""
+    _require_config()
+    config = load_config()
+    _require_brain(config)
+
+    if not config.services.qdrant.enabled:
+        console.print("[yellow]⚠[/yellow]  Qdrant is not enabled — soul store not available.")
+        raise typer.Exit(0)
+
+    try:
+        qc = _qdrant_client(config)
+        all_points = _soul_scroll_all(qc, f"soul_{config.user_id}")
+    except Exception as e:
+        console.print(f"[red]✗[/red] Qdrant error: {e}")
+        raise typer.Exit(1)
+
+    if not all_points:
+        console.print("[dim]Soul store is empty — nothing to review.[/dim]")
+        raise typer.Exit(0)
+
+    # Optional keyword pre-filter
+    if query:
+        q_lower = query.lower()
+        all_points = [
+            pt for pt in all_points
+            if q_lower in (pt.payload or {}).get("page_content", "").lower()
+        ]
+        if not all_points:
+            console.print(f"[dim]No soul knowledge matching \"{query}\".[/dim]")
+            raise typer.Exit(0)
+
+    console.print()
+    console.print(f"[bold]Soul knowledge review[/bold] — {len(all_points)} statement(s)")
+    if query:
+        console.print(f"[dim]Filtered by: \"{query}\"[/dim]")
+    console.print()
+
+    choices = []
+    for pt in all_points:
+        payload = pt.payload or {}
+        meta = payload.get("metadata", {})
+        category = meta.get("category", "General")
+        statement = payload.get("page_content", "")
+        label = f"[{category}] {statement[:80]}{'...' if len(statement) > 80 else ''}"
+        choices.append({"name": label, "value": pt.id})
+
+    try:
+        selected = inquirer.checkbox(
+            message="Select statements to DELETE (space to select, enter to confirm):",
+            choices=choices,
+        ).execute()
+    except KeyboardInterrupt:
+        console.print("[dim]Cancelled.[/dim]")
+        raise typer.Exit(0)
+
+    if not selected:
+        console.print("[dim]No statements selected — nothing deleted.[/dim]")
+        raise typer.Exit(0)
+
+    console.print()
+    try:
+        from qdrant_client.http import models as qmodels
+        qc.delete(
+            collection_name=f"soul_{config.user_id}",
+            points_selector=qmodels.PointIdsList(points=selected),
+        )
+        console.print(f"[green]✓[/green] Deleted [bold]{len(selected)}[/bold] soul knowledge statement(s).")
+    except Exception as e:
+        console.print(f"[red]✗[/red] Qdrant deletion failed: {e}")
+        raise typer.Exit(1)
+
     console.print()
 
 
