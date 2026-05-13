@@ -1,6 +1,8 @@
 import json
 import logging
+from datetime import datetime, timezone
 from typing import List, Optional
+from uuid import uuid4
 
 from src.core.domain.brain import EpisodicMemory
 
@@ -59,6 +61,7 @@ class EpisodicMemoryWriter:
             memories = await self._extract(user_message, assistant_response)
             for memory_data in memories:
                 memory = EpisodicMemory(
+                    **{"_id": str(uuid4())},
                     user_id=user_id,
                     type=memory_data.get("type", "episode"),
                     content=memory_data.get("content", ""),
@@ -66,6 +69,7 @@ class EpisodicMemoryWriter:
                     emotion=memory_data.get("emotion") or None,
                     tags=memory_data.get("tags", []),
                     source_conversation_id=conversation_id,
+                    created_at=datetime.now(timezone.utc),
                 )
                 if not memory.content.strip():
                     continue

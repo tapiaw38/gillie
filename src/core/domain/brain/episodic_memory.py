@@ -6,7 +6,7 @@ from pydantic import BaseModel, Field
 
 
 class EpisodicMemory(BaseModel):
-    id: Optional[str] = Field(alias="_id", default_factory=lambda: str(uuid4()))
+    id: Optional[str] = Field(alias="_id", default=None)
     user_id: str
     type: str = "episode"  # "episode" | "fact" | "preference" | "goal"
     content: str
@@ -14,7 +14,7 @@ class EpisodicMemory(BaseModel):
     emotion: Optional[str] = None
     tags: List[str] = Field(default_factory=list)
     source_conversation_id: Optional[str] = None
-    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+    created_at: datetime
     last_accessed: Optional[datetime] = None
     access_count: int = 0
     promoted_to_soul: bool = False

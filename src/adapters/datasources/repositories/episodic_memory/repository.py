@@ -20,10 +20,6 @@ class Repository(RepositoryInterface):
     async def create(self, memory: EpisodicMemory) -> str:
         try:
             memory_dict = memory.dict(by_alias=True, exclude_none=True, exclude_unset=True)
-            if "_id" not in memory_dict:
-                memory_dict["_id"] = memory.id
-            if "created_at" not in memory_dict:
-                memory_dict["created_at"] = memory.created_at
             result = await self.client.insert_one(memory_dict)
             return str(result.inserted_id)
         except PyMongoError as exc:
