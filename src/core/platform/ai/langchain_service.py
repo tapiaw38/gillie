@@ -148,6 +148,7 @@ class LangChainService:
         max_concurrent_requests: int = 3,
         enable_langsmith: bool = False,
         skill_manager=None,
+        brain=None,
     ):
         """
         Initialize the LangChain service.
@@ -163,6 +164,7 @@ class LangChainService:
         self.skill_manager = skill_manager
         self.store_service = None
         self.job_usecases = None
+        self.brain = brain
 
         self.llm = _build_llm(
             model=self.config.model,
@@ -309,6 +311,7 @@ class LangChainService:
                         store_service=self.store_service,
                         job_usecases=self.job_usecases,
                         client_workspace=client_workspace,
+                        brain=self.brain,
                     )
                     if _is_ollama_url(self.config.base_url):
                         tools = await self._route_tools(question, tools)
@@ -431,6 +434,7 @@ class LangChainService:
                         client_workspace=client_workspace,
                         approval_callback=approval_callback,
                         plan_mode=plan_mode,
+                        brain=self.brain,
                     )
                     if _is_ollama_url(self.config.base_url):
                         tools = await self._route_tools(question, tools)

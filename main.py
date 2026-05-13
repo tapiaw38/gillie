@@ -188,6 +188,7 @@ async def _build_runtime(
                 logger.info("Brain services initialized")
             except Exception as exc:
                 logger.warning("Brain services could not be initialized: %s", exc)
+        integrations.openai.set_brain(brain)
 
         platform_services = PlatformServices.create_services(
             integrations=integrations,

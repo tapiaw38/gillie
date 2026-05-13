@@ -177,7 +177,9 @@ _DEFAULT_TOOL_PROMPTS: Dict[str, str] = {
         "Preserve all unique information — only merge actual duplicates."
     ),
     "save_memory": (
-        "Save important information to assistant memory as a remembered fact, not to the soul store. "
+        "Save important information to long-term assistant memory. "
+        "When the soul store is available, save it there so it can be retrieved by relevance. "
+        "If the brain/soul store is not available, fall back to facts.skill.md. "
         "ALWAYS use this tool when the user says phrases like: "
         "'recuerda', 'recuerda esto', 'guarda esto', 'ten en cuenta', "
         "'guarda en memoria', 'anota', 'no olvides', 'para el futuro', "
@@ -1159,7 +1161,7 @@ import atexit as _atexit
 _atexit.register(_browser_cleanup_sync)
 
 
-def create_langchain_tools(openai_integration, profile, skill_manager=None, store_service=None, job_usecases=None, shell_output_callback=None, client_workspace: str = "", approval_callback=None, plan_mode: bool = False) -> List[StructuredTool]:
+def create_langchain_tools(openai_integration, profile, skill_manager=None, store_service=None, job_usecases=None, shell_output_callback=None, client_workspace: str = "", approval_callback=None, plan_mode: bool = False, brain=None) -> List[StructuredTool]:
     """
     Create LangChain StructuredTool instances with Pydantic validation.
 
@@ -4095,6 +4097,13 @@ If data is not found, say so clearly."""
 
     if skill_manager is not None:
         async def save_memory_tool(content: str, category: str = "General") -> str:
+            soul_vector = getattr(brain, "soul_vector", None) if brain is not None else None
+            if soul_vector is not None:
+                stored = soul_vector.store_statement(profile.user_id, content, category)
+                if stored:
+                    return f"Guardado en memoria de largo plazo (Qdrant soul store) para el usuario {profile.user_id}."
+                return "No se guardó en el soul store porque ya existía una entrada semánticamente similar."
+
             existing_id = skill_manager._find_similar_note(content, skill_manager.load_skill("facts"))
             if existing_id:
                 return (
@@ -4102,7 +4111,7 @@ If data is not found, say so clearly."""
                     f"No se creó duplicado. Si quieres actualizar la información usa organize_memory."
                 )
             note_id = skill_manager.save_memory_fact(content, category)
-            return f"Guardado en memoria (facts.skill.md) con ID {note_id}."
+            return f"Guardado en memoria fallback (facts.skill.md) con ID {note_id}."
 
         async def search_memory_tool(query: str, max_results: int = 5) -> str:
             return skill_manager.search_memory(query, max_results)
