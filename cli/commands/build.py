@@ -25,15 +25,38 @@ RELEASE = ROOT / "release"
 
 
 def _venv_nuitka_cmd() -> list[str]:
-    """Return the Nuitka invocation that uses the project venv's Python.
+    """Return the preferred Nuitka invocation for this project.
 
     Avoids the system nuitka shim (#!/usr/bin/python) picking up the wrong
-    site-packages and failing to locate venv-only packages.
+    site-packages and failing to locate venv-only packages, while preserving
+    fallback to the active interpreter or PATH when the project venv exists
+    but does not have Nuitka installed.
     """
+    candidates: list[list[str]] = []
+    seen: set[tuple[str, ...]] = set()
+
+    def add_candidate(cmd: list[str]) -> None:
+        key = tuple(cmd)
+        if key not in seen:
+            seen.add(key)
+            candidates.append(cmd)
+
     venv_python = ROOT / ".venv" / "bin" / "python3"
     if venv_python.exists():
-        return [str(venv_python), "-m", "nuitka"]
-    return [sys.executable, "-m", "nuitka"]
+        add_candidate([str(venv_python), "-m", "nuitka"])
+
+    add_candidate([sys.executable, "-m", "nuitka"])
+
+    nuitka_bin = shutil.which("nuitka")
+    if nuitka_bin:
+        add_candidate([nuitka_bin])
+
+    for cmd in candidates:
+        check = subprocess.run(cmd + ["--version"], capture_output=True)
+        if check.returncode == 0:
+            return cmd
+
+    return candidates[0] if candidates else [sys.executable, "-m", "nuitka"]
 
 
 
@@ -79,8 +102,7 @@ def _build_api(out: Path) -> bool:
     out.mkdir(parents=True, exist_ok=True)
 
     nuitka_cmd = _venv_nuitka_cmd()
-    check = subprocess.run(nuitka_cmd + ["--version"], capture_output=True)
-    if check.returncode != 0:
+    if subprocess.run(nuitka_cmd + ["--version"], capture_output=True).returncode != 0:
         console.print("[red]✗ Nuitka not found.[/red] Install: [cyan]pip install nuitka[/cyan]")
         return False
 
@@ -203,8 +225,7 @@ def _build_cli(out: Path) -> bool:
     out.mkdir(parents=True, exist_ok=True)
 
     nuitka_cmd = _venv_nuitka_cmd()
-    check = subprocess.run(nuitka_cmd + ["--version"], capture_output=True)
-    if check.returncode != 0:
+    if subprocess.run(nuitka_cmd + ["--version"], capture_output=True).returncode != 0:
         console.print("[red]✗ Nuitka not found.[/red] Install it with: [cyan]pip install nuitka[/cyan]")
         return False
 

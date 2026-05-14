@@ -14,6 +14,7 @@ import json
 import logging
 from dataclasses import dataclass
 from typing import Any
+from urllib.parse import urlparse
 
 from langchain_core.messages import HumanMessage, SystemMessage
 
@@ -55,9 +56,20 @@ def is_ollama_url(base_url: str) -> bool:
 
 
 def is_local_provider(base_url: str, model: str = "", provider_name: str = "") -> bool:
-    """Best-effort detection for local/small-model providers."""
-    joined = " ".join([provider_name or "", base_url or "", model or ""]).lower()
-    return any(token in joined for token in ("ollama", "localhost", "127.0.0.1", "gemma"))
+    """Detect providers that are actually hosted on the local machine."""
+    provider = (provider_name or "").lower()
+    if "ollama" in provider:
+        return True
+
+    if is_ollama_url(base_url):
+        return True
+
+    if not base_url:
+        return False
+
+    parsed = urlparse(base_url)
+    host = (parsed.hostname or "").lower()
+    return host in {"localhost", "127.0.0.1", "::1"}
 
 
 def resolve_profile(base_url: str, model: str = "", provider_name: str = "") -> PromptProfile:
