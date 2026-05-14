@@ -3,6 +3,7 @@ Ollama adapter for LangChain.
 
 Centralizes all Ollama-specific logic:
 - URL detection
+- PromptProfile resolution (local_small vs default)
 - LLM construction (ChatOllama)
 - Tool routing (reduce 50+ tools to a relevant subset)
 - Tool name aliases (gemma4 hallucinates google:search instead of web_search)
@@ -11,14 +12,71 @@ Centralizes all Ollama-specific logic:
 
 import json
 import logging
+from dataclasses import dataclass
 from typing import Any
+from urllib.parse import urlparse
 
 from langchain_core.messages import HumanMessage, SystemMessage
 
 logger = logging.getLogger(__name__)
 
+
+@dataclass
+class PromptProfile:
+    """Runtime profile that controls resource budgets for a single request."""
+    name: str
+    max_history_messages: int   # max conversation turns kept in context
+    max_tool_rounds: int        # max agentic tool-call loops
+    max_context_chars: int      # char budget for history (0 = no extra limit)
+    short_answers: bool         # inject "be concise" instruction in system prompt
+    max_workspace_files: int    # cap on workspace map entries (0 = no map)
+
+
+LOCAL_PROFILE = PromptProfile(
+    name="local_small",
+    max_history_messages=6,
+    max_tool_rounds=3,
+    max_context_chars=8000,
+    short_answers=True,
+    max_workspace_files=60,
+)
+
+DEFAULT_PROFILE = PromptProfile(
+    name="default",
+    max_history_messages=20,
+    max_tool_rounds=30,
+    max_context_chars=24000,
+    short_answers=False,
+    max_workspace_files=180,
+)
+
+
 def is_ollama_url(base_url: str) -> bool:
     return bool(base_url and ("localhost:11434" in base_url or "127.0.0.1:11434" in base_url))
+
+
+def is_local_provider(base_url: str, model: str = "", provider_name: str = "") -> bool:
+    """Detect providers that are actually hosted on the local machine."""
+    provider = (provider_name or "").lower()
+    if "ollama" in provider:
+        return True
+
+    if is_ollama_url(base_url):
+        return True
+
+    if not base_url:
+        return False
+
+    parsed = urlparse(base_url)
+    host = (parsed.hostname or "").lower()
+    return host in {"localhost", "127.0.0.1", "::1"}
+
+
+def resolve_profile(base_url: str, model: str = "", provider_name: str = "") -> PromptProfile:
+    """Return LOCAL_PROFILE for local providers, DEFAULT_PROFILE otherwise."""
+    if is_local_provider(base_url, model, provider_name):
+        return LOCAL_PROFILE
+    return DEFAULT_PROFILE
 
 
 def build_ollama_llm(model: str):
@@ -49,7 +107,7 @@ TOOL_GROUPS: dict[str, list[str]] = {
         "browser_close", "browser_switch_tab", "browser_evaluate", "browser_enable_remote_debug",
     ],
     "calendar":  ["calendar_list_events", "calendar_create_event", "calendar_update_event", "calendar_delete_event"],
-    "memory":    ["organize_memory", "add_memory"],
+    "memory":    ["organize_memory", "save_memory", "search_memory", "save_solution"],
     "database":  [],  # matched dynamically by prefix query_* / execute_sql_*
 }
 
@@ -100,6 +158,7 @@ TOOL_ALIASES: dict[str, str] = {
     "search":         "web_search",
     "internet_search": "web_search",
     "duckduckgo":     "web_search",
+    "add_memory":     "save_memory",
 }
 
 

@@ -847,6 +847,7 @@ _AT_URL_RE  = re.compile(r'@(https?://[^\s]+)')
 _AT_GLOB_RE = re.compile(r'@@([^\s]+)')
 _AT_DIR_RE  = re.compile(r'@([^\s@]+/)')
 _AT_FILE_RE = re.compile(r'@([^\s@]+\.[^\s@/]*)')  # path (abs or rel) ending with .extension
+_FILE_PATH_RE = re.compile(r'(?:file://)?(/[^\s]+)')
 
 _LOCAL_DOC_EXTS = {".xlsx", ".xls", ".docx", ".doc", ".csv", ".pdf"}
 
@@ -997,6 +998,55 @@ def _expand_file(filepath: str) -> tuple[str, str | None]:
         text = text[:_FILE_CAP] + f"\n[... truncated at {_FILE_CAP} chars]"
     block = f"--- @{filepath} ---\n{text}\n--- end ---"
     return block, None
+
+
+def _replace_file_paths(text: str, attached_files: list[str]) -> str:
+    """Replace absolute file paths with stable [file(N)] tags for this prompt."""
+    def repl(match: re.Match) -> str:
+        path = match.group(1)
+        candidate = Path(path)
+        try:
+            if not candidate.exists() or not candidate.is_file():
+                return match.group(0)
+        except OSError:
+            return match.group(0)
+
+        normalized = str(candidate.resolve())
+        for idx, existing in enumerate(attached_files):
+            if existing == normalized:
+                return f"[file({idx + 1})]"
+        attached_files.append(normalized)
+        return f"[file({len(attached_files)})]"
+
+    return _FILE_PATH_RE.sub(repl, text)
+
+
+def _attach_paste(text: str, pasted_blocks: list[str]) -> str:
+    """Store pasted multiline text and return its compact placeholder tag."""
+    pasted_blocks.append(text)
+    lines = text.count("\n") + 1
+    return f"[paste({len(pasted_blocks)}): {lines} lines]"
+
+
+def _expand_tagged_refs(content: str, attached_files: list[str], pasted_blocks: list[str]) -> str:
+    """Expand [file(N)] and [paste(N)] placeholders into sendable context."""
+    for idx, path in enumerate(attached_files, 1):
+        tag = f"[file({idx})]"
+        if tag not in content:
+            continue
+        try:
+            data = Path(path).read_text(encoding="utf-8", errors="replace")
+        except OSError:
+            continue
+        block = f'<file name="{Path(path).name}">\n{data}\n</file>'
+        content = content.replace(tag, block)
+
+    for idx, text in enumerate(pasted_blocks, 1):
+        lines = text.count("\n") + 1
+        tag = f"[paste({idx}): {lines} lines]"
+        content = content.replace(tag, text, 1)
+
+    return content
 
 
 def _resolve_at_references(text: str) -> tuple[str, list[str]]:
@@ -1369,6 +1419,8 @@ def agent(
 
     session_files: list = []
     session_local_files: list = []
+    prompt_attached_files: list[str] = []
+    prompt_pasted_blocks: list[str] = []
 
     ws = _workspace()
     agent_md_content = _load_agent_md(ws)
@@ -1559,6 +1611,8 @@ def agent(
             current_id = conversation.get("id") or conversation.get("_id")
             session_files.clear()
             session_local_files.clear()
+            prompt_attached_files.clear()
+            prompt_pasted_blocks.clear()
             console.print(f"[green]✓[/green] New conversation: [bold]{current_id}[/bold]\n")
             _print_header(assistant_name, current_id, mode[0])
             _print_workspace_summary(_workspace())
@@ -1665,11 +1719,18 @@ def agent(
             console.print()
             continue
 
-        expanded, ref_warnings = _resolve_at_references(user_input)
+        display_input = user_input
+        if "\n" in user_input:
+            display_input = _attach_paste(user_input, prompt_pasted_blocks)
+        else:
+            display_input = _replace_file_paths(user_input, prompt_attached_files)
+
+        tagged_expanded = _expand_tagged_refs(display_input, prompt_attached_files, prompt_pasted_blocks)
+        expanded, ref_warnings = _resolve_at_references(tagged_expanded)
         for w in ref_warnings:
             console.print(f"[yellow]Warning:[/yellow] {w}")
-        if expanded != user_input:
-            ref_count = len(re.findall(r'(?<!\s)@', user_input))
+        if expanded != tagged_expanded:
+            ref_count = len(re.findall(r'(?<!\s)@', tagged_expanded))
             console.print(f"[dim]{ref_count} reference(s) expanded[/dim]")
             if len(expanded) > _WARN_TOTAL:
                 console.print(
@@ -1685,7 +1746,9 @@ def agent(
             )
             _agent_md_injected = True
 
-        _print_user(user_input)
+        _print_user(display_input)
+        prompt_attached_files.clear()
+        prompt_pasted_blocks.clear()
         _stream_assistant(
             current_id,
             assistant_name,
