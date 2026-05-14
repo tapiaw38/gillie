@@ -82,6 +82,7 @@ class ConversationMemoryManager:
         messages: List[BaseMessage],
         system_prompt: Optional[str] = None,
         max_chars: int = 24000,
+        max_messages: Optional[int] = None,
     ) -> List[BaseMessage]:
         """
         Optimize message history by keeping recent messages and system prompt.
@@ -104,12 +105,13 @@ class ConversationMemoryManager:
         if system_prompt:
             optimized.append(SystemMessage(content=system_prompt))
 
+        limit = max_messages if max_messages is not None else self.max_messages
         history = [m for m in messages if not isinstance(m, SystemMessage)]
-        if len(history) > self.max_messages:
+        if len(history) > limit:
             logger.info(
-                f"Optimizing message history: {len(history)} -> {self.max_messages} messages"
+                f"Optimizing message history: {len(history)} -> {limit} messages"
             )
-            history = history[-self.max_messages:]
+            history = history[-limit:]
 
         total_chars = sum(
             len(m.content) if isinstance(m.content, str) else 0

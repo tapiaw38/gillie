@@ -35,10 +35,13 @@ def _extract_text(content) -> str:
 
 from src.core.platform.ai.ollama_adapter import (
     is_ollama_url as _is_ollama_url,
+    is_local_provider as _is_local_provider,
     build_ollama_llm as _build_ollama_llm,
     route_tools as _route_tools_ollama,
     resolve_tool_name as _resolve_tool_name,
     normalize_tool_args as _normalize_tool_args,
+    resolve_profile as _resolve_profile,
+    PromptProfile as _PromptProfile,
 )
 
 
@@ -193,8 +196,18 @@ class LangChainService:
 
     def reload_llm(self, model: str, base_url: str, api_key: str, auth_type: str = "api_key") -> None:
         """Rebuild the LLM instance for a new provider (hot-reload)."""
+        self.config.model = model
+        self.config.base_url = base_url
+        self.config.api_key = api_key
+        self.config.auth_type = auth_type
         self.llm = _build_llm(model=model, api_key=api_key, base_url=base_url, auth_type=auth_type)
         logger.info(f"LangChainService LLM reloaded: model={model}")
+
+    def _get_profile(self) -> _PromptProfile:
+        """Resolve PromptProfile based on the current provider URL."""
+        base_url = getattr(self.config, "base_url", "") or ""
+        model = getattr(self.config, "model", "") or ""
+        return _resolve_profile(base_url, model)
 
     async def _route_tools(self, user_message: str, all_tools: list) -> list:
         """For Ollama: run a fast routing call to select only relevant tool groups."""
@@ -287,7 +300,8 @@ class LangChainService:
 
         async with self.semaphore:
             try:
-                system_prompt = self._build_system_prompt(profile, context, client_workspace)
+                prompt_profile = self._get_profile()
+                system_prompt = self._build_system_prompt(profile, context, client_workspace, prompt_profile)
 
                 messages = self._convert_messages_to_langchain(
                     previous_messages=previous_messages,
@@ -299,7 +313,10 @@ class LangChainService:
                     conversation_id, profile.user_id
                 )
                 messages = self.memory_manager.optimize_message_history(
-                    messages, system_prompt=system_prompt
+                    messages,
+                    system_prompt=system_prompt,
+                    max_messages=prompt_profile.max_history_messages,
+                    max_chars=prompt_profile.max_context_chars,
                 )
 
                 tools = None
@@ -313,7 +330,7 @@ class LangChainService:
                         client_workspace=client_workspace,
                         brain=self.brain,
                     )
-                    if _is_ollama_url(self.config.base_url):
+                    if _is_local_provider(self.config.base_url, self.config.model):
                         tools = await self._route_tools(question, tools)
                     llm_with_tools = self.llm.bind_tools(tools)
                     logger.debug(f"Bound {len(tools)} tools to LLM")
@@ -321,7 +338,7 @@ class LangChainService:
                     llm_with_tools = self.llm
                     logger.debug("No tools enabled")
 
-                logger.info(f"Generating response for user {profile.user_id}")
+                logger.info(f"Generating response for user {profile.user_id} [profile={prompt_profile.name}]")
                 response = await llm_with_tools.ainvoke(messages)
 
                 if hasattr(response, 'tool_calls') and response.tool_calls:
@@ -329,7 +346,8 @@ class LangChainService:
                         response=response,
                         messages=messages,
                         llm_with_tools=llm_with_tools,
-                        tools=tools
+                        tools=tools,
+                        max_rounds=prompt_profile.max_tool_rounds,
                     )
                 else:
                     response_text = _extract_text(response.content)
@@ -373,14 +391,21 @@ class LangChainService:
 
         async with self.semaphore:
             try:
-                system_prompt = self._build_system_prompt(profile, context, client_workspace)
+                prompt_profile = self._get_profile()
+                system_prompt = self._build_system_prompt(profile, context, client_workspace, prompt_profile)
                 messages = self._convert_messages_to_langchain(
                     previous_messages=previous_messages,
                     system_prompt=system_prompt,
                     current_question=question,
                 )
                 thread_id = self.memory_manager.create_thread_id(conversation_id, profile.user_id)
-                messages = self.memory_manager.optimize_message_history(messages, system_prompt=system_prompt)
+                messages = self.memory_manager.optimize_message_history(
+                    messages,
+                    system_prompt=system_prompt,
+                    max_messages=prompt_profile.max_history_messages,
+                    max_chars=prompt_profile.max_context_chars,
+                )
+                logger.info(f"Stream: profile={prompt_profile.name}, max_rounds={prompt_profile.max_tool_rounds}")
 
                 shell_output_callback = None
                 if shell_output_queue is not None:
@@ -436,7 +461,7 @@ class LangChainService:
                         plan_mode=plan_mode,
                         brain=self.brain,
                     )
-                    if _is_ollama_url(self.config.base_url):
+                    if _is_local_provider(self.config.base_url, self.config.model):
                         tools = await self._route_tools(question, tools)
                     llm_with_tools = self.llm.bind_tools(tools)
 
@@ -476,6 +501,7 @@ class LangChainService:
                             try:
                                 return await self._handle_tool_calls(
                                     combined, messages, llm_with_tools, tools,
+                                    max_rounds=prompt_profile.max_tool_rounds,
                                     event_queue=shell_output_queue,
                                 )
                             finally:
@@ -494,7 +520,10 @@ class LangChainService:
 
                         response_text = await tool_task
                     else:
-                        response_text = await self._handle_tool_calls(combined, messages, llm_with_tools, tools)
+                        response_text = await self._handle_tool_calls(
+                            combined, messages, llm_with_tools, tools,
+                            max_rounds=prompt_profile.max_tool_rounds,
+                        )
 
                     logger.info(f"Stream: yielding tool-call result, length={len(response_text or '')}")
                     yield response_text
@@ -736,6 +765,7 @@ class LangChainService:
         profile: Profile,
         context: Optional[str],
         client_workspace: str = "",
+        prompt_profile: "_PromptProfile | None" = None,
     ) -> str:
         """
         Build system prompt from profile and context.
@@ -805,9 +835,18 @@ class LangChainService:
                 "5. FAQ answers are official and pre-approved, they take priority over any other information\n"
             )
 
-        if client_workspace and os.path.isdir(client_workspace):
+        if prompt_profile and prompt_profile.short_answers:
+            system_prompt += (
+                "\n\nIMPORTANT: Keep answers short and direct. "
+                "Prefer concrete results over long explanations. "
+                "Do not repeat the user's request. "
+                "Avoid unnecessary preamble."
+            )
+
+        max_workspace_files = prompt_profile.max_workspace_files if prompt_profile else 180
+        if max_workspace_files > 0 and client_workspace and os.path.isdir(client_workspace):
             try:
-                workspace_map = self._build_workspace_map(client_workspace)
+                workspace_map = self._build_workspace_map(client_workspace, max_files=max_workspace_files)
                 system_prompt += (
                     "\n\n## Workspace Map\n"
                     "The following is the file tree of the current working directory.\n"
