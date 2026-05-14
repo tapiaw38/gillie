@@ -95,7 +95,7 @@ TOOL_GROUPS: dict[str, list[str]] = {
         "browser_close", "browser_switch_tab", "browser_evaluate", "browser_enable_remote_debug",
     ],
     "calendar":  ["calendar_list_events", "calendar_create_event", "calendar_update_event", "calendar_delete_event"],
-    "memory":    ["organize_memory", "add_memory"],
+    "memory":    ["organize_memory", "save_memory", "search_memory", "save_solution"],
     "database":  [],  # matched dynamically by prefix query_* / execute_sql_*
 }
 
@@ -146,6 +146,7 @@ TOOL_ALIASES: dict[str, str] = {
     "search":         "web_search",
     "internet_search": "web_search",
     "duckduckgo":     "web_search",
+    "add_memory":     "save_memory",
 }
 
 
