@@ -228,14 +228,15 @@ const expandTaggedRefs = async (text: string): Promise<string> => {
   for (let i = 0; i < attachedFiles.value.length; i++) {
     const tag = `[file(${i + 1})]`
     if (!content.includes(tag)) continue
+    const filePath = attachedFiles.value[i]
     try {
-      const filePath = attachedFiles.value[i]
       const fileContent = await api.readFile(filePath)
       const fileName = filePath.split('/').pop() || filePath
       const block = `<file name="${fileName}">\n${fileContent}\n</file>`
       content = content.split(tag).join(block)
-    } catch {
-      continue
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Could not read local file'
+      content = content.split(tag).join(`[Local file read error: ${filePath} — ${message}]`)
     }
   }
 

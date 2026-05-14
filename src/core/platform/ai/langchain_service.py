@@ -207,7 +207,8 @@ class LangChainService:
         """Resolve PromptProfile based on the current provider URL."""
         base_url = getattr(self.config, "base_url", "") or ""
         model = getattr(self.config, "model", "") or ""
-        return _resolve_profile(base_url, model)
+        provider_name = getattr(self.config, "provider_name", "") or ""
+        return _resolve_profile(base_url, model, provider_name)
 
     async def _route_tools(self, user_message: str, all_tools: list) -> list:
         """For Ollama: run a fast routing call to select only relevant tool groups."""
