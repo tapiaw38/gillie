@@ -24,6 +24,18 @@ ROOT = Path(__file__).resolve().parents[2]
 RELEASE = ROOT / "release"
 
 
+def _venv_nuitka_cmd() -> list[str]:
+    """Return the Nuitka invocation that uses the project venv's Python.
+
+    Avoids the system nuitka shim (#!/usr/bin/python) picking up the wrong
+    site-packages and failing to locate venv-only packages.
+    """
+    venv_python = ROOT / ".venv" / "bin" / "python3"
+    if venv_python.exists():
+        return [str(venv_python), "-m", "nuitka"]
+    return [sys.executable, "-m", "nuitka"]
+
+
 
 def _run(cmd: list[str], cwd: Path | None = None, env: dict | None = None) -> int:
     result = subprocess.run(
@@ -66,18 +78,11 @@ def _build_api(out: Path) -> bool:
 
     out.mkdir(parents=True, exist_ok=True)
 
-    nuitka = shutil.which("nuitka")
-    if not nuitka:
-        check = subprocess.run(
-            [sys.executable, "-m", "nuitka", "--version"],
-            capture_output=True,
-        )
-        if check.returncode != 0:
-            console.print("[red]✗ Nuitka not found.[/red] Install: [cyan]pip install nuitka[/cyan]")
-            return False
-        nuitka_cmd = [sys.executable, "-m", "nuitka"]
-    else:
-        nuitka_cmd = [nuitka]
+    nuitka_cmd = _venv_nuitka_cmd()
+    check = subprocess.run(nuitka_cmd + ["--version"], capture_output=True)
+    if check.returncode != 0:
+        console.print("[red]✗ Nuitka not found.[/red] Install: [cyan]pip install nuitka[/cyan]")
+        return False
 
     exclude_flags = [f"--nofollow-import-to={pkg}" for pkg in _API_EXCLUDED_PACKAGES]
 
@@ -88,31 +93,89 @@ def _build_api(out: Path) -> bool:
         "--output-filename=gillie-api",
         f"--output-dir={out}",
         "--follow-imports",
+
+        # ── Core app ──────────────────────────────────────────────────────────
         "--include-package=src",
+
+        # ── Web framework ─────────────────────────────────────────────────────
         "--include-package=fastapi",
+        "--include-package=starlette",       # fastapi base
         "--include-package=uvicorn",
+        "--include-package=anyio",           # uvicorn/starlette async
+        "--include-package=click",           # uvicorn CLI
+        "--include-package=multipart",       # fastapi file uploads
         "--include-package=pydantic",
-        "--include-package=pymongo",
-        "--include-package=openai",
-        "--include-package=langchain",
-        "--include-package=langchain_openai",
-        "--include-package=langchain_community",
-        "--include-package=langchain_qdrant",
-        "--include-package=langgraph",
-        "--include-package=boto3",
-        "--include-package=botocore",
-        "--include-package=dotenv",
-        "--include-package=jwt",
         "--include-package=aiohttp",
         "--include-package=aiofiles",
-        "--include-package=requests",
-        "--include-package=pymupdf",
-        "--include-package=pytesseract",
-        "--include-package=PIL",
+        "--include-package=httpx",           # openai client transport
+
+        # ── Database / storage ────────────────────────────────────────────────
+        "--include-package=pymongo",
+        "--include-package=boto3",
+        "--include-package=botocore",
+
+        # ── AI / LLM ──────────────────────────────────────────────────────────
+        "--include-package=openai",
+        "--include-package=anthropic",
+        "--include-package=tiktoken",        # openai tokenizer
+        "--include-package=langchain",
+        "--include-package=langchain_core",
+        "--include-package=langchain_openai",
+        "--include-package=langchain_anthropic",
+        "--include-package=langchain_ollama",
+        "--include-package=langchain_community",
+        "--include-package=langchain_qdrant",
+        "--include-package=langchain_text_splitters",
+        "--include-package=langgraph",
+        "--include-package=langsmith",
+
+        # ── Vector store ──────────────────────────────────────────────────────
         "--include-package=qdrant_client",
+        "--include-package=faiss",
+        "--include-package=numpy",
+
+        # ── Document processing ───────────────────────────────────────────────
+        "--include-package=PIL",
+        "--include-package=pytesseract",
+        "--include-package=pymupdf",         # fitz
+        "--include-package=PyPDF2",
+        "--include-package=pdf2image",
+        "--include-package=docx",            # python-docx
+        "--include-package=pptx",            # python-pptx
+        "--include-package=openpyxl",
+        "--include-package=pandas",
+
+        # ── Google integrations ───────────────────────────────────────────────
+        "--include-package=google",
+        "--include-package=google_auth_oauthlib",
+        "--include-package=googleapiclient",
+
+        # ── Audio / TTS / STT ─────────────────────────────────────────────────
+        "--include-package=gtts",
+        "--include-package=pydub",
+        "--include-package=speech_recognition",
+
+        # ── Utilities ─────────────────────────────────────────────────────────
+        "--include-package=requests",
+        "--include-package=dotenv",
+        "--include-package=jwt",
         "--include-package=apscheduler",
+        "--include-package=dateparser",
+        "--include-package=qrcode",
+        "--include-package=duckduckgo_search",
+
+        # ── Distribution metadata (packages that self-inspect their version) ──
+        "--include-distribution-metadata=langchain",
+        "--include-distribution-metadata=langchain-core",
+        "--include-distribution-metadata=langchain-openai",
+        "--include-distribution-metadata=langchain-community",
+        "--include-distribution-metadata=openai",
+        "--include-distribution-metadata=fastapi",
+        "--include-distribution-metadata=pydantic",
+
         "--include-data-dir=src=src",
         *exclude_flags,
+        "--noinclude-setuptools-mode=nofollow",
         "--python-flag=no_docstrings",
         "--python-flag=no_asserts",
         "main.py",
@@ -139,18 +202,11 @@ def _build_cli(out: Path) -> bool:
 
     out.mkdir(parents=True, exist_ok=True)
 
-    nuitka = shutil.which("nuitka") or shutil.which("python3.nuitka")
-    if not nuitka:
-        check = subprocess.run(
-            [sys.executable, "-m", "nuitka", "--version"],
-            capture_output=True,
-        )
-        if check.returncode != 0:
-            console.print("[red]✗ Nuitka not found.[/red] Install it with: [cyan]pip install nuitka[/cyan]")
-            return False
-        nuitka_cmd = [sys.executable, "-m", "nuitka"]
-    else:
-        nuitka_cmd = [nuitka]
+    nuitka_cmd = _venv_nuitka_cmd()
+    check = subprocess.run(nuitka_cmd + ["--version"], capture_output=True)
+    if check.returncode != 0:
+        console.print("[red]✗ Nuitka not found.[/red] Install it with: [cyan]pip install nuitka[/cyan]")
+        return False
 
     binary_name = "gillie"
     cmd = [
