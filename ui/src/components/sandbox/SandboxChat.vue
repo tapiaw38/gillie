@@ -71,6 +71,8 @@ const approvalFeedback = ref('')
 const approvalLoading = ref(false)
 
 const currentWorkspace = ref('')
+const attachedFiles = ref<string[]>([])
+const pastedBlocks = ref<string[]>([])
 
 const autocompleteVisible = ref(false)
 const autocompleteItems = ref<{ label: string; value: string; hint?: string }[]>([])
@@ -91,6 +93,8 @@ const AT_HINTS = [
   { label: '@https://...', value: '@', hint: 'Fetch a URL as context' },
   { label: '@@glob/**', value: '@@', hint: 'Glob-expand a file pattern' },
 ]
+
+const FILE_PATH_RE = /(?:file:\/\/)?(\/[^\s]+)/g
 
 const TOOL_ICONS: Record<string, string> = {
   read_file: 'pi-file',
@@ -180,6 +184,68 @@ const addSystemMessage = (content: string) => {
     shellOutput: [],
   })
   scrollToBottom()
+}
+
+const insertAtCursor = (text: string) => {
+  const ta = getRawTextarea()
+  const start = ta?.selectionStart ?? inputText.value.length
+  const end = ta?.selectionEnd ?? start
+  inputText.value = inputText.value.slice(0, start) + text + inputText.value.slice(end)
+  nextTick(() => {
+    const pos = start + text.length
+    ta?.focus()
+    ta?.setSelectionRange(pos, pos)
+  })
+}
+
+const attachPaste = (text: string): string => {
+  pastedBlocks.value.push(text)
+  const lines = text.split('\n').length
+  return `[paste(${pastedBlocks.value.length}): ${lines} lines]`
+}
+
+const replaceFilePaths = (text: string): string => {
+  return text.replace(FILE_PATH_RE, (match, rawPath: string) => {
+    const path = rawPath
+    if (path.endsWith('/')) return match
+
+    const existingIdx = attachedFiles.value.findIndex((p) => p === path)
+    if (existingIdx >= 0) {
+      return `[file(${existingIdx + 1})]`
+    }
+
+    attachedFiles.value.push(path)
+    return `[file(${attachedFiles.value.length})]`
+  })
+}
+
+const expandTaggedRefs = async (text: string): Promise<string> => {
+  const api = window.electronAPI
+  if (!api) return text
+
+  let content = text
+
+  for (let i = 0; i < attachedFiles.value.length; i++) {
+    const tag = `[file(${i + 1})]`
+    if (!content.includes(tag)) continue
+    try {
+      const filePath = attachedFiles.value[i]
+      const fileContent = await api.readFile(filePath)
+      const fileName = filePath.split('/').pop() || filePath
+      const block = `<file name="${fileName}">\n${fileContent}\n</file>`
+      content = content.split(tag).join(block)
+    } catch {
+      continue
+    }
+  }
+
+  for (let i = 0; i < pastedBlocks.value.length; i++) {
+    const pasted = pastedBlocks.value[i]
+    const tag = `[paste(${i + 1}): ${pasted.split('\n').length} lines]`
+    content = content.replace(tag, pasted)
+  }
+
+  return content
 }
 
 // ── Slash command handler ─────────────────────────────────────────────────────
@@ -340,6 +406,25 @@ const expandAtReferences = async (text: string): Promise<string> => {
   return `${contextBlock}\n\n---\n\n${text}`
 }
 
+const handlePaste = (e: ClipboardEvent) => {
+  const pasted = e.clipboardData?.getData('text/plain') ?? ''
+  if (!pasted) return
+
+  if (pasted.includes('\n')) {
+    e.preventDefault()
+    insertAtCursor(attachPaste(pasted))
+    updateAutocomplete(inputText.value)
+    return
+  }
+
+  const replaced = replaceFilePaths(pasted)
+  if (replaced !== pasted) {
+    e.preventDefault()
+    insertAtCursor(replaced)
+    updateAutocomplete(inputText.value)
+  }
+}
+
 // ── Streaming send ─────────────────────────────────────────────────────────────
 
 const sendMessage = async () => {
@@ -355,7 +440,8 @@ const sendMessage = async () => {
   // Expand @ references
   let content: string
   try {
-    content = await expandAtReferences(rawContent)
+    const withTaggedRefs = await expandTaggedRefs(rawContent)
+    content = await expandAtReferences(withTaggedRefs)
   } catch {
     content = rawContent
   }
@@ -463,6 +549,8 @@ const sendMessage = async () => {
     assistantMsg.isStreaming = false
     isStreaming.value = false
     streamAbortController.value = null
+    attachedFiles.value = []
+    pastedBlocks.value = []
     await scrollToBottom()
   }
 }
@@ -991,6 +1079,7 @@ watch(
             class="chat-textarea"
             @keydown="handleKeydown"
             @input="handleInput"
+            @paste="handlePaste"
           />
           <Button
             v-if="isStreaming"
