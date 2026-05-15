@@ -151,6 +151,14 @@
         "name": "Telegram",
         "description": "Conecta el asistente a tu bot de Telegram para responder mensajes automáticamente"
       },
+      "clickup": {
+        "name": "ClickUp",
+        "description": "Gestiona tareas y proyectos de ClickUp directamente desde el asistente"
+      },
+      "jira": {
+        "name": "Jira",
+        "description": "Crea, actualiza y consulta issues de Jira usando lenguaje natural"
+      },
       "systemCommands": {
         "name": "Comandos del Sistema",
         "description": "Permite al asistente ejecutar comandos en el servidor Linux con confirmación y lista negra"
@@ -392,8 +400,17 @@
       "credentialsTitle": "Credenciales de Slack",
       "credentialsSubtitle": "Obtenidas desde el panel de tu Slack App",
       "botTokenHelp": "Token OAuth del bot. Lo encontrás en OAuth & Permissions de tu Slack App.",
-      "signingSecretHelp": "Recomendado para verificar webhooks. Lo encontrás en Basic Information.",
+      "botTokenRequired": "El Bot Token es obligatorio",
+      "signingSecretHelp": "Obligatorio para verificar requests de Slack. Lo encontrás en Basic Information.",
+      "signingSecretRequired": "El Signing Secret es obligatorio",
       "webhookHelp": "Configurá esta URL en Event Subscriptions de tu Slack App.",
+      "verify": "Verificar conexión",
+      "connectedSuccess": "Conexión verificada",
+      "connectedSuccessDesc": "La app quedó validada contra el workspace {team}",
+      "errorVerifyConnection": "Error al verificar Slack",
+      "workspaceLabel": "Workspace validado",
+      "statusConnected": "Conectado y validado",
+      "statusNotVerified": "Configurado, falta validar",
       "guideStep1": "Creá una Slack App en api.slack.com/apps",
       "guideStep2": "En OAuth & Permissions, agregá el scope chat:write",
       "guideStep3": "Instalá la app en tu workspace y copiá el Bot Token",
@@ -401,7 +418,8 @@
       "guideStep5": "Suscribite al evento message.channels o message.im",
       "guideStep6": "Copiá el Signing Secret de Basic Information",
       "credentialsSaved": "Configuración guardada",
-      "stepsSubtitle": "Pasos para conectar tu Slack App al asistente"
+      "stepsSubtitle": "Pasos para conectar tu Slack App al asistente",
+      "currentStateSubtitle": "Estado actual de la integración con Slack"
     },
     "telegram": {
       "title": "Telegram",
@@ -422,6 +440,55 @@
       "enterPublicUrl": "Ingresá la URL pública (ngrok) primero.",
       "optional": "opcional",
       "secretTokenPlaceholder": "Mi token secreto personalizado"
+    },
+    "clickup": {
+      "title": "ClickUp",
+      "subtitle": "Gestiona tareas, listas y espacios de ClickUp directamente desde el asistente",
+      "credentialsTitle": "Credenciales de ClickUp",
+      "credentialsSubtitle": "Obtenidas desde tu cuenta en app.clickup.com",
+      "apiTokenHelp": "Token personal de API. Lo encontrás en Configuración → Apps → API Token.",
+      "credentialsSaved": "Configuración de ClickUp guardada",
+      "verify": "Verificar conexión",
+      "connectedSuccess": "Conexión verificada",
+      "connectedSuccessDesc": "Se accedió correctamente a {count} workspace(s) de ClickUp",
+      "errorVerifyConnection": "Error al verificar ClickUp",
+      "workspacesLabel": "Workspaces accesibles",
+      "workspacesCount": "{count} workspace(s)",
+      "statusConnected": "Conectado y validado",
+      "statusNotVerified": "Configurado, falta validar",
+      "currentStateSubtitle": "Estado actual de la integración con ClickUp",
+      "stepsSubtitle": "Pasos para conectar ClickUp al asistente",
+      "guideStep1": "Iniciá sesión en app.clickup.com",
+      "guideStep2": "Andá a Configuración (ícono de perfil) → Apps",
+      "guideStep3": "En la sección API, generá o copiá tu API Token personal",
+      "guideStep4": "Pegá el token aquí, activá la integración y guardá"
+    },
+    "jira": {
+      "title": "Jira",
+      "subtitle": "Crea y gestiona issues de Jira Cloud usando lenguaje natural",
+      "credentialsTitle": "Credenciales de Jira",
+      "credentialsSubtitle": "Usamos autenticación básica con tu email y API Token de Atlassian",
+      "domainLabel": "Dominio de Jira",
+      "domainHelp": "Solo el subdominio de Atlassian, ej: miempresa.atlassian.net",
+      "domainRequired": "El dominio de Jira es requerido",
+      "emailHelp": "Email asociado a tu cuenta de Atlassian",
+      "emailRequired": "El email es requerido",
+      "apiTokenHelp": "Token de API de Atlassian. Generalo en id.atlassian.com/manage-profile/security/api-tokens",
+      "credentialsSaved": "Configuración de Jira guardada",
+      "verify": "Verificar conexión",
+      "connectedSuccess": "Conexión verificada",
+      "connectedSuccessDesc": "Se accedió correctamente a {count} proyecto(s) de Jira",
+      "errorVerifyConnection": "Error al verificar Jira",
+      "projectsLabel": "Proyectos accesibles",
+      "projectsCount": "{count} proyecto(s)",
+      "statusConnected": "Conectado y validado",
+      "statusNotVerified": "Configurado, falta validar",
+      "currentStateSubtitle": "Estado actual de la integración con Jira",
+      "stepsSubtitle": "Pasos para conectar Jira Cloud al asistente",
+      "guideStep1": "Iniciá sesión en id.atlassian.com",
+      "guideStep2": "Andá a Security → API tokens → Create API token",
+      "guideStep3": "Copiá el token generado y tu email de Atlassian",
+      "guideStep4": "Completá los campos (dominio, email y token), activá la integración y guardá"
     },
     "whatsapp": {
       "title": "WhatsApp Business API",

@@ -115,6 +115,16 @@ const router = createRouter({
           component: () => import('../views/SandboxView.vue'),
         },
         {
+          path: '/app/clickup-integration',
+          name: 'clickup-integration',
+          component: () => import('../views/ClickUpIntegrationView.vue'),
+        },
+        {
+          path: '/app/jira-integration',
+          name: 'jira-integration',
+          component: () => import('../views/JiraIntegrationView.vue'),
+        },
+        {
           path: '/app/cron-jobs',
           name: 'cron-jobs',
           component: () => import('../views/CronJobsView.vue'),

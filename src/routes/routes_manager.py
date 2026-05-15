@@ -16,6 +16,8 @@ from src.adapters.web.controllers.notion.notion import router as notion_router
 from src.adapters.web.controllers.job.controllers import router as job_router
 from src.adapters.web.controllers.system.controllers import router as system_router
 from src.adapters.web.controllers.brain.controllers import router as brain_router
+from src.adapters.web.controllers.clickup.controllers import router as clickup_router
+from src.adapters.web.controllers.jira.controllers import router as jira_router
 from src.core.platform.config.service import ConfigurationService
 
 
@@ -54,3 +56,5 @@ class RoutesManager:
         self.app.include_router(job_router)
         self.app.include_router(system_router)
         self.app.include_router(brain_router)
+        self.app.include_router(clickup_router)
+        self.app.include_router(jira_router)

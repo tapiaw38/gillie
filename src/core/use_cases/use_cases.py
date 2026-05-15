@@ -26,6 +26,7 @@ from src.core.use_cases.profile import (
     FindByWhatsAppBusinessIdUseCase as ProfileFindByWhatsAppBusinessIdUseCase,
     FindWithActiveWhatsAppIntegrationUseCase as ProfileFindWithActiveWhatsAppIntegrationUseCase,
     FindWithActiveSlackIntegrationUseCase as ProfileFindWithActiveSlackIntegrationUseCase,
+    FindWithActiveSlackIntegrationByTeamIdUseCase as ProfileFindWithActiveSlackIntegrationByTeamIdUseCase,
     FindWithActiveTelegramIntegrationUseCase as ProfileFindWithActiveTelegramIntegrationUseCase,
 )
 from src.core.use_cases.memory import (
@@ -91,7 +92,7 @@ from src.core.use_cases.notion import (
     GetPageUseCase as NotionGetPageUseCase,
     GetPageContentUseCase as NotionGetPageContentUseCase,
 )
-from src.core.use_cases.slack import ProcessSlackMessageUseCase
+from src.core.use_cases.slack import ProcessSlackMessageUseCase, VerifySlackConnectionUseCase
 from src.core.use_cases.telegram import ProcessTelegramMessageUseCase
 from src.core.use_cases.system import ShellCompleteUseCase, ShellInlineAssistUseCase
 from src.core.use_cases.job import (
@@ -100,6 +101,22 @@ from src.core.use_cases.job import (
     GetJobUseCase,
     DeleteJobUseCase,
     RunJobUseCase,
+)
+from src.core.use_cases.clickup import (
+    GetTasksUseCase as ClickUpGetTasksUseCase,
+    CreateTaskUseCase as ClickUpCreateTaskUseCase,
+    UpdateTaskUseCase as ClickUpUpdateTaskUseCase,
+    AddCommentUseCase as ClickUpAddCommentUseCase,
+    GetWorkspacesUseCase as ClickUpGetWorkspacesUseCase,
+)
+from src.core.use_cases.jira import (
+    SearchIssuesUseCase as JiraSearchIssuesUseCase,
+    CreateIssueUseCase as JiraCreateIssueUseCase,
+    UpdateIssueUseCase as JiraUpdateIssueUseCase,
+    TransitionIssueUseCase as JiraTransitionIssueUseCase,
+    AddCommentUseCase as JiraAddCommentUseCase,
+    GetProjectsUseCase as JiraGetProjectsUseCase,
+    GetTransitionsUseCase as JiraGetTransitionsUseCase,
 )
 from src.core.use_cases.whatsapp_device import (
     CreateDeviceUseCase as WhatsAppDeviceCreateUseCase,
@@ -130,6 +147,7 @@ class Profile:
     find_by_whatsapp_business_id_usecase: ProfileFindByWhatsAppBusinessIdUseCase
     find_with_active_whatsapp_integration_usecase: ProfileFindWithActiveWhatsAppIntegrationUseCase
     find_with_active_slack_integration_usecase: ProfileFindWithActiveSlackIntegrationUseCase
+    find_with_active_slack_integration_by_team_id_usecase: ProfileFindWithActiveSlackIntegrationByTeamIdUseCase
     find_with_active_telegram_integration_usecase: ProfileFindWithActiveTelegramIntegrationUseCase
     update_provider_usecase: ProfileUpdateProviderUseCase
 
@@ -244,11 +262,32 @@ class Jobs:
 @dataclass
 class Slack:
     process_message_usecase: ProcessSlackMessageUseCase
+    verify_connection_usecase: VerifySlackConnectionUseCase
 
 
 @dataclass
 class Telegram:
     process_message_usecase: ProcessTelegramMessageUseCase
+
+
+@dataclass
+class ClickUp:
+    get_workspaces_usecase: ClickUpGetWorkspacesUseCase
+    get_tasks_usecase: ClickUpGetTasksUseCase
+    create_task_usecase: ClickUpCreateTaskUseCase
+    update_task_usecase: ClickUpUpdateTaskUseCase
+    add_comment_usecase: ClickUpAddCommentUseCase
+
+
+@dataclass
+class Jira:
+    get_projects_usecase: JiraGetProjectsUseCase
+    search_issues_usecase: JiraSearchIssuesUseCase
+    create_issue_usecase: JiraCreateIssueUseCase
+    update_issue_usecase: JiraUpdateIssueUseCase
+    get_transitions_usecase: JiraGetTransitionsUseCase
+    transition_issue_usecase: JiraTransitionIssueUseCase
+    add_comment_usecase: JiraAddCommentUseCase
 
 
 @dataclass
@@ -272,6 +311,8 @@ class Usecases:
     slack: Slack
     telegram: Telegram
     system: System
+    clickup: ClickUp
+    jira: Jira
 
 
 def create_usecases(context_factory: Factory) -> Usecases:
@@ -292,6 +333,7 @@ def create_usecases(context_factory: Factory) -> Usecases:
             find_by_whatsapp_business_id_usecase=ProfileFindByWhatsAppBusinessIdUseCase(context_factory),
             find_with_active_whatsapp_integration_usecase=ProfileFindWithActiveWhatsAppIntegrationUseCase(context_factory),
             find_with_active_slack_integration_usecase=ProfileFindWithActiveSlackIntegrationUseCase(context_factory),
+            find_with_active_slack_integration_by_team_id_usecase=ProfileFindWithActiveSlackIntegrationByTeamIdUseCase(context_factory),
             find_with_active_telegram_integration_usecase=ProfileFindWithActiveTelegramIntegrationUseCase(context_factory),
             update_provider_usecase=ProfileUpdateProviderUseCase(context_factory),
         ),
@@ -386,6 +428,7 @@ def create_usecases(context_factory: Factory) -> Usecases:
         ),
         slack=Slack(
             process_message_usecase=ProcessSlackMessageUseCase(context_factory),
+            verify_connection_usecase=VerifySlackConnectionUseCase(context_factory),
         ),
         telegram=Telegram(
             process_message_usecase=ProcessTelegramMessageUseCase(context_factory),
@@ -393,5 +436,21 @@ def create_usecases(context_factory: Factory) -> Usecases:
         system=System(
             shell_complete_usecase=ShellCompleteUseCase(context_factory),
             shell_inline_assist_usecase=ShellInlineAssistUseCase(context_factory),
+        ),
+        clickup=ClickUp(
+            get_workspaces_usecase=ClickUpGetWorkspacesUseCase(context_factory),
+            get_tasks_usecase=ClickUpGetTasksUseCase(context_factory),
+            create_task_usecase=ClickUpCreateTaskUseCase(context_factory),
+            update_task_usecase=ClickUpUpdateTaskUseCase(context_factory),
+            add_comment_usecase=ClickUpAddCommentUseCase(context_factory),
+        ),
+        jira=Jira(
+            get_projects_usecase=JiraGetProjectsUseCase(context_factory),
+            search_issues_usecase=JiraSearchIssuesUseCase(context_factory),
+            create_issue_usecase=JiraCreateIssueUseCase(context_factory),
+            update_issue_usecase=JiraUpdateIssueUseCase(context_factory),
+            get_transitions_usecase=JiraGetTransitionsUseCase(context_factory),
+            transition_issue_usecase=JiraTransitionIssueUseCase(context_factory),
+            add_comment_usecase=JiraAddCommentUseCase(context_factory),
         ),
     )

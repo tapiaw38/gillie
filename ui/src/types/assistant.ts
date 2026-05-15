@@ -174,6 +174,8 @@ export interface IntegrationParams {
     | SystemCommandsIntegrationConfig
     | SlackIntegrationConfig
     | TelegramIntegrationConfig
+    | ClickUpIntegrationConfig
+    | JiraIntegrationConfig
 }
 
 export interface ToolPromptsConfig {
@@ -213,11 +215,24 @@ export interface SystemCommandsIntegrationConfig {
 export interface SlackIntegrationConfig {
   bot_token: string
   signing_secret: string
+  team_id?: string
+  team_name?: string
+  bot_user_id?: string
 }
 
 export interface TelegramIntegrationConfig {
   bot_token: string
   secret_token: string
+}
+
+export interface ClickUpIntegrationConfig {
+  api_token: string
+}
+
+export interface JiraIntegrationConfig {
+  domain: string
+  email: string
+  api_token: string
 }
 
 export interface IntegrationResponse {

@@ -109,6 +109,8 @@ TOOL_GROUPS: dict[str, list[str]] = {
     "calendar":  ["calendar_list_events", "calendar_create_event", "calendar_update_event", "calendar_delete_event"],
     "memory":    ["organize_memory", "save_memory", "search_memory", "save_solution"],
     "database":  [],  # matched dynamically by prefix query_* / execute_sql_*
+    "clickup":   ["clickup_get_tasks", "clickup_create_task", "clickup_update_task", "clickup_add_comment", "clickup_get_workspaces"],
+    "jira":      ["jira_search_issues", "jira_create_issue", "jira_update_issue", "jira_transition_issue", "jira_add_comment", "jira_get_projects"],
 }
 
 _WEB_ALWAYS = {"web_search", "fetch_url"}

@@ -13,6 +13,8 @@ from .drive import *
 from .whatsapp_device import *
 from .job import *
 from .gmail import *
+from .clickup import *
+from .jira import *
 
 __all__ = [
     # Common errors
@@ -141,4 +143,32 @@ __all__ = [
     "GmailToRequiredError",
     "GmailSubjectRequiredError",
     "GmailBodyRequiredError",
+
+    # ClickUp errors
+    "ClickUpIntegrationNotFoundError",
+    "ClickUpIntegrationConfigError",
+    "ClickUpTaskNotFoundError",
+    "ClickUpTaskCreateError",
+    "ClickUpTaskUpdateError",
+    "ClickUpTaskDeleteError",
+    "ClickUpTaskQueryError",
+    "ClickUpCommentCreateError",
+    "ClickUpWorkspaceQueryError",
+    "ClickUpTaskNameRequiredError",
+    "ClickUpListIdRequiredError",
+
+    # Jira errors
+    "JiraIntegrationNotFoundError",
+    "JiraIntegrationConfigError",
+    "JiraIssueNotFoundError",
+    "JiraIssueCreateError",
+    "JiraIssueUpdateError",
+    "JiraIssueDeleteError",
+    "JiraIssueQueryError",
+    "JiraTransitionError",
+    "JiraTransitionQueryError",
+    "JiraCommentCreateError",
+    "JiraProjectQueryError",
+    "JiraIssueSummaryRequiredError",
+    "JiraProjectKeyRequiredError",
 ]

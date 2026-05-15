@@ -9,6 +9,8 @@ _PUBLIC_PREFIXES = (
     "/docs",
     "/redoc",
     "/openapi.json",
+    "/api/slack/events",
+    "/api/slack/verify",
     "/api/v1/calendar/oauth/callback",
     "/api/v1/drive/oauth/callback",
     "/api/v1/gmail/oauth/callback",
