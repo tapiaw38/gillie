@@ -362,6 +362,22 @@ const integrations = computed<IntegrationItem[]>(() => [
     enabled: true,
   },
   {
+    name: t('dashboard.integrations.clickup.name'),
+    description: t('dashboard.integrations.clickup.description'),
+    icon: 'pi pi-check-square',
+    tone: 'primary',
+    to: 'clickup-integration',
+    enabled: true,
+  },
+  {
+    name: t('dashboard.integrations.jira.name'),
+    description: t('dashboard.integrations.jira.description'),
+    icon: 'pi pi-ticket',
+    tone: 'info',
+    to: 'jira-integration',
+    enabled: true,
+  },
+  {
     name: t('dashboard.integrations.slack.name'),
     description: t('dashboard.integrations.slack.description'),
     icon: 'pi pi-slack',
@@ -375,6 +391,14 @@ const integrations = computed<IntegrationItem[]>(() => [
     icon: 'pi pi-send',
     tone: 'info',
     to: 'telegram-integration',
+    enabled: true,
+  },
+  {
+    name: t('dashboard.integrations.teams.name'),
+    description: t('dashboard.integrations.teams.description'),
+    icon: 'pi pi-microsoft',
+    tone: 'primary',
+    to: 'teams-integration',
     enabled: true,
   },
   {
@@ -434,6 +458,7 @@ const MESSAGING_ROUTES = [
   'whatsapp-devices',
   'slack-integration',
   'telegram-integration',
+  'teams-integration',
 ]
 const PRODUCTIVITY_ROUTES = [
   'google-calendar-integration',
@@ -442,6 +467,8 @@ const PRODUCTIVITY_ROUTES = [
   'notion-integration',
   'store-integration',
   'sqldatabase-integration',
+  'clickup-integration',
+  'jira-integration',
 ]
 const AUTOMATION_ROUTES = [
   'system-commands',

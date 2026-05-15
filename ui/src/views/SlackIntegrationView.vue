@@ -1,7 +1,8 @@
 <script setup lang="ts">
 import type { IntegrationParams, SlackIntegrationConfig } from '@/types/assistant'
-import { onMounted, reactive, computed, watch } from 'vue'
+import { onMounted, reactive, computed, ref, watch } from 'vue'
 import { useAssistant } from '@/composables/useAssistant'
+import { useSlack } from '@/composables/useSlack'
 import { useClipboard } from '@/composables/useClipboard'
 import { useErrorToast } from '@/composables/useErrorToast'
 import { useI18n } from 'vue-i18n'
@@ -20,9 +21,17 @@ const {
   isGetAssistantProfileError,
   getAssistantProfileError,
 } = useAssistant()
+const {
+  verifyConnection,
+  authData,
+  isVerifyConnectionPending,
+  isVerifyConnectionError,
+  verifyConnectionError,
+} = useSlack()
 
 const { t } = useI18n()
 const { copyText } = useClipboard()
+const verificationSucceeded = ref(false)
 
 const errorWatchers = [
   {
@@ -34,6 +43,11 @@ const errorWatchers = [
     flag: isGetAssistantProfileError,
     summary: t('systemCommands.errorLoadProfile'),
     detail: getAssistantProfileError,
+  },
+  {
+    flag: isVerifyConnectionError,
+    summary: t('integrations.slack.errorVerifyConnection'),
+    detail: verifyConnectionError,
   },
 ]
 
@@ -51,14 +65,18 @@ const slackIntegration = reactive<IntegrationParams>({
 
 const validationErrors = reactive({
   bot_token: '',
+  signing_secret: '',
 })
 
 const saveConfig = async () => {
   const config = slackIntegration.config as SlackIntegrationConfig
 
-  validationErrors.bot_token = !config.bot_token ? t('integrations.slack.botTokenHelp') : ''
+  validationErrors.bot_token = !config.bot_token ? t('integrations.slack.botTokenRequired') : ''
+  validationErrors.signing_secret = !config.signing_secret
+    ? t('integrations.slack.signingSecretRequired')
+    : ''
 
-  if (validationErrors.bot_token) {
+  if (validationErrors.bot_token || validationErrors.signing_secret) {
     toast.add({
       severity: 'warn',
       summary: t('common.requiredFields'),
@@ -71,6 +89,7 @@ const saveConfig = async () => {
   try {
     await addIntegration(slackIntegration)
     await getAssistantProfile()
+    verificationSucceeded.value = false
     toast.add({
       severity: 'success',
       summary: t('integrations.slack.credentialsSaved'),
@@ -85,6 +104,7 @@ const updateIntegration = async () => {
   try {
     await addIntegration(slackIntegration)
     await getAssistantProfile()
+    verificationSucceeded.value = false
   } catch (error) {
     console.error('Error al actualizar integración:', error)
   }
@@ -129,6 +149,28 @@ const copyWebhookUrl = async () => {
   }
 }
 
+const handleVerifyConnection = async () => {
+  try {
+    const result = await verifyConnection()
+    const config = slackIntegration.config as SlackIntegrationConfig
+    config.team_id = result.team_id
+    config.team_name = result.team
+    config.bot_user_id = result.user_id
+    await addIntegration(slackIntegration)
+    await getAssistantProfile()
+    verificationSucceeded.value = true
+    toast.add({
+      severity: 'success',
+      summary: t('integrations.slack.connectedSuccess'),
+      detail: t('integrations.slack.connectedSuccessDesc', { team: result.team }),
+      life: 3000,
+    })
+  } catch (error) {
+    console.error('Error al verificar Slack:', error)
+    verificationSucceeded.value = false
+  }
+}
+
 onMounted(async () => {
   await getAssistantProfile()
   assistantProfile.value?.integrations?.forEach((integration) => {
@@ -138,6 +180,10 @@ onMounted(async () => {
       const saved = integration.config as unknown as SlackIntegrationConfig
       config.bot_token = saved.bot_token || ''
       config.signing_secret = saved.signing_secret || ''
+      config.team_id = saved.team_id || ''
+      config.team_name = saved.team_name || ''
+      config.bot_user_id = saved.bot_user_id || ''
+      verificationSucceeded.value = !!saved.team_id
     }
   })
 })
@@ -206,9 +252,13 @@ onMounted(async () => {
             v-model="(slackIntegration.config as SlackIntegrationConfig).signing_secret"
             placeholder="xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
             :disabled="!slackIntegration.activated"
+            :invalid="!!validationErrors.signing_secret"
             class="w-full"
             type="password"
           />
+          <Message v-if="validationErrors.signing_secret" severity="error" class="field-error">
+            {{ validationErrors.signing_secret }}
+          </Message>
           <small class="field-help">{{ t('integrations.slack.signingSecretHelp') }}</small>
         </div>
 
@@ -231,7 +281,7 @@ onMounted(async () => {
         <span class="step-badge">2</span>
         <div>
           <p class="panel-title">{{ t('integrations.currentState') }}</p>
-          <p class="panel-subtitle">{{ t('integrations.whatsapp.currentStateSubtitle') }}</p>
+          <p class="panel-subtitle">{{ t('integrations.slack.currentStateSubtitle') }}</p>
         </div>
       </div>
 
@@ -292,6 +342,54 @@ onMounted(async () => {
             </span>
           </div>
         </div>
+
+        <div class="status-row">
+          <div class="status-row-label">
+            <i class="pi pi-building"></i>
+            {{ t('integrations.slack.workspaceLabel') }}
+          </div>
+          <div class="status-row-value">
+            <span class="status-value-text">
+              {{
+                (currentIntegration?.config as unknown as SlackIntegrationConfig)?.team_name
+                  || authData?.team
+                  || t('integrations.notConfigured')
+              }}
+            </span>
+          </div>
+        </div>
+
+        <div class="status-row">
+          <div class="status-row-label">
+            <i class="pi pi-check-circle"></i>
+            {{ t('integrations.status') }}
+          </div>
+          <div class="status-row-value">
+            <span class="status-value-text" :class="verificationSucceeded ? 'text-success' : 'text-muted'">
+              {{
+                verificationSucceeded
+                  ? t('integrations.slack.statusConnected')
+                  : t('integrations.slack.statusNotVerified')
+              }}
+            </span>
+          </div>
+        </div>
+      </div>
+
+      <div class="panel-footer">
+        <div></div>
+        <Button
+          :label="t('integrations.slack.verify')"
+          icon="pi pi-check-circle"
+          severity="secondary"
+          :loading="isVerifyConnectionPending"
+          :disabled="
+            !slackIntegration.activated ||
+            !(slackIntegration.config as SlackIntegrationConfig).bot_token ||
+            !(slackIntegration.config as SlackIntegrationConfig).signing_secret
+          "
+          @click="handleVerifyConnection"
+        />
       </div>
     </div>
 

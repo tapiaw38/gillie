@@ -1,6 +1,7 @@
 import hashlib
 import hmac
 import logging
+import time
 from typing import List, Dict, Any
 
 import requests
@@ -24,6 +25,18 @@ class SlackIntegration:
             "Authorization": f"Bearer {self.bot_token}",
             "Content-Type": "application/json",
         }
+
+    def auth_test(self) -> Dict[str, Any]:
+        """
+        Validate the bot token and return workspace/app metadata.
+        """
+        url = f"{self.api_url}/auth.test"
+        response = requests.post(url, headers=self._build_headers(), timeout=10)
+        response.raise_for_status()
+        result = response.json() if response.content else {}
+        if not result.get("ok"):
+            raise ValueError(f"Slack auth.test failed: {result.get('error', 'unknown_error')}")
+        return result
 
     def send_message(self, channel: str, text: str) -> bool:
         """
@@ -171,9 +184,17 @@ class SlackIntegration:
 
     def verify_signature(self, raw_body: bytes, timestamp: str, signature: str) -> bool:
         """
-        Verify a Slack request signature using HMAC-SHA256.
+        Verify a Slack request signature using HMAC-SHA256 and a 5-minute replay window.
         """
         if not self.signing_secret or not timestamp or not signature:
+            return False
+
+        try:
+            request_ts = int(timestamp)
+        except (TypeError, ValueError):
+            return False
+
+        if abs(time.time() - request_ts) > 60 * 5:
             return False
 
         base = f"v0:{timestamp}:{raw_body.decode('utf-8')}"

@@ -1,11 +1,12 @@
 import json
 import logging
 
-from fastapi import APIRouter, Request
+from fastapi import APIRouter, Depends, Request
 from fastapi.responses import JSONResponse, PlainTextResponse
 
 from src.adapters.web.integrations.slack.slack import SlackIntegration
 from src.adapters.web.dependencies import get_usecases
+from src.core.use_cases.use_cases import Usecases
 
 router = APIRouter(prefix="/api/slack", tags=["Slack"])
 
@@ -16,6 +17,16 @@ async def verify_endpoint():
     logger = logging.getLogger(__name__)
     logger.info("Slack verification request received")
     return "Slack webhook server is running"
+
+
+@router.get("/auth-test")
+async def slack_auth_test(
+    request: Request,
+    usecases: Usecases = Depends(get_usecases),
+):
+    user_id = request.state.user.get("user_id")
+    result = await usecases.slack.verify_connection_usecase.execute(user_id)
+    return {"data": result}
 
 
 @router.post("/events")
@@ -53,19 +64,27 @@ async def slack_events(request: Request):
         logger.error(f"Failed to parse Slack event body: {str(e)}")
         return JSONResponse(status_code=200, content={"status": "error", "message": "invalid JSON"})
 
-    # URL verification must be answered before any signature check or profile lookup
-    if payload.get("type") == "url_verification":
-        logger.info("Slack URL verification challenge received")
-        return JSONResponse(
-            status_code=200,
-            content={"challenge": payload.get("challenge", "")},
-        )
-
-    # Resolve the active profile first so we can verify the request signature
-    # against the configured signing secret.
     usecases = get_usecases(request)
+    team_id = payload.get("team_id")
+    if not team_id:
+        authorizations = payload.get("authorizations") or []
+        if authorizations and isinstance(authorizations[0], dict):
+            team_id = authorizations[0].get("team_id")
 
-    profile = await usecases.profile.find_with_active_slack_integration_usecase.execute()
+    all_profiles = await usecases.profile.find_all_usecase.execute()
+    active_slack_profiles = []
+    for candidate in all_profiles:
+        for integration in candidate.integrations or []:
+            if integration.name == "slack" and integration.activated:
+                active_slack_profiles.append((candidate, integration))
+                break
+
+    profile = None
+    if team_id:
+        profile = await usecases.profile.find_with_active_slack_integration_by_team_id_usecase.execute(team_id)
+
+    if profile is None and len(active_slack_profiles) == 1 and not active_slack_profiles[0][1].config.get("team_id"):
+        profile = active_slack_profiles[0][0]
 
     signing_secret = ""
     if profile:
@@ -73,6 +92,15 @@ async def slack_events(request: Request):
             if integration.name == "slack" and integration.activated:
                 signing_secret = integration.config.get("signing_secret", "")
                 break
+    elif payload.get("type") == "url_verification":
+        signable_profiles = [
+            (candidate, integration)
+            for candidate, integration in active_slack_profiles
+            if integration.config.get("signing_secret")
+        ]
+        if len(signable_profiles) == 1:
+            profile = signable_profiles[0][0]
+            signing_secret = signable_profiles[0][1].config.get("signing_secret", "")
 
     app_mode = getattr(request.app.state.config_service.server_config, "mode", "release")
     allow_insecure_dev = str(app_mode) == "debug"
@@ -91,6 +119,13 @@ async def slack_events(request: Request):
         if not verifier.verify_signature(raw_body, timestamp, signature):
             logger.warning("Slack signature verification failed; ignoring request")
             return JSONResponse(status_code=200, content={"status": "ignored"})
+
+    if payload.get("type") == "url_verification":
+        logger.info("Slack URL verification challenge received")
+        return JSONResponse(
+            status_code=200,
+            content={"challenge": payload.get("challenge", "")},
+        )
 
     if payload.get("type") != "event_callback":
         logger.debug(f"Ignoring non-event_callback payload type: {payload.get('type')}")

@@ -120,6 +120,18 @@ class Integrations:
         from src.adapters.web.integrations.telegram.telegram import TelegramIntegration
         return TelegramIntegration(bot_token=bot_token, secret_token=secret_token, store_service=store_service)
 
+    def make_teams_client(self, app_id: str, app_password: str):
+        from src.adapters.web.integrations.teams.teams import TeamsIntegration
+        return TeamsIntegration(app_id=app_id, app_password=app_password)
+
+    def make_clickup_client(self, api_token: str):
+        from src.adapters.web.integrations.clickup.clickup import ClickUpIntegration
+        return ClickUpIntegration(api_token=api_token)
+
+    def make_jira_client(self, domain: str, email: str, api_token: str):
+        from src.adapters.web.integrations.jira.jira import JiraIntegration
+        return JiraIntegration(domain=domain, email=email, api_token=api_token)
+
     def make_sqldatabase_client(self, connection_string: str, allowed_table: str, table_description: str = ""):
         from src.adapters.web.integrations.sqldatabase.sqldatabase import SQLDatabaseIntegration
         return SQLDatabaseIntegration(
