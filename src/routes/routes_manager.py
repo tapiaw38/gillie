@@ -18,6 +18,7 @@ from src.adapters.web.controllers.system.controllers import router as system_rou
 from src.adapters.web.controllers.brain.controllers import router as brain_router
 from src.adapters.web.controllers.clickup.controllers import router as clickup_router
 from src.adapters.web.controllers.jira.controllers import router as jira_router
+from src.adapters.web.controllers.teams.controllers import router as teams_router
 from src.core.platform.config.service import ConfigurationService
 
 
@@ -58,3 +59,4 @@ class RoutesManager:
         self.app.include_router(brain_router)
         self.app.include_router(clickup_router)
         self.app.include_router(jira_router)
+        self.app.include_router(teams_router)

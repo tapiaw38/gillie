@@ -176,6 +176,7 @@ export interface IntegrationParams {
     | TelegramIntegrationConfig
     | ClickUpIntegrationConfig
     | JiraIntegrationConfig
+    | TeamsIntegrationConfig
 }
 
 export interface ToolPromptsConfig {
@@ -233,6 +234,14 @@ export interface JiraIntegrationConfig {
   domain: string
   email: string
   api_token: string
+}
+
+export interface TeamsIntegrationConfig {
+  app_id: string
+  app_password: string
+  tenant_id?: string
+  bot_id?: string
+  service_url?: string
 }
 
 export interface IntegrationResponse {

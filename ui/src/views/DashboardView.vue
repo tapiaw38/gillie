@@ -394,6 +394,14 @@ const integrations = computed<IntegrationItem[]>(() => [
     enabled: true,
   },
   {
+    name: t('dashboard.integrations.teams.name'),
+    description: t('dashboard.integrations.teams.description'),
+    icon: 'pi pi-microsoft',
+    tone: 'primary',
+    to: 'teams-integration',
+    enabled: true,
+  },
+  {
     name: t('dashboard.integrations.systemCommands.name'),
     description: t('dashboard.integrations.systemCommands.description'),
     icon: 'pi pi-server',
@@ -450,6 +458,7 @@ const MESSAGING_ROUTES = [
   'whatsapp-devices',
   'slack-integration',
   'telegram-integration',
+  'teams-integration',
 ]
 const PRODUCTIVITY_ROUTES = [
   'google-calendar-integration',

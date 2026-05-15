@@ -111,6 +111,7 @@ TOOL_GROUPS: dict[str, list[str]] = {
     "database":  [],  # matched dynamically by prefix query_* / execute_sql_*
     "clickup":   ["clickup_get_tasks", "clickup_create_task", "clickup_update_task", "clickup_add_comment", "clickup_get_workspaces"],
     "jira":      ["jira_search_issues", "jira_create_issue", "jira_update_issue", "jira_transition_issue", "jira_add_comment", "jira_get_projects"],
+    "teams":     ["teams_send_message"],
 }
 
 _WEB_ALWAYS = {"web_search", "fetch_url"}

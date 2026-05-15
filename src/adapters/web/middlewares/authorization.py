@@ -11,6 +11,7 @@ _PUBLIC_PREFIXES = (
     "/openapi.json",
     "/api/slack/events",
     "/api/slack/verify",
+    "/api/teams/activities",
     "/api/v1/calendar/oauth/callback",
     "/api/v1/drive/oauth/callback",
     "/api/v1/gmail/oauth/callback",

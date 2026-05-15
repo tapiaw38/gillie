@@ -15,6 +15,7 @@ from .job import *
 from .gmail import *
 from .clickup import *
 from .jira import *
+from .teams import *
 
 __all__ = [
     # Common errors
@@ -171,4 +172,12 @@ __all__ = [
     "JiraProjectQueryError",
     "JiraIssueSummaryRequiredError",
     "JiraProjectKeyRequiredError",
+
+    # Teams errors
+    "TeamsIntegrationNotFoundError",
+    "TeamsIntegrationConfigError",
+    "TeamsAuthError",
+    "TeamsSendMessageError",
+    "TeamsProcessMessageError",
+    "TeamsVerifyError",
 ]

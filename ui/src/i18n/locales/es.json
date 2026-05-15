@@ -159,6 +159,10 @@
         "name": "Jira",
         "description": "Crea, actualiza y consulta issues de Jira usando lenguaje natural"
       },
+      "teams": {
+        "name": "Microsoft Teams",
+        "description": "Conecta el asistente a Microsoft Teams para recibir y responder mensajes automáticamente"
+      },
       "systemCommands": {
         "name": "Comandos del Sistema",
         "description": "Permite al asistente ejecutar comandos en el servidor Linux con confirmación y lista negra"
@@ -489,6 +493,33 @@
       "guideStep2": "Andá a Security → API tokens → Create API token",
       "guideStep3": "Copiá el token generado y tu email de Atlassian",
       "guideStep4": "Completá los campos (dominio, email y token), activá la integración y guardá"
+    },
+    "teams": {
+      "title": "Microsoft Teams",
+      "subtitle": "Recibe y responde mensajes de Teams automáticamente usando el Bot Framework",
+      "credentialsTitle": "Credenciales del Bot de Azure",
+      "credentialsSubtitle": "Registrá tu bot en el Portal de Azure para obtener las credenciales",
+      "appIdLabel": "Application (client) ID",
+      "appIdHelp": "GUID del registro de tu aplicación en Azure Active Directory",
+      "appIdRequired": "El Application ID es requerido",
+      "appPasswordLabel": "Client Secret",
+      "appPasswordHelp": "Secreto de cliente generado en Certificates & secrets del registro de la app",
+      "appPasswordRequired": "El Client Secret es requerido",
+      "tenantLabel": "Tenant vinculado",
+      "botIdLabel": "Bot ID detectado",
+      "credentialsSaved": "Configuración de Teams guardada",
+      "verify": "Verificar conexión",
+      "connectedSuccess": "Conexión verificada",
+      "errorVerifyConnection": "Error al verificar Teams",
+      "statusConnected": "Conectado y validado",
+      "statusNotVerified": "Configurado, falta validar",
+      "currentStateSubtitle": "Estado actual de la integración con Microsoft Teams",
+      "stepsSubtitle": "Pasos para conectar el bot de Teams al asistente",
+      "guideStep1": "Ingresá a portal.azure.com y creá un nuevo registro de aplicación en Azure Active Directory",
+      "guideStep2": "Anotá el Application (client) ID que aparece en la página de overview",
+      "guideStep3": "Andá a Certificates & secrets → New client secret y copiá el valor generado",
+      "guideStep4": "En el Bot Service, registrá el endpoint de mensajes: https://tu-dominio/api/teams/activities",
+      "guideStep5": "Completá los campos, activá la integración y verificá la conexión"
     },
     "whatsapp": {
       "title": "WhatsApp Business API",

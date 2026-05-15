@@ -125,6 +125,11 @@ const router = createRouter({
           component: () => import('../views/JiraIntegrationView.vue'),
         },
         {
+          path: '/app/teams-integration',
+          name: 'teams-integration',
+          component: () => import('../views/TeamsIntegrationView.vue'),
+        },
+        {
           path: '/app/cron-jobs',
           name: 'cron-jobs',
           component: () => import('../views/CronJobsView.vue'),

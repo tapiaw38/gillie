@@ -13,6 +13,8 @@ from .find_with_active_whatsapp_integration_use_case import FindWithActiveWhatsA
 from .find_with_active_slack_integration_use_case import FindWithActiveSlackIntegrationUseCase
 from .find_with_active_slack_integration_by_team_id_use_case import FindWithActiveSlackIntegrationByTeamIdUseCase
 from .find_with_active_telegram_integration_use_case import FindWithActiveTelegramIntegrationUseCase
+from .find_with_active_teams_integration_by_tenant_id_use_case import FindWithActiveTeamsIntegrationByTenantIdUseCase
+from .find_with_active_teams_integration_use_case import FindWithActiveTeamsIntegrationUseCase
 
 __all__ = [
     "CreateUseCase",
@@ -33,4 +35,6 @@ __all__ = [
     "FindWithActiveSlackIntegrationUseCase",
     "FindWithActiveSlackIntegrationByTeamIdUseCase",
     "FindWithActiveTelegramIntegrationUseCase",
+    "FindWithActiveTeamsIntegrationByTenantIdUseCase",
+    "FindWithActiveTeamsIntegrationUseCase",
 ]

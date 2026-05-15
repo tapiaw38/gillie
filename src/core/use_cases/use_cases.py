@@ -28,6 +28,8 @@ from src.core.use_cases.profile import (
     FindWithActiveSlackIntegrationUseCase as ProfileFindWithActiveSlackIntegrationUseCase,
     FindWithActiveSlackIntegrationByTeamIdUseCase as ProfileFindWithActiveSlackIntegrationByTeamIdUseCase,
     FindWithActiveTelegramIntegrationUseCase as ProfileFindWithActiveTelegramIntegrationUseCase,
+    FindWithActiveTeamsIntegrationByTenantIdUseCase as ProfileFindWithActiveTeamsIntegrationByTenantIdUseCase,
+    FindWithActiveTeamsIntegrationUseCase as ProfileFindWithActiveTeamsIntegrationUseCase,
 )
 from src.core.use_cases.memory import (
     GetFAQsUseCase,
@@ -94,6 +96,7 @@ from src.core.use_cases.notion import (
 )
 from src.core.use_cases.slack import ProcessSlackMessageUseCase, VerifySlackConnectionUseCase
 from src.core.use_cases.telegram import ProcessTelegramMessageUseCase
+from src.core.use_cases.teams import ProcessTeamsMessageUseCase, VerifyTeamsConnectionUseCase
 from src.core.use_cases.system import ShellCompleteUseCase, ShellInlineAssistUseCase
 from src.core.use_cases.job import (
     CreateJobUseCase,
@@ -149,6 +152,8 @@ class Profile:
     find_with_active_slack_integration_usecase: ProfileFindWithActiveSlackIntegrationUseCase
     find_with_active_slack_integration_by_team_id_usecase: ProfileFindWithActiveSlackIntegrationByTeamIdUseCase
     find_with_active_telegram_integration_usecase: ProfileFindWithActiveTelegramIntegrationUseCase
+    find_with_active_teams_integration_by_tenant_id_usecase: ProfileFindWithActiveTeamsIntegrationByTenantIdUseCase
+    find_with_active_teams_integration_usecase: ProfileFindWithActiveTeamsIntegrationUseCase
     update_provider_usecase: ProfileUpdateProviderUseCase
 
 
@@ -271,6 +276,12 @@ class Telegram:
 
 
 @dataclass
+class Teams:
+    process_message_usecase: ProcessTeamsMessageUseCase
+    verify_connection_usecase: VerifyTeamsConnectionUseCase
+
+
+@dataclass
 class ClickUp:
     get_workspaces_usecase: ClickUpGetWorkspacesUseCase
     get_tasks_usecase: ClickUpGetTasksUseCase
@@ -310,6 +321,7 @@ class Usecases:
     jobs: Jobs
     slack: Slack
     telegram: Telegram
+    teams: Teams
     system: System
     clickup: ClickUp
     jira: Jira
@@ -335,6 +347,8 @@ def create_usecases(context_factory: Factory) -> Usecases:
             find_with_active_slack_integration_usecase=ProfileFindWithActiveSlackIntegrationUseCase(context_factory),
             find_with_active_slack_integration_by_team_id_usecase=ProfileFindWithActiveSlackIntegrationByTeamIdUseCase(context_factory),
             find_with_active_telegram_integration_usecase=ProfileFindWithActiveTelegramIntegrationUseCase(context_factory),
+            find_with_active_teams_integration_by_tenant_id_usecase=ProfileFindWithActiveTeamsIntegrationByTenantIdUseCase(context_factory),
+            find_with_active_teams_integration_usecase=ProfileFindWithActiveTeamsIntegrationUseCase(context_factory),
             update_provider_usecase=ProfileUpdateProviderUseCase(context_factory),
         ),
         conversation=Conversation(
@@ -432,6 +446,10 @@ def create_usecases(context_factory: Factory) -> Usecases:
         ),
         telegram=Telegram(
             process_message_usecase=ProcessTelegramMessageUseCase(context_factory),
+        ),
+        teams=Teams(
+            process_message_usecase=ProcessTeamsMessageUseCase(context_factory),
+            verify_connection_usecase=VerifyTeamsConnectionUseCase(context_factory),
         ),
         system=System(
             shell_complete_usecase=ShellCompleteUseCase(context_factory),
