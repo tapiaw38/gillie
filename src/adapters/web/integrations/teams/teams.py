@@ -33,8 +33,6 @@ class TeamsIntegration:
         self._openid_config: Optional[Dict[str, Any]] = None
         self._jwks_client: Optional[PyJWKClient] = None
 
-    # ── Auth ──────────────────────────────────────────────────────────────────
-
     def _get_token(self) -> str:
         """Obtain a Bot Framework access token using client credentials."""
         resp = requests.post(
@@ -60,8 +58,6 @@ class TeamsIntegration:
             "Authorization": f"Bearer {token}",
             "Content-Type": "application/json",
         }
-
-    # ── Verify ────────────────────────────────────────────────────────────────
 
     def verify_credentials(self) -> bool:
         """
@@ -123,8 +119,6 @@ class TeamsIntegration:
 
         return claims
 
-    # ── Receive ───────────────────────────────────────────────────────────────
-
     def receive_message(self, payload: Dict[str, Any]) -> List[Dict[str, Any]]:
         """
         Parse an incoming Bot Framework Activity and extract messages.
@@ -159,8 +153,6 @@ class TeamsIntegration:
                 ),
             }
         ]
-
-    # ── Send ──────────────────────────────────────────────────────────────────
 
     def send_message(
         self,
