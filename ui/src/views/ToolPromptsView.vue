@@ -161,6 +161,8 @@ const searchQuery = ref('')
 const filterMode = ref<FilterMode>('all')
 const activeCategoryId = ref<string | null>(null)
 const editorToolKey = ref<ToolKey | null>(null)
+const initialPromptsSnapshot = ref('{}')
+const initialDisabledSnapshot = ref('[]')
 
 for (const category of ALL_CATEGORIES) {
   for (const tool of category.tools) {
@@ -248,6 +250,33 @@ const editorTool = computed(() => {
   return ALL_CATEGORIES.flatMap((category) => category.tools).find((tool) => tool.key === editorToolKey.value) ?? null
 })
 
+const normalizedPrompts = computed<ToolPromptsConfig>(() => {
+  const cleaned: ToolPromptsConfig = {}
+  for (const [key, value] of Object.entries(prompts.value)) {
+    const trimmed = typeof value === 'string' ? value.trim() : ''
+    if (trimmed) cleaned[key as ToolKey] = trimmed
+  }
+  return cleaned
+})
+
+const disabledToolsList = computed(() =>
+  ALL_CATEGORIES.flatMap((category) => category.tools)
+    .filter((tool) => !enabled.value[tool.key])
+    .map((tool) => tool.key)
+    .sort(),
+)
+
+const isDirty = computed(
+  () =>
+    JSON.stringify(normalizedPrompts.value) !== initialPromptsSnapshot.value ||
+    JSON.stringify(disabledToolsList.value) !== initialDisabledSnapshot.value,
+)
+
+const syncSnapshots = () => {
+  initialPromptsSnapshot.value = JSON.stringify(normalizedPrompts.value)
+  initialDisabledSnapshot.value = JSON.stringify(disabledToolsList.value)
+}
+
 const resetToDefault = (key: ToolKey) => {
   prompts.value[key] = ''
 }
@@ -261,22 +290,15 @@ const closeEditor = () => {
 }
 
 const save = async () => {
+  if (!isDirty.value) return
   isSaving.value = true
   try {
-    const toSave: ToolPromptsConfig = {}
-    for (const [k, v] of Object.entries(prompts.value)) {
-      if (v && v.trim()) toSave[k as ToolKey] = v.trim()
-    }
-
-    const disabledTools = ALL_CATEGORIES.flatMap((category) => category.tools)
-      .filter((tool) => !enabled.value[tool.key])
-      .map((tool) => tool.key)
-
     await updateAssistantProfile({
-      tool_prompts: JSON.stringify(toSave),
-      disabled_tools: disabledTools,
+      tool_prompts: JSON.stringify(normalizedPrompts.value),
+      disabled_tools: disabledToolsList.value,
     })
 
+    syncSnapshots()
     toast.add({
       severity: 'success',
       summary: t('toolPrompts.saved'),
@@ -313,6 +335,8 @@ onMounted(async () => {
       }
     }
   }
+
+  syncSnapshots()
 })
 </script>
 
@@ -407,11 +431,11 @@ onMounted(async () => {
             :class="{ 'category-card--active': activeCategory?.id === category.id }"
             @click="activeCategoryId = activeCategory?.id === category.id ? null : category.id"
           >
-            <div class="category-head">
+            <div class="category-main">
               <div class="category-icon">
                 <i :class="category.icon"></i>
               </div>
-              <div>
+              <div class="category-copy">
                 <h2 class="category-title">{{ categoryLabel(category.id) }}</h2>
                 <p class="category-meta">{{ category.visibleCount }} {{ t('toolPrompts.toolsCount') }}</p>
               </div>
@@ -499,11 +523,14 @@ onMounted(async () => {
 
     <div class="panel">
       <div class="panel-body save-bar">
+        <span v-if="isDirty" class="dirty-indicator">{{ t('toolPrompts.unsavedChanges') }}</span>
+        <span v-else class="clean-indicator">{{ t('toolPrompts.allChangesSaved') }}</span>
         <Button
           :label="t('toolPrompts.saveChanges')"
           icon="pi pi-save"
           severity="primary"
           :loading="isSaving"
+          :disabled="!isDirty"
           @click="save"
         />
       </div>
@@ -577,16 +604,17 @@ onMounted(async () => {
 .filter-row { display: flex; flex-wrap: wrap; gap: 0.6rem; }
 .filter-chip { display: inline-flex; align-items: center; gap: 0.45rem; border-radius: 999px; border: 1px solid var(--do-border-light); background: rgba(255, 255, 255, 0.015); color: var(--do-text); padding: 0.55rem 0.85rem; font-size: 0.84rem; cursor: pointer; transition: border-color 0.18s ease, background 0.18s ease; }
 .filter-chip--active { background: rgba(255, 255, 255, 0.04); border-color: var(--color-primary); }
-.categories-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 0.6rem; }
-.category-card { text-align: left; padding: 0.7rem 0.75rem; border-radius: 0.45rem; border: 1px solid var(--do-border-light); background: rgba(255, 255, 255, 0.015); color: inherit; cursor: pointer; transition: border-color 0.18s ease, background 0.18s ease; }
+.categories-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(165px, 1fr)); gap: 0.5rem; }
+.category-card { display: flex; align-items: center; justify-content: space-between; gap: 0.6rem; text-align: left; padding: 0.55rem 0.65rem; border-radius: 0.45rem; border: 1px solid var(--do-border-light); background: rgba(255, 255, 255, 0.015); color: inherit; cursor: pointer; transition: border-color 0.18s ease, background 0.18s ease; }
 .category-card--active { border-color: var(--color-primary); background: rgba(255, 255, 255, 0.03); }
-.category-head { display: flex; gap: 0.55rem; align-items: center; margin-bottom: 0.55rem; }
+.category-main { display: flex; gap: 0.55rem; align-items: center; min-width: 0; }
+.category-copy { min-width: 0; }
 .category-icon, .tool-icon { width: 1.8rem; height: 1.8rem; border-radius: 0.35rem; display: inline-flex; align-items: center; justify-content: center; background: rgba(255, 255, 255, 0.03); color: var(--color-primary); flex-shrink: 0; }
 .category-title, .tool-title { margin: 0; color: var(--do-text); }
 .category-title { font-size: 0.86rem; font-weight: 700; }
 .category-meta, .tool-hint, .editor-hint, .empty-body p { margin: 0; color: var(--do-text-muted); }
 .category-meta { font-size: 0.72rem; margin-top: 0.1rem; }
-.category-badges { display: flex; flex-wrap: wrap; gap: 0.35rem; }
+.category-badges { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 0.25rem; flex-shrink: 0; }
 .category-badge, .tool-pill { display: inline-flex; align-items: center; border-radius: 999px; padding: 0.14rem 0.42rem; font-size: 0.65rem; font-weight: 600; background: rgba(255, 255, 255, 0.04); color: var(--do-text-muted); }
 .category-badge--muted, .tool-pill--disabled { color: var(--color-danger); }
 .category-badge--quiet { opacity: 0.8; }
@@ -601,7 +629,11 @@ onMounted(async () => {
 .tool-actions { display: flex; align-items: center; gap: 0.55rem; flex-shrink: 0; }
 .empty-body { align-items: center; text-align: center; padding: 2rem 1.25rem; }
 .empty-icon { font-size: 2rem; color: var(--do-text-muted); margin-bottom: 0.3rem; }
-.save-bar { display: flex; justify-content: flex-end; }
+.save-bar { display: flex; align-items: center; justify-content: space-between; gap: 0.75rem; }
+.dirty-indicator,
+.clean-indicator { font-size: 0.78rem; font-weight: 600; }
+.dirty-indicator { color: #fbbf24; }
+.clean-indicator { color: var(--do-text-muted); }
 .editor-modal { display: flex; flex-direction: column; gap: 0.9rem; }
 .editor-key { display: inline-block; align-self: flex-start; font-size: 0.76rem; color: var(--do-text-muted); background: rgba(255, 255, 255, 0.025); padding: 0.18rem 0.42rem; border-radius: 0.3rem; }
 .editor-hint { font-size: 0.88rem; line-height: 1.45; }
@@ -619,7 +651,10 @@ onMounted(async () => {
   .page-header { flex-direction: column; align-items: flex-start; gap: 0.875rem; }
   .summary-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .status-row { flex-direction: column; align-items: flex-start; }
+  .category-card { align-items: flex-start; }
+  .category-badges { justify-content: flex-start; }
   .tool-row { flex-direction: column; align-items: stretch; }
+  .save-bar { flex-direction: column; align-items: stretch; }
   .tool-actions { justify-content: space-between; }
   .editor-actions { flex-direction: column; align-items: stretch; }
 }

@@ -849,6 +849,8 @@
     "defaultPlaceholder": "Dejar vacío para usar el prompt por defecto de",
     "restoreDefault": "Restaurar por defecto",
     "saveChanges": "Guardar cambios",
+    "unsavedChanges": "Hay cambios sin guardar",
+    "allChangesSaved": "Todo guardado",
     "editPrompt": "Editar prompt",
     "closeEditor": "Cerrar editor",
     "overviewTitle": "Resumen y filtros",

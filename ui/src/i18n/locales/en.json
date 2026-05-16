@@ -849,6 +849,8 @@
     "defaultPlaceholder": "Leave empty to use the default prompt for",
     "restoreDefault": "Restore default",
     "saveChanges": "Save changes",
+    "unsavedChanges": "You have unsaved changes",
+    "allChangesSaved": "All changes saved",
     "editPrompt": "Edit prompt",
     "closeEditor": "Close editor",
     "overviewTitle": "Overview and filters",
