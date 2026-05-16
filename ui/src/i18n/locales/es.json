@@ -842,7 +842,7 @@
   },
   "toolPrompts": {
     "title": "Prompts de Tools",
-    "subtitle": "Activá/desactivá herramientas y personalizá las instrucciones que le indican al LLM cuándo usar cada una.",
+    "subtitle": "Activá o personalizá las tools que puede usar el asistente.",
     "disabled": "Desactivada",
     "custom": "Personalizado",
     "genericHint": "Personaliza cuándo y cómo debería usar el LLM la tool {tool}.",
@@ -853,17 +853,17 @@
     "closeEditor": "Cerrar editor",
     "overviewTitle": "Resumen y filtros",
     "categoriesTitle": "Categorías",
-    "categoriesSubtitle": "Elegí un grupo de tools para trabajar con una vista más ordenada.",
-    "toolsSubtitle": "Ajustá el estado de cada tool y abrí el editor solo cuando necesites personalizar su prompt.",
+    "categoriesSubtitle": "Elegí un grupo para trabajar con una vista más ordenada.",
+    "toolsSubtitle": "Activá, desactivá o editá el prompt de cada tool.",
     "selectCategoryTitle": "Seleccioná una categoría",
     "selectCategoryDesc": "Las tools del grupo aparecen recién cuando hacés click en una card.",
     "saved": "Guardado",
     "savedDesc": "Configuración actualizada",
     "error": "Error",
     "errorDesc": "No se pudo guardar",
-    "searchPlaceholder": "Buscar por nombre, key o descripción...",
+    "searchPlaceholder": "Buscar por nombre o descripción...",
     "toolsCount": "tools",
-    "panelSubtitle": "Activa o desactiva tools rápidamente y abre el editor solo cuando necesites un prompt personalizado.",
+    "panelSubtitle": "Revisá el estado general y filtrá antes de entrar a una categoría.",
     "noResultsTitle": "No hay tools para mostrar",
     "noResultsDesc": "Probá otro filtro o borrá la búsqueda para volver a ver categorías.",
     "filters": {
@@ -893,12 +893,12 @@
     },
     "tools": {
       "search_documents": {
-        "label": "Buscar en documentos",
-        "hint": "Cuándo el LLM debe buscar en PDFs/Excel subidos al asistente."
+        "label": "Buscar documentos",
+        "hint": "Cuándo buscar información dentro de PDFs y Excels subidos."
       },
       "query_database": {
-        "label": "Consultar base de datos",
-        "hint": "Cuándo el LLM debe consultar la tabla PostgreSQL configurada. Solo aplica si la integración SQL está activa."
+        "label": "Consultar BD",
+        "hint": "Cuándo consultar la tabla PostgreSQL configurada."
       },
       "search_images": {
         "label": "Buscar imágenes",
@@ -918,7 +918,7 @@
       },
       "write_excel": {
         "label": "Escribir Excel",
-        "hint": "Cuándo crear o sobrescribir un archivo Excel con datos estructurados."
+        "hint": "Cuándo crear o sobrescribir un Excel con datos estructurados."
       },
       "read_docx": {
         "label": "Leer Word",
@@ -934,7 +934,7 @@
       },
       "modify_docx": {
         "label": "Modificar Word",
-        "hint": "Cuándo editar un documento .docx existente sin recrearlo desde cero."
+        "hint": "Cuándo editar un .docx existente sin recrearlo."
       },
       "insert_image_docx": {
         "label": "Insertar imagen en Word",
@@ -945,8 +945,8 @@
         "hint": "Cuándo insertar una imagen dentro de una hoja de cálculo .xlsx."
       },
       "insert_image_pptx": {
-        "label": "Insertar imagen en PowerPoint",
-        "hint": "Cuándo insertar una imagen en una diapositiva de PowerPoint."
+        "label": "Imagen en PowerPoint",
+        "hint": "Cuándo insertar una imagen en una diapositiva."
       },
       "describe_image": {
         "label": "Describir imagen",
@@ -978,7 +978,7 @@
       },
       "organize_memory": {
         "label": "Organizar memoria",
-        "hint": "Cuándo ordenar y consolidar la memoria general persistente del asistente."
+        "hint": "Cuándo ordenar y consolidar la memoria general persistente."
       },
       "search_memory": {
         "label": "Buscar en memoria",
@@ -989,16 +989,16 @@
         "hint": "Cuándo guardar un problema y su resolución para reutilizarla más adelante."
       },
       "system_propose": {
-        "label": "Proponer comando del servidor",
-        "hint": "Cuándo proponer un comando de shell en el servidor Linux para que el usuario confirme."
+        "label": "Proponer comando",
+        "hint": "Cuándo proponer un comando de shell para confirmar."
       },
       "system_confirm": {
-        "label": "Confirmar comando del servidor",
-        "hint": "Cuándo ejecutar un comando ya propuesto usando el código de confirmación del usuario."
+        "label": "Confirmar comando",
+        "hint": "Cuándo ejecutar un comando ya propuesto con código de confirmación."
       },
       "cron_create": {
         "label": "Crear cron job",
-        "hint": "Cuándo crear una tarea programada que combina una fuente (comando, HTTP, texto) con un destino (WhatsApp, Telegram, Slack)."
+        "hint": "Cuándo crear una tarea programada con fuente y destino."
       },
       "cron_list": {
         "label": "Listar cron jobs",
@@ -1009,8 +1009,8 @@
         "hint": "Cuándo eliminar una tarea programada por su ID."
       },
       "cron_run": {
-        "label": "Ejecutar cron job ahora",
-        "hint": "Cuándo ejecutar una tarea programada de inmediato sin esperar el próximo horario."
+        "label": "Ejecutar cron ahora",
+        "hint": "Cuándo ejecutar una tarea programada sin esperar el próximo horario."
       },
       "read_file": {
         "label": "Leer archivo",
@@ -1022,15 +1022,15 @@
       },
       "edit_file": {
         "label": "Editar archivo",
-        "hint": "Reemplaza fragmentos exactos de código en archivos. Usa matching inteligente (exact → normalizado → fuzzy)."
+        "hint": "Cuándo reemplazar fragmentos exactos de código en archivos."
       },
       "list_directory": {
         "label": "Listar directorio",
-        "hint": "Lista archivos y directorios con tamaños. Ideal para explorar la estructura del proyecto."
+        "hint": "Cuándo listar archivos y carpetas para explorar el proyecto."
       },
       "find_files": {
         "label": "Buscar archivos",
-        "hint": "Busca archivos por patrón glob (ej: **/*.py, src/**/*.ts) de forma recursiva."
+        "hint": "Cuándo buscar archivos por patrón glob de forma recursiva."
       },
       "download_file": {
         "label": "Descargar archivo",
@@ -1038,7 +1038,7 @@
       },
       "repo_map": {
         "label": "Mapa del repositorio",
-        "hint": "Cuándo generar un mapa estructural del proyecto para entender módulos, carpetas y firmas."
+        "hint": "Cuándo generar un mapa estructural del proyecto."
       },
       "check_code": {
         "label": "Revisar código",
@@ -1046,31 +1046,31 @@
       },
       "run_shell": {
         "label": "Ejecutar comandos",
-        "hint": "Ejecuta comandos shell: correr tests, instalar paquetes, ver logs. Incluye protección contra comandos destructivos."
+        "hint": "Cuándo ejecutar comandos shell dentro del workspace."
       },
       "grep_files": {
         "label": "Buscar en archivos",
-        "hint": "Busca texto o regex dentro del contenido de archivos. Soporta filtros por extensión y búsqueda case-insensitive."
+        "hint": "Cuándo buscar texto o regex dentro de archivos."
       },
       "git_status": {
         "label": "Git: Estado",
-        "hint": "Muestra el estado actual del repositorio git y las estadísticas de cambios pendientes."
+        "hint": "Cuándo ver el estado actual del repositorio git."
       },
       "git_diff": {
         "label": "Git: Diferencias",
-        "hint": "Muestra el diff de un archivo específico o de todo el repositorio. Soporta cambios staged y unstaged."
+        "hint": "Cuándo ver el diff de un archivo o del repositorio."
       },
       "git_log": {
         "label": "Git: Historial",
-        "hint": "Muestra el historial de commits recientes, opcionalmente filtrado por archivo."
+        "hint": "Cuándo ver el historial reciente de commits."
       },
       "git_commit": {
         "label": "Git: Commit",
-        "hint": "Hace commit de cambios con un mensaje. Solo se usa cuando el usuario lo pide explícitamente."
+        "hint": "Cuándo crear un commit con mensaje."
       },
       "send_file": {
         "label": "Enviar archivo",
-        "hint": "Cuándo enviar un archivo al usuario o a un canal soportado."
+        "hint": "Cuándo enviar un archivo al usuario o a un canal."
       },
       "send_screenshot": {
         "label": "Enviar captura",
@@ -1118,11 +1118,11 @@
       },
       "browser_switch_tab": {
         "label": "Navegador: Cambiar pestaña",
-        "hint": "Cuándo cambiar entre pestañas abiertas de la sesión del navegador."
+        "hint": "Cuándo cambiar entre pestañas abiertas."
       },
       "browser_enable_remote_debug": {
         "label": "Navegador: Debug remoto",
-        "hint": "Cuándo habilitar depuración remota para una sesión de navegador."
+        "hint": "Cuándo habilitar depuración remota del navegador."
       },
       "browser_evaluate": {
         "label": "Navegador: Evaluar JS",

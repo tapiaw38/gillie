@@ -842,7 +842,7 @@
   },
   "toolPrompts": {
     "title": "Tool Prompts",
-    "subtitle": "Enable/disable tools and customize the instructions that tell the LLM when to use each one.",
+    "subtitle": "Enable or customize the tools your assistant can use.",
     "disabled": "Disabled",
     "custom": "Custom",
     "genericHint": "Customize when and how the LLM should use the {tool} tool.",
@@ -853,17 +853,17 @@
     "closeEditor": "Close editor",
     "overviewTitle": "Overview and filters",
     "categoriesTitle": "Categories",
-    "categoriesSubtitle": "Choose a tool group to work with a cleaner, more focused view.",
-    "toolsSubtitle": "Adjust each tool state and open the editor only when you need a custom prompt.",
+    "categoriesSubtitle": "Choose a group to work with a cleaner view.",
+    "toolsSubtitle": "Enable, disable, or edit the prompt for each tool.",
     "selectCategoryTitle": "Select a category",
     "selectCategoryDesc": "Tools in that group appear only after you click a category card.",
     "saved": "Saved",
     "savedDesc": "Configuration updated",
     "error": "Error",
     "errorDesc": "Could not save",
-    "searchPlaceholder": "Search by name, key, or description...",
+    "searchPlaceholder": "Search by name or description...",
     "toolsCount": "tools",
-    "panelSubtitle": "Toggle tools quickly and open the editor only when you need a custom prompt.",
+    "panelSubtitle": "Review overall state and filter before opening a category.",
     "noResultsTitle": "No tools to display",
     "noResultsDesc": "Try another filter or clear the search to see categories again.",
     "filters": {
@@ -894,11 +894,11 @@
     "tools": {
       "search_documents": {
         "label": "Search documents",
-        "hint": "When the LLM should search PDFs/Excel uploaded to the assistant."
+        "hint": "When to search inside uploaded PDFs and Excel files."
       },
       "query_database": {
-        "label": "Query database",
-        "hint": "When the LLM should query the configured PostgreSQL table. Only applies if the SQL integration is active."
+        "label": "Query DB",
+        "hint": "When to query the configured PostgreSQL table."
       },
       "search_images": {
         "label": "Search images",
@@ -933,8 +933,8 @@
         "hint": "When to edit an existing Excel file: cells, rows, sheets, or structure."
       },
       "modify_docx": {
-        "label": "Modify Word document",
-        "hint": "When to edit an existing .docx document without recreating it from scratch."
+        "label": "Modify Word doc",
+        "hint": "When to edit an existing .docx without recreating it."
       },
       "insert_image_docx": {
         "label": "Insert image in Word",
@@ -945,8 +945,8 @@
         "hint": "When to insert an image into an .xlsx spreadsheet."
       },
       "insert_image_pptx": {
-        "label": "Insert image in PowerPoint",
-        "hint": "When to insert an image into a PowerPoint slide."
+        "label": "Image in PowerPoint",
+        "hint": "When to insert an image into a slide."
       },
       "describe_image": {
         "label": "Describe image",
@@ -978,7 +978,7 @@
       },
       "organize_memory": {
         "label": "Organize memory",
-        "hint": "When to reorganize and consolidate the assistant's persistent general memory."
+        "hint": "When to reorganize and consolidate persistent general memory."
       },
       "search_memory": {
         "label": "Search memory",
@@ -989,16 +989,16 @@
         "hint": "When to store a problem and its resolution for future reuse."
       },
       "system_propose": {
-        "label": "Propose server command",
-        "hint": "When to propose a shell command on the Linux server for the user to confirm."
+        "label": "Propose command",
+        "hint": "When to propose a shell command for confirmation."
       },
       "system_confirm": {
-        "label": "Confirm server command",
-        "hint": "When to execute an already proposed command using the user confirmation code."
+        "label": "Confirm command",
+        "hint": "When to execute a proposed command using a confirmation code."
       },
       "cron_create": {
         "label": "Create cron job",
-        "hint": "When to create a scheduled task combining a source (command, HTTP, text) with a destination (WhatsApp, Telegram, Slack)."
+        "hint": "When to create a scheduled task with a source and destination."
       },
       "cron_list": {
         "label": "List cron jobs",
@@ -1009,8 +1009,8 @@
         "hint": "When to delete a scheduled task by ID."
       },
       "cron_run": {
-        "label": "Run cron job now",
-        "hint": "When to run a scheduled task immediately without waiting for the next schedule."
+        "label": "Run cron now",
+        "hint": "When to run a scheduled task immediately."
       },
       "read_file": {
         "label": "Read file",
@@ -1022,15 +1022,15 @@
       },
       "edit_file": {
         "label": "Edit file",
-        "hint": "Replaces exact code fragments in files. Uses smart matching (exact → normalized → fuzzy)."
+        "hint": "When to replace exact code fragments in files."
       },
       "list_directory": {
         "label": "List directory",
-        "hint": "Lists files and directories with sizes. Ideal for exploring project structure."
+        "hint": "When to list files and folders to explore the project."
       },
       "find_files": {
         "label": "Find files",
-        "hint": "Searches files by glob pattern (e.g.: **/*.py, src/**/*.ts) recursively."
+        "hint": "When to search files recursively by glob pattern."
       },
       "download_file": {
         "label": "Download file",
@@ -1038,7 +1038,7 @@
       },
       "repo_map": {
         "label": "Repository map",
-        "hint": "When to generate a structural map of the project to understand folders, modules, and signatures."
+        "hint": "When to generate a structural map of the project."
       },
       "check_code": {
         "label": "Check code",
@@ -1046,31 +1046,31 @@
       },
       "run_shell": {
         "label": "Run commands",
-        "hint": "Executes shell commands: run tests, install packages, view logs. Includes protection against destructive commands."
+        "hint": "When to run shell commands inside the workspace."
       },
       "grep_files": {
         "label": "Search in files",
-        "hint": "Searches text or regex within file contents. Supports extension filters and case-insensitive search."
+        "hint": "When to search text or regex inside files."
       },
       "git_status": {
         "label": "Git: Status",
-        "hint": "Shows the current state of the git repository and pending change statistics."
+        "hint": "When to inspect the current git repository state."
       },
       "git_diff": {
         "label": "Git: Diff",
-        "hint": "Shows the diff of a specific file or the entire repository. Supports staged and unstaged changes."
+        "hint": "When to inspect the diff of a file or repository."
       },
       "git_log": {
         "label": "Git: Log",
-        "hint": "Shows recent commit history, optionally filtered by file."
+        "hint": "When to inspect recent commit history."
       },
       "git_commit": {
         "label": "Git: Commit",
-        "hint": "Commits changes with a message. Only used when the user explicitly requests it."
+        "hint": "When to create a commit with a message."
       },
       "send_file": {
         "label": "Send file",
-        "hint": "When to send a file to the user or to a supported channel."
+        "hint": "When to send a file to the user or a supported channel."
       },
       "send_screenshot": {
         "label": "Send screenshot",
@@ -1118,11 +1118,11 @@
       },
       "browser_switch_tab": {
         "label": "Browser: Switch tab",
-        "hint": "When to move between open tabs in the browser session."
+        "hint": "When to move between open browser tabs."
       },
       "browser_enable_remote_debug": {
         "label": "Browser: Remote debug",
-        "hint": "When to enable remote debugging for a browser session."
+        "hint": "When to enable remote browser debugging."
       },
       "browser_evaluate": {
         "label": "Browser: Evaluate JS",
