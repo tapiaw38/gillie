@@ -76,7 +76,7 @@ const saveConfig = async () => {
     await getAssistantProfile()
     toast.add({ severity: 'success', summary: t('integrations.saveConfig'), life: 3000 })
   } catch (error) {
-    console.error('Error al guardar la configuración:', error)
+    console.error('Error saving configuration:', error)
   }
 }
 
@@ -85,7 +85,7 @@ const updateIntegration = async () => {
     await addIntegration(telegramIntegration)
     await getAssistantProfile()
   } catch (error) {
-    console.error('Error al actualizar integración:', error)
+    console.error('Error updating integration:', error)
   }
 }
 
@@ -334,37 +334,34 @@ onMounted(async () => {
         <span class="step-badge">3</span>
         <div>
           <p class="panel-title">{{ t('integrations.setupGuide') }}</p>
-          <p class="panel-subtitle">{{ t('integrations.telegram.registerWebhookSubtitle') }}</p>
+          <p class="panel-subtitle">{{ t('integrations.telegram.stepsSubtitle') }}</p>
         </div>
       </div>
 
       <ol class="steps-list">
         <li class="step-item">
           <span class="step-num">1</span>
-          <span>Abrí Telegram y hablá con <strong>@BotFather</strong></span>
+          <span>{{ t('integrations.telegram.guideStep1') }}</span>
         </li>
         <li class="step-item">
           <span class="step-num">2</span>
-          <span>Enviá <code>/newbot</code> y seguí las instrucciones para crear el bot</span>
+          <span>{{ t('integrations.telegram.guideStep2') }}</span>
         </li>
         <li class="step-item">
           <span class="step-num">3</span>
-          <span>Copiá el <strong>Bot Token</strong> que te da BotFather y guardalo arriba</span>
+          <span>{{ t('integrations.telegram.guideStep3') }}</span>
         </li>
         <li class="step-item">
           <span class="step-num">4</span>
-          <span>Activá la integración con el toggle del encabezado</span>
+          <span>{{ t('integrations.telegram.guideStep4') }}</span>
         </li>
         <li class="step-item">
           <span class="step-num">5</span>
-          <span>Si estás en local, iniciá un túnel: <code>ngrok http 8000</code></span>
+          <span>{{ t('integrations.telegram.guideStep5') }}</span>
         </li>
         <li class="step-item">
           <span class="step-num">6</span>
-          <span
-            >Pegá la URL de ngrok en el paso 2 y hacé clic en
-            <strong>Registrar en Telegram</strong></span
-          >
+          <span>{{ t('integrations.telegram.guideStep6') }}</span>
         </li>
       </ol>
     </div>

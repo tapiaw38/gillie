@@ -192,7 +192,7 @@ const saveForm = async () => {
     showAddForm.value = false
     editingId.value = null
   } catch (error) {
-    console.error('Error al guardar la base de datos:', error)
+    console.error('Error saving database:', error)
   }
 }
 
@@ -218,7 +218,7 @@ const deleteDb = async (id: string) => {
       life: 3000,
     })
   } catch (error) {
-    console.error('Error al eliminar la base de datos:', error)
+    console.error('Error deleting database:', error)
     toast.add({
       severity: 'error',
       summary: t('integrations.sqlDatabase.errorDeleteDb'),

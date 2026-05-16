@@ -443,7 +443,14 @@
       "webhookRegistered": "Webhook registered",
       "enterPublicUrl": "Enter the public URL (ngrok) first.",
       "optional": "optional",
-      "secretTokenPlaceholder": "My custom secret token"
+      "secretTokenPlaceholder": "My custom secret token",
+      "stepsSubtitle": "Steps to configure your Telegram bot",
+      "guideStep1": "Open Telegram and talk to @BotFather",
+      "guideStep2": "Send /newbot and follow the instructions to create the bot",
+      "guideStep3": "Copy the Bot Token that BotFather gives you and save it above",
+      "guideStep4": "Enable the integration with the header toggle",
+      "guideStep5": "If running locally, start a tunnel: ngrok http 8000",
+      "guideStep6": "Paste the ngrok URL in step 2 and click Register Webhook"
     },
     "clickup": {
       "title": "ClickUp",
@@ -535,7 +542,14 @@
       "currentStateSubtitle": "Saved integration values",
       "accessTokenRequired": "Access token is required.",
       "phoneNumberIdRequired": "Phone number ID is required.",
-      "businessAccountIdRequired": "WhatsApp Business account ID is required."
+      "businessAccountIdRequired": "WhatsApp Business account ID is required.",
+      "stepsSubtitle": "Steps to connect the WhatsApp Business API",
+      "guideStep1": "Go to developers.facebook.com and create an app",
+      "guideStep2": "Add the WhatsApp product to your app",
+      "guideStep3": "Copy the Access Token from the API panel",
+      "guideStep4": "Copy the Phone Number ID and Business Account ID",
+      "guideStep5": "Enable the integration and save the credentials",
+      "guideStep6": "Configure the webhook with URL: /api/whatsapp/webhook"
     },
     "whatsappDevices": {
       "title": "WhatsApp Devices",
@@ -838,6 +852,28 @@
       "insertDesc": "Insert new rows",
       "updateDesc": "Modify existing rows",
       "deleteDesc": "Delete rows"
+    },
+    "web": {
+      "title": "Web Integration",
+      "subtitle": "Integrate your assistant into websites and applications",
+      "howItWorks": "How does it work?",
+      "howItWorksDesc": "Add a customizable chat to your website so users can interact with your assistant. The widget adapts to your site design and is fully configurable.",
+      "quickSetup": "Quick Setup",
+      "quickSetupSubtitle": "Essential information to get started",
+      "npmPackage": "NPM Package",
+      "generateInAccount": "Generate in My Account",
+      "configuration": "Configuration",
+      "configurationDesc": "Full assistant options",
+      "configurationTitle": "Assistant Configuration",
+      "methods": "Methods",
+      "methodsDesc": "Programmatic control of the assistant",
+      "methodsTitle": "Assistant Methods",
+      "codeCopied": "Code copied",
+      "codeCopiedDesc": "copied to clipboard",
+      "errorCopying": "Copy error",
+      "errorCopyingDesc": "Could not copy code to the clipboard",
+      "copy": "Copy",
+      "copyTitle": "Copy code"
     }
   },
   "toolPrompts": {

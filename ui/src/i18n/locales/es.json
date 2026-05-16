@@ -443,7 +443,14 @@
       "webhookRegistered": "Webhook registrado",
       "enterPublicUrl": "Ingresá la URL pública (ngrok) primero.",
       "optional": "opcional",
-      "secretTokenPlaceholder": "Mi token secreto personalizado"
+      "secretTokenPlaceholder": "Mi token secreto personalizado",
+      "stepsSubtitle": "Pasos para configurar tu bot de Telegram",
+      "guideStep1": "Abrí Telegram y hablá con @BotFather",
+      "guideStep2": "Enviá /newbot y seguí las instrucciones para crear el bot",
+      "guideStep3": "Copiá el Bot Token que te da BotFather y guardalo arriba",
+      "guideStep4": "Activá la integración con el toggle del encabezado",
+      "guideStep5": "Si estás en local, iniciá un túnel: ngrok http 8000",
+      "guideStep6": "Pegá la URL de ngrok en el paso 2 y hacé clic en Registrar Webhook"
     },
     "clickup": {
       "title": "ClickUp",
@@ -535,7 +542,14 @@
       "currentStateSubtitle": "Valores guardados de la integración",
       "accessTokenRequired": "El token de acceso es obligatorio.",
       "phoneNumberIdRequired": "El ID de número de teléfono es obligatorio.",
-      "businessAccountIdRequired": "El ID de cuenta de WhatsApp Business es obligatorio."
+      "businessAccountIdRequired": "El ID de cuenta de WhatsApp Business es obligatorio.",
+      "stepsSubtitle": "Pasos para conectar la API de WhatsApp Business",
+      "guideStep1": "Ve a developers.facebook.com y crea una app",
+      "guideStep2": "Agrega el producto WhatsApp a tu app",
+      "guideStep3": "Copia el Access Token del panel de API",
+      "guideStep4": "Copia el Phone Number ID y el Business Account ID",
+      "guideStep5": "Activa la integración y guarda los datos",
+      "guideStep6": "Configura el webhook con URL: /api/whatsapp/webhook"
     },
     "whatsappDevices": {
       "title": "Dispositivos WhatsApp",
@@ -838,6 +852,28 @@
       "insertDesc": "Insertar nuevas filas",
       "updateDesc": "Modificar filas existentes",
       "deleteDesc": "Eliminar filas"
+    },
+    "web": {
+      "title": "Integración Web",
+      "subtitle": "Integra tu asistente en sitios web y aplicaciones",
+      "howItWorks": "¿Cómo funciona?",
+      "howItWorksDesc": "Agrega un chat personalizable a tu página web para que los usuarios puedan interactuar con tu asistente. El widget se adapta al diseño de tu sitio y es completamente configurable.",
+      "quickSetup": "Configuración Rápida",
+      "quickSetupSubtitle": "Información esencial para comenzar",
+      "npmPackage": "Paquete NPM",
+      "generateInAccount": "Generar en Mi Cuenta",
+      "configuration": "Configuración",
+      "configurationDesc": "Opciones completas del asistente",
+      "configurationTitle": "Configuración del Asistente",
+      "methods": "Métodos",
+      "methodsDesc": "Control programático del asistente",
+      "methodsTitle": "Métodos del Asistente",
+      "codeCopied": "Código copiado",
+      "codeCopiedDesc": "copiado al portapapeles",
+      "errorCopying": "Error al copiar",
+      "errorCopyingDesc": "No se pudo copiar el código al portapapeles",
+      "copy": "Copiar",
+      "copyTitle": "Copiar código"
     }
   },
   "toolPrompts": {

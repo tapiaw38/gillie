@@ -167,7 +167,7 @@ const connectGoogleDrive = async () => {
       })
     }
   } catch (error) {
-    console.error('Error al conectar Google Drive:', error)
+    console.error('Error connecting Google Drive:', error)
   }
 }
 
@@ -176,7 +176,7 @@ const updateIntegration = async () => {
     await addIntegration(driveIntegration)
     await getAssistantProfile()
   } catch (error) {
-    console.error('Error al actualizar integración:', error)
+    console.error('Error updating integration:', error)
   }
 }
 
@@ -214,7 +214,7 @@ const checkConnectionStatus = async () => {
       })
     }
   } catch (error) {
-    console.error('Error al verificar estado de conexión:', error)
+    console.error('Error checking connection status:', error)
   }
 }
 

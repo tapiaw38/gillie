@@ -166,7 +166,7 @@ const connectGoogleCalendar = async () => {
       })
     }
   } catch (error) {
-    console.error('Error al conectar Google Calendar:', error)
+    console.error('Error connecting Google Calendar:', error)
   }
 }
 
@@ -175,7 +175,7 @@ const updateIntegration = async () => {
     await addIntegration(calendarIntegration)
     await getAssistantProfile()
   } catch (error) {
-    console.error('Error al actualizar integración:', error)
+    console.error('Error updating integration:', error)
   }
 }
 
@@ -197,7 +197,7 @@ const checkConnectionStatus = async () => {
   try {
     await checkStatus(assistantProfile.value.id)
   } catch (error) {
-    console.error('Error al verificar estado de conexión:', error)
+    console.error('Error checking connection status:', error)
   }
 }
 

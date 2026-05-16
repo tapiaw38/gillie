@@ -85,7 +85,7 @@ const saveConfig = async () => {
     await addIntegration(whatsappIntegration)
     await getAssistantProfile()
   } catch (error) {
-    console.error('Error al guardar la configuración:', error)
+    console.error('Error saving configuration:', error)
   }
 }
 
@@ -94,7 +94,7 @@ const updateIntegration = async () => {
     await addIntegration(whatsappIntegration)
     await getAssistantProfile()
   } catch (error) {
-    console.error('Error al actualizar integración:', error)
+    console.error('Error updating integration:', error)
   }
 }
 
@@ -203,7 +203,7 @@ onMounted(async () => {
         <div class="field-group">
           <label for="businessAccountId" class="field-label">
             <i class="pi pi-building field-icon"></i>
-            ID de Cuenta Business
+            {{ t('integrations.whatsapp.businessAccountId') }}
           </label>
           <InputText
             id="businessAccountId"
@@ -216,14 +216,14 @@ onMounted(async () => {
           <Message v-if="validationErrors.businessAccountId" severity="error" class="field-error">
             {{ validationErrors.businessAccountId }}
           </Message>
-          <small class="field-help">ID de tu cuenta de WhatsApp Business</small>
+          <small class="field-help">{{ t('integrations.whatsapp.businessAccountIdHelp') }}</small>
         </div>
 
         <div class="panel-footer">
           <div></div>
           <Button
             type="submit"
-            label="Guardar Configuración"
+            :label="t('integrations.saveConfig')"
             icon="pi pi-save"
             severity="primary"
             :disabled="!whatsappIntegration.activated"
@@ -237,8 +237,8 @@ onMounted(async () => {
       <div class="panel-header">
         <span class="step-badge">2</span>
         <div>
-          <p class="panel-title">Estado Actual</p>
-          <p class="panel-subtitle">Valores guardados de la integración</p>
+          <p class="panel-title">{{ t('integrations.currentState') }}</p>
+          <p class="panel-subtitle">{{ t('integrations.whatsapp.currentStateSubtitle') }}</p>
         </div>
       </div>
 
@@ -246,14 +246,14 @@ onMounted(async () => {
         <div class="status-row">
           <span class="status-label">
             <i class="pi pi-key"></i>
-            Token de Acceso
+            {{ t('integrations.whatsapp.accessToken') }}
           </span>
           <code class="status-value">
             {{
               (searchWhatsappIntegration?.config as unknown as WhatsappIntegrationConfig)
                 ?.accessToken
-                ? '&bull;&bull;&bull;&bull;&bull;&bull;&bull;&bull;&bull;&bull;&bull;'
-                : 'No configurado'
+                ? '•••••••••••'
+                : t('integrations.notConfigured')
             }}
           </code>
         </div>
@@ -261,12 +261,12 @@ onMounted(async () => {
         <div class="status-row">
           <span class="status-label">
             <i class="pi pi-phone"></i>
-            ID de Número
+            {{ t('integrations.whatsapp.phoneNumberId') }}
           </span>
           <code class="status-value">
             {{
               (searchWhatsappIntegration?.config as unknown as WhatsappIntegrationConfig)
-                ?.phoneNumberId || 'No configurado'
+                ?.phoneNumberId || t('integrations.notConfigured')
             }}
           </code>
         </div>
@@ -274,12 +274,12 @@ onMounted(async () => {
         <div class="status-row">
           <span class="status-label">
             <i class="pi pi-building"></i>
-            ID de Cuenta Business
+            {{ t('integrations.whatsapp.businessAccountId') }}
           </span>
           <code class="status-value">
             {{
               (searchWhatsappIntegration?.config as unknown as WhatsappIntegrationConfig)
-                ?.businessAccountId || 'No configurado'
+                ?.businessAccountId || t('integrations.notConfigured')
             }}
           </code>
         </div>
@@ -291,38 +291,35 @@ onMounted(async () => {
       <div class="panel-header">
         <span class="step-badge">3</span>
         <div>
-          <p class="panel-title">Guía de Configuración</p>
-          <p class="panel-subtitle">Pasos para conectar WhatsApp Business API</p>
+          <p class="panel-title">{{ t('integrations.setupGuide') }}</p>
+          <p class="panel-subtitle">{{ t('integrations.whatsapp.stepsSubtitle') }}</p>
         </div>
       </div>
 
       <ol class="steps-list">
         <li class="step-item">
           <span class="step-num">1</span>
-          <span>Ve a <strong>developers.facebook.com</strong> y crea una app</span>
+          <span>{{ t('integrations.whatsapp.guideStep1') }}</span>
         </li>
         <li class="step-item">
           <span class="step-num">2</span>
-          <span>Agrega el producto <strong>"WhatsApp"</strong> a tu app</span>
+          <span>{{ t('integrations.whatsapp.guideStep2') }}</span>
         </li>
         <li class="step-item">
           <span class="step-num">3</span>
-          <span>Copia el <strong>Access Token</strong> del panel de API</span>
+          <span>{{ t('integrations.whatsapp.guideStep3') }}</span>
         </li>
         <li class="step-item">
           <span class="step-num">4</span>
-          <span
-            >Copia el <strong>Phone Number ID</strong> y el
-            <strong>Business Account ID</strong></span
-          >
+          <span>{{ t('integrations.whatsapp.guideStep4') }}</span>
         </li>
         <li class="step-item">
           <span class="step-num">5</span>
-          <span>Activa la integración y guarda los datos</span>
+          <span>{{ t('integrations.whatsapp.guideStep5') }}</span>
         </li>
         <li class="step-item">
           <span class="step-num">6</span>
-          <span>Configura el webhook con URL: <code>/api/whatsapp/webhook</code></span>
+          <span>{{ t('integrations.whatsapp.guideStep6') }}</span>
         </li>
       </ol>
     </div>

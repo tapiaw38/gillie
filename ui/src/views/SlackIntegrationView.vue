@@ -96,7 +96,7 @@ const saveConfig = async () => {
       life: 3000,
     })
   } catch (error) {
-    console.error('Error al guardar la configuración:', error)
+    console.error('Error saving configuration:', error)
   }
 }
 
@@ -106,7 +106,7 @@ const updateIntegration = async () => {
     await getAssistantProfile()
     verificationSucceeded.value = false
   } catch (error) {
-    console.error('Error al actualizar integración:', error)
+    console.error('Error updating integration:', error)
   }
 }
 
@@ -139,7 +139,7 @@ const copyWebhookUrl = async () => {
       life: 2000,
     })
   } catch (error) {
-    console.error('Error al copiar webhook URL:', error)
+    console.error('Error copying webhook URL:', error)
     toast.add({
       severity: 'error',
       summary: t('common.error'),
@@ -166,7 +166,7 @@ const handleVerifyConnection = async () => {
       life: 3000,
     })
   } catch (error) {
-    console.error('Error al verificar Slack:', error)
+    console.error('Error verifying Slack:', error)
     verificationSucceeded.value = false
   }
 }
