@@ -2,14 +2,16 @@
 import Card from 'primevue/card'
 import Button from 'primevue/button'
 import { useToast } from 'primevue/usetoast'
+import { useI18n } from 'vue-i18n'
 
 const toast = useToast()
+const { t } = useI18n()
 
 const contactSupport = () => {
   toast.add({
     severity: 'info',
-    summary: 'Contactar Soporte',
-    detail: 'Enviaremos un correo a nuestro equipo de soporte para que te contacten pronto.',
+    summary: t('about.contactSupportSummary'),
+    detail: t('about.contactSupportDetail'),
     life: 4000,
   })
 }
@@ -17,8 +19,8 @@ const contactSupport = () => {
 const scheduleDemo = () => {
   toast.add({
     severity: 'success',
-    summary: 'Demo Programada',
-    detail: 'Hemos registrado tu solicitud. Un representante se pondrá en contacto contigo.',
+    summary: t('about.scheduleDemoSummary'),
+    detail: t('about.scheduleDemoDetail'),
     life: 4000,
   })
 }
@@ -33,8 +35,8 @@ const scheduleDemo = () => {
           <i class="pi pi-info-circle"></i>
         </div>
         <div class="header-content">
-          <h1 class="page-title">Acerca de Gillie</h1>
-          <p class="page-subtitle">Conoce más sobre nuestro asistente virtual</p>
+          <h1 class="page-title">{{ t('about.title') }}</h1>
+          <p class="page-subtitle">{{ t('about.subtitle') }}</p>
         </div>
       </div>
     </div>
@@ -46,32 +48,20 @@ const scheduleDemo = () => {
         <template #content>
           <div class="about-content">
             <div class="about-text">
-              <h2>Nuestra Misión</h2>
-              <p>
-                En Gillie, nos dedicamos a transformar la experiencia del cliente mediante
-                asistentes virtuales inteligentes que automatizan procesos, reducen tiempos de
-                atención y mejoran la eficiencia operativa de tu negocio.
-              </p>
+              <h2>{{ t('about.mission') }}</h2>
+              <p>{{ t('about.missionDesc') }}</p>
 
-              <h2>Nuestra Tecnología</h2>
-              <p>
-                Utilizamos las últimas tecnologías de procesamiento de lenguaje natural y
-                aprendizaje automático para crear asistentes que comprenden el contexto, mantienen
-                conversaciones naturales y resuelven problemas complejos de forma autónoma.
-              </p>
+              <h2>{{ t('about.technology') }}</h2>
+              <p>{{ t('about.technologyDesc') }}</p>
 
-              <h2>Integraciones</h2>
-              <p>
-                Nuestro sistema se integra fácilmente con WhatsApp Business, páginas web, sistemas
-                CRM y APIs de terceros para ofrecer una experiencia de usuario coherente en todos
-                los canales de comunicación.
-              </p>
+              <h2>{{ t('about.integrations') }}</h2>
+              <p>{{ t('about.integrationsDesc') }}</p>
             </div>
 
             <div class="about-image">
               <div class="image-placeholder">
                 <i class="pi pi-robot"></i>
-                <span>Asistente Virtual</span>
+                <span>{{ t('about.virtualAssistant') }}</span>
               </div>
             </div>
           </div>
@@ -86,8 +76,8 @@ const scheduleDemo = () => {
               <i class="pi pi-star"></i>
             </div>
             <div class="header-text">
-              <h3>Características Principales</h3>
-              <p>Lo que hace especial a Gillie</p>
+              <h3>{{ t('about.featuresTitle') }}</h3>
+              <p>{{ t('about.featuresSubtitle') }}</p>
             </div>
           </div>
         </template>
@@ -98,10 +88,8 @@ const scheduleDemo = () => {
                 <i class="pi pi-brain"></i>
               </div>
               <div class="feature-content">
-                <h4>Inteligencia Artificial Avanzada</h4>
-                <p>
-                  Modelos de lenguaje de última generación para respuestas precisas y naturales.
-                </p>
+                <h4>{{ t('about.feature1Title') }}</h4>
+                <p>{{ t('about.feature1Desc') }}</p>
               </div>
             </div>
 
@@ -110,8 +98,8 @@ const scheduleDemo = () => {
                 <i class="pi pi-bolt"></i>
               </div>
               <div class="feature-content">
-                <h4>Integraciones Personalizadas</h4>
-                <p>Conexiones con APIs externas para realizar tareas complejas y automatizadas.</p>
+                <h4>{{ t('about.feature2Title') }}</h4>
+                <p>{{ t('about.feature2Desc') }}</p>
               </div>
             </div>
 
@@ -120,11 +108,8 @@ const scheduleDemo = () => {
                 <i class="pi pi-shield"></i>
               </div>
               <div class="feature-content">
-                <h4>Seguridad de Datos</h4>
-                <p>
-                  Políticas de privacidad y encriptación de extremo a extremo para proteger la
-                  información.
-                </p>
+                <h4>{{ t('about.feature3Title') }}</h4>
+                <p>{{ t('about.feature3Desc') }}</p>
               </div>
             </div>
 
@@ -133,10 +118,8 @@ const scheduleDemo = () => {
                 <i class="pi pi-chart-line"></i>
               </div>
               <div class="feature-content">
-                <h4>Analítica Avanzada</h4>
-                <p>
-                  Seguimiento detallado de interacciones para optimizar la experiencia del usuario.
-                </p>
+                <h4>{{ t('about.feature4Title') }}</h4>
+                <p>{{ t('about.feature4Desc') }}</p>
               </div>
             </div>
           </div>
@@ -151,23 +134,23 @@ const scheduleDemo = () => {
               <i class="pi pi-envelope"></i>
             </div>
             <div class="header-text">
-              <h3>¿Tienes preguntas?</h3>
-              <p>Contacta con nuestro equipo de soporte</p>
+              <h3>{{ t('about.contactTitle') }}</h3>
+              <p>{{ t('about.contactSubtitle') }}</p>
             </div>
           </div>
         </template>
         <template #content>
           <div class="contact-content">
-            <p>¿Quieres más información sobre Gillie o necesitas ayuda con tu asistente?</p>
+            <p>{{ t('about.contactDesc') }}</p>
             <div class="contact-actions">
               <Button
-                label="Contactar Soporte"
+                :label="t('about.contactSupport')"
                 icon="pi pi-comments"
                 class="p-button-text"
                 @click="contactSupport"
               />
               <Button
-                label="Programar Demo"
+                :label="t('about.scheduleDemo')"
                 icon="pi pi-calendar"
                 severity="primary"
                 outlined

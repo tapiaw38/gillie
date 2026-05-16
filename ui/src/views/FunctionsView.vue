@@ -459,7 +459,7 @@ const openWorkflowForCard = (fn: Record<string, unknown>) => {
       <div class="summary-header">
         <span class="summary-title">
           <i class="pi pi-list"></i>
-          Funciones configuradas
+          {{ t('functions.configuredFunctions') }}
           <span class="summary-count">{{ allFunctions.length }}</span>
         </span>
         <Button
@@ -501,15 +501,11 @@ const openWorkflowForCard = (fn: Record<string, unknown>) => {
           <div class="function-footer">
             <div v-if="fn.input_params && fn.input_params.length" class="function-meta">
               <i class="pi pi-sliders-h"></i>
-              <span
-                >{{ fn.input_params.length }} parámetro{{
-                  fn.input_params.length !== 1 ? 's' : ''
-                }}</span
-              >
+              <span>{{ t('functions.paramCount', fn.input_params.length) }}</span>
             </div>
             <div v-else-if="fn.steps && fn.steps.length" class="function-meta">
               <i class="pi pi-share-alt"></i>
-              <span>{{ fn.steps.length }} paso{{ fn.steps.length !== 1 ? 's' : '' }}</span>
+              <span>{{ t('functions.stepCount', fn.steps.length) }}</span>
             </div>
             <div v-else-if="fn.keywords && fn.keywords.length" class="function-meta">
               <i class="pi pi-tag"></i>
@@ -592,7 +588,7 @@ const openWorkflowForCard = (fn: Record<string, unknown>) => {
           <div class="editor-header">
             <label for="json-editor" class="editor-label">
               <i class="pi pi-file-edit"></i>
-              Configuración JSON
+              {{ t('functions.jsonConfiguration') }}
             </label>
           </div>
 

@@ -484,7 +484,7 @@ onMounted(() => {
     <!-- QR Code Dialog -->
     <Dialog
       v-model:visible="showQRDialog"
-      :header="qrCode ? 'Escanear Código QR' : 'Generando Código QR…'"
+      :header="qrCode ? t('integrations.whatsappDevices.scanQR') : t('integrations.whatsappDevices.generatingQR')"
       :modal="true"
       :style="{ width: '500px' }"
       :closable="true"
@@ -495,10 +495,10 @@ onMounted(() => {
         <!-- QR instructions -->
         <div v-if="qrCode" class="qr-instructions">
           <ol class="instructions-list">
-            <li>Abre WhatsApp en tu teléfono</li>
-            <li>Ve a Configuración &gt; Dispositivos vinculados</li>
-            <li>Toca en "Vincular un dispositivo"</li>
-            <li>Escanea este código QR</li>
+            <li>{{ t('integrations.whatsappDevices.qrInstructions1') }}</li>
+            <li>{{ t('integrations.whatsappDevices.qrInstructions2') }}</li>
+            <li>{{ t('integrations.whatsappDevices.qrInstructions3') }}</li>
+            <li>{{ t('integrations.whatsappDevices.qrInstructions4') }}</li>
           </ol>
         </div>
 
@@ -515,21 +515,18 @@ onMounted(() => {
         <!-- Loading state -->
         <div v-else class="qr-loading">
           <ProgressSpinner style="width: 2.5rem; height: 2.5rem" />
-          <p class="qr-loading-text">Conectando con WhatsApp…</p>
+          <p class="qr-loading-text">{{ t('integrations.whatsappDevices.qrConnecting') }}</p>
         </div>
 
         <!-- Warning -->
         <div v-if="qrCode" class="qr-warning">
           <i class="pi pi-exclamation-triangle warning-icon"></i>
-          <span
-            >Este código QR expira en 60 segundos. Si expira, cierra esta ventana y vuelve a
-            conectar.</span
-          >
+          <span>{{ t('integrations.whatsappDevices.qrExpiry') }}</span>
         </div>
       </div>
 
       <template #footer>
-        <Button label="Cancelar" icon="pi pi-times" text @click="closeQRDialog" />
+        <Button :label="t('common.cancel')" icon="pi pi-times" text @click="closeQRDialog" />
       </template>
     </Dialog>
   </div>

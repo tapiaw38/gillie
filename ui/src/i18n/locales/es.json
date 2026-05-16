@@ -598,7 +598,9 @@
       "errorAuthTitle": "Error de autenticación",
       "errorConnTitle": "Error de conexión",
       "errorConnStream": "No se pudo conectar al stream QR",
-      "confirmDelete": "¿Estás seguro de eliminar el dispositivo"
+      "confirmDelete": "¿Estás seguro de eliminar el dispositivo",
+      "qrConnecting": "Conectando con WhatsApp…",
+      "qrExpiry": "Este código QR expira en 60 segundos. Si expira, cierra esta ventana y vuelve a conectar."
     },
     "googleCalendar": {
       "title": "Google Calendar",
@@ -1205,7 +1207,11 @@
     "workflowExportedDesc": "El workflow visual se ha convertido a JSON. Usa \"Guardar Funciones\" para persistir los cambios.",
     "eachFunctionRequired": "Cada función debe tener: name, description y type",
     "jsonMustBeArray": "El JSON debe ser un array de funciones o tener un campo \"functions\" con array",
-    "jsonSyntaxError": "Error de sintaxis JSON"
+    "jsonSyntaxError": "Error de sintaxis JSON",
+    "configuredFunctions": "Funciones configuradas",
+    "paramCount": "{n} parámetro | {n} parámetros",
+    "stepCount": "{n} paso | {n} pasos",
+    "jsonConfiguration": "Configuración JSON"
   },
   "calendarEvents": {
     "title": "Mis Eventos de Calendario",
@@ -1248,5 +1254,35 @@
       "startTime": "Fecha y hora de inicio",
       "endTime": "Fecha y hora de fin"
     }
+  },
+  "about": {
+    "title": "Acerca de Gillie",
+    "subtitle": "Conoce más sobre nuestro asistente virtual",
+    "mission": "Nuestra Misión",
+    "missionDesc": "En Gillie, nos dedicamos a transformar la experiencia del cliente mediante asistentes virtuales inteligentes que automatizan procesos, reducen tiempos de atención y mejoran la eficiencia operativa de tu negocio.",
+    "technology": "Nuestra Tecnología",
+    "technologyDesc": "Utilizamos las últimas tecnologías de procesamiento de lenguaje natural y aprendizaje automático para crear asistentes que comprenden el contexto, mantienen conversaciones naturales y resuelven problemas complejos de forma autónoma.",
+    "integrations": "Integraciones",
+    "integrationsDesc": "Nuestro sistema se integra fácilmente con WhatsApp Business, páginas web, sistemas CRM y APIs de terceros para ofrecer una experiencia de usuario coherente en todos los canales de comunicación.",
+    "virtualAssistant": "Asistente Virtual",
+    "featuresTitle": "Características Principales",
+    "featuresSubtitle": "Lo que hace especial a Gillie",
+    "feature1Title": "Inteligencia Artificial Avanzada",
+    "feature1Desc": "Modelos de lenguaje de última generación para respuestas precisas y naturales.",
+    "feature2Title": "Integraciones Personalizadas",
+    "feature2Desc": "Conexiones con APIs externas para realizar tareas complejas y automatizadas.",
+    "feature3Title": "Seguridad de Datos",
+    "feature3Desc": "Políticas de privacidad y encriptación de extremo a extremo para proteger la información.",
+    "feature4Title": "Analítica Avanzada",
+    "feature4Desc": "Seguimiento detallado de interacciones para optimizar la experiencia del usuario.",
+    "contactTitle": "¿Tienes preguntas?",
+    "contactSubtitle": "Contacta con nuestro equipo de soporte",
+    "contactDesc": "¿Quieres más información sobre Gillie o necesitas ayuda con tu asistente?",
+    "contactSupport": "Contactar Soporte",
+    "scheduleDemo": "Programar Demo",
+    "contactSupportSummary": "Contactar Soporte",
+    "contactSupportDetail": "Enviaremos un correo a nuestro equipo de soporte para que te contacten pronto.",
+    "scheduleDemoSummary": "Demo Programada",
+    "scheduleDemoDetail": "Hemos registrado tu solicitud. Un representante se pondrá en contacto contigo."
   }
 }
