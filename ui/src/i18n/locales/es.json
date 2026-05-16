@@ -885,7 +885,7 @@
       "git": "Git",
       "documents": "Documentos",
       "media": "Media",
-      "browser": "Browser",
+      "browser": "Navegador",
       "memory": "Memoria",
       "system": "Sistema",
       "cron": "Cron",
@@ -916,17 +916,77 @@
         "label": "Analizar Excel",
         "hint": "Cuándo analizar datos de un archivo Excel."
       },
+      "write_excel": {
+        "label": "Escribir Excel",
+        "hint": "Cuándo crear o sobrescribir un archivo Excel con datos estructurados."
+      },
+      "read_docx": {
+        "label": "Leer Word",
+        "hint": "Cuándo leer el contenido completo de un documento .docx."
+      },
+      "write_docx": {
+        "label": "Escribir Word",
+        "hint": "Cuándo generar o reescribir un documento .docx."
+      },
+      "modify_excel": {
+        "label": "Modificar Excel",
+        "hint": "Cuándo editar un Excel existente: celdas, filas, hojas o estructura."
+      },
+      "modify_docx": {
+        "label": "Modificar Word",
+        "hint": "Cuándo editar un documento .docx existente sin recrearlo desde cero."
+      },
+      "insert_image_docx": {
+        "label": "Insertar imagen en Word",
+        "hint": "Cuándo insertar una imagen dentro de un documento .docx existente."
+      },
+      "insert_image_excel": {
+        "label": "Insertar imagen en Excel",
+        "hint": "Cuándo insertar una imagen dentro de una hoja de cálculo .xlsx."
+      },
+      "insert_image_pptx": {
+        "label": "Insertar imagen en PowerPoint",
+        "hint": "Cuándo insertar una imagen en una diapositiva de PowerPoint."
+      },
       "describe_image": {
         "label": "Describir imagen",
         "hint": "Cuándo describir el contenido de una imagen en base64."
+      },
+      "read_pptx": {
+        "label": "Leer PowerPoint",
+        "hint": "Cuándo leer el contenido de una presentación .pptx."
+      },
+      "write_pptx": {
+        "label": "Escribir PowerPoint",
+        "hint": "Cuándo generar o sobrescribir una presentación .pptx."
+      },
+      "modify_pptx": {
+        "label": "Modificar PowerPoint",
+        "hint": "Cuándo editar una presentación .pptx existente."
+      },
+      "fetch_url": {
+        "label": "Leer URL",
+        "hint": "Cuándo leer y extraer texto de una página web específica."
       },
       "save_memory": {
         "label": "Guardar memoria",
         "hint": "Cuándo guardar un dato relevante del usuario en la memoria del asistente."
       },
+      "web_search": {
+        "label": "Buscar en la web",
+        "hint": "Cuándo buscar información actual o reciente en internet."
+      },
+      "organize_memory": {
+        "label": "Organizar memoria",
+        "hint": "Cuándo ordenar y consolidar la memoria general persistente del asistente."
+      },
       "search_memory": {
         "label": "Buscar en memoria",
         "hint": "Cuándo buscar datos previos guardados en memoria."
+      },
+      "save_solution": {
+        "label": "Guardar solución",
+        "hint": "Cuándo guardar un problema y su resolución para reutilizarla más adelante."
       },
       "system_propose": {
         "label": "Proponer comando del servidor",
@@ -976,6 +1036,14 @@
         "label": "Descargar archivo",
         "hint": "Cuándo descargar una imagen, PDF u otro archivo desde una URL y guardarlo dentro del workspace."
       },
+      "repo_map": {
+        "label": "Mapa del repositorio",
+        "hint": "Cuándo generar un mapa estructural del proyecto para entender módulos, carpetas y firmas."
+      },
+      "check_code": {
+        "label": "Revisar código",
+        "hint": "Cuándo correr chequeos automáticos para encontrar errores o warnings en el código."
+      },
       "run_shell": {
         "label": "Ejecutar comandos",
         "hint": "Ejecuta comandos shell: correr tests, instalar paquetes, ver logs. Incluye protección contra comandos destructivos."
@@ -999,6 +1067,66 @@
       "git_commit": {
         "label": "Git: Commit",
         "hint": "Hace commit de cambios con un mensaje. Solo se usa cuando el usuario lo pide explícitamente."
+      },
+      "send_file": {
+        "label": "Enviar archivo",
+        "hint": "Cuándo enviar un archivo al usuario o a un canal soportado."
+      },
+      "send_screenshot": {
+        "label": "Enviar captura",
+        "hint": "Cuándo enviar una captura generada previamente al usuario."
+      },
+      "take_screenshot": {
+        "label": "Tomar captura",
+        "hint": "Cuándo capturar visualmente una página, app o navegador."
+      },
+      "browser_connect": {
+        "label": "Navegador: Conectar",
+        "hint": "Cuándo iniciar o reconectar una sesión de navegador controlada."
+      },
+      "browser_navigate": {
+        "label": "Navegador: Navegar",
+        "hint": "Cuándo abrir una URL o mover la sesión del navegador a otra página."
+      },
+      "browser_act": {
+        "label": "Navegador: Actuar",
+        "hint": "Cuándo realizar acciones guiadas en el navegador con una instrucción más general."
+      },
+      "browser_extract": {
+        "label": "Navegador: Extraer",
+        "hint": "Cuándo extraer datos estructurados o texto desde una página abierta."
+      },
+      "browser_click": {
+        "label": "Navegador: Click",
+        "hint": "Cuándo hacer click en un elemento específico de la página."
+      },
+      "browser_type": {
+        "label": "Navegador: Escribir",
+        "hint": "Cuándo escribir texto dentro de un input o formulario del navegador."
+      },
+      "browser_get_content": {
+        "label": "Navegador: Leer contenido",
+        "hint": "Cuándo leer el contenido visible o textual de la página actual."
+      },
+      "browser_screenshot": {
+        "label": "Navegador: Captura",
+        "hint": "Cuándo sacar una captura de la página o del viewport actual."
+      },
+      "browser_close": {
+        "label": "Navegador: Cerrar",
+        "hint": "Cuándo cerrar la sesión o pestaña actual del navegador."
+      },
+      "browser_switch_tab": {
+        "label": "Navegador: Cambiar pestaña",
+        "hint": "Cuándo cambiar entre pestañas abiertas de la sesión del navegador."
+      },
+      "browser_enable_remote_debug": {
+        "label": "Navegador: Debug remoto",
+        "hint": "Cuándo habilitar depuración remota para una sesión de navegador."
+      },
+      "browser_evaluate": {
+        "label": "Navegador: Evaluar JS",
+        "hint": "Cuándo ejecutar JavaScript en el contexto de la página abierta."
       }
     }
   },

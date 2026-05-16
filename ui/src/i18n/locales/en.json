@@ -916,17 +916,77 @@
         "label": "Analyze Excel",
         "hint": "When to analyze data from an Excel file."
       },
+      "write_excel": {
+        "label": "Write Excel",
+        "hint": "When to create or overwrite an Excel file with structured data."
+      },
+      "read_docx": {
+        "label": "Read Word document",
+        "hint": "When to read the full contents of a .docx document."
+      },
+      "write_docx": {
+        "label": "Write Word document",
+        "hint": "When to generate or overwrite a .docx document."
+      },
+      "modify_excel": {
+        "label": "Modify Excel",
+        "hint": "When to edit an existing Excel file: cells, rows, sheets, or structure."
+      },
+      "modify_docx": {
+        "label": "Modify Word document",
+        "hint": "When to edit an existing .docx document without recreating it from scratch."
+      },
+      "insert_image_docx": {
+        "label": "Insert image in Word",
+        "hint": "When to insert an image into an existing .docx document."
+      },
+      "insert_image_excel": {
+        "label": "Insert image in Excel",
+        "hint": "When to insert an image into an .xlsx spreadsheet."
+      },
+      "insert_image_pptx": {
+        "label": "Insert image in PowerPoint",
+        "hint": "When to insert an image into a PowerPoint slide."
+      },
       "describe_image": {
         "label": "Describe image",
         "hint": "When to describe the content of a base64 image."
+      },
+      "read_pptx": {
+        "label": "Read PowerPoint",
+        "hint": "When to read the content of a .pptx presentation."
+      },
+      "write_pptx": {
+        "label": "Write PowerPoint",
+        "hint": "When to generate or overwrite a .pptx presentation."
+      },
+      "modify_pptx": {
+        "label": "Modify PowerPoint",
+        "hint": "When to edit an existing .pptx presentation."
+      },
+      "fetch_url": {
+        "label": "Read URL",
+        "hint": "When to fetch and extract text from a specific web page."
       },
       "save_memory": {
         "label": "Save memory",
         "hint": "When to save relevant user data in the assistant memory."
       },
+      "web_search": {
+        "label": "Search the web",
+        "hint": "When to look up current or recent information on the internet."
+      },
+      "organize_memory": {
+        "label": "Organize memory",
+        "hint": "When to reorganize and consolidate the assistant's persistent general memory."
+      },
       "search_memory": {
         "label": "Search memory",
         "hint": "When to search previously saved data in memory."
+      },
+      "save_solution": {
+        "label": "Save solution",
+        "hint": "When to store a problem and its resolution for future reuse."
       },
       "system_propose": {
         "label": "Propose server command",
@@ -976,6 +1036,14 @@
         "label": "Download file",
         "hint": "When to download an image, PDF, or other file from a URL and save it inside the workspace."
       },
+      "repo_map": {
+        "label": "Repository map",
+        "hint": "When to generate a structural map of the project to understand folders, modules, and signatures."
+      },
+      "check_code": {
+        "label": "Check code",
+        "hint": "When to run automated checks to find code errors or warnings."
+      },
       "run_shell": {
         "label": "Run commands",
         "hint": "Executes shell commands: run tests, install packages, view logs. Includes protection against destructive commands."
@@ -999,6 +1067,66 @@
       "git_commit": {
         "label": "Git: Commit",
         "hint": "Commits changes with a message. Only used when the user explicitly requests it."
+      },
+      "send_file": {
+        "label": "Send file",
+        "hint": "When to send a file to the user or to a supported channel."
+      },
+      "send_screenshot": {
+        "label": "Send screenshot",
+        "hint": "When to send a previously generated screenshot to the user."
+      },
+      "take_screenshot": {
+        "label": "Take screenshot",
+        "hint": "When to capture a visual screenshot of a page, app, or browser."
+      },
+      "browser_connect": {
+        "label": "Browser: Connect",
+        "hint": "When to start or reconnect a controlled browser session."
+      },
+      "browser_navigate": {
+        "label": "Browser: Navigate",
+        "hint": "When to open a URL or move the browser session to another page."
+      },
+      "browser_act": {
+        "label": "Browser: Act",
+        "hint": "When to perform guided browser actions from a more general instruction."
+      },
+      "browser_extract": {
+        "label": "Browser: Extract",
+        "hint": "When to extract structured data or text from an open page."
+      },
+      "browser_click": {
+        "label": "Browser: Click",
+        "hint": "When to click a specific element on the page."
+      },
+      "browser_type": {
+        "label": "Browser: Type",
+        "hint": "When to type text into an input or form in the browser."
+      },
+      "browser_get_content": {
+        "label": "Browser: Get content",
+        "hint": "When to read the visible or textual content of the current page."
+      },
+      "browser_screenshot": {
+        "label": "Browser: Screenshot",
+        "hint": "When to capture a screenshot of the current page or viewport."
+      },
+      "browser_close": {
+        "label": "Browser: Close",
+        "hint": "When to close the current browser session or tab."
+      },
+      "browser_switch_tab": {
+        "label": "Browser: Switch tab",
+        "hint": "When to move between open tabs in the browser session."
+      },
+      "browser_enable_remote_debug": {
+        "label": "Browser: Remote debug",
+        "hint": "When to enable remote debugging for a browser session."
+      },
+      "browser_evaluate": {
+        "label": "Browser: Evaluate JS",
+        "hint": "When to execute JavaScript in the context of the open page."
       }
     }
   },
