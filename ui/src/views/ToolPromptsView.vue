@@ -418,8 +418,18 @@ onMounted(async () => {
             </div>
 
             <div class="category-badges">
-              <span class="category-badge">{{ category.customizedCount }} {{ t('toolPrompts.summary.customized') }}</span>
-              <span class="category-badge category-badge--muted">{{ category.disabledCount }} {{ t('toolPrompts.summary.disabled') }}</span>
+              <span v-if="category.customizedCount > 0" class="category-badge">
+                {{ category.customizedCount }} {{ t('toolPrompts.summary.customized') }}
+              </span>
+              <span v-if="category.disabledCount > 0" class="category-badge category-badge--muted">
+                {{ category.disabledCount }} {{ t('toolPrompts.summary.disabled') }}
+              </span>
+              <span
+                v-if="category.customizedCount === 0 && category.disabledCount === 0"
+                class="category-badge category-badge--quiet"
+              >
+                {{ t('toolPrompts.readyLabel') }}
+              </span>
             </div>
           </button>
         </div>
@@ -446,13 +456,12 @@ onMounted(async () => {
                 <i :class="tool.icon"></i>
               </div>
               <div class="tool-copy">
-                <div class="tool-title-row">
+              <div class="tool-title-row">
                   <h3 class="tool-title">{{ toolLabel(tool.key) }}</h3>
                   <span v-if="isCustomized(tool.key)" class="tool-pill">{{ t('toolPrompts.custom') }}</span>
                   <span v-if="!enabled[tool.key]" class="tool-pill tool-pill--disabled">{{ t('toolPrompts.disabled') }}</span>
                 </div>
                 <p class="tool-hint">{{ toolHint(tool.key) }}</p>
-                <code class="tool-key">{{ tool.key }}</code>
               </div>
             </div>
 
@@ -508,6 +517,7 @@ onMounted(async () => {
       @update:visible="(visible) => !visible && closeEditor()"
     >
       <div v-if="editorTool" class="editor-modal">
+        <code class="editor-key">{{ editorTool.key }}</code>
         <p class="editor-hint">{{ toolHint(editorTool.key) }}</p>
         <Textarea
           v-model="prompts[editorTool.key]"
@@ -554,12 +564,12 @@ onMounted(async () => {
 .panel-header { display: flex; align-items: center; gap: 0.875rem; padding: 0.875rem 1.25rem; border-bottom: 1px solid var(--do-border-light); background: rgba(255, 255, 255, 0.015); }
 .panel-title { font-size: 0.95rem; font-weight: 600; color: var(--do-text); margin: 0 0 0.15rem; }
 .panel-subtitle { font-size: 0.8rem; color: var(--do-text-muted); margin: 0; }
-.panel-body { padding: 1.25rem; display: flex; flex-direction: column; gap: 1rem; }
-.summary-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 0.55rem; }
-.status-row { display: flex; flex-direction: column; gap: 0.3rem; padding: 0.55rem 0.65rem; background: rgba(255, 255, 255, 0.015); border: 1px solid var(--do-border-light); border-radius: 0.45rem; }
-.status-row-label { display: flex; align-items: center; gap: 0.35rem; font-size: 0.68rem; font-weight: 600; color: var(--do-text-muted); text-transform: uppercase; letter-spacing: 0.03em; }
-.status-row-value { display: flex; flex-direction: column; gap: 0.35rem; }
-.summary-value { font-family: 'SF Mono', 'Monaco', 'Consolas', monospace; font-size: 0.95rem; color: var(--do-text); }
+.panel-body { padding: 1rem; display: flex; flex-direction: column; gap: 0.85rem; }
+.summary-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 0.45rem; }
+.status-row { display: flex; align-items: baseline; justify-content: space-between; gap: 0.5rem; padding: 0.42rem 0.55rem; background: rgba(255, 255, 255, 0.015); border: 1px solid var(--do-border-light); border-radius: 0.4rem; }
+.status-row-label { display: flex; align-items: center; gap: 0.3rem; font-size: 0.64rem; font-weight: 600; color: var(--do-text-muted); text-transform: uppercase; letter-spacing: 0.03em; }
+.status-row-value { display: flex; align-items: center; justify-content: flex-end; min-width: 0; }
+.summary-value { font-family: 'SF Mono', 'Monaco', 'Consolas', monospace; font-size: 0.88rem; color: var(--do-text); }
 .search-box { position: relative; }
 .search-icon { position: absolute; left: 0.9rem; top: 50%; transform: translateY(-50%); color: var(--do-text-muted); }
 .search-input { width: 100%; }
@@ -579,20 +589,21 @@ onMounted(async () => {
 .category-badges { display: flex; flex-wrap: wrap; gap: 0.35rem; }
 .category-badge, .tool-pill { display: inline-flex; align-items: center; border-radius: 999px; padding: 0.14rem 0.42rem; font-size: 0.65rem; font-weight: 600; background: rgba(255, 255, 255, 0.04); color: var(--do-text-muted); }
 .category-badge--muted, .tool-pill--disabled { color: var(--color-danger); }
-.tool-list { display: flex; flex-direction: column; gap: 0.75rem; }
-.tool-row { display: flex; align-items: center; justify-content: space-between; gap: 1rem; padding: 0.85rem; border-radius: 0.5rem; background: rgba(255, 255, 255, 0.015); border: 1px solid var(--do-border-light); }
+.category-badge--quiet { opacity: 0.8; }
+.tool-list { display: flex; flex-direction: column; gap: 0.55rem; }
+.tool-row { display: flex; align-items: center; justify-content: space-between; gap: 0.85rem; padding: 0.68rem 0.75rem; border-radius: 0.45rem; background: rgba(255, 255, 255, 0.015); border: 1px solid var(--do-border-light); }
 .tool-row--disabled { opacity: 0.7; }
-.tool-main { display: flex; align-items: flex-start; gap: 0.85rem; min-width: 0; }
+.tool-main { display: flex; align-items: flex-start; gap: 0.7rem; min-width: 0; }
 .tool-copy { min-width: 0; }
-.tool-title-row { display: flex; flex-wrap: wrap; align-items: center; gap: 0.45rem; margin-bottom: 0.25rem; }
-.tool-title { font-size: 0.93rem; font-weight: 700; }
-.tool-hint { font-size: 0.84rem; line-height: 1.45; margin-bottom: 0.4rem; }
-.tool-key { display: inline-block; font-size: 0.76rem; color: var(--do-text-muted); background: rgba(255, 255, 255, 0.025); padding: 0.16rem 0.4rem; border-radius: 0.3rem; }
-.tool-actions { display: flex; align-items: center; gap: 0.7rem; flex-shrink: 0; }
+.tool-title-row { display: flex; flex-wrap: wrap; align-items: center; gap: 0.35rem; margin-bottom: 0.15rem; }
+.tool-title { font-size: 0.88rem; font-weight: 700; }
+.tool-hint { font-size: 0.8rem; line-height: 1.35; }
+.tool-actions { display: flex; align-items: center; gap: 0.55rem; flex-shrink: 0; }
 .empty-body { align-items: center; text-align: center; padding: 2rem 1.25rem; }
 .empty-icon { font-size: 2rem; color: var(--do-text-muted); margin-bottom: 0.3rem; }
 .save-bar { display: flex; justify-content: flex-end; }
 .editor-modal { display: flex; flex-direction: column; gap: 0.9rem; }
+.editor-key { display: inline-block; align-self: flex-start; font-size: 0.76rem; color: var(--do-text-muted); background: rgba(255, 255, 255, 0.025); padding: 0.18rem 0.42rem; border-radius: 0.3rem; }
 .editor-hint { font-size: 0.88rem; line-height: 1.45; }
 .editor-actions { display: flex; align-items: center; justify-content: space-between; gap: 0.75rem; }
 .w-full { width: 100%; }
@@ -607,6 +618,7 @@ onMounted(async () => {
   .integration-container { padding: 0.75rem; }
   .page-header { flex-direction: column; align-items: flex-start; gap: 0.875rem; }
   .summary-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .status-row { flex-direction: column; align-items: flex-start; }
   .tool-row { flex-direction: column; align-items: stretch; }
   .tool-actions { justify-content: space-between; }
   .editor-actions { flex-direction: column; align-items: stretch; }

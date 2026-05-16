@@ -863,6 +863,7 @@
     "errorDesc": "No se pudo guardar",
     "searchPlaceholder": "Buscar por nombre o descripción...",
     "toolsCount": "tools",
+    "readyLabel": "Lista",
     "panelSubtitle": "Revisá el estado general y filtrá antes de entrar a una categoría.",
     "noResultsTitle": "No hay tools para mostrar",
     "noResultsDesc": "Probá otro filtro o borrá la búsqueda para volver a ver categorías.",

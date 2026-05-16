@@ -863,6 +863,7 @@
     "errorDesc": "Could not save",
     "searchPlaceholder": "Search by name or description...",
     "toolsCount": "tools",
+    "readyLabel": "Ready",
     "panelSubtitle": "Review overall state and filter before opening a category.",
     "noResultsTitle": "No tools to display",
     "noResultsDesc": "Try another filter or clear the search to see categories again.",
