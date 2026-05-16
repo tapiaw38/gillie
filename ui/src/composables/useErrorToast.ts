@@ -15,7 +15,7 @@ export const useErrorToast = (errorWatchers: ErrorWatcher[]) => {
   errorWatchers.forEach(({ flag, summary, detail }) => {
     watch(flag, (value) => {
       if (value) {
-        let errorMessage = 'Error desconocido'
+        let errorMessage = 'Unknown error'
 
         if (detail.value) {
           if (detail.value instanceof ApplicationError) {
@@ -23,7 +23,7 @@ export const useErrorToast = (errorWatchers: ErrorWatcher[]) => {
           } else if (typeof detail.value === 'string') {
             errorMessage = detail.value
           } else if (detail.value instanceof Error) {
-            errorMessage = detail.value.message || 'Error desconocido'
+            errorMessage = detail.value.message || 'Unknown error'
           }
         }
 

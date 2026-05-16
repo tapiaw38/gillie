@@ -134,6 +134,11 @@ const router = createRouter({
           name: 'cron-jobs',
           component: () => import('../views/CronJobsView.vue'),
         },
+        {
+          path: '/app/workflow',
+          name: 'workflow',
+          component: () => import('../components/workflow/WorkflowEditor.vue'),
+        },
       ],
     },
   ],

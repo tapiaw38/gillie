@@ -1,6 +1,7 @@
 import '@/assets/main.css'
 import '@/assets/common.css'
 import '@/assets/responsive.css'
+import '@/assets/integration.css'
 
 import { createApp } from 'vue'
 import { createPinia } from 'pinia'

@@ -21,16 +21,18 @@ export interface SandboxConversationResponse {
   data: SandboxConversation[]
 }
 
+export interface SandboxConversationDetail {
+  id: string
+  title: string
+  client_id: string
+  is_sandbox: boolean
+  created_at: string
+  updated_at: string
+  messages: SandboxMessage[]
+}
+
 export interface SandboxConversationDetailResponse {
-  data: {
-    id: string
-    title: string
-    client_id: string
-    is_sandbox: boolean
-    created_at: string
-    updated_at: string
-    messages: SandboxMessage[]
-  }
+  data: SandboxConversationDetail
 }
 
 export interface SandboxMessageResponse {

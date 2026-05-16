@@ -1022,6 +1022,12 @@ const skillGroups = computed<SkillGroup[]>(() => [
   gap: 0.65rem;
 }
 
+@media (max-width: 1024px) {
+  .integrations-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
 /* Skills Section */
 .skill-groups {
   display: flex;
