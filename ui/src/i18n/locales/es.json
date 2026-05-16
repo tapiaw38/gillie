@@ -845,13 +845,52 @@
     "subtitle": "Activá/desactivá herramientas y personalizá las instrucciones que le indican al LLM cuándo usar cada una.",
     "disabled": "Desactivada",
     "custom": "Personalizado",
+    "genericHint": "Personaliza cuándo y cómo debería usar el LLM la tool {tool}.",
     "defaultPlaceholder": "Dejar vacío para usar el prompt por defecto de",
     "restoreDefault": "Restaurar por defecto",
     "saveChanges": "Guardar cambios",
+    "editPrompt": "Editar prompt",
+    "closeEditor": "Cerrar editor",
+    "overviewTitle": "Resumen y filtros",
+    "categoriesTitle": "Categorías",
+    "categoriesSubtitle": "Elegí un grupo de tools para trabajar con una vista más ordenada.",
+    "toolsSubtitle": "Ajustá el estado de cada tool y abrí el editor solo cuando necesites personalizar su prompt.",
+    "selectCategoryTitle": "Seleccioná una categoría",
+    "selectCategoryDesc": "Las tools del grupo aparecen recién cuando hacés click en una card.",
     "saved": "Guardado",
     "savedDesc": "Configuración actualizada",
     "error": "Error",
     "errorDesc": "No se pudo guardar",
+    "searchPlaceholder": "Buscar por nombre, key o descripción...",
+    "toolsCount": "tools",
+    "panelSubtitle": "Activa o desactiva tools rápidamente y abre el editor solo cuando necesites un prompt personalizado.",
+    "noResultsTitle": "No hay tools para mostrar",
+    "noResultsDesc": "Probá otro filtro o borrá la búsqueda para volver a ver categorías.",
+    "filters": {
+      "all": "Todas",
+      "enabled": "Activas",
+      "disabled": "Desactivadas",
+      "customized": "Personalizadas"
+    },
+    "summary": {
+      "total": "Total",
+      "enabled": "Activas",
+      "disabled": "Desactivadas",
+      "customized": "Personalizadas"
+    },
+    "categories": {
+      "web": "Web",
+      "files": "Archivos",
+      "code": "Código",
+      "git": "Git",
+      "documents": "Documentos",
+      "media": "Media",
+      "browser": "Browser",
+      "memory": "Memoria",
+      "system": "Sistema",
+      "cron": "Cron",
+      "database": "Base de datos"
+    },
     "tools": {
       "search_documents": {
         "label": "Buscar en documentos",
@@ -932,6 +971,10 @@
       "find_files": {
         "label": "Buscar archivos",
         "hint": "Busca archivos por patrón glob (ej: **/*.py, src/**/*.ts) de forma recursiva."
+      },
+      "download_file": {
+        "label": "Descargar archivo",
+        "hint": "Cuándo descargar una imagen, PDF u otro archivo desde una URL y guardarlo dentro del workspace."
       },
       "run_shell": {
         "label": "Ejecutar comandos",

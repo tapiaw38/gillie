@@ -845,13 +845,52 @@
     "subtitle": "Enable/disable tools and customize the instructions that tell the LLM when to use each one.",
     "disabled": "Disabled",
     "custom": "Custom",
+    "genericHint": "Customize when and how the LLM should use the {tool} tool.",
     "defaultPlaceholder": "Leave empty to use the default prompt for",
     "restoreDefault": "Restore default",
     "saveChanges": "Save changes",
+    "editPrompt": "Edit prompt",
+    "closeEditor": "Close editor",
+    "overviewTitle": "Overview and filters",
+    "categoriesTitle": "Categories",
+    "categoriesSubtitle": "Choose a tool group to work with a cleaner, more focused view.",
+    "toolsSubtitle": "Adjust each tool state and open the editor only when you need a custom prompt.",
+    "selectCategoryTitle": "Select a category",
+    "selectCategoryDesc": "Tools in that group appear only after you click a category card.",
     "saved": "Saved",
     "savedDesc": "Configuration updated",
     "error": "Error",
     "errorDesc": "Could not save",
+    "searchPlaceholder": "Search by name, key, or description...",
+    "toolsCount": "tools",
+    "panelSubtitle": "Toggle tools quickly and open the editor only when you need a custom prompt.",
+    "noResultsTitle": "No tools to display",
+    "noResultsDesc": "Try another filter or clear the search to see categories again.",
+    "filters": {
+      "all": "All",
+      "enabled": "Enabled",
+      "disabled": "Disabled",
+      "customized": "Customized"
+    },
+    "summary": {
+      "total": "Total",
+      "enabled": "Enabled",
+      "disabled": "Disabled",
+      "customized": "Customized"
+    },
+    "categories": {
+      "web": "Web",
+      "files": "Files",
+      "code": "Code",
+      "git": "Git",
+      "documents": "Documents",
+      "media": "Media",
+      "browser": "Browser",
+      "memory": "Memory",
+      "system": "System",
+      "cron": "Cron",
+      "database": "Database"
+    },
     "tools": {
       "search_documents": {
         "label": "Search documents",
@@ -932,6 +971,10 @@
       "find_files": {
         "label": "Find files",
         "hint": "Searches files by glob pattern (e.g.: **/*.py, src/**/*.ts) recursively."
+      },
+      "download_file": {
+        "label": "Download file",
+        "hint": "When to download an image, PDF, or other file from a URL and save it inside the workspace."
       },
       "run_shell": {
         "label": "Run commands",

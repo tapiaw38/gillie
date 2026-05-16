@@ -90,7 +90,7 @@ def build_ollama_llm(model: str):
 
 
 TOOL_GROUPS: dict[str, list[str]] = {
-    "web":       ["web_search", "fetch_url"],
+    "web":       ["web_search", "fetch_url", "download_file"],
     "files":     ["read_file", "write_file", "edit_file", "list_directory", "find_files", "grep_files"],
     "shell":     ["run_shell"],
     "git":       ["git_status", "git_diff", "git_log", "git_commit"],
@@ -114,7 +114,7 @@ TOOL_GROUPS: dict[str, list[str]] = {
     "teams":     ["teams_send_message"],
 }
 
-_WEB_ALWAYS = {"web_search", "fetch_url"}
+_WEB_ALWAYS = {"web_search", "fetch_url", "download_file"}
 
 _ROUTING_SYSTEM = (
     "You are a tool router. Given the user's message, respond with ONLY a JSON array "
