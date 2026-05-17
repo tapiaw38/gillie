@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { ref } from 'vue'
+import { useI18n } from 'vue-i18n'
 import Dialog from 'primevue/dialog'
 import Button from 'primevue/button'
 
@@ -12,6 +13,7 @@ const emit = defineEmits<{
   'update:visible': [value: boolean]
 }>()
 
+const { t } = useI18n()
 const activeStep = ref(0)
 const totalSteps = 4
 
@@ -35,8 +37,8 @@ const prevStep = () => {
 const jsonExample = `[
   {
     "type": "workflow",
-    "name": "reserva_habitacion",
-    "description": "Reserva de habitación completa",
+    "name": "room_booking",
+    "description": "Complete room booking",
     "input_params": ["guest_name", "email", "check_in"],
     "keywords": ["reserva", "hotel", "booking"],
     "steps": [
@@ -64,7 +66,7 @@ const jsonExample = `[
     <template #header>
       <div class="dialog-header">
         <i class="pi pi-book"></i>
-        <h2>Guía Rápida de Workflows</h2>
+        <h2>{{ t('workflow.guide.title') }}</h2>
       </div>
     </template>
 
@@ -87,12 +89,12 @@ const jsonExample = `[
           <div class="step-label">
             {{
               step === 1
-                ? 'Introducción'
+                ? t('workflow.guide.step1Label')
                 : step === 2
-                  ? 'JSON'
+                  ? t('workflow.guide.step2Label')
                   : step === 3
-                    ? 'Visual'
-                    : 'Consejos'
+                    ? t('workflow.guide.step3Label')
+                    : t('workflow.guide.step4Label')
             }}
           </div>
         </div>
@@ -104,47 +106,44 @@ const jsonExample = `[
           <div class="step-icon intro">
             <i class="pi pi-info-circle"></i>
           </div>
-          <h3>¿Qué son los Workflows?</h3>
+          <h3>{{ t('workflow.guide.step1Title') }}</h3>
         </div>
-        <p>
-          Los workflows te permiten crear procesos automatizados con múltiples pasos que se
-          ejecutan secuencialmente.
-        </p>
+        <p>{{ t('workflow.guide.step1Desc') }}</p>
 
         <div class="features-grid">
           <div class="feature-item">
             <i class="pi pi-bolt"></i>
             <div>
-              <h4>Pasos Secuenciales</h4>
-              <p>Ejecuta acciones en orden</p>
+              <h4>{{ t('workflow.guide.feature1Title') }}</h4>
+              <p>{{ t('workflow.guide.feature1Desc') }}</p>
             </div>
           </div>
           <div class="feature-item">
             <i class="pi pi-sitemap"></i>
             <div>
-              <h4>Lógica Condicional</h4>
-              <p>Flujos según condiciones</p>
+              <h4>{{ t('workflow.guide.feature2Title') }}</h4>
+              <p>{{ t('workflow.guide.feature2Desc') }}</p>
             </div>
           </div>
           <div class="feature-item">
             <i class="pi pi-globe"></i>
             <div>
-              <h4>Integración API</h4>
-              <p>Conecta con servicios externos</p>
+              <h4>{{ t('workflow.guide.feature3Title') }}</h4>
+              <p>{{ t('workflow.guide.feature3Desc') }}</p>
             </div>
           </div>
           <div class="feature-item">
             <i class="pi pi-code"></i>
             <div>
-              <h4>JSON o Visual</h4>
-              <p>Configura como prefieras</p>
+              <h4>{{ t('workflow.guide.feature4Title') }}</h4>
+              <p>{{ t('workflow.guide.feature4Desc') }}</p>
             </div>
           </div>
         </div>
 
         <div class="step-actions">
           <span></span>
-          <Button label="Siguiente" icon="pi pi-arrow-right" icon-pos="right" @click="nextStep" />
+          <Button :label="t('workflow.guide.next')" icon="pi pi-arrow-right" icon-pos="right" @click="nextStep" />
         </div>
       </div>
 
@@ -154,7 +153,7 @@ const jsonExample = `[
           <div class="step-icon json">
             <i class="pi pi-code"></i>
           </div>
-          <h3>Configurar con JSON</h3>
+          <h3>{{ t('workflow.guide.step2Title') }}</h3>
         </div>
 
         <div class="step-two-col">
@@ -162,24 +161,24 @@ const jsonExample = `[
             <div class="config-step">
               <span class="step-number">1</span>
               <div class="step-info">
-                <h4>Click en "Editar"</h4>
-                <p>Activa el modo de edición del JSON</p>
+                <h4>{{ t('workflow.guide.jsonStep1Title') }}</h4>
+                <p>{{ t('workflow.guide.jsonStep1Desc') }}</p>
               </div>
             </div>
 
             <div class="config-step">
               <span class="step-number">2</span>
               <div class="step-info">
-                <h4>Escribe tu workflow</h4>
-                <p>Define steps, métodos HTTP y parámetros</p>
+                <h4>{{ t('workflow.guide.jsonStep2Title') }}</h4>
+                <p>{{ t('workflow.guide.jsonStep2Desc') }}</p>
               </div>
             </div>
 
             <div class="config-step">
               <span class="step-number">3</span>
               <div class="step-info">
-                <h4>Guarda los cambios</h4>
-                <p>Click en "Guardar Funciones"</p>
+                <h4>{{ t('workflow.guide.jsonStep3Title') }}</h4>
+                <p>{{ t('workflow.guide.jsonStep3Desc') }}</p>
               </div>
             </div>
           </div>
@@ -187,7 +186,7 @@ const jsonExample = `[
           <div class="code-example">
             <div class="code-header">
               <i class="pi pi-file-edit"></i>
-              <span>Ejemplo de workflow</span>
+              <span>{{ t('workflow.guide.jsonExample') }}</span>
             </div>
             <pre class="code-block">{{ jsonExample }}</pre>
           </div>
@@ -195,12 +194,12 @@ const jsonExample = `[
 
         <div class="step-actions">
           <Button
-            label="Anterior"
+            :label="t('workflow.guide.prev')"
             severity="secondary"
             icon="pi pi-arrow-left"
             @click="prevStep"
           />
-          <Button label="Siguiente" icon="pi pi-arrow-right" icon-pos="right" @click="nextStep" />
+          <Button :label="t('workflow.guide.next')" icon="pi pi-arrow-right" icon-pos="right" @click="nextStep" />
         </div>
       </div>
 
@@ -210,7 +209,7 @@ const jsonExample = `[
           <div class="step-icon visual">
             <i class="pi pi-sitemap"></i>
           </div>
-          <h3>Configurar Visualmente</h3>
+          <h3>{{ t('workflow.guide.step3Title') }}</h3>
         </div>
 
         <div class="step-two-col">
@@ -218,48 +217,48 @@ const jsonExample = `[
             <div class="config-step">
               <span class="step-number">1</span>
               <div class="step-info">
-                <h4>Click en "Editar"</h4>
-                <p>Activa el modo de edición</p>
+                <h4>{{ t('workflow.guide.visualStep1Title') }}</h4>
+                <p>{{ t('workflow.guide.visualStep1Desc') }}</p>
               </div>
             </div>
 
             <div class="config-step">
               <span class="step-number">2</span>
               <div class="step-info">
-                <h4>Click en "Editor Visual"</h4>
-                <p>Cambia al modo visual interactivo</p>
+                <h4>{{ t('workflow.guide.visualStep2Title') }}</h4>
+                <p>{{ t('workflow.guide.visualStep2Desc') }}</p>
               </div>
             </div>
 
             <div class="config-step">
               <span class="step-number">3</span>
               <div class="step-info">
-                <h4>Agrega nodos</h4>
-                <p>Usa botones "Agregar HTTP" o "Agregar Condición"</p>
+                <h4>{{ t('workflow.guide.visualStep3Title') }}</h4>
+                <p>{{ t('workflow.guide.visualStep3Desc') }}</p>
               </div>
             </div>
 
             <div class="config-step">
               <span class="step-number">4</span>
               <div class="step-info">
-                <h4>Configura cada nodo</h4>
-                <p>Click en un nodo para editar URL, método, parámetros</p>
+                <h4>{{ t('workflow.guide.visualStep4Title') }}</h4>
+                <p>{{ t('workflow.guide.visualStep4Desc') }}</p>
               </div>
             </div>
 
             <div class="config-step">
               <span class="step-number">5</span>
               <div class="step-info">
-                <h4>Conecta los nodos</h4>
-                <p>Arrastra desde un punto de conexión a otro</p>
+                <h4>{{ t('workflow.guide.visualStep5Title') }}</h4>
+                <p>{{ t('workflow.guide.visualStep5Desc') }}</p>
               </div>
             </div>
 
             <div class="config-step">
               <span class="step-number">6</span>
               <div class="step-info">
-                <h4>Guarda el workflow</h4>
-                <p>Click en "Guardar Workflow"</p>
+                <h4>{{ t('workflow.guide.visualStep6Title') }}</h4>
+                <p>{{ t('workflow.guide.visualStep6Desc') }}</p>
               </div>
             </div>
           </div>
@@ -267,20 +266,19 @@ const jsonExample = `[
           <div class="tip-box">
             <i class="pi pi-lightbulb"></i>
             <div>
-              <strong>Tip:</strong> Puedes arrastrar los nodos para reorganizarlos incluso en
-              modo lectura.
+              <strong>{{ t('workflow.guide.tip') }}:</strong> {{ t('workflow.guide.tipDesc') }}
             </div>
           </div>
         </div>
 
         <div class="step-actions">
           <Button
-            label="Anterior"
+            :label="t('workflow.guide.prev')"
             severity="secondary"
             icon="pi pi-arrow-left"
             @click="prevStep"
           />
-          <Button label="Siguiente" icon="pi pi-arrow-right" icon-pos="right" @click="nextStep" />
+          <Button :label="t('workflow.guide.next')" icon="pi pi-arrow-right" icon-pos="right" @click="nextStep" />
         </div>
       </div>
 
@@ -290,61 +288,59 @@ const jsonExample = `[
           <div class="step-icon tips">
             <i class="pi pi-star"></i>
           </div>
-          <h3>Consejos y Buenas Prácticas</h3>
+          <h3>{{ t('workflow.guide.step4Title') }}</h3>
         </div>
 
         <div class="tips-list">
           <div class="tip-item">
             <i class="pi pi-check-circle"></i>
             <div>
-              <h4>Usa nombres descriptivos</h4>
-              <p>Nombra tus pasos de forma clara: "validar_cliente", "crear_reserva"</p>
+              <h4>{{ t('workflow.guide.tip1Title') }}</h4>
+              <p>{{ t('workflow.guide.tip1Desc') }}</p>
             </div>
           </div>
 
           <div class="tip-item">
             <i class="pi pi-check-circle"></i>
             <div>
-              <h4>Mapea las respuestas</h4>
-              <p>
-                Usa response_mapping para extraer datos: {"is_valid": "data.valid"}
-              </p>
+              <h4>{{ t('workflow.guide.tip2Title') }}</h4>
+              <p>{{ t('workflow.guide.tip2Desc') }}</p>
             </div>
           </div>
 
           <div class="tip-item">
             <i class="pi pi-check-circle"></i>
             <div>
-              <h4>Agrega condiciones</h4>
-              <p>Controla el flujo con condiciones: "is_valid == true"</p>
+              <h4>{{ t('workflow.guide.tip3Title') }}</h4>
+              <p>{{ t('workflow.guide.tip3Desc') }}</p>
             </div>
           </div>
 
           <div class="tip-item">
             <i class="pi pi-check-circle"></i>
             <div>
-              <h4>Usa keywords relevantes</h4>
-              <p>Ayuda al asistente a identificar cuándo usar tu workflow</p>
+              <h4>{{ t('workflow.guide.tip4Title') }}</h4>
+              <p>{{ t('workflow.guide.tip4Desc') }}</p>
             </div>
           </div>
 
           <div class="tip-item">
             <i class="pi pi-check-circle"></i>
             <div>
-              <h4>Alterna entre modos</h4>
-              <p>Usa JSON para editar rápido y Visual para visualizar el flujo</p>
+              <h4>{{ t('workflow.guide.tip5Title') }}</h4>
+              <p>{{ t('workflow.guide.tip5Desc') }}</p>
             </div>
           </div>
         </div>
 
         <div class="step-actions">
           <Button
-            label="Anterior"
+            :label="t('workflow.guide.prev')"
             severity="secondary"
             icon="pi pi-arrow-left"
             @click="prevStep"
           />
-          <Button label="Finalizar" severity="success" icon="pi pi-check" @click="closeModal" />
+          <Button :label="t('workflow.guide.finish')" severity="success" icon="pi pi-check" @click="closeModal" />
         </div>
       </div>
     </div>

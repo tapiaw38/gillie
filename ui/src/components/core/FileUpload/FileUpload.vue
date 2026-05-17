@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { ref, watch } from 'vue'
+import { useI18n } from 'vue-i18n'
 import { usePrimeVue } from 'primevue/config'
 import type { FileUploadSelectEvent } from 'primevue/fileupload'
 import FileUpload from 'primevue/fileupload'
@@ -14,10 +15,12 @@ import { useErrorToast } from '../../../composables/useErrorToast'
 const { addFiles, addFilesError, isAddFilesPending, isAddFilesSuccess, isAddFilesError } =
   useAssistant()
 
+const { t } = useI18n()
+
 const errorWatchers = [
   {
     flag: isAddFilesError,
-    summary: 'Error al subir archivos',
+    summary: t('fileUpload.errorUpload'),
     detail: addFilesError,
   },
 ]
@@ -28,8 +31,8 @@ watch(isAddFilesSuccess, (value) => {
   if (value) {
     toast.add({
       severity: 'success',
-      summary: 'Archivos subidos',
-      detail: 'Los archivos se subieron correctamente',
+      summary: t('fileUpload.successUpload'),
+      detail: t('fileUpload.successUploadDetail'),
       life: 3000,
     })
   }
@@ -67,8 +70,8 @@ const onSelectedFiles = (event: FileUploadSelectEvent) => {
   if (filtered.length !== event.files.length) {
     toast.add({
       severity: 'warn',
-      summary: 'Tipos de archivo no válidos',
-      detail: 'Solo se permiten archivos PDF y Excel (.xls, .xlsx).',
+      summary: t('fileUpload.invalidTypes'),
+      detail: t('fileUpload.invalidTypesDetail'),
       life: 4000,
     })
   }
@@ -79,10 +82,8 @@ const onSelectedFiles = (event: FileUploadSelectEvent) => {
   if (oversizedFiles.length > 0) {
     toast.add({
       severity: 'error',
-      summary: 'Archivos demasiado grandes',
-      detail: `Los siguientes archivos superan el límite de 250 MiB: ${oversizedFiles
-        .map((f: UploadFile) => f.name)
-        .join(', ')}`,
+      summary: t('fileUpload.filesTooBig'),
+      detail: t('fileUpload.filesTooBigDetail', { files: oversizedFiles.map((f: UploadFile) => f.name).join(', ') }),
       life: 5000,
     })
     return
@@ -91,8 +92,8 @@ const onSelectedFiles = (event: FileUploadSelectEvent) => {
   if (filtered.length > 0) {
     toast.add({
       severity: 'info',
-      summary: 'Archivos seleccionados',
-      detail: `${filtered.length} archivo(s) seleccionado(s) correctamente`,
+      summary: t('fileUpload.filesSelected'),
+      detail: t('fileUpload.filesSelectedDetail', { count: filtered.length }),
       life: 3000,
     })
   }

@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { ref, watch, computed } from 'vue'
+import { useI18n } from 'vue-i18n'
 import Card from 'primevue/card'
 import InputText from 'primevue/inputtext'
 import Dropdown from 'primevue/dropdown'
@@ -19,6 +20,8 @@ const emit = defineEmits<{
   delete: [nodeId: string]
   close: []
 }>()
+
+const { t } = useI18n()
 
 // HTTP Methods
 const httpMethods = [
@@ -141,7 +144,7 @@ const hasChanges = computed(() => {
           <div class="header-info">
             <i class="pi pi-cog"></i>
             <div>
-              <h3>Configuración del Nodo</h3>
+              <h3>{{ t('workflow.config.title') }}</h3>
               <p>{{ selectedNode.data?.type === 'http_request' ? 'HTTP Request' : 'Condition' }}</p>
             </div>
           </div>
@@ -161,12 +164,12 @@ const hasChanges = computed(() => {
           <div class="form-field">
             <label for="node-label">
               <i class="pi pi-tag"></i>
-              Nombre del Paso
+              {{ t('workflow.config.stepName') }}
             </label>
             <InputText
               id="node-label"
               v-model="editForm.label"
-              placeholder="Ej: Validar datos del cliente"
+              :placeholder="t('workflow.config.stepNamePlaceholder')"
             />
           </div>
 
@@ -174,7 +177,7 @@ const hasChanges = computed(() => {
           <div class="form-field">
             <label for="node-url">
               <i class="pi pi-link"></i>
-              URL del Endpoint
+              {{ t('workflow.config.endpointUrl') }}
             </label>
             <InputText
               id="node-url"
@@ -187,7 +190,7 @@ const hasChanges = computed(() => {
           <div class="form-field">
             <label for="node-method">
               <i class="pi pi-globe"></i>
-              Método HTTP
+              {{ t('workflow.config.httpMethod') }}
             </label>
             <Dropdown
               id="node-method"
@@ -195,7 +198,7 @@ const hasChanges = computed(() => {
               :options="httpMethods"
               option-label="label"
               option-value="value"
-              placeholder="Selecciona método"
+              :placeholder="t('workflow.config.selectMethod')"
             />
           </div>
 
@@ -203,21 +206,21 @@ const hasChanges = computed(() => {
           <div class="form-field">
             <label for="node-params">
               <i class="pi pi-list"></i>
-              Parámetros Requeridos
+              {{ t('workflow.config.requiredParams') }}
             </label>
             <Chips
               id="node-params"
               v-model="editForm.params"
-              placeholder="Presiona Enter para agregar"
+              :placeholder="t('workflow.config.paramsPlaceholder')"
             />
-            <small>Ej: customer_name, email, phone</small>
+            <small>{{ t('workflow.config.paramsHint') }}</small>
           </div>
 
           <!-- Body Template -->
           <div class="form-field">
             <label for="node-body">
               <i class="pi pi-file"></i>
-              Body Template (JSON)
+              {{ t('workflow.config.bodyTemplate') }}
             </label>
             <Textarea
               id="node-body"
@@ -231,14 +234,14 @@ const hasChanges = computed(() => {
           <div class="form-field">
             <label for="node-condition">
               <i class="pi pi-question-circle"></i>
-              Condición (Opcional)
+              {{ t('workflow.config.condition') }}
             </label>
             <InputText
               id="node-condition"
               v-model="editForm.condition"
               placeholder="is_valid == true"
             />
-            <small>Condición para ejecutar este paso</small>
+            <small>{{ t('workflow.config.conditionHint') }}</small>
           </div>
 
           <!-- Response Mapping -->
@@ -246,7 +249,7 @@ const hasChanges = computed(() => {
             <div class="field-header">
               <label>
                 <i class="pi pi-arrows-h"></i>
-                Mapeo de Respuesta
+                {{ t('workflow.config.responseMapping') }}
               </label>
               <Button
                 icon="pi pi-plus"
@@ -279,20 +282,20 @@ const hasChanges = computed(() => {
             </div>
 
             <small v-if="responseMappingArray.length === 0">
-              Agrega mapeos para extraer datos de la respuesta
+              {{ t('workflow.config.responseMappingHint') }}
             </small>
           </div>
 
           <!-- Actions -->
           <div class="form-actions">
             <Button
-              label="Guardar Cambios"
+              :label="t('workflow.config.saveChanges')"
               icon="pi pi-check"
               :disabled="!hasChanges"
               @click="handleSave"
             />
             <Button
-              label="Eliminar Nodo"
+              :label="t('workflow.config.deleteNode')"
               icon="pi pi-trash"
               severity="danger"
               outlined

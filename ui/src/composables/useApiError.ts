@@ -59,7 +59,7 @@ export const useApiError = (options: UseApiErrorOptions = {}) => {
     return new ApplicationError(
       {
         code: 'network:error',
-        message: axiosError.message || 'Error de conexión con el servidor',
+        message: axiosError.message || 'Connection error',
       },
       axiosError.response?.status,
     )
@@ -85,7 +85,7 @@ export const useApiError = (options: UseApiErrorOptions = {}) => {
     } else {
       appError = new ApplicationError({
         code: 'unknown:error',
-        message: 'Ha ocurrido un error desconocido',
+        message: 'An unknown error occurred',
       })
     }
 

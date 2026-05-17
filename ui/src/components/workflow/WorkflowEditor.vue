@@ -8,6 +8,7 @@ import type { Node, Edge, Connection, NodeComponent } from '@vue-flow/core'
 import Button from 'primevue/button'
 import Card from 'primevue/card'
 import { useToast } from 'primevue/usetoast'
+import { useI18n } from 'vue-i18n'
 
 import HttpRequestNode from './nodes/HttpRequestNode.vue'
 import ConditionNode from './nodes/ConditionNode.vue'
@@ -33,6 +34,7 @@ const emit = defineEmits<{
 }>()
 
 const toast = useToast()
+const { t } = useI18n()
 
 const nodeTypes: Record<string, NodeComponent> = {
   httpRequest: markRaw(HttpRequestNode) as NodeComponent,
@@ -53,8 +55,8 @@ onConnect((connection: Connection) => {
   addEdges([connection])
   toast.add({
     severity: 'success',
-    summary: 'Nodos Conectados',
-    detail: 'Se ha creado una conexión entre los nodos',
+    summary: t('workflow.toast.nodesConnected'),
+    detail: t('workflow.toast.nodesConnectedDetail'),
     life: 2000,
   })
 })
@@ -84,8 +86,8 @@ const handleNodeUpdate = (nodeId: string, data: Partial<WorkflowNodeData>) => {
 
     toast.add({
       severity: 'success',
-      summary: 'Nodo Actualizado',
-      detail: 'Los cambios se han guardado correctamente',
+      summary: t('workflow.toast.nodeUpdated'),
+      detail: t('workflow.toast.nodeUpdatedDetail'),
       life: 2000,
     })
   }
@@ -104,8 +106,8 @@ const handleNodeDelete = (nodeId: string) => {
 
   toast.add({
     severity: 'info',
-    summary: 'Nodo Eliminado',
-    detail: 'El nodo se ha eliminado del workflow',
+    summary: t('workflow.toast.nodeDeleted'),
+    detail: t('workflow.toast.nodeDeletedDetail'),
     life: 2000,
   })
 }
@@ -124,7 +126,7 @@ const addHttpRequestNode = () => {
       y: 50 + nodes.value.length * 200,
     },
     data: {
-      label: 'Nuevo Paso',
+      label: t('workflow.node.newStep'),
       type: 'http_request',
       config: {
         url: '',
@@ -140,8 +142,8 @@ const addHttpRequestNode = () => {
 
   toast.add({
     severity: 'success',
-    summary: 'Nodo Agregado',
-    detail: 'Se ha creado un nuevo nodo HTTP Request',
+    summary: t('workflow.toast.nodeAdded'),
+    detail: t('workflow.toast.nodeAddedHttpDetail'),
     life: 2000,
   })
 
@@ -158,7 +160,7 @@ const addConditionNode = () => {
       y: 50 + nodes.value.length * 200,
     },
     data: {
-      label: 'Nueva Condición',
+      label: t('workflow.node.newCondition'),
       type: 'condition',
       config: {
         condition: '',
@@ -170,8 +172,8 @@ const addConditionNode = () => {
 
   toast.add({
     severity: 'success',
-    summary: 'Nodo Agregado',
-    detail: 'Se ha creado un nuevo nodo de condición',
+    summary: t('workflow.toast.nodeAdded'),
+    detail: t('workflow.toast.nodeAddedConditionDetail'),
     life: 2000,
   })
 
@@ -281,40 +283,40 @@ watch(
           <div class="header-left">
             <i class="pi pi-sitemap"></i>
             <h3>
-              {{ readonly ? 'Visualización de Workflow' : 'Visual Workflow Editor' }}
+              {{ readonly ? t('workflow.editor.viewTitle') : t('workflow.editor.title') }}
             </h3>
           </div>
           <div v-if="!readonly" class="header-actions">
             <Button
-              v-tooltip.bottom="'Agregar HTTP'"
+              v-tooltip.bottom="t('workflow.editor.addHttp')"
               icon="pi pi-plus"
               size="small"
               severity="success"
               @click="addHttpRequestNode"
             />
             <Button
-              v-tooltip.bottom="'Agregar Condición'"
+              v-tooltip.bottom="t('workflow.editor.addCondition')"
               icon="pi pi-question"
               size="small"
               severity="warning"
               @click="addConditionNode"
             />
             <Button
-              v-tooltip.bottom="'Recargar desde JSON'"
+              v-tooltip.bottom="t('workflow.editor.reloadFromJson')"
               icon="pi pi-refresh"
               size="small"
               severity="secondary"
               @click="loadWorkflowFromJson(props.workflow!)"
             />
             <Button
-              v-tooltip.bottom="'Exportar a JSON'"
+              v-tooltip.bottom="t('workflow.editor.exportToJson')"
               icon="pi pi-download"
               size="small"
               severity="info"
               @click="handleExport"
             />
             <Button
-              v-tooltip.bottom="'Guardar Workflow'"
+              v-tooltip.bottom="t('workflow.editor.saveWorkflow')"
               icon="pi pi-save"
               size="small"
               @click="handleSave"
@@ -351,13 +353,8 @@ watch(
             <Panel position="top-left" class="info-panel">
               <div class="panel-content">
                 <i class="pi pi-info-circle"></i>
-                <span v-if="readonly"
-                  >Arrastra los nodos para reorganizarlos. Usa zoom y pan para navegar.</span
-                >
-                <span v-else
-                  >Arrastra los nodos para reposicionar. Conecta nodos arrastrando desde los
-                  puntos.</span
-                >
+                <span v-if="readonly">{{ t('workflow.editor.infoPanelReadonly') }}</span>
+                <span v-else>{{ t('workflow.editor.infoPanelEdit') }}</span>
               </div>
             </Panel>
           </VueFlow>

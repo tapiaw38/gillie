@@ -1,4 +1,7 @@
 <script setup lang="ts">
+import { useI18n } from 'vue-i18n'
+
+const { t } = useI18n()
 const currentYear = new Date().getFullYear()
 const socialLinks = [
   {
@@ -32,15 +35,11 @@ const socialLinks = [
       <div class="footer-content">
         <div class="footer-section">
           <h3>Gillie App</h3>
-          <p>
-            Automatiza tu negocio con inteligencia artificial. Gillie te ayuda a integrar IA en tu
-            sitio web, canales de atención y sistemas de trabajo para aumentar la productividad y
-            mejorar la experiencia de tus clientes.
-          </p>
+          <p>{{ t('footer.tagline') }}</p>
         </div>
 
         <div class="footer-section">
-          <h3>Síguenos</h3>
+          <h3>{{ t('footer.followUs') }}</h3>
           <ul class="social-links">
             <li v-for="link in socialLinks" :key="link.url">
               <a :href="link.url" target="_blank" rel="noopener noreferrer">
@@ -51,18 +50,18 @@ const socialLinks = [
         </div>
 
         <div class="footer-section">
-          <h3>Enlaces</h3>
+          <h3>{{ t('footer.links') }}</h3>
           <ul class="footer-links">
-            <li><a href="/privacy-policy">Política de Privacidad</a></li>
-            <li><a href="/terms-of-service">Términos de Servicio</a></li>
-            <li><a href="/contact">Contáctanos</a></li>
-            <li><a href="/about">Acerca de</a></li>
+            <li><a href="/privacy-policy">{{ t('footer.privacyPolicy') }}</a></li>
+            <li><a href="/terms-of-service">{{ t('footer.termsOfService') }}</a></li>
+            <li><a href="/contact">{{ t('footer.contactUs') }}</a></li>
+            <li><a href="/about">{{ t('footer.about') }}</a></li>
           </ul>
         </div>
       </div>
 
       <div class="footer-bottom">
-        <p>&copy; {{ currentYear }} Gillie App. Todos los derechos reservados.</p>
+        <p>&copy; {{ currentYear }} Gillie App. {{ t('footer.allRightsReserved') }}</p>
       </div>
     </div>
   </footer>
