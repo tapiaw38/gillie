@@ -78,7 +78,7 @@ const saveIntegration = async () => {
     await addIntegration(integration)
     await getAssistantProfile()
   } catch (error) {
-    console.error('Error al guardar integración:', error)
+    console.error('Error saving integration:', error)
   }
 }
 

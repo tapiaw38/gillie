@@ -46,7 +46,7 @@ export const useSandboxStore = (sandboxService: ISandboxService) =>
         if (err instanceof ApplicationError) {
           error.value = getErrorMessage(err)
         } else {
-          error.value = 'Error al cargar conversaciones'
+          error.value = 'Failed to load conversations'
         }
         conversations.value = []
       } finally {
@@ -73,7 +73,7 @@ export const useSandboxStore = (sandboxService: ISandboxService) =>
         if (err instanceof ApplicationError) {
           error.value = getErrorMessage(err)
         } else {
-          error.value = 'Error al cargar mensajes de la conversación'
+          error.value = 'Failed to load conversation messages'
         }
         messages.value = []
       } finally {
@@ -87,7 +87,7 @@ export const useSandboxStore = (sandboxService: ISandboxService) =>
         error.value = null
 
         const response = await sandboxService.createSandboxConversation({
-          title: 'Nueva Conversación',
+          title: 'New Conversation',
           is_sandbox: true,
         })
 
@@ -103,7 +103,7 @@ export const useSandboxStore = (sandboxService: ISandboxService) =>
         if (err instanceof ApplicationError) {
           error.value = getErrorMessage(err)
         } else {
-          error.value = 'Error al crear nueva conversación'
+          error.value = 'Failed to create new conversation'
         }
         throw err
       } finally {
@@ -152,15 +152,12 @@ export const useSandboxStore = (sandboxService: ISandboxService) =>
         if (conversationIndex !== -1) {
           conversations.value[conversationIndex].message_count = messages.value.length
         }
-
-        // Update conversation list to reflect new message
-        await loadSandboxConversations()
       } catch (err) {
         console.error('Error sending message:', err)
         if (err instanceof ApplicationError) {
           error.value = getErrorMessage(err)
         } else {
-          error.value = 'Error al enviar mensaje'
+          error.value = 'Failed to send message'
         }
         messages.value = messages.value.filter((msg) => !msg.id.startsWith('temp-'))
       } finally {
@@ -191,7 +188,7 @@ export const useSandboxStore = (sandboxService: ISandboxService) =>
         if (err instanceof ApplicationError) {
           error.value = getErrorMessage(err)
         } else {
-          error.value = 'Error al eliminar conversación'
+          error.value = 'Failed to delete conversation'
         }
         throw err
       }

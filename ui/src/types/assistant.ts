@@ -184,11 +184,23 @@ export interface ToolPromptsConfig {
   analyze_pdf?: string
   extract_text_from_pdf?: string
   analyze_excel?: string
+  write_excel?: string
+  read_docx?: string
+  write_docx?: string
+  modify_excel?: string
+  modify_docx?: string
+  insert_image_docx?: string
+  insert_image_excel?: string
+  insert_image_pptx?: string
   describe_image?: string
   search_documents?: string
   query_database?: string
+  fetch_url?: string
   save_memory?: string
+  web_search?: string
+  organize_memory?: string
   search_memory?: string
+  save_solution?: string
   system_propose?: string
   system_confirm?: string
   cron_create?: string
@@ -200,12 +212,33 @@ export interface ToolPromptsConfig {
   edit_file?: string
   list_directory?: string
   find_files?: string
+  download_file?: string
   run_shell?: string
   grep_files?: string
   git_status?: string
   git_diff?: string
   git_log?: string
   git_commit?: string
+  send_file?: string
+  send_screenshot?: string
+  take_screenshot?: string
+  browser_act?: string
+  browser_extract?: string
+  browser_navigate?: string
+  browser_click?: string
+  browser_type?: string
+  browser_get_content?: string
+  browser_screenshot?: string
+  browser_close?: string
+  browser_connect?: string
+  browser_switch_tab?: string
+  browser_enable_remote_debug?: string
+  browser_evaluate?: string
+  repo_map?: string
+  check_code?: string
+  read_pptx?: string
+  write_pptx?: string
+  modify_pptx?: string
 }
 
 export interface SystemCommandsIntegrationConfig {

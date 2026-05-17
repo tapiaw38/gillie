@@ -1,17 +1,19 @@
 <script setup lang="ts">
 import { onMounted, ref, watch } from 'vue'
 import { useClipboard } from '@/composables/useClipboard'
+import { useI18n } from 'vue-i18n'
 import Card from 'primevue/card'
 import Toast from 'primevue/toast'
 import { useToast } from 'primevue/usetoast'
 import Prism from 'prismjs'
 
+const { t } = useI18n()
 const codeConfigBlock = ref<HTMLElement | null>(null)
 const codeMethodsBlock = ref<HTMLElement | null>(null)
 const toast = useToast()
 const { copyText } = useClipboard()
 
-const copyToClipboard = async (text: string, type: string) => {
+const copyToClipboard = async (text: string, label: string) => {
   try {
     const copied = await copyText(text)
     if (!copied) {
@@ -19,16 +21,16 @@ const copyToClipboard = async (text: string, type: string) => {
     }
     toast.add({
       severity: 'success',
-      summary: 'Código copiado',
-      detail: `${type} copiado al portapapeles`,
+      summary: t('integrations.web.codeCopied'),
+      detail: `${label} ${t('integrations.web.codeCopiedDesc')}`,
       life: 3000,
     })
   } catch (error) {
-    console.log(error)
+    console.error('Error copying to clipboard:', error)
     toast.add({
       severity: 'error',
-      summary: 'Error al copiar',
-      detail: 'No se pudo copiar el código al portapapeles',
+      summary: t('integrations.web.errorCopying'),
+      detail: t('integrations.web.errorCopyingDesc'),
       life: 3000,
     })
   }
@@ -126,8 +128,8 @@ watch(codeMethodsBlock, (newValue) => {
           <i class="pi pi-globe"></i>
         </div>
         <div class="header-content">
-          <h1 class="integration-title">Integración Web</h1>
-          <p class="integration-subtitle">Integra tu asistente en sitios web y aplicaciones</p>
+          <h1 class="integration-title">{{ t('integrations.web.title') }}</h1>
+          <p class="integration-subtitle">{{ t('integrations.web.subtitle') }}</p>
         </div>
       </div>
     </div>
@@ -140,12 +142,8 @@ watch(codeMethodsBlock, (newValue) => {
             <i class="pi pi-info-circle"></i>
           </div>
           <div class="info-text">
-            <h3>¿Cómo funciona?</h3>
-            <p>
-              Agrega un chat personalizable a tu página web para que los usuarios puedan interactuar
-              con tu asistente. El widget se adapta al diseño de tu sitio y es completamente
-              configurable.
-            </p>
+            <h3>{{ t('integrations.web.howItWorks') }}</h3>
+            <p>{{ t('integrations.web.howItWorksDesc') }}</p>
           </div>
         </div>
       </template>
@@ -159,8 +157,8 @@ watch(codeMethodsBlock, (newValue) => {
             <i class="pi pi-cog"></i>
           </div>
           <div class="header-text">
-            <h3>Configuración Rápida</h3>
-            <p>Información esencial para comenzar</p>
+            <h3>{{ t('integrations.web.quickSetup') }}</h3>
+            <p>{{ t('integrations.web.quickSetupSubtitle') }}</p>
           </div>
         </div>
       </template>
@@ -180,7 +178,7 @@ watch(codeMethodsBlock, (newValue) => {
             <div class="setup-item">
               <div class="setup-label">
                 <i class="pi pi-box"></i>
-                Paquete NPM
+                {{ t('integrations.web.npmPackage') }}
               </div>
               <div class="setup-value">
                 <a
@@ -201,7 +199,7 @@ watch(codeMethodsBlock, (newValue) => {
               </div>
               <div class="setup-value">
                 <RouterLink to="/my-account" class="api-key-link">
-                  Generar en Mi Cuenta
+                  {{ t('integrations.web.generateInAccount') }}
                   <i class="pi pi-arrow-right"></i>
                 </RouterLink>
               </div>
@@ -221,8 +219,8 @@ watch(codeMethodsBlock, (newValue) => {
               <i class="pi pi-wrench"></i>
             </div>
             <div class="code-header-text">
-              <h3>Configuración</h3>
-              <p>Opciones completas del asistente</p>
+              <h3>{{ t('integrations.web.configuration') }}</h3>
+              <p>{{ t('integrations.web.configurationDesc') }}</p>
             </div>
           </div>
         </template>
@@ -230,14 +228,14 @@ watch(codeMethodsBlock, (newValue) => {
           <div class="code-section">
             <div class="code-container">
               <div class="code-toolbar">
-                <span class="code-title">Configuración del Asistente</span>
+                <span class="code-title">{{ t('integrations.web.configurationTitle') }}</span>
                 <button
                   class="copy-button"
-                  @click="copyToClipboard(codeConfig, 'Código de configuración')"
-                  title="Copiar código"
+                  @click="copyToClipboard(codeConfig, t('integrations.web.configurationTitle'))"
+                  :title="t('integrations.web.copyTitle')"
                 >
                   <i class="pi pi-copy"></i>
-                  Copiar
+                  {{ t('integrations.web.copy') }}
                 </button>
               </div>
               <div class="code-content">
@@ -258,8 +256,8 @@ watch(codeMethodsBlock, (newValue) => {
               <i class="pi pi-code"></i>
             </div>
             <div class="code-header-text">
-              <h3>Métodos</h3>
-              <p>Control programático del asistente</p>
+              <h3>{{ t('integrations.web.methods') }}</h3>
+              <p>{{ t('integrations.web.methodsDesc') }}</p>
             </div>
           </div>
         </template>
@@ -267,14 +265,14 @@ watch(codeMethodsBlock, (newValue) => {
           <div class="code-section">
             <div class="code-container">
               <div class="code-toolbar">
-                <span class="code-title">Métodos del Asistente</span>
+                <span class="code-title">{{ t('integrations.web.methodsTitle') }}</span>
                 <button
                   class="copy-button"
-                  @click="copyToClipboard(codeMethods, 'Código de métodos')"
-                  title="Copiar código"
+                  @click="copyToClipboard(codeMethods, t('integrations.web.methodsTitle'))"
+                  :title="t('integrations.web.copyTitle')"
                 >
                   <i class="pi pi-copy"></i>
-                  Copiar
+                  {{ t('integrations.web.copy') }}
                 </button>
               </div>
               <div class="code-content">

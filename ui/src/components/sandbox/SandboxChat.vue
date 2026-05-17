@@ -3,12 +3,12 @@ import { ref, computed, nextTick, watch } from 'vue'
 import { marked } from 'marked'
 import DOMPurify from 'dompurify'
 import Button from 'primevue/button'
-import Dialog from 'primevue/dialog'
 import Textarea from 'primevue/textarea'
 import { useToast } from 'primevue/usetoast'
 import Toast from 'primevue/toast'
 import { useI18n } from 'vue-i18n'
 import { useSandboxTransport } from '@/composables/useSandboxTransport'
+import ToolApprovalDialog from '@/components/sandbox/ToolApprovalDialog.vue'
 
 interface ToolCallEvent {
   name: string
@@ -643,7 +643,7 @@ const processStreamEvent = async (msg: ChatMessage, payload: unknown) => {
 
 // ── Approval ──────────────────────────────────────────────────────────────────
 
-const handleApproval = async (approved: boolean) => {
+const handleApproval = async (approved: boolean, feedback: string = '') => {
   if (!pendingApproval.value) return
   approvalLoading.value = true
 
@@ -652,7 +652,7 @@ const handleApproval = async (approved: boolean) => {
       pendingApproval.value.request_id,
       approved,
       props.apiKey,
-      approvalFeedback.value,
+      feedback,
     )
   } catch {
     toast.add({
@@ -1109,73 +1109,13 @@ watch(
     </template>
 
     <!-- Tool approval dialog -->
-    <Dialog
+    <ToolApprovalDialog
       v-model:visible="approvalVisible"
-      :closable="false"
-      :draggable="false"
-      :modal="true"
-      :header="t('sandbox.approvalTitle')"
-      class="approval-dialog"
-      style="width: min(680px, 95vw)"
-    >
-      <div class="approval-body">
-        <div class="approval-warning">
-          <i class="pi pi-exclamation-triangle approval-warning-icon" />
-          <div>
-            <p class="approval-warning-title">{{ t('sandbox.approvalTitle') }}</p>
-            <p class="approval-warning-tool">
-              {{ t('sandbox.approvalTool') }}: <strong>{{ pendingApproval?.tool_name }}</strong>
-            </p>
-          </div>
-        </div>
-
-        <div v-if="pendingApproval?.diff" class="diff-viewer">
-          <p class="diff-label">{{ t('sandbox.approvalTitle') }}:</p>
-          <div class="diff-content">
-            <div
-              v-for="(line, i) in parseDiffLines(pendingApproval.diff)"
-              :key="i"
-              :class="['diff-line', `diff-line--${line.type}`]"
-            >
-              {{ line.text }}
-            </div>
-          </div>
-        </div>
-
-        <div class="approval-feedback">
-          <label class="approval-feedback-label">{{
-            t('sandbox.approvalFeedbackPlaceholder')
-          }}</label>
-          <Textarea
-            v-model="approvalFeedback"
-            :placeholder="t('sandbox.approvalFeedbackPlaceholder')"
-            :rows="2"
-            auto-resize
-            class="approval-feedback-input"
-          />
-        </div>
-      </div>
-
-      <template #footer>
-        <div class="approval-footer">
-          <Button
-            :label="t('sandbox.approvalReject')"
-            icon="pi pi-times"
-            severity="danger"
-            outlined
-            :loading="approvalLoading"
-            @click="handleApproval(false)"
-          />
-          <Button
-            :label="t('sandbox.approvalApprove')"
-            icon="pi pi-check"
-            severity="success"
-            :loading="approvalLoading"
-            @click="handleApproval(true)"
-          />
-        </div>
-      </template>
-    </Dialog>
+      :loading="approvalLoading"
+      :pending-approval="pendingApproval"
+      @approve="(fb) => handleApproval(true, fb)"
+      @reject="(fb) => handleApproval(false, fb)"
+    />
   </div>
 </template>
 
@@ -1844,105 +1784,14 @@ watch(
   color: var(--do-blue);
 }
 
-/* ── Approval dialog ──────────────────────────────────────────────────── */
-.approval-body {
-  display: flex;
-  flex-direction: column;
-  gap: 1rem;
-}
-
-.approval-warning {
-  display: flex;
-  align-items: flex-start;
-  gap: 0.75rem;
-  padding: 0.875rem;
-  background: rgba(245, 166, 35, 0.08);
-  border: 1px solid rgba(245, 166, 35, 0.25);
-  border-radius: 0.5rem;
-}
-
-.approval-warning-icon {
-  font-size: 1.5rem;
-  color: var(--do-warning);
-  flex-shrink: 0;
-  margin-top: 0.1rem;
-}
-
-.approval-warning-title {
-  font-size: 0.9rem;
-  font-weight: 600;
-  color: var(--do-text);
-  margin: 0 0 0.25rem;
-}
-
-.approval-warning-tool {
-  font-size: 0.85rem;
-  color: var(--do-text-secondary);
-  margin: 0;
-}
-
-.diff-label {
-  font-size: 0.8rem;
-  font-weight: 600;
-  color: var(--do-text-secondary);
-  margin: 0 0 0.5rem;
-}
-
-.diff-viewer {
-  border-radius: 0.5rem;
-  overflow: hidden;
-  border: 1px solid rgba(255, 255, 255, 0.08);
-}
-
-.diff-content {
-  background: #0a0f1a;
-  padding: 0.625rem 0.875rem;
-  max-height: 240px;
-  overflow-y: auto;
-}
-
-.diff-line {
-  font-family: 'JetBrains Mono', 'Fira Code', monospace;
-  font-size: 0.8rem;
-  line-height: 1.6;
-  white-space: pre-wrap;
-  word-break: break-all;
-}
-
-.diff-line--added {
-  color: #4ade80;
-  background: rgba(74, 222, 128, 0.06);
-}
-
-.diff-line--removed {
-  color: #f87171;
-  background: rgba(248, 113, 113, 0.06);
-}
-
-.diff-line--context {
-  color: var(--do-text-muted);
-}
-
-.approval-feedback-label {
-  display: block;
-  font-size: 0.82rem;
-  font-weight: 600;
-  color: var(--do-text-secondary);
-  margin-bottom: 0.375rem;
-}
-
-.approval-feedback-input {
-  width: 100%;
-  font-size: 0.875rem;
-}
-
-.approval-footer {
-  display: flex;
-  justify-content: flex-end;
-  gap: 0.75rem;
-}
-
 /* ── Responsive ───────────────────────────────────────────────────────── */
+@media (max-width: 1024px) {
+  .msg-row--user,
+  .msg-row--assistant {
+    max-width: 90%;
+  }
+}
+
 @media (max-width: 640px) {
   .msg-row--user,
   .msg-row--assistant {

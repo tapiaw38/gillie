@@ -62,7 +62,7 @@ const removeFile = async (fileId: string) => {
       await getAssistantProfile()
     }
   } catch (error) {
-    console.error('Error al eliminar el archivo:', error)
+    console.error('Error deleting file:', error)
   }
 }
 </script>

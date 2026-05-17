@@ -160,6 +160,12 @@ _DEFAULT_TOOL_PROMPTS: Dict[str, str] = {
         "(e.g. 'consulta en dolarhoy', 'abre infobae.com', 'revisa la página X'). "
         "Prepend https:// if the user gives a domain without protocol."
     ),
+    "download_file": (
+        "Download a file from an HTTP or HTTPS URL and save it inside the workspace. "
+        "Use when the user asks to download an image, PDF, ZIP, audio, document, or any other file from the web. "
+        "Prefer this tool over fetch_url when the goal is to save the original file instead of extracting page text. "
+        "If save_as is omitted, infer a safe filename from the URL or response content type."
+    ),
     "web_search": (
         "Search the internet for current, real-time information using DuckDuckGo. "
         "Use when the user asks about recent news, current events, live data, prices, "
@@ -728,6 +734,19 @@ class FetchUrlArgs(BaseModel):
     url: str = Field(description="Full URL to fetch (e.g. https://dolarhoy.com)")
 
 
+class DownloadFileArgs(BaseModel):
+    """Arguments for downloading a file into the workspace"""
+    url: str = Field(description="Full HTTP or HTTPS URL to download")
+    save_as: Optional[str] = Field(
+        default=None,
+        description="Output path inside the workspace. If omitted, a filename is inferred automatically."
+    )
+    create_dirs: bool = Field(
+        default=True,
+        description="Create intermediate directories for save_as if they do not exist."
+    )
+
+
 class WebSearchArgs(BaseModel):
     """Arguments for web search"""
     query: str = Field(description="Search query to look up on the internet")
@@ -1178,7 +1197,7 @@ def create_langchain_tools(openai_integration, profile, skill_manager=None, stor
             When provided, edit_file and write_file pause and wait for explicit
             user approval before applying any changes to disk.
         plan_mode: When True, state-mutating tools (edit_file, write_file,
-            run_shell, git_commit) describe what they *would* do without
+            download_file, run_shell, git_commit) describe what they *would* do without
             actually executing anything.
 
     Returns:
@@ -3962,6 +3981,77 @@ If data is not found, say so clearly."""
             logger.error(f"fetch_url error for {url}: {e}")
             return {"error": str(e), "url": url}
 
+    async def download_file_tool(
+        url: str,
+        save_as: Optional[str] = None,
+        create_dirs: bool = True,
+    ) -> Dict[str, Any]:
+        """Download a file from a URL and save it inside the workspace."""
+        import mimetypes
+        from urllib.parse import urlparse, unquote
+        import httpx
+
+        def _infer_name(final_url: str, content_type: str) -> str:
+            parsed = urlparse(final_url)
+            candidate = _Path(unquote(parsed.path)).name.strip()
+            if candidate and candidate not in {".", "..", "/"}:
+                return candidate
+
+            base = "downloaded_file"
+            clean_type = (content_type or "").split(";")[0].strip().lower()
+            ext = mimetypes.guess_extension(clean_type) if clean_type else ""
+            if clean_type == "image/jpg":
+                ext = ".jpg"
+            return base + (ext or "")
+
+        if not url.startswith(("http://", "https://")):
+            return {"error": "Only HTTP and HTTPS URLs are supported", "url": url}
+
+        if plan_mode:
+            inferred = save_as or _infer_name(url, "")
+            return {
+                "plan_only": True,
+                "would_do": f"Download '{url}' to '{inferred}'",
+            }
+
+        try:
+            async with httpx.AsyncClient(follow_redirects=True, timeout=60) as client:
+                response = await client.get(url, headers={"User-Agent": "Mozilla/5.0 (gillie-ai)"})
+                response.raise_for_status()
+
+            final_url = str(response.url)
+            content_type = response.headers.get("content-type", "")
+            output_name = save_as or _infer_name(final_url, content_type)
+
+            resolved, err = _resolve_safe_path(output_name)
+            if err:
+                return {"error": err, "url": url, "save_as": output_name}
+            if _is_ignored(resolved, workspace):
+                return {
+                    "error": f"Access denied: '{output_name}' is excluded by .gillierignore",
+                    "url": url,
+                    "save_as": output_name,
+                }
+
+            if create_dirs:
+                resolved.parent.mkdir(parents=True, exist_ok=True)
+
+            resolved.write_bytes(response.content)
+
+            return {
+                "success": True,
+                "url": url,
+                "final_url": final_url,
+                "path": str(resolved.relative_to(workspace)),
+                "saved_to": str(resolved),
+                "bytes": len(response.content),
+                "content_type": content_type or "application/octet-stream",
+                "status_code": response.status_code,
+            }
+        except Exception as e:
+            logger.error(f"download_file error for {url}: {e}")
+            return {"error": str(e), "url": url, "save_as": save_as}
+
     async def web_search_tool(query: str, max_results: int = 5) -> Dict[str, Any]:
         """Search the internet using DuckDuckGo."""
         import asyncio
@@ -3998,6 +4088,7 @@ If data is not found, say so clearly."""
 
     tools = list(filter(None, [
         _tool("fetch_url",              prompts.get("fetch_url",  _DEFAULT_TOOL_PROMPTS["fetch_url"]),  fetch_url_tool,  FetchUrlArgs),
+        _tool("download_file",          prompts.get("download_file", _DEFAULT_TOOL_PROMPTS["download_file"]), download_file_tool, DownloadFileArgs),
         _tool("web_search",             prompts.get("web_search", _DEFAULT_TOOL_PROMPTS["web_search"]), web_search_tool, WebSearchArgs),
         _tool("read_file",              prompts.get("read_file",  _DEFAULT_TOOL_PROMPTS["read_file"]),  read_file_tool,  ReadFileArgs),
         _tool("write_file",             prompts.get("write_file", _DEFAULT_TOOL_PROMPTS["write_file"]), write_file_tool, WriteFileArgs),

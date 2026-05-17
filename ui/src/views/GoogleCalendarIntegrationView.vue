@@ -166,7 +166,7 @@ const connectGoogleCalendar = async () => {
       })
     }
   } catch (error) {
-    console.error('Error al conectar Google Calendar:', error)
+    console.error('Error connecting Google Calendar:', error)
   }
 }
 
@@ -175,7 +175,7 @@ const updateIntegration = async () => {
     await addIntegration(calendarIntegration)
     await getAssistantProfile()
   } catch (error) {
-    console.error('Error al actualizar integración:', error)
+    console.error('Error updating integration:', error)
   }
 }
 
@@ -197,7 +197,7 @@ const checkConnectionStatus = async () => {
   try {
     await checkStatus(assistantProfile.value.id)
   } catch (error) {
-    console.error('Error al verificar estado de conexión:', error)
+    console.error('Error checking connection status:', error)
   }
 }
 
@@ -490,179 +490,9 @@ onMounted(async () => {
 </template>
 
 <style scoped>
-.integration-container {
-  max-width: 860px;
-  margin: 0 auto;
-  padding: 1.25rem;
-  display: flex;
-  flex-direction: column;
-  gap: 1rem;
-  background: var(--do-bg);
-  box-sizing: border-box;
-}
-
-.page-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 1rem;
-  padding: 1rem 1.25rem;
-  border: 1px solid var(--do-border-light);
-  border-radius: 0.75rem;
-  background: rgba(255, 255, 255, 0.03);
-}
-
-.header-left {
-  display: flex;
-  align-items: center;
-  gap: 1rem;
-  min-width: 0;
-}
-
-.icon-wrapper {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-size: 2rem;
-  color: var(--do-blue);
-  flex-shrink: 0;
-}
-
+/* ── View-specific styles ────────────────────────────────── */
 .calendar-icon {
   color: #4285f4;
-}
-
-.header-text {
-  min-width: 0;
-}
-
-.page-title {
-  font-size: 1.35rem;
-  font-weight: 700;
-  color: var(--do-text);
-  margin: 0 0 0.2rem;
-  line-height: 1.2;
-}
-
-.page-subtitle {
-  font-size: 0.875rem;
-  color: var(--do-text-muted);
-  margin: 0;
-}
-
-.header-toggle {
-  display: flex;
-  align-items: center;
-  gap: 0.75rem;
-  flex-shrink: 0;
-}
-
-.toggle-status {
-  font-size: 0.8rem;
-  font-weight: 600;
-  color: var(--color-danger);
-  transition: color 0.25s;
-  white-space: nowrap;
-}
-
-.toggle-status.active {
-  color: var(--color-success);
-}
-
-.panel {
-  border: 1px solid var(--do-border-light);
-  border-radius: 0.75rem;
-  overflow: hidden;
-  background: var(--do-bg);
-}
-
-.panel-disabled {
-  opacity: 0.55;
-  filter: grayscale(0.4);
-  pointer-events: none;
-}
-
-.panel-header {
-  display: flex;
-  align-items: center;
-  gap: 0.875rem;
-  padding: 0.875rem 1.25rem;
-  border-bottom: 1px solid var(--do-border-light);
-  background: rgba(255, 255, 255, 0.025);
-}
-
-.step-badge {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 1.75rem;
-  height: 1.75rem;
-  border-radius: 50%;
-  background: var(--gradient-primary, var(--color-primary));
-  color: #fff;
-  font-size: 0.8rem;
-  font-weight: 700;
-  flex-shrink: 0;
-}
-
-.panel-title {
-  font-size: 0.95rem;
-  font-weight: 600;
-  color: var(--do-text);
-  margin: 0 0 0.15rem;
-}
-
-.panel-subtitle {
-  font-size: 0.8rem;
-  color: var(--do-text-muted);
-  margin: 0;
-}
-
-.panel-body {
-  padding: 1.25rem;
-  display: flex;
-  flex-direction: column;
-  gap: 1rem;
-}
-
-.panel-footer {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 1rem;
-  padding-top: 1rem;
-  border-top: 1px solid var(--do-border-light);
-  margin-top: 0.25rem;
-}
-
-.field-group {
-  display: flex;
-  flex-direction: column;
-  gap: 0.4rem;
-}
-
-.field-label {
-  display: flex;
-  align-items: center;
-  gap: 0.4rem;
-  font-size: 0.875rem;
-  font-weight: 600;
-  color: var(--do-text);
-}
-
-.required {
-  color: var(--color-danger);
-}
-
-.optional {
-  font-size: 0.75rem;
-  font-weight: 400;
-  color: var(--do-text-muted);
-  margin-left: 0.25rem;
-}
-
-.w-full {
-  width: 100%;
 }
 
 :deep(.w-full.p-password) {
@@ -671,105 +501,6 @@ onMounted(async () => {
 
 :deep(.w-full.p-password .p-inputtext) {
   width: 100%;
-}
-
-.credentials-saved-notice {
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
-  font-size: 0.825rem;
-  color: var(--color-success);
-  background: rgba(34, 197, 94, 0.07);
-  border: 1px solid rgba(34, 197, 94, 0.2);
-  border-radius: 0.75rem;
-  padding: 0.6rem 0.875rem;
-}
-
-.saved-badge {
-  display: flex;
-  align-items: center;
-  gap: 0.35rem;
-  font-size: 0.825rem;
-  font-weight: 500;
-  color: var(--color-success);
-}
-
-.spacer {
-  flex: 1;
-}
-
-.connection-state {
-  display: flex;
-  align-items: flex-start;
-  gap: 1rem;
-  padding: 1rem;
-  border-radius: 0.75rem;
-  border: 1px solid var(--do-border-light);
-}
-
-.connection-state.connected {
-  background: rgba(34, 197, 94, 0.05);
-  border-color: rgba(34, 197, 94, 0.2);
-}
-
-.connection-state.disconnected {
-  background: rgba(255, 255, 255, 0.03);
-}
-
-.connection-state-icon {
-  font-size: 1.5rem;
-  flex-shrink: 0;
-  line-height: 1;
-}
-
-.connected .connection-state-icon {
-  color: var(--color-success);
-}
-
-.disconnected .connection-state-icon {
-  color: var(--do-text-muted);
-}
-
-.connection-state-title {
-  font-size: 0.95rem;
-  font-weight: 600;
-  color: var(--do-text);
-  margin: 0 0 0.25rem;
-}
-
-.connection-state-subtitle {
-  font-size: 0.825rem;
-  color: var(--do-text-muted);
-  margin: 0;
-  line-height: 1.45;
-}
-
-.connection-meta {
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
-}
-
-.meta-dot {
-  width: 0.5rem;
-  height: 0.5rem;
-  border-radius: 50%;
-  background: var(--color-danger);
-  transition: background 0.25s;
-}
-
-.meta-dot.meta-dot-ok {
-  background: var(--color-success);
-}
-
-.meta-label {
-  font-size: 0.8rem;
-  color: var(--do-text-muted);
-}
-
-.connection-actions {
-  display: flex;
-  gap: 0.75rem;
 }
 
 .capabilities-grid {
@@ -798,40 +529,8 @@ onMounted(async () => {
 }
 
 @media (max-width: 600px) {
-  .integration-container {
-    padding: 0.75rem;
-  }
-
-  .page-header {
-    flex-direction: column;
-    align-items: flex-start;
-    gap: 0.875rem;
-  }
-
-  .header-toggle {
-    align-self: flex-end;
-  }
-
   .capabilities-grid {
     grid-template-columns: 1fr;
-  }
-
-  .panel-footer {
-    flex-direction: column-reverse;
-    align-items: stretch;
-  }
-
-  .connection-actions {
-    flex-direction: column;
-    width: 100%;
-  }
-
-  .connection-actions :deep(button) {
-    width: 100%;
-  }
-
-  .panel-footer :deep(button) {
-    width: 100%;
   }
 }
 </style>

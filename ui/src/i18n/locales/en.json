@@ -2,7 +2,11 @@
   "nav": {
     "back": "Back",
     "active": "Active",
-    "inactive": "Inactive"
+    "inactive": "Inactive",
+    "backendUnavailable": "Backend unavailable",
+    "timeout": "Request timed out",
+    "serverError": "Server error ({status})",
+    "noConnection": "No connection"
   },
   "common": {
     "save": "Save",
@@ -443,7 +447,14 @@
       "webhookRegistered": "Webhook registered",
       "enterPublicUrl": "Enter the public URL (ngrok) first.",
       "optional": "optional",
-      "secretTokenPlaceholder": "My custom secret token"
+      "secretTokenPlaceholder": "My custom secret token",
+      "stepsSubtitle": "Steps to configure your Telegram bot",
+      "guideStep1": "Open Telegram and talk to @BotFather",
+      "guideStep2": "Send /newbot and follow the instructions to create the bot",
+      "guideStep3": "Copy the Bot Token that BotFather gives you and save it above",
+      "guideStep4": "Enable the integration with the header toggle",
+      "guideStep5": "If running locally, start a tunnel: ngrok http 8000",
+      "guideStep6": "Paste the ngrok URL in step 2 and click Register Webhook"
     },
     "clickup": {
       "title": "ClickUp",
@@ -535,7 +546,14 @@
       "currentStateSubtitle": "Saved integration values",
       "accessTokenRequired": "Access token is required.",
       "phoneNumberIdRequired": "Phone number ID is required.",
-      "businessAccountIdRequired": "WhatsApp Business account ID is required."
+      "businessAccountIdRequired": "WhatsApp Business account ID is required.",
+      "stepsSubtitle": "Steps to connect the WhatsApp Business API",
+      "guideStep1": "Go to developers.facebook.com and create an app",
+      "guideStep2": "Add the WhatsApp product to your app",
+      "guideStep3": "Copy the Access Token from the API panel",
+      "guideStep4": "Copy the Phone Number ID and Business Account ID",
+      "guideStep5": "Enable the integration and save the credentials",
+      "guideStep6": "Configure the webhook with URL: /api/whatsapp/webhook"
     },
     "whatsappDevices": {
       "title": "WhatsApp Devices",
@@ -584,7 +602,9 @@
       "errorAuthTitle": "Authentication error",
       "errorConnTitle": "Connection error",
       "errorConnStream": "Could not connect to QR stream",
-      "confirmDelete": "Are you sure you want to delete device"
+      "confirmDelete": "Are you sure you want to delete device",
+      "qrConnecting": "Connecting to WhatsApp…",
+      "qrExpiry": "This QR code expires in 60 seconds. If it expires, close this window and reconnect."
     },
     "googleCalendar": {
       "title": "Google Calendar",
@@ -838,28 +858,92 @@
       "insertDesc": "Insert new rows",
       "updateDesc": "Modify existing rows",
       "deleteDesc": "Delete rows"
+    },
+    "web": {
+      "title": "Web Integration",
+      "subtitle": "Integrate your assistant into websites and applications",
+      "howItWorks": "How does it work?",
+      "howItWorksDesc": "Add a customizable chat to your website so users can interact with your assistant. The widget adapts to your site design and is fully configurable.",
+      "quickSetup": "Quick Setup",
+      "quickSetupSubtitle": "Essential information to get started",
+      "npmPackage": "NPM Package",
+      "generateInAccount": "Generate in My Account",
+      "configuration": "Configuration",
+      "configurationDesc": "Full assistant options",
+      "configurationTitle": "Assistant Configuration",
+      "methods": "Methods",
+      "methodsDesc": "Programmatic control of the assistant",
+      "methodsTitle": "Assistant Methods",
+      "codeCopied": "Code copied",
+      "codeCopiedDesc": "copied to clipboard",
+      "errorCopying": "Copy error",
+      "errorCopyingDesc": "Could not copy code to the clipboard",
+      "copy": "Copy",
+      "copyTitle": "Copy code"
     }
   },
   "toolPrompts": {
     "title": "Tool Prompts",
-    "subtitle": "Enable/disable tools and customize the instructions that tell the LLM when to use each one.",
+    "subtitle": "Enable or customize the tools your assistant can use.",
     "disabled": "Disabled",
     "custom": "Custom",
+    "genericHint": "Customize when and how the LLM should use the {tool} tool.",
     "defaultPlaceholder": "Leave empty to use the default prompt for",
     "restoreDefault": "Restore default",
     "saveChanges": "Save changes",
+    "unsavedChanges": "You have unsaved changes",
+    "allChangesSaved": "All changes saved",
+    "editPrompt": "Edit prompt",
+    "closeEditor": "Close editor",
+    "overviewTitle": "Overview and filters",
+    "categoriesTitle": "Categories",
+    "categoriesSubtitle": "Choose a group to work with a cleaner view.",
+    "toolsSubtitle": "Enable, disable, or edit the prompt for each tool.",
+    "selectCategoryTitle": "Select a category",
+    "selectCategoryDesc": "Tools in that group appear only after you click a category card.",
     "saved": "Saved",
     "savedDesc": "Configuration updated",
     "error": "Error",
     "errorDesc": "Could not save",
+    "searchPlaceholder": "Search by name or description...",
+    "toolsCount": "tools",
+    "readyLabel": "Ready",
+    "panelSubtitle": "Review overall state and filter before opening a category.",
+    "noResultsTitle": "No tools to display",
+    "noResultsDesc": "Try another filter or clear the search to see categories again.",
+    "filters": {
+      "all": "All",
+      "enabled": "Enabled",
+      "disabled": "Disabled",
+      "customized": "Customized"
+    },
+    "summary": {
+      "total": "Total",
+      "enabled": "Enabled",
+      "disabled": "Disabled",
+      "customized": "Customized"
+    },
+    "categories": {
+      "web": "Web",
+      "files": "Files",
+      "code": "Code",
+      "git": "Git",
+      "documents": "Documents",
+      "media": "Media",
+      "browser": "Browser",
+      "memory": "Memory",
+      "system": "System",
+      "cron": "Cron",
+      "database": "Database"
+    },
     "tools": {
       "search_documents": {
         "label": "Search documents",
-        "hint": "When the LLM should search PDFs/Excel uploaded to the assistant."
+        "hint": "When to search inside uploaded PDFs and Excel files."
       },
       "query_database": {
-        "label": "Query database",
-        "hint": "When the LLM should query the configured PostgreSQL table. Only applies if the SQL integration is active."
+        "label": "Query DB",
+        "hint": "When to query the configured PostgreSQL table."
       },
       "search_images": {
         "label": "Search images",
@@ -877,29 +961,89 @@
         "label": "Analyze Excel",
         "hint": "When to analyze data from an Excel file."
       },
+      "write_excel": {
+        "label": "Write Excel",
+        "hint": "When to create or overwrite an Excel file with structured data."
+      },
+      "read_docx": {
+        "label": "Read Word document",
+        "hint": "When to read the full contents of a .docx document."
+      },
+      "write_docx": {
+        "label": "Write Word document",
+        "hint": "When to generate or overwrite a .docx document."
+      },
+      "modify_excel": {
+        "label": "Modify Excel",
+        "hint": "When to edit an existing Excel file: cells, rows, sheets, or structure."
+      },
+      "modify_docx": {
+        "label": "Modify Word doc",
+        "hint": "When to edit an existing .docx without recreating it."
+      },
+      "insert_image_docx": {
+        "label": "Insert image in Word",
+        "hint": "When to insert an image into an existing .docx document."
+      },
+      "insert_image_excel": {
+        "label": "Insert image in Excel",
+        "hint": "When to insert an image into an .xlsx spreadsheet."
+      },
+      "insert_image_pptx": {
+        "label": "Image in PowerPoint",
+        "hint": "When to insert an image into a slide."
+      },
       "describe_image": {
         "label": "Describe image",
         "hint": "When to describe the content of a base64 image."
+      },
+      "read_pptx": {
+        "label": "Read PowerPoint",
+        "hint": "When to read the content of a .pptx presentation."
+      },
+      "write_pptx": {
+        "label": "Write PowerPoint",
+        "hint": "When to generate or overwrite a .pptx presentation."
+      },
+      "modify_pptx": {
+        "label": "Modify PowerPoint",
+        "hint": "When to edit an existing .pptx presentation."
+      },
+      "fetch_url": {
+        "label": "Read URL",
+        "hint": "When to fetch and extract text from a specific web page."
       },
       "save_memory": {
         "label": "Save memory",
         "hint": "When to save relevant user data in the assistant memory."
       },
+      "web_search": {
+        "label": "Search the web",
+        "hint": "When to look up current or recent information on the internet."
+      },
+      "organize_memory": {
+        "label": "Organize memory",
+        "hint": "When to reorganize and consolidate persistent general memory."
+      },
       "search_memory": {
         "label": "Search memory",
         "hint": "When to search previously saved data in memory."
       },
+      "save_solution": {
+        "label": "Save solution",
+        "hint": "When to store a problem and its resolution for future reuse."
+      },
       "system_propose": {
-        "label": "Propose server command",
-        "hint": "When to propose a shell command on the Linux server for the user to confirm."
+        "label": "Propose command",
+        "hint": "When to propose a shell command for confirmation."
       },
       "system_confirm": {
-        "label": "Confirm server command",
-        "hint": "When to execute an already proposed command using the user confirmation code."
+        "label": "Confirm command",
+        "hint": "When to execute a proposed command using a confirmation code."
       },
       "cron_create": {
         "label": "Create cron job",
-        "hint": "When to create a scheduled task combining a source (command, HTTP, text) with a destination (WhatsApp, Telegram, Slack)."
+        "hint": "When to create a scheduled task with a source and destination."
       },
       "cron_list": {
         "label": "List cron jobs",
@@ -910,8 +1054,8 @@
         "hint": "When to delete a scheduled task by ID."
       },
       "cron_run": {
-        "label": "Run cron job now",
-        "hint": "When to run a scheduled task immediately without waiting for the next schedule."
+        "label": "Run cron now",
+        "hint": "When to run a scheduled task immediately."
       },
       "read_file": {
         "label": "Read file",
@@ -923,39 +1067,111 @@
       },
       "edit_file": {
         "label": "Edit file",
-        "hint": "Replaces exact code fragments in files. Uses smart matching (exact → normalized → fuzzy)."
+        "hint": "When to replace exact code fragments in files."
       },
       "list_directory": {
         "label": "List directory",
-        "hint": "Lists files and directories with sizes. Ideal for exploring project structure."
+        "hint": "When to list files and folders to explore the project."
       },
       "find_files": {
         "label": "Find files",
-        "hint": "Searches files by glob pattern (e.g.: **/*.py, src/**/*.ts) recursively."
+        "hint": "When to search files recursively by glob pattern."
+      },
+      "download_file": {
+        "label": "Download file",
+        "hint": "When to download an image, PDF, or other file from a URL and save it inside the workspace."
+      },
+      "repo_map": {
+        "label": "Repository map",
+        "hint": "When to generate a structural map of the project."
+      },
+      "check_code": {
+        "label": "Check code",
+        "hint": "When to run automated checks to find code errors or warnings."
       },
       "run_shell": {
         "label": "Run commands",
-        "hint": "Executes shell commands: run tests, install packages, view logs. Includes protection against destructive commands."
+        "hint": "When to run shell commands inside the workspace."
       },
       "grep_files": {
         "label": "Search in files",
-        "hint": "Searches text or regex within file contents. Supports extension filters and case-insensitive search."
+        "hint": "When to search text or regex inside files."
       },
       "git_status": {
         "label": "Git: Status",
-        "hint": "Shows the current state of the git repository and pending change statistics."
+        "hint": "When to inspect the current git repository state."
       },
       "git_diff": {
         "label": "Git: Diff",
-        "hint": "Shows the diff of a specific file or the entire repository. Supports staged and unstaged changes."
+        "hint": "When to inspect the diff of a file or repository."
       },
       "git_log": {
         "label": "Git: Log",
-        "hint": "Shows recent commit history, optionally filtered by file."
+        "hint": "When to inspect recent commit history."
       },
       "git_commit": {
         "label": "Git: Commit",
-        "hint": "Commits changes with a message. Only used when the user explicitly requests it."
+        "hint": "When to create a commit with a message."
+      },
+      "send_file": {
+        "label": "Send file",
+        "hint": "When to send a file to the user or a supported channel."
+      },
+      "send_screenshot": {
+        "label": "Send screenshot",
+        "hint": "When to send a previously generated screenshot to the user."
+      },
+      "take_screenshot": {
+        "label": "Take screenshot",
+        "hint": "When to capture a visual screenshot of a page, app, or browser."
+      },
+      "browser_connect": {
+        "label": "Browser: Connect",
+        "hint": "When to start or reconnect a controlled browser session."
+      },
+      "browser_navigate": {
+        "label": "Browser: Navigate",
+        "hint": "When to open a URL or move the browser session to another page."
+      },
+      "browser_act": {
+        "label": "Browser: Act",
+        "hint": "When to perform guided browser actions from a more general instruction."
+      },
+      "browser_extract": {
+        "label": "Browser: Extract",
+        "hint": "When to extract structured data or text from an open page."
+      },
+      "browser_click": {
+        "label": "Browser: Click",
+        "hint": "When to click a specific element on the page."
+      },
+      "browser_type": {
+        "label": "Browser: Type",
+        "hint": "When to type text into an input or form in the browser."
+      },
+      "browser_get_content": {
+        "label": "Browser: Get content",
+        "hint": "When to read the visible or textual content of the current page."
+      },
+      "browser_screenshot": {
+        "label": "Browser: Screenshot",
+        "hint": "When to capture a screenshot of the current page or viewport."
+      },
+      "browser_close": {
+        "label": "Browser: Close",
+        "hint": "When to close the current browser session or tab."
+      },
+      "browser_switch_tab": {
+        "label": "Browser: Switch tab",
+        "hint": "When to move between open browser tabs."
+      },
+      "browser_enable_remote_debug": {
+        "label": "Browser: Remote debug",
+        "hint": "When to enable remote browser debugging."
+      },
+      "browser_evaluate": {
+        "label": "Browser: Evaluate JS",
+        "hint": "When to execute JavaScript in the context of the open page."
       }
     }
   },
@@ -995,7 +1211,11 @@
     "workflowExportedDesc": "The visual workflow was converted to JSON. Use \"Save Functions\" to persist the changes.",
     "eachFunctionRequired": "Each function must have: name, description and type",
     "jsonMustBeArray": "JSON must be an array of functions or have a \"functions\" field with an array",
-    "jsonSyntaxError": "JSON syntax error"
+    "jsonSyntaxError": "JSON syntax error",
+    "configuredFunctions": "Configured functions",
+    "paramCount": "{n} parameter | {n} parameters",
+    "stepCount": "{n} step | {n} steps",
+    "jsonConfiguration": "JSON Configuration"
   },
   "calendarEvents": {
     "title": "My Calendar Events",
@@ -1038,5 +1258,156 @@
       "startTime": "Start date and time",
       "endTime": "End date and time"
     }
+  },
+  "about": {
+    "title": "About Gillie",
+    "subtitle": "Learn more about our virtual assistant",
+    "mission": "Our Mission",
+    "missionDesc": "At Gillie, we are dedicated to transforming the customer experience through intelligent virtual assistants that automate processes, reduce response times, and improve the operational efficiency of your business.",
+    "technology": "Our Technology",
+    "technologyDesc": "We use the latest natural language processing and machine learning technologies to create assistants that understand context, maintain natural conversations, and autonomously resolve complex problems.",
+    "integrations": "Integrations",
+    "integrationsDesc": "Our system integrates easily with WhatsApp Business, websites, CRM systems, and third-party APIs to deliver a consistent user experience across all communication channels.",
+    "virtualAssistant": "Virtual Assistant",
+    "featuresTitle": "Key Features",
+    "featuresSubtitle": "What makes Gillie special",
+    "feature1Title": "Advanced Artificial Intelligence",
+    "feature1Desc": "State-of-the-art language models for precise and natural responses.",
+    "feature2Title": "Custom Integrations",
+    "feature2Desc": "Connections with external APIs to perform complex and automated tasks.",
+    "feature3Title": "Data Security",
+    "feature3Desc": "Privacy policies and end-to-end encryption to protect information.",
+    "feature4Title": "Advanced Analytics",
+    "feature4Desc": "Detailed interaction tracking to optimize the user experience.",
+    "contactTitle": "Have questions?",
+    "contactSubtitle": "Contact our support team",
+    "contactDesc": "Want more information about Gillie or need help with your assistant?",
+    "contactSupport": "Contact Support",
+    "scheduleDemo": "Schedule Demo",
+    "contactSupportSummary": "Contact Support",
+    "contactSupportDetail": "We will send an email to our support team so they can contact you soon.",
+    "scheduleDemoSummary": "Demo Scheduled",
+    "scheduleDemoDetail": "We have registered your request. A representative will contact you shortly."
+  },
+  "workflow": {
+    "editor": {
+      "title": "Visual Workflow Editor",
+      "viewTitle": "Workflow View",
+      "addHttp": "Add HTTP",
+      "addCondition": "Add Condition",
+      "reloadFromJson": "Reload from JSON",
+      "exportToJson": "Export to JSON",
+      "saveWorkflow": "Save Workflow",
+      "infoPanelReadonly": "Drag nodes to rearrange. Use zoom and pan to navigate.",
+      "infoPanelEdit": "Drag nodes to reposition. Connect nodes by dragging from the dots."
+    },
+    "toast": {
+      "nodesConnected": "Nodes Connected",
+      "nodesConnectedDetail": "A connection was created between the nodes",
+      "nodeUpdated": "Node Updated",
+      "nodeUpdatedDetail": "Changes saved successfully",
+      "nodeDeleted": "Node Deleted",
+      "nodeDeletedDetail": "The node was removed from the workflow",
+      "nodeAdded": "Node Added",
+      "nodeAddedHttpDetail": "A new HTTP Request node was created",
+      "nodeAddedConditionDetail": "A new condition node was created"
+    },
+    "node": {
+      "newStep": "New Step",
+      "newCondition": "New Condition"
+    },
+    "config": {
+      "title": "Node Configuration",
+      "stepName": "Step Name",
+      "stepNamePlaceholder": "Ex: Validate customer data",
+      "endpointUrl": "Endpoint URL",
+      "httpMethod": "HTTP Method",
+      "selectMethod": "Select method",
+      "requiredParams": "Required Parameters",
+      "paramsPlaceholder": "Press Enter to add",
+      "paramsHint": "Ex: customer_name, email, phone",
+      "bodyTemplate": "Body Template (JSON)",
+      "condition": "Condition (Optional)",
+      "conditionHint": "Condition to execute this step",
+      "responseMapping": "Response Mapping",
+      "responseMappingHint": "Add mappings to extract data from the response",
+      "saveChanges": "Save Changes",
+      "deleteNode": "Delete Node"
+    },
+    "guide": {
+      "title": "Quick Workflow Guide",
+      "step1Label": "Introduction",
+      "step2Label": "JSON",
+      "step3Label": "Visual",
+      "step4Label": "Tips",
+      "step1Title": "What are Workflows?",
+      "step1Desc": "Workflows let you create automated processes with multiple steps that execute sequentially.",
+      "feature1Title": "Sequential Steps",
+      "feature1Desc": "Execute actions in order",
+      "feature2Title": "Conditional Logic",
+      "feature2Desc": "Flows based on conditions",
+      "feature3Title": "API Integration",
+      "feature3Desc": "Connect with external services",
+      "feature4Title": "JSON or Visual",
+      "feature4Desc": "Configure as you prefer",
+      "next": "Next",
+      "prev": "Previous",
+      "finish": "Finish",
+      "step2Title": "Configure with JSON",
+      "jsonStep1Title": "Click \"Edit\"",
+      "jsonStep1Desc": "Enable JSON edit mode",
+      "jsonStep2Title": "Write your workflow",
+      "jsonStep2Desc": "Define steps, HTTP methods and parameters",
+      "jsonStep3Title": "Save changes",
+      "jsonStep3Desc": "Click \"Save Functions\"",
+      "jsonExample": "Workflow example",
+      "step3Title": "Configure Visually",
+      "visualStep1Title": "Click \"Edit\"",
+      "visualStep1Desc": "Enable edit mode",
+      "visualStep2Title": "Click \"Visual Editor\"",
+      "visualStep2Desc": "Switch to interactive visual mode",
+      "visualStep3Title": "Add nodes",
+      "visualStep3Desc": "Use \"Add HTTP\" or \"Add Condition\" buttons",
+      "visualStep4Title": "Configure each node",
+      "visualStep4Desc": "Click a node to edit URL, method, parameters",
+      "visualStep5Title": "Connect the nodes",
+      "visualStep5Desc": "Drag from one connection point to another",
+      "visualStep6Title": "Save the workflow",
+      "visualStep6Desc": "Click \"Save Workflow\"",
+      "tip": "Tip",
+      "tipDesc": "You can drag nodes to rearrange them even in read mode.",
+      "step4Title": "Tips & Best Practices",
+      "tip1Title": "Use descriptive names",
+      "tip1Desc": "Name your steps clearly: \"validate_client\", \"create_booking\"",
+      "tip2Title": "Map the responses",
+      "tip2Desc": "Use response_mapping to extract data: {\"is_valid\": \"data.valid\"}",
+      "tip3Title": "Add conditions",
+      "tip3Desc": "Control flow with conditions: \"is_valid == true\"",
+      "tip4Title": "Use relevant keywords",
+      "tip4Desc": "Help the assistant identify when to use your workflow",
+      "tip5Title": "Switch between modes",
+      "tip5Desc": "Use JSON for quick edits and Visual to visualize the flow"
+    }
+  },
+  "fileUpload": {
+    "errorUpload": "Error uploading files",
+    "successUpload": "Files uploaded",
+    "successUploadDetail": "Files were uploaded successfully",
+    "invalidTypes": "Invalid file types",
+    "invalidTypesDetail": "Only PDF and Excel files (.xls, .xlsx) are allowed.",
+    "filesTooBig": "Files too large",
+    "filesTooBigDetail": "The following files exceed the 250 MiB limit: {files}",
+    "filesSelected": "Files selected",
+    "filesSelectedDetail": "{count} file(s) selected successfully"
+  },
+  "footer": {
+    "tagline": "Automate your business with artificial intelligence. Gillie helps you integrate AI into your website, customer service channels, and work systems to increase productivity and improve your customers' experience.",
+    "followUs": "Follow us",
+    "links": "Links",
+    "privacyPolicy": "Privacy Policy",
+    "termsOfService": "Terms of Service",
+    "contactUs": "Contact Us",
+    "about": "About",
+    "allRightsReserved": "All rights reserved."
   }
 }

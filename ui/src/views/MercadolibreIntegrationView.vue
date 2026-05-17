@@ -49,7 +49,7 @@ const updateIntegration = async () => {
     await addIntegration(meliIntegration)
     await getAssistantProfile()
   } catch (error) {
-    console.error('Error al actualizar integración:', error)
+    console.error('Error updating integration:', error)
   }
 }
 

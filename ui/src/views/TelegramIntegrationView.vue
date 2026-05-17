@@ -76,7 +76,7 @@ const saveConfig = async () => {
     await getAssistantProfile()
     toast.add({ severity: 'success', summary: t('integrations.saveConfig'), life: 3000 })
   } catch (error) {
-    console.error('Error al guardar la configuración:', error)
+    console.error('Error saving configuration:', error)
   }
 }
 
@@ -85,7 +85,7 @@ const updateIntegration = async () => {
     await addIntegration(telegramIntegration)
     await getAssistantProfile()
   } catch (error) {
-    console.error('Error al actualizar integración:', error)
+    console.error('Error updating integration:', error)
   }
 }
 
@@ -203,7 +203,7 @@ onMounted(async () => {
             id="bot_token"
             v-model="(telegramIntegration.config as TelegramIntegrationConfig).bot_token"
             placeholder="123456789:ABCDefghIJKlmnoPQRstUVwxyz"
-            :disabled="!telegramIntegration.activated"
+            :disabled="!telegramIntegration.activated || isRegisteringWebhook"
             :invalid="!!validationErrors.bot_token"
             class="w-full"
             type="password"
@@ -224,7 +224,7 @@ onMounted(async () => {
             id="secret_token"
             v-model="(telegramIntegration.config as TelegramIntegrationConfig).secret_token"
             :placeholder="t('integrations.telegram.secretTokenPlaceholder')"
-            :disabled="!telegramIntegration.activated"
+            :disabled="!telegramIntegration.activated || isRegisteringWebhook"
             class="w-full"
           />
           <small class="field-help">{{ t('integrations.telegram.secretTokenHelp') }}</small>
@@ -334,37 +334,34 @@ onMounted(async () => {
         <span class="step-badge">3</span>
         <div>
           <p class="panel-title">{{ t('integrations.setupGuide') }}</p>
-          <p class="panel-subtitle">{{ t('integrations.telegram.registerWebhookSubtitle') }}</p>
+          <p class="panel-subtitle">{{ t('integrations.telegram.stepsSubtitle') }}</p>
         </div>
       </div>
 
       <ol class="steps-list">
         <li class="step-item">
           <span class="step-num">1</span>
-          <span>Abrí Telegram y hablá con <strong>@BotFather</strong></span>
+          <span>{{ t('integrations.telegram.guideStep1') }}</span>
         </li>
         <li class="step-item">
           <span class="step-num">2</span>
-          <span>Enviá <code>/newbot</code> y seguí las instrucciones para crear el bot</span>
+          <span>{{ t('integrations.telegram.guideStep2') }}</span>
         </li>
         <li class="step-item">
           <span class="step-num">3</span>
-          <span>Copiá el <strong>Bot Token</strong> que te da BotFather y guardalo arriba</span>
+          <span>{{ t('integrations.telegram.guideStep3') }}</span>
         </li>
         <li class="step-item">
           <span class="step-num">4</span>
-          <span>Activá la integración con el toggle del encabezado</span>
+          <span>{{ t('integrations.telegram.guideStep4') }}</span>
         </li>
         <li class="step-item">
           <span class="step-num">5</span>
-          <span>Si estás en local, iniciá un túnel: <code>ngrok http 8000</code></span>
+          <span>{{ t('integrations.telegram.guideStep5') }}</span>
         </li>
         <li class="step-item">
           <span class="step-num">6</span>
-          <span
-            >Pegá la URL de ngrok en el paso 2 y hacé clic en
-            <strong>Registrar en Telegram</strong></span
-          >
+          <span>{{ t('integrations.telegram.guideStep6') }}</span>
         </li>
       </ol>
     </div>
@@ -374,180 +371,14 @@ onMounted(async () => {
 </template>
 
 <style scoped>
-.integration-container {
-  max-width: 860px;
-  margin: 0 auto;
-  padding: 1.25rem;
-  display: flex;
-  flex-direction: column;
-  gap: 1rem;
-  background: var(--do-bg);
-  box-sizing: border-box;
-}
-
-.page-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 1rem;
-  padding: 1rem 1.25rem;
-  border: 1px solid var(--do-border-light);
-  border-radius: 0.75rem;
-  background: rgba(255, 255, 255, 0.03);
-}
-
-.header-left {
-  display: flex;
-  align-items: center;
-  gap: 1rem;
-  min-width: 0;
-}
-
-.icon-wrapper {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-size: 2rem;
-  color: var(--do-blue);
-  flex-shrink: 0;
-}
-
+/* ── View-specific styles ────────────────────────────────── */
 .tg-icon {
   color: #0088cc;
-}
-
-.header-text {
-  min-width: 0;
-}
-
-.page-title {
-  font-size: 1.35rem;
-  font-weight: 700;
-  color: var(--do-text);
-  margin: 0 0 0.2rem;
-  line-height: 1.2;
-}
-
-.page-subtitle {
-  font-size: 0.875rem;
-  color: var(--do-text-muted);
-  margin: 0;
-}
-
-.header-toggle {
-  display: flex;
-  align-items: center;
-  gap: 0.75rem;
-  flex-shrink: 0;
-}
-
-.toggle-status {
-  font-size: 0.8rem;
-  font-weight: 600;
-  color: var(--color-danger);
-  transition: color 0.25s;
-  white-space: nowrap;
-}
-
-.toggle-status.active {
-  color: var(--color-success);
-}
-
-.panel {
-  border: 1px solid var(--do-border-light);
-  border-radius: 0.75rem;
-  overflow: hidden;
-  background: var(--do-bg);
-}
-
-.panel-disabled {
-  opacity: 0.55;
-  filter: grayscale(0.4);
-  pointer-events: none;
-}
-
-.panel-header {
-  display: flex;
-  align-items: center;
-  gap: 0.875rem;
-  padding: 0.875rem 1.25rem;
-  border-bottom: 1px solid var(--do-border-light);
-  background: rgba(255, 255, 255, 0.025);
-}
-
-.step-badge {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 1.75rem;
-  height: 1.75rem;
-  border-radius: 50%;
-  background: var(--gradient-primary, var(--color-primary));
-  color: #fff;
-  font-size: 0.8rem;
-  font-weight: 700;
-  flex-shrink: 0;
-}
-
-.panel-title {
-  font-size: 0.95rem;
-  font-weight: 600;
-  color: var(--do-text);
-  margin: 0 0 0.15rem;
-}
-
-.panel-subtitle {
-  font-size: 0.8rem;
-  color: var(--do-text-muted);
-  margin: 0;
-}
-
-.panel-body {
-  padding: 1.25rem;
-  display: flex;
-  flex-direction: column;
-  gap: 1rem;
-}
-
-.panel-footer {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 1rem;
-  padding-top: 1rem;
-  border-top: 1px solid var(--do-border-light);
-  margin-top: 0.25rem;
-}
-
-.field-group {
-  display: flex;
-  flex-direction: column;
-  gap: 0.4rem;
-}
-
-.field-label {
-  display: flex;
-  align-items: center;
-  gap: 0.4rem;
-  font-size: 0.875rem;
-  font-weight: 600;
-  color: var(--do-text);
 }
 
 .field-icon {
   color: var(--color-primary);
   font-size: 0.875rem;
-}
-
-.required {
-  color: var(--color-danger);
-}
-
-.optional {
-  font-size: 0.75rem;
-  font-weight: 400;
-  color: var(--do-text-muted);
-  margin-left: 0.25rem;
 }
 
 .field-help {
@@ -558,10 +389,6 @@ onMounted(async () => {
 
 .field-error {
   margin-top: 0.25rem;
-}
-
-.w-full {
-  width: 100%;
 }
 
 .saved-state {
@@ -684,28 +511,4 @@ onMounted(async () => {
   color: var(--do-text);
 }
 
-@media (max-width: 600px) {
-  .integration-container {
-    padding: 0.75rem;
-  }
-
-  .page-header {
-    flex-direction: column;
-    align-items: flex-start;
-    gap: 0.875rem;
-  }
-
-  .header-toggle {
-    align-self: flex-end;
-  }
-
-  .panel-footer {
-    flex-direction: column-reverse;
-    align-items: stretch;
-  }
-
-  .panel-footer :deep(button) {
-    width: 100%;
-  }
-}
 </style>

@@ -85,7 +85,7 @@ const saveConfig = async () => {
     await addIntegration(whatsappIntegration)
     await getAssistantProfile()
   } catch (error) {
-    console.error('Error al guardar la configuración:', error)
+    console.error('Error saving configuration:', error)
   }
 }
 
@@ -94,7 +94,7 @@ const updateIntegration = async () => {
     await addIntegration(whatsappIntegration)
     await getAssistantProfile()
   } catch (error) {
-    console.error('Error al actualizar integración:', error)
+    console.error('Error updating integration:', error)
   }
 }
 
@@ -203,7 +203,7 @@ onMounted(async () => {
         <div class="field-group">
           <label for="businessAccountId" class="field-label">
             <i class="pi pi-building field-icon"></i>
-            ID de Cuenta Business
+            {{ t('integrations.whatsapp.businessAccountId') }}
           </label>
           <InputText
             id="businessAccountId"
@@ -216,14 +216,14 @@ onMounted(async () => {
           <Message v-if="validationErrors.businessAccountId" severity="error" class="field-error">
             {{ validationErrors.businessAccountId }}
           </Message>
-          <small class="field-help">ID de tu cuenta de WhatsApp Business</small>
+          <small class="field-help">{{ t('integrations.whatsapp.businessAccountIdHelp') }}</small>
         </div>
 
         <div class="panel-footer">
           <div></div>
           <Button
             type="submit"
-            label="Guardar Configuración"
+            :label="t('integrations.saveConfig')"
             icon="pi pi-save"
             severity="primary"
             :disabled="!whatsappIntegration.activated"
@@ -237,8 +237,8 @@ onMounted(async () => {
       <div class="panel-header">
         <span class="step-badge">2</span>
         <div>
-          <p class="panel-title">Estado Actual</p>
-          <p class="panel-subtitle">Valores guardados de la integración</p>
+          <p class="panel-title">{{ t('integrations.currentState') }}</p>
+          <p class="panel-subtitle">{{ t('integrations.whatsapp.currentStateSubtitle') }}</p>
         </div>
       </div>
 
@@ -246,14 +246,14 @@ onMounted(async () => {
         <div class="status-row">
           <span class="status-label">
             <i class="pi pi-key"></i>
-            Token de Acceso
+            {{ t('integrations.whatsapp.accessToken') }}
           </span>
           <code class="status-value">
             {{
               (searchWhatsappIntegration?.config as unknown as WhatsappIntegrationConfig)
                 ?.accessToken
-                ? '&bull;&bull;&bull;&bull;&bull;&bull;&bull;&bull;&bull;&bull;&bull;'
-                : 'No configurado'
+                ? '•••••••••••'
+                : t('integrations.notConfigured')
             }}
           </code>
         </div>
@@ -261,12 +261,12 @@ onMounted(async () => {
         <div class="status-row">
           <span class="status-label">
             <i class="pi pi-phone"></i>
-            ID de Número
+            {{ t('integrations.whatsapp.phoneNumberId') }}
           </span>
           <code class="status-value">
             {{
               (searchWhatsappIntegration?.config as unknown as WhatsappIntegrationConfig)
-                ?.phoneNumberId || 'No configurado'
+                ?.phoneNumberId || t('integrations.notConfigured')
             }}
           </code>
         </div>
@@ -274,12 +274,12 @@ onMounted(async () => {
         <div class="status-row">
           <span class="status-label">
             <i class="pi pi-building"></i>
-            ID de Cuenta Business
+            {{ t('integrations.whatsapp.businessAccountId') }}
           </span>
           <code class="status-value">
             {{
               (searchWhatsappIntegration?.config as unknown as WhatsappIntegrationConfig)
-                ?.businessAccountId || 'No configurado'
+                ?.businessAccountId || t('integrations.notConfigured')
             }}
           </code>
         </div>
@@ -291,38 +291,35 @@ onMounted(async () => {
       <div class="panel-header">
         <span class="step-badge">3</span>
         <div>
-          <p class="panel-title">Guía de Configuración</p>
-          <p class="panel-subtitle">Pasos para conectar WhatsApp Business API</p>
+          <p class="panel-title">{{ t('integrations.setupGuide') }}</p>
+          <p class="panel-subtitle">{{ t('integrations.whatsapp.stepsSubtitle') }}</p>
         </div>
       </div>
 
       <ol class="steps-list">
         <li class="step-item">
           <span class="step-num">1</span>
-          <span>Ve a <strong>developers.facebook.com</strong> y crea una app</span>
+          <span>{{ t('integrations.whatsapp.guideStep1') }}</span>
         </li>
         <li class="step-item">
           <span class="step-num">2</span>
-          <span>Agrega el producto <strong>"WhatsApp"</strong> a tu app</span>
+          <span>{{ t('integrations.whatsapp.guideStep2') }}</span>
         </li>
         <li class="step-item">
           <span class="step-num">3</span>
-          <span>Copia el <strong>Access Token</strong> del panel de API</span>
+          <span>{{ t('integrations.whatsapp.guideStep3') }}</span>
         </li>
         <li class="step-item">
           <span class="step-num">4</span>
-          <span
-            >Copia el <strong>Phone Number ID</strong> y el
-            <strong>Business Account ID</strong></span
-          >
+          <span>{{ t('integrations.whatsapp.guideStep4') }}</span>
         </li>
         <li class="step-item">
           <span class="step-num">5</span>
-          <span>Activa la integración y guarda los datos</span>
+          <span>{{ t('integrations.whatsapp.guideStep5') }}</span>
         </li>
         <li class="step-item">
           <span class="step-num">6</span>
-          <span>Configura el webhook con URL: <code>/api/whatsapp/webhook</code></span>
+          <span>{{ t('integrations.whatsapp.guideStep6') }}</span>
         </li>
       </ol>
     </div>
@@ -332,168 +329,9 @@ onMounted(async () => {
 </template>
 
 <style scoped>
-/* ── Layout ─────────────────────────────────────────────── */
-.integration-container {
-  max-width: 860px;
-  margin: 0 auto;
-  padding: 1.25rem;
-  display: flex;
-  flex-direction: column;
-  gap: 1rem;
-  background: var(--do-bg);
-  box-sizing: border-box;
-}
-
-/* ── Page header ─────────────────────────────────────────── */
-.page-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 1rem;
-  padding: 1rem 1.25rem;
-  border: 1px solid var(--do-border-light);
-  border-radius: 0.75rem;
-  background: rgba(255, 255, 255, 0.03);
-}
-
-.header-left {
-  display: flex;
-  align-items: center;
-  gap: 1rem;
-  min-width: 0;
-}
-
-.icon-wrapper {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-size: 2rem;
-  color: var(--do-blue);
-  flex-shrink: 0;
-}
-
+/* ── View-specific styles ────────────────────────────────── */
 .whatsapp-icon {
   color: #25d366;
-}
-
-.header-text {
-  min-width: 0;
-}
-
-.page-title {
-  font-size: 1.35rem;
-  font-weight: 700;
-  color: var(--do-text);
-  margin: 0 0 0.2rem;
-  line-height: 1.2;
-}
-
-.page-subtitle {
-  font-size: 0.875rem;
-  color: var(--do-text-muted);
-  margin: 0;
-}
-
-.header-toggle {
-  display: flex;
-  align-items: center;
-  gap: 0.75rem;
-  flex-shrink: 0;
-}
-
-.toggle-status {
-  font-size: 0.8rem;
-  font-weight: 600;
-  color: var(--color-danger);
-  transition: color 0.25s;
-  white-space: nowrap;
-}
-
-.toggle-status.active {
-  color: var(--color-success);
-}
-
-/* ── Panel ───────────────────────────────────────────────── */
-.panel {
-  border: 1px solid var(--do-border-light);
-  border-radius: 0.75rem;
-  overflow: hidden;
-  background: var(--do-bg);
-}
-
-.panel-disabled {
-  opacity: 0.55;
-  filter: grayscale(0.4);
-  pointer-events: none;
-}
-
-.panel-header {
-  display: flex;
-  align-items: center;
-  gap: 0.875rem;
-  padding: 0.875rem 1.25rem;
-  border-bottom: 1px solid var(--do-border-light);
-  background: rgba(255, 255, 255, 0.025);
-}
-
-.step-badge {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 1.75rem;
-  height: 1.75rem;
-  border-radius: 50%;
-  background: var(--gradient-primary, var(--color-primary));
-  color: #fff;
-  font-size: 0.8rem;
-  font-weight: 700;
-  flex-shrink: 0;
-}
-
-.panel-title {
-  font-size: 0.95rem;
-  font-weight: 600;
-  color: var(--do-text);
-  margin: 0 0 0.15rem;
-}
-
-.panel-subtitle {
-  font-size: 0.8rem;
-  color: var(--do-text-muted);
-  margin: 0;
-}
-
-.panel-body {
-  padding: 1.25rem;
-  display: flex;
-  flex-direction: column;
-  gap: 1rem;
-}
-
-.panel-footer {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 1rem;
-  padding-top: 1rem;
-  border-top: 1px solid var(--do-border-light);
-  margin-top: 0.25rem;
-}
-
-/* ── Form fields ─────────────────────────────────────────── */
-.field-group {
-  display: flex;
-  flex-direction: column;
-  gap: 0.4rem;
-}
-
-.field-label {
-  display: flex;
-  align-items: center;
-  gap: 0.4rem;
-  font-size: 0.875rem;
-  font-weight: 600;
-  color: var(--do-text);
 }
 
 .field-icon {
@@ -509,10 +347,6 @@ onMounted(async () => {
 
 .field-error {
   margin-top: 0.25rem;
-}
-
-.w-full {
-  width: 100%;
 }
 
 /* ── Status panel ────────────────────────────────────────── */
@@ -600,31 +434,7 @@ onMounted(async () => {
   color: var(--do-text);
 }
 
-/* ── Responsive ──────────────────────────────────────────── */
 @media (max-width: 600px) {
-  .integration-container {
-    padding: 0.75rem;
-  }
-
-  .page-header {
-    flex-direction: column;
-    align-items: flex-start;
-    gap: 0.875rem;
-  }
-
-  .header-toggle {
-    align-self: flex-end;
-  }
-
-  .panel-footer {
-    flex-direction: column-reverse;
-    align-items: stretch;
-  }
-
-  .panel-footer :deep(button) {
-    width: 100%;
-  }
-
   .status-row {
     flex-direction: column;
     align-items: flex-start;
