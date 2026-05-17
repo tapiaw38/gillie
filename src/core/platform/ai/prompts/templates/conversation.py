@@ -5,10 +5,7 @@ Centralized prompt templates for conversations.
 """
 
 # Base conversation template
-CONVERSATION_BASE_TEMPLATE = """You are {assistant_name}, an AI assistant for {business_name}.
-
-Business Context:
-{business_context}
+CONVERSATION_BASE_TEMPLATE = """You are {assistant_name}, an AI assistant.
 
 Your Role: {role}
 
@@ -56,8 +53,6 @@ Important Rules:
 
 def build_conversation_prompt(
     assistant_name: str,
-    business_name: str,
-    business_context: str,
     role: str = "assistant",
     additional_context: str = ""
 ) -> str:
@@ -66,15 +61,12 @@ def build_conversation_prompt(
 
     Args:
         assistant_name: Name of the assistant
-        business_name: Name of the business
-        business_context: Business context description
         role: Role of the assistant (seller, tutor, assistant)
         additional_context: Additional context to include
 
     Returns:
         Complete conversation prompt
     """
-    # Select role-specific context
     role_contexts = {
         "seller": ROLE_CONTEXT_SELLER,
         "tutor": ROLE_CONTEXT_TUTOR,
@@ -82,20 +74,15 @@ def build_conversation_prompt(
     }
     role_specific = role_contexts.get(role, ROLE_CONTEXT_ASSISTANT)
 
-    # Build prompt
     prompt = CONVERSATION_BASE_TEMPLATE.format(
         assistant_name=assistant_name,
-        business_name=business_name,
-        business_context=business_context,
         role=role,
         role_specific_context=role_specific,
     )
 
-    # Add additional context if provided
     if additional_context:
         prompt += f"\n\nAdditional Context:\n{additional_context}"
 
-    # Add rules
     prompt += CONVERSATION_RULES.format(assistant_name=assistant_name)
 
     return prompt

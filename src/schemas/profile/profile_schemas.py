@@ -9,7 +9,6 @@ from ..integration.integration_schemas import IntegrationOutput, IntegrationOutp
 
 class ProfileInput(BaseModel):
     assistant_name: Optional[str] = None
-    business_name: Optional[str] = None
     functions: Optional[str] = None
     tool_prompts: Optional[str] = None
     disabled_tools: Optional[List[str]] = None
@@ -25,7 +24,6 @@ class ProfileOutputData(BaseModel):
     id: str
     user_id: str
     assistant_name: str
-    business_name: Optional[str] = None
     functions: Optional[str] = None
     tool_prompts: Optional[str] = None
     disabled_tools: Optional[List[str]] = None
@@ -52,7 +50,6 @@ class ProfileOutput(BaseModel):
                 id=profile.id,
                 user_id=profile.user_id,
                 assistant_name=profile.assistant_name,
-                business_name=profile.business_name,
                 functions=profile.functions,
                 tool_prompts=profile.tool_prompts,
                 disabled_tools=profile.disabled_tools,

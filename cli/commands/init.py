@@ -93,7 +93,6 @@ def init(
     console.print()
 
     assistant_name = _prompt_text("Assistant name", required=True)
-    business_name = _prompt_text("Business name (optional)", default="")
     functions = _prompt_text("Functions / tools description (optional)", default="")
     response_language = _prompt_select(
         "Assistant response language",
@@ -235,13 +234,7 @@ def init(
     enable_tts = _prompt_confirm("Enable Text-to-Speech (TTS)?", default=False)
     enable_stt = _prompt_confirm("Enable Speech-to-Text (STT)?", default=False)
 
-    console.print()
-    console.print("[bold]WhatsApp Integration[/bold]")
-    enable_whatsapp = _prompt_confirm("Enable WhatsApp webhook?", default=False)
     whatsapp_cfg = WhatsAppServiceConfig(enabled=False)
-    if enable_whatsapp:
-        verify_token = _prompt_text("WhatsApp verify token", required=True)
-        whatsapp_cfg = WhatsAppServiceConfig(enabled=True, verify_token=verify_token)
 
     console.print()
     console.print("[bold]Observability (LangSmith)[/bold]")
@@ -264,7 +257,6 @@ def init(
         user_id=existing_user_id or str(uuid.uuid4()),
         profile=ProfileConfig(
             assistant_name=assistant_name,
-            business_name=business_name,
             functions=functions,
             response_language=response_language,
         ),
@@ -325,7 +317,7 @@ def _print_summary(config: AssistantConfig) -> None:
     table.add_row("Response language", config.profile.response_language or "en")
     table.add_row("TTS", "✓ enabled" if config.services.tts.enabled else "✗ disabled")
     table.add_row("STT", "✓ enabled" if config.services.stt.enabled else "✗ disabled")
-    table.add_row("WhatsApp", "✓ enabled" if config.services.whatsapp.enabled else "✗ disabled")
+    table.add_row("WhatsApp", "[dim]disabled[/dim]")
     table.add_row("LangSmith", "✓ enabled" if config.services.langsmith.enabled else "✗ disabled")
     table.add_row("Server", f"{config.server.host}:{config.server.port}")
 

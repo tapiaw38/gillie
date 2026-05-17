@@ -9,7 +9,6 @@ from ..integration.integration import Integration
 class Profile(BaseModel):
     id: Optional[str] = Field(alias="_id", default=None)
     assistant_name: Optional[str] = None
-    business_name: Optional[str] = None
     functions: Optional[str] = None
     tool_prompts: Optional[str] = None
     disabled_tools: Optional[List[str]] = None

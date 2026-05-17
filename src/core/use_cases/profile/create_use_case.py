@@ -27,7 +27,6 @@ class CreateUseCase:
                 _id=generated_id,
                 user_id=user_id,
                 assistant_name=profile.assistant_name,
-                business_name=profile.business_name,
                 functions=profile.functions,
                 is_active=True,
                 created_at=datetime.now(timezone.utc),
