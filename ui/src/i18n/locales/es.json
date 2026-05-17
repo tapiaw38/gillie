@@ -2,7 +2,11 @@
   "nav": {
     "back": "Volver",
     "active": "Activo",
-    "inactive": "Inactivo"
+    "inactive": "Inactivo",
+    "backendUnavailable": "Backend no disponible",
+    "timeout": "Tiempo de espera agotado",
+    "serverError": "Error del servidor ({status})",
+    "noConnection": "Sin conexión"
   },
   "common": {
     "save": "Guardar",

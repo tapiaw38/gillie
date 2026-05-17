@@ -2,7 +2,11 @@
   "nav": {
     "back": "Back",
     "active": "Active",
-    "inactive": "Inactive"
+    "inactive": "Inactive",
+    "backendUnavailable": "Backend unavailable",
+    "timeout": "Request timed out",
+    "serverError": "Server error ({status})",
+    "noConnection": "No connection"
   },
   "common": {
     "save": "Save",
