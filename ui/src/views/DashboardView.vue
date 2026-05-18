@@ -90,6 +90,12 @@ const newProvider = reactive({
   api_key: '',
 })
 
+const builtinProviders = computed(() => providerOptions.value.filter((p) => p.is_builtin))
+const customProviders = computed(() => providerOptions.value.filter((p) => !p.is_builtin))
+const activeProviderInfo = computed(() =>
+  providerOptions.value.find((p) => p.key === aiProvider.value) ?? null,
+)
+
 watch(
   () => assistantProfile.value?.response_language,
   (lang) => {
@@ -638,12 +644,19 @@ const skillGroups = computed<SkillGroup[]>(() => [
                     @change="onProviderSelect(($event.target as HTMLSelectElement).value)"
                   >
                     <option value="">{{ t('dashboard.aiModelDefault') }}</option>
-                    <option v-for="p in providerOptions" :key="p.key" :value="p.key">
-                      {{ p.key }} — {{ p.model }}
-                    </option>
+                    <optgroup v-if="builtinProviders.length" :label="t('dashboard.providerBuiltin')">
+                      <option v-for="p in builtinProviders" :key="p.key" :value="p.key">
+                        {{ p.key }}{{ p.auth_type !== 'none' ? (p.api_key_set ? ' ✓' : ' !') : '' }}
+                      </option>
+                    </optgroup>
+                    <optgroup v-if="customProviders.length" :label="t('dashboard.providerCustom')">
+                      <option v-for="p in customProviders" :key="p.key" :value="p.key">
+                        {{ p.key }}{{ p.auth_type !== 'none' ? (p.api_key_set ? ' ✓' : ' !') : '' }}
+                      </option>
+                    </optgroup>
                   </select>
                   <button
-                    v-if="aiProvider && providerOptions.find((p) => p.key === aiProvider)?.auth_type !== 'none'"
+                    v-if="aiProvider && activeProviderInfo?.auth_type !== 'none'"
                     type="button"
                     class="add-provider-toggle"
                     :title="t('dashboard.updateProviderKey')"
@@ -660,6 +673,22 @@ const skillGroups = computed<SkillGroup[]>(() => [
                     <i :class="showAddProvider ? 'pi pi-times' : 'pi pi-plus-circle'"></i>
                   </button>
                 </div>
+              </div>
+
+              <!-- Active provider model chip -->
+              <div v-if="activeProviderInfo" class="provider-meta-row">
+                <span class="provider-meta-chip">
+                  <i class="pi pi-microchip"></i>
+                  {{ activeProviderInfo.model }}
+                </span>
+                <span
+                  v-if="activeProviderInfo.auth_type !== 'none'"
+                  class="provider-meta-chip"
+                  :class="activeProviderInfo.api_key_set ? 'chip--ok' : 'chip--warn'"
+                >
+                  <i :class="activeProviderInfo.api_key_set ? 'pi pi-check-circle' : 'pi pi-exclamation-circle'"></i>
+                  {{ activeProviderInfo.api_key_set ? t('dashboard.providerKeySet') : t('dashboard.providerKeyMissing') }}
+                </span>
               </div>
 
               <!-- API Key input -->
@@ -713,7 +742,13 @@ const skillGroups = computed<SkillGroup[]>(() => [
                     size="small"
                     :placeholder="t('dashboard.providerModel')"
                   />
+                  <select v-model="newProvider.auth_type" class="provider-select provider-select--full">
+                    <option value="api_key">{{ t('dashboard.providerAuthApiKey') }}</option>
+                    <option value="bearer">{{ t('dashboard.providerAuthBearer') }}</option>
+                    <option value="none">{{ t('dashboard.providerAuthNone') }}</option>
+                  </select>
                   <InputText
+                    v-if="newProvider.auth_type !== 'none'"
                     v-model="newProvider.api_key"
                     size="small"
                     :placeholder="t('dashboard.providerApiKeyPlaceholder')"
@@ -1326,6 +1361,48 @@ const skillGroups = computed<SkillGroup[]>(() => [
   display: flex;
   gap: 0.4rem;
   justify-content: flex-end;
+}
+
+.provider-select--full {
+  max-width: 100%;
+  width: 100%;
+}
+
+.provider-meta-row {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  flex-wrap: wrap;
+  padding-bottom: 0.25rem;
+}
+
+.provider-meta-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  font-size: 0.72rem;
+  font-weight: 500;
+  color: var(--do-text-secondary);
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 999px;
+  padding: 0.15rem 0.5rem;
+}
+
+.provider-meta-chip i {
+  font-size: 0.7rem;
+}
+
+.chip--ok {
+  color: var(--do-success);
+  background: rgba(34, 197, 94, 0.08);
+  border-color: rgba(34, 197, 94, 0.2);
+}
+
+.chip--warn {
+  color: var(--do-warning);
+  background: rgba(245, 158, 11, 0.08);
+  border-color: rgba(245, 158, 11, 0.2);
 }
 
 .provider-select-row {
