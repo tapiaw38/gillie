@@ -34,7 +34,7 @@ def start(
     console.print()
     console.print(Panel(
         f"✨🐙 [bold cyan]Gillie[/bold cyan] — [bold]{config.profile.assistant_name}[/bold]\n"
-        f"[dim]{config.profile.business_name}[/dim]",
+        f"[dim]{config.profile.assistant_name}[/dim]",
         border_style="cyan",
     ))
     console.print(f"  Server:  [bold]http://{actual_host}:{actual_port}[/bold]")

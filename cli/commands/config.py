@@ -42,7 +42,6 @@ def show():
 
     table.add_row("User ID", config.user_id)
     table.add_row("Assistant Name", p.assistant_name)
-    table.add_row("Business Name", p.business_name or "[dim]not set[/dim]")
     table.add_row("Functions", p.functions or "[dim]not set[/dim]")
     table.add_row("Response Language", p.response_language or "en")
 
@@ -70,11 +69,6 @@ def edit():
         default=p.assistant_name,
     ).execute()
 
-    business_name = inquirer.text(
-        message="Business name (optional)",
-        default=p.business_name,
-    ).execute()
-
     functions = inquirer.text(
         message="Functions / tools",
         default=p.functions,
@@ -92,7 +86,6 @@ def edit():
     ).execute()
 
     config.profile.assistant_name = assistant_name or p.assistant_name
-    config.profile.business_name = business_name
     config.profile.functions = functions
     config.profile.response_language = response_language
 

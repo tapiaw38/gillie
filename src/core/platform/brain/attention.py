@@ -44,5 +44,12 @@ class AttentionSystem:
     def _recency(created_at: datetime) -> float:
         """Exponential decay: score=1.0 at creation, ~0.5 after 7 days, ~0.1 after 30 days."""
         now = datetime.now(timezone.utc)
-        days = max(0.0, (now - created_at).total_seconds() / 86400)
+        normalized_created_at = AttentionSystem._ensure_utc(created_at)
+        days = max(0.0, (now - normalized_created_at).total_seconds() / 86400)
         return math.exp(-0.1 * days)
+
+    @staticmethod
+    def _ensure_utc(value: datetime) -> datetime:
+        if value.tzinfo is None or value.tzinfo.utcoffset(value) is None:
+            return value.replace(tzinfo=timezone.utc)
+        return value.astimezone(timezone.utc)

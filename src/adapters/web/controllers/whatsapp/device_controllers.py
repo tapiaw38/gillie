@@ -126,9 +126,9 @@ async def _handle_incoming_message(
         for msg in new_assistant_msgs:
             for segment in parse_message_segments(msg.content):
                 if segment["type"] == "image":
-                    await neonize.send_image(device_id, sender_jid, segment["content"])
+                    await neonize.send_image(device_id, send_target, segment["content"])
                 elif segment["type"] == "document":
-                    await neonize.send_document(device_id, sender_jid, segment["content"])
+                    await neonize.send_document(device_id, send_target, segment["content"])
                 elif segment["content"]:
                     await neonize.send_text(device_id, send_target, segment["content"])
             logger.info(f"[device:{device_id}] Replied to {sender_jid}")
@@ -138,9 +138,9 @@ async def _handle_incoming_message(
             if audio_url:
                 sent = await neonize.send_audio(device_id, send_target, audio_url)
                 if sent:
-                    logger.info(f"[device:{device_id}] Sent audio to {sender_jid}")
+                    logger.info(f"[device:{device_id}] Sent audio to {send_target}")
                 else:
-                    logger.warning(f"[device:{device_id}] Audio send failed")
+                    logger.warning(f"[device:{device_id}] Audio send failed to {send_target}")
 
     except Exception as e:
         logger.error(

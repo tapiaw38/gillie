@@ -445,14 +445,6 @@ class NeonizeIntegration:
             return None
 
     async def send_audio(self, device_id: str, jid: str, audio_url: str) -> Optional[str]:
-        """
-        Descarga el audio desde audio_url, lo convierte a MP3 y lo envía al JID.
-
-        Neonize detecta el mimetype con python-magic:
-        - OGG OPUS → "audio/ogg"  (WhatsApp necesita "audio/ogg; codecs=opus" → no reproduce)
-        - MP3      → "audio/mpeg" (universalmente soportado por WhatsApp)
-        Por eso convertimos a MP3.
-        """
         import subprocess
         import tempfile
         import aiohttp
@@ -464,48 +456,66 @@ class NeonizeIntegration:
             user, server = jid, "s.whatsapp.net"
         jid_proto = build_jid(user, server)
 
-        tmp_wav = None
-        tmp_mp3 = None
+        tmp_src = None
+        tmp_ogg = None
         try:
             async with aiohttp.ClientSession() as session:
                 async with session.get(audio_url) as resp:
                     resp.raise_for_status()
-                    wav_bytes = await resp.read()
+                    src_bytes = await resp.read()
 
             logger.info(
                 "[neonize] Downloaded audio %d bytes from %s for device %s",
-                len(wav_bytes), audio_url[:60], device_id,
+                len(src_bytes), audio_url[:60], device_id,
             )
 
             with tempfile.NamedTemporaryFile(suffix=".wav", delete=False) as f:
-                f.write(wav_bytes)
-                tmp_wav = f.name
+                f.write(src_bytes)
+                tmp_src = f.name
 
-            tmp_mp3 = tmp_wav.replace(".wav", ".mp3")
+            tmp_ogg = tmp_src.replace(".wav", ".ogg")
             ffmpeg_cmd = [
                 "ffmpeg", "-y",
-                "-i", tmp_wav,
+                "-i", tmp_src,
                 "-vn",
-                "-acodec", "libmp3lame",
+                "-acodec", "libopus",
                 "-b:a", "64k",
-                "-ar", "22050",
+                "-ar", "48000",
                 "-ac", "1",
-                tmp_mp3,
+                tmp_ogg,
             ]
             conv = subprocess.run(ffmpeg_cmd, capture_output=True, timeout=30)
             if conv.returncode != 0:
-                logger.warning(
-                    "[neonize] ffmpeg WAV→MP3 failed: %s — enviando WAV",
-                    conv.stderr[-200:],
-                )
-                audio_bytes = wav_bytes
-            else:
-                with open(tmp_mp3, "rb") as f:
-                    audio_bytes = f.read()
-                logger.info("[neonize] Converted to MP3: %d bytes", len(audio_bytes))
+                logger.error("[neonize] ffmpeg WAV→OGG failed: %s", conv.stderr[-300:])
+                return None
+
+            with open(tmp_ogg, "rb") as f:
+                audio_bytes = f.read()
+            logger.info("[neonize] Converted to OGG Opus: %d bytes", len(audio_bytes))
+
+            from io import BytesIO
+            from neonize.aioze.client import AFFmpeg, AudioMessage, MediaType, Message
 
             client = await self.get_client(device_id)
-            result = await client.send_audio(jid_proto, audio_bytes, ptt=False)
+            upload = await client.upload(audio_bytes, MediaType.MediaAudio)
+
+            async with AFFmpeg(audio_bytes) as ffmpeg:
+                duration = int((await ffmpeg.extract_info()).format.duration)
+
+            message = Message(
+                audioMessage=AudioMessage(
+                    URL=upload.url,
+                    directPath=upload.DirectPath,
+                    fileEncSHA256=upload.FileEncSHA256,
+                    fileLength=upload.FileLength,
+                    fileSHA256=upload.FileSHA256,
+                    mediaKey=upload.MediaKey,
+                    mimetype="audio/ogg; codecs=opus",
+                    seconds=duration,
+                    PTT=False,
+                )
+            )
+            result = await client.send_message(jid_proto, message)
             msg_id = str(result.id) if hasattr(result, "id") else str(result)
             logger.info(
                 "[neonize] Sent audio to %s via device %s: id=%s",
@@ -521,7 +531,7 @@ class NeonizeIntegration:
             )
             return None
         finally:
-            for path in (tmp_wav, tmp_mp3):
+            for path in (tmp_src, tmp_ogg):
                 if path and os.path.exists(path):
                     os.unlink(path)
 
