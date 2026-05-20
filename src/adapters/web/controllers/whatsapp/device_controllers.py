@@ -121,6 +121,13 @@ async def _handle_incoming_message(
                     if m.sender == SenderEnum.assistant
                 ]
 
+        if not device.device_policies.contact_allowed_any(candidate_contacts, "outgoing"):
+            logger.info(
+                f"[device:{device_id}] Blocked outgoing reply to {send_target} "
+                f"(candidates={candidate_contacts}) by device policies"
+            )
+            return
+
         from src.core.platform.utils.message_parser import parse_message_segments
 
         for msg in new_assistant_msgs:
@@ -174,18 +181,6 @@ async def get_device(device_id: str, request: Request, usecases: Usecases = Depe
     return DeviceResponse(**device.dict())
 
 
-async def _update_device_policies_impl(
-    device_id: str,
-    body: UpdateDevicePoliciesRequest,
-    usecases: Usecases = Depends(get_usecases),
-):
-    device = await usecases.whatsapp_device.update_policies_usecase.execute(
-        device_id,
-        WhatsAppDevicePolicies(**body.device_policies.dict()),
-    )
-    return DeviceResponse(**device.dict())
-
-
 @router.patch("/device/{device_id}/policies", response_model=DeviceResponse)
 async def update_device_policies_patch(
     device_id: str,
@@ -193,7 +188,13 @@ async def update_device_policies_patch(
     request: Request,
     usecases: Usecases = Depends(get_usecases),
 ):
-    return await _update_device_policies_impl(device_id, body, usecases)
+    user_id = _get_user_id(request)
+    device = await usecases.whatsapp_device.update_policies_usecase.execute(
+        device_id,
+        WhatsAppDevicePolicies(**body.device_policies.dict()),
+        user_id,
+    )
+    return DeviceResponse(**device.dict())
 
 
 @router.post("/device/{device_id}/policies", response_model=DeviceResponse)
@@ -203,7 +204,13 @@ async def update_device_policies_post(
     request: Request,
     usecases: Usecases = Depends(get_usecases),
 ):
-    return await _update_device_policies_impl(device_id, body, usecases)
+    user_id = _get_user_id(request)
+    device = await usecases.whatsapp_device.update_policies_usecase.execute(
+        device_id,
+        WhatsAppDevicePolicies(**body.device_policies.dict()),
+        user_id,
+    )
+    return DeviceResponse(**device.dict())
 
 
 @router.delete("/device/{device_id}", status_code=status.HTTP_204_NO_CONTENT)

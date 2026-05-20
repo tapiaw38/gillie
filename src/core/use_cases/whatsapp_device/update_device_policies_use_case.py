@@ -3,6 +3,7 @@ import logging
 from src.core.platform.appcontext.appcontext import Factory
 from src.core.platform.errors import NewApplicationError
 from src.core.platform.errors.mappings.whatsapp_device import (
+    WhatsAppDeviceForbiddenError,
     WhatsAppDeviceNotFoundError,
     WhatsAppDeviceUpdateError,
 )
@@ -15,11 +16,13 @@ class UpdateDevicePoliciesUseCase:
     def __init__(self, context_factory: Factory):
         self.context_factory = context_factory
 
-    async def execute(self, device_id: str, device_policies: WhatsAppDevicePolicies):
+    async def execute(self, device_id: str, device_policies: WhatsAppDevicePolicies, user_id: str):
         context = self.context_factory()
         device = await context.repositories.whatsapp_device.find_by_id(device_id)
         if not device:
             raise NewApplicationError(WhatsAppDeviceNotFoundError)
+        if device.user_id != user_id:
+            raise NewApplicationError(WhatsAppDeviceForbiddenError)
 
         try:
             sanitized = WhatsAppDevicePolicies(

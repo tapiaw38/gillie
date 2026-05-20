@@ -117,6 +117,7 @@ __all__ = [
     "WhatsAppDeviceSendError",
     "WhatsAppDeviceNotConnectedError",
     "WhatsAppDevicePhoneRequiredError",
+    "WhatsAppDeviceForbiddenError",
 
     # Job errors
     "JobCreateError",
