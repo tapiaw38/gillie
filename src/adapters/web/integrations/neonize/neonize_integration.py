@@ -25,6 +25,22 @@ _neonize_loop_started = False
 _neonize_loop: Optional[asyncio.AbstractEventLoop] = None
 
 
+def _prefer_contact_jid(candidates: list[str]) -> str:
+    for candidate in candidates:
+        if candidate and not candidate.endswith("@lid"):
+            return candidate
+    for candidate in candidates:
+        if candidate:
+            return candidate
+    return ""
+
+
+def _select_reply_jid(sender: str, resolved: str) -> str:
+    if sender:
+        return sender
+    return resolved
+
+
 def _ensure_neonize_loop() -> None:
     """
     Create a new asyncio event loop, register it with neonize via set_event_loop(),
@@ -65,6 +81,7 @@ class NeonizeIntegration:
         self.sessions_dir = sessions_dir
         os.makedirs(sessions_dir, exist_ok=True)
         self._clients: Dict[str, object] = {}  # device_id → NewAClient
+        self._app_loop: Optional[asyncio.AbstractEventLoop] = None
         self._stt_integration = stt_integration  # optional STT for audio transcription
         self._whatsapp_device_repository = whatsapp_device_repository
         self._profile_repository = profile_repository
@@ -73,6 +90,9 @@ class NeonizeIntegration:
         self._jid_queues: Dict[str, asyncio.Queue] = {}   # key: "{device_id}:{jid}"
         self._jid_workers: Dict[str, asyncio.Task] = {}   # key: "{device_id}:{jid}"
         _ensure_neonize_loop()
+
+    def set_app_loop(self, loop: asyncio.AbstractEventLoop) -> None:
+        self._app_loop = loop
 
     def _session_path(self, device_id: str) -> str:
         return os.path.join(self.sessions_dir, f"{device_id}.db")
@@ -598,7 +618,14 @@ class NeonizeIntegration:
 
             from neonize.utils.jid import Jid2String
             sender_obj = getattr(src, "Sender", None)
-            sender_jid = Jid2String(sender_obj) if sender_obj is not None else ""
+            sender_alt_obj = getattr(src, "SenderAlt", None)
+            chat_obj = getattr(src, "Chat", None)
+            raw_sender_alt = Jid2String(sender_alt_obj) if sender_alt_obj is not None else ""
+            raw_sender = Jid2String(sender_obj) if sender_obj is not None else ""
+            raw_chat = Jid2String(chat_obj) if chat_obj is not None else ""
+            sender_candidates = [raw_sender_alt, raw_sender, raw_chat]
+            sender_jid = _prefer_contact_jid(sender_candidates)
+            reply_jid = _select_reply_jid(raw_sender, sender_jid)
             if not sender_jid:
                 return
 
@@ -624,7 +651,14 @@ class NeonizeIntegration:
             logger.info(
                 f"[neonize] Queuing message from {sender_jid} on device {device_id}: {text[:50]!r}"
             )
-            await self._enqueue_message(device_id, sender_jid, text, handler)
+            await self._enqueue_message(
+                device_id,
+                sender_jid,
+                reply_jid,
+                sender_candidates,
+                text,
+                handler,
+            )
 
         except Exception as e:
             logger.error(f"[neonize] _dispatch_message error: {e}", exc_info=True)
@@ -633,6 +667,8 @@ class NeonizeIntegration:
         self,
         device_id: str,
         sender_jid: str,
+        reply_jid: str,
+        sender_candidates: list[str],
         text: str,
         handler: Callable,
     ) -> None:
@@ -642,7 +678,7 @@ class NeonizeIntegration:
         if queue_key not in self._jid_queues:
             self._jid_queues[queue_key] = asyncio.Queue()
 
-        await self._jid_queues[queue_key].put((text, handler))
+        await self._jid_queues[queue_key].put((text, handler, sender_candidates, reply_jid))
 
         # Start a worker task for this queue if one isn't already running
         existing = self._jid_workers.get(queue_key)
@@ -665,7 +701,7 @@ class NeonizeIntegration:
 
         while not queue.empty():
             try:
-                text, handler = await queue.get()
+                text, handler, sender_candidates, reply_jid = await queue.get()
                 try:
                     # Send composing indicator while the AI is processing
                     try:
@@ -690,7 +726,26 @@ class NeonizeIntegration:
                     logger.info(
                         f"[neonize] Dispatching message from {sender_jid} on device {device_id}: {text[:50]!r}"
                     )
-                    await handler(device_id=device_id, sender_jid=sender_jid, text=text)
+                    if self._app_loop is not None and self._app_loop is not asyncio.get_running_loop():
+                        future = asyncio.run_coroutine_threadsafe(
+                            handler(
+                                device_id=device_id,
+                                sender_jid=sender_jid,
+                                reply_jid=reply_jid,
+                                sender_candidates=sender_candidates,
+                                text=text,
+                            ),
+                            self._app_loop,
+                        )
+                        await asyncio.wrap_future(future)
+                    else:
+                        await handler(
+                            device_id=device_id,
+                            sender_jid=sender_jid,
+                            reply_jid=reply_jid,
+                            sender_candidates=sender_candidates,
+                            text=text,
+                        )
                 except Exception as e:
                     logger.error(
                         f"[neonize] Worker error processing message from {sender_jid}: {e}",

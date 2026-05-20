@@ -13,7 +13,9 @@ from src.schemas.whatsapp.device_schemas import (
     SendMessageByPhoneRequest,
     SendMessageRequest,
     SendMessageResponse,
+    UpdateDevicePoliciesRequest,
 )
+from src.core.domain.whatsapp import WhatsAppDevicePolicies
 
 logger = logging.getLogger(__name__)
 
@@ -42,7 +44,13 @@ def _get_user_id(request: Request) -> str:
     return request.state.user.get("user_id", "default-user")
 
 
-async def _handle_incoming_message(device_id: str, sender_jid: str, text: str):
+async def _handle_incoming_message(
+    device_id: str,
+    sender_jid: str,
+    text: str,
+    reply_jid: Optional[str] = None,
+    sender_candidates: Optional[List[str]] = None,
+):
     """
     Called by neonize when an incoming WhatsApp message is received.
     Processes the message via AI and replies.
@@ -50,12 +58,20 @@ async def _handle_incoming_message(device_id: str, sender_jid: str, text: str):
     app = _get_app()
     usecases = app.state.usecases
     neonize = _get_neonize_from_app(app)
+    send_target = reply_jid or sender_jid
 
     try:
         device = await usecases.whatsapp_device.get_usecase.execute(device_id)
         user_id = device.user_id
         sender_phone = sender_jid.split("@")[0]
+        candidate_contacts = sender_candidates or [sender_jid]
         conversation_title = f"WhatsApp-{sender_phone}"
+        if not device.device_policies.contact_allowed_any(candidate_contacts, "incoming"):
+            logger.info(
+                f"[device:{device_id}] Blocked incoming message from {sender_jid} "
+                f"(candidates={candidate_contacts}) by device policies"
+            )
+            return
         conversation_id = None
 
         conversations = await usecases.conversation.find_by_user_id_usecase.execute(user_id)
@@ -114,13 +130,13 @@ async def _handle_incoming_message(device_id: str, sender_jid: str, text: str):
                 elif segment["type"] == "document":
                     await neonize.send_document(device_id, sender_jid, segment["content"])
                 elif segment["content"]:
-                    await neonize.send_text(device_id, sender_jid, segment["content"])
+                    await neonize.send_text(device_id, send_target, segment["content"])
             logger.info(f"[device:{device_id}] Replied to {sender_jid}")
 
         if new_assistant_msgs:
             audio_url = getattr(new_assistant_msgs[-1], "audio_url", None)
             if audio_url:
-                sent = await neonize.send_audio(device_id, sender_jid, audio_url)
+                sent = await neonize.send_audio(device_id, send_target, audio_url)
                 if sent:
                     logger.info(f"[device:{device_id}] Sent audio to {sender_jid}")
                 else:
@@ -140,6 +156,7 @@ async def create_device(request: Request, body: CreateDeviceRequest, usecases: U
         user_id,
         body.device_name,
         body.phone_number,
+        WhatsAppDevicePolicies(**body.device_policies.dict()),
     )
     return DeviceResponse(**device.dict())
 
@@ -155,6 +172,38 @@ async def list_devices(request: Request, usecases: Usecases = Depends(get_usecas
 async def get_device(device_id: str, request: Request, usecases: Usecases = Depends(get_usecases)):
     device = await usecases.whatsapp_device.get_usecase.execute(device_id)
     return DeviceResponse(**device.dict())
+
+
+async def _update_device_policies_impl(
+    device_id: str,
+    body: UpdateDevicePoliciesRequest,
+    usecases: Usecases = Depends(get_usecases),
+):
+    device = await usecases.whatsapp_device.update_policies_usecase.execute(
+        device_id,
+        WhatsAppDevicePolicies(**body.device_policies.dict()),
+    )
+    return DeviceResponse(**device.dict())
+
+
+@router.patch("/device/{device_id}/policies", response_model=DeviceResponse)
+async def update_device_policies_patch(
+    device_id: str,
+    body: UpdateDevicePoliciesRequest,
+    request: Request,
+    usecases: Usecases = Depends(get_usecases),
+):
+    return await _update_device_policies_impl(device_id, body, usecases)
+
+
+@router.post("/device/{device_id}/policies", response_model=DeviceResponse)
+async def update_device_policies_post(
+    device_id: str,
+    body: UpdateDevicePoliciesRequest,
+    request: Request,
+    usecases: Usecases = Depends(get_usecases),
+):
+    return await _update_device_policies_impl(device_id, body, usecases)
 
 
 @router.delete("/device/{device_id}", status_code=status.HTTP_204_NO_CONTENT)

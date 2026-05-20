@@ -4,6 +4,7 @@ import type {
   CreateDeviceRequest,
   AuthenticateDeviceRequest,
   SendMessageRequest,
+  UpdateDevicePoliciesRequest,
 } from '@/services/whatsapp/whatsappService'
 
 export const useWhatsAppQueries = (whatsappService: IWhatsAppService) => {
@@ -19,6 +20,16 @@ export const useWhatsAppQueries = (whatsappService: IWhatsAppService) => {
   const connectDeviceMutation = useMutation({
     mutationFn: ({ deviceId, method }: { deviceId: string; method: 'qr' | 'pair' }) =>
       whatsappService.connectDevice(deviceId, method),
+  })
+
+  const updateDevicePoliciesMutation = useMutation({
+    mutationFn: ({
+      deviceId,
+      request,
+    }: {
+      deviceId: string
+      request: UpdateDevicePoliciesRequest
+    }) => whatsappService.updateDevicePolicies(deviceId, request),
   })
 
   const authenticateDeviceMutation = useMutation({
@@ -47,6 +58,7 @@ export const useWhatsAppQueries = (whatsappService: IWhatsAppService) => {
     listDevicesQuery,
     createDeviceMutation,
     connectDeviceMutation,
+    updateDevicePoliciesMutation,
     authenticateDeviceMutation,
     disconnectDeviceMutation,
     deleteDeviceMutation,

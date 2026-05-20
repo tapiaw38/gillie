@@ -2,7 +2,7 @@
 import { ref, onMounted, computed } from 'vue'
 import { useWhatsApp } from '@/composables/useWhatsApp'
 import { useToast } from 'primevue/usetoast'
-import type { WhatsAppDevice } from '@/services/whatsapp'
+import type { DevicePolicies, WhatsAppDevice } from '@/services/whatsapp'
 
 import DataTable from 'primevue/datatable'
 import Column from 'primevue/column'
@@ -10,6 +10,7 @@ import Button from 'primevue/button'
 import Dialog from 'primevue/dialog'
 import InputText from 'primevue/inputtext'
 import Dropdown from 'primevue/dropdown'
+import Textarea from 'primevue/textarea'
 import Tag from 'primevue/tag'
 import Toast from 'primevue/toast'
 import ProgressSpinner from 'primevue/progressspinner'
@@ -49,8 +50,10 @@ const devices = ref<WhatsAppDevice[]>([])
 const loading = ref(false)
 const showCreateDialog = ref(false)
 const showQRDialog = ref(false)
+const showPoliciesDialog = ref(false)
 const qrCode = ref<string>()
 const selectedDevice = ref<WhatsAppDevice>()
+const selectedPolicyDevice = ref<WhatsAppDevice>()
 const wsConnection = ref<WebSocket | null>(null)
 
 function getWsBaseUrl(): string {
@@ -59,9 +62,59 @@ function getWsBaseUrl(): string {
   return httpBase.replace(/^https?/, (p: string) => (p === 'https' ? 'wss' : 'ws'))
 }
 
-const newDevice = ref({ device_name: '' })
+type FilterMode = DevicePolicies['incoming_filter_mode']
+
+const filterModeOptions: { labelKey: string; value: FilterMode }[] = [
+  { labelKey: 'integrations.whatsappDevices.policyModeOff', value: 'off' },
+  { labelKey: 'integrations.whatsappDevices.policyModeWhitelist', value: 'whitelist' },
+  { labelKey: 'integrations.whatsappDevices.policyModeBlacklist', value: 'blacklist' },
+  { labelKey: 'integrations.whatsappDevices.policyModeBoth', value: 'both' },
+]
+
+const emptyPolicies = (): DevicePolicies => ({
+  allowed_numbers: [],
+  blocked_numbers: [],
+  incoming_filter_mode: 'off',
+  outgoing_filter_mode: 'off',
+})
+
+const newDevice = ref({
+  device_name: '',
+  device_policies: emptyPolicies(),
+})
+const policyForm = ref({
+  incoming_filter_mode: 'off' as FilterMode,
+  outgoing_filter_mode: 'off' as FilterMode,
+  allowed_numbers_text: '',
+  blocked_numbers_text: '',
+})
 
 const hasDevices = computed(() => devices.value?.length > 0)
+
+const parseNumbers = (value: string): string[] =>
+  value
+    .split(/[\n,;]/)
+    .map((item) => item.trim())
+    .filter(Boolean)
+
+const formatNumbers = (values: string[] = []): string => values.join('\n')
+
+const buildPoliciesPayload = (): DevicePolicies => ({
+  incoming_filter_mode: policyForm.value.incoming_filter_mode,
+  outgoing_filter_mode: policyForm.value.outgoing_filter_mode,
+  allowed_numbers: parseNumbers(policyForm.value.allowed_numbers_text),
+  blocked_numbers: parseNumbers(policyForm.value.blocked_numbers_text),
+})
+
+const loadPolicyForm = (policies?: DevicePolicies) => {
+  const current = policies || emptyPolicies()
+  policyForm.value = {
+    incoming_filter_mode: current.incoming_filter_mode || 'off',
+    outgoing_filter_mode: current.outgoing_filter_mode || 'off',
+    allowed_numbers_text: formatNumbers(current.allowed_numbers),
+    blocked_numbers_text: formatNumbers(current.blocked_numbers),
+  }
+}
 
 const loadDevices = async () => {
   loading.value = true
@@ -94,7 +147,11 @@ const createDevice = async () => {
   loading.value = true
   try {
     const phone_number = selectedCountry.value.dial + localPhone.value.replace(/^\+/, '')
-    const device = await whatsapp.createDevice({ ...newDevice.value, phone_number })
+    const device = await whatsapp.createDevice({
+      ...newDevice.value,
+      phone_number,
+      device_policies: buildPoliciesPayload(),
+    })
     toast.add({
       severity: 'success',
       summary: t('integrations.whatsappDevices.deviceCreated'),
@@ -102,7 +159,8 @@ const createDevice = async () => {
       life: 3000,
     })
     showCreateDialog.value = false
-    newDevice.value = { device_name: '' }
+    newDevice.value = { device_name: '', device_policies: emptyPolicies() }
+    loadPolicyForm()
     localPhone.value = ''
     selectedCountry.value = countries[0]
     await loadDevices()
@@ -114,6 +172,48 @@ const createDevice = async () => {
       life: 3000,
     })
     console.error('Error creating device:', error)
+  } finally {
+    loading.value = false
+  }
+}
+
+const openPoliciesDialog = (device: WhatsAppDevice) => {
+  selectedPolicyDevice.value = device
+  loadPolicyForm(device.device_policies)
+  showPoliciesDialog.value = true
+}
+
+const savePolicies = async () => {
+  if (!selectedPolicyDevice.value) {
+    return
+  }
+
+  loading.value = true
+  try {
+    const updated = await whatsapp.updateDevicePolicies(selectedPolicyDevice.value.id, {
+      device_policies: buildPoliciesPayload(),
+    })
+    toast.add({
+      severity: 'success',
+      summary: t('integrations.whatsappDevices.policiesSaved'),
+      detail: `${updated.device_name} ${t('integrations.whatsappDevices.policiesSavedDesc')}`,
+      life: 3000,
+    })
+    showPoliciesDialog.value = false
+    selectedPolicyDevice.value = undefined
+    await loadDevices()
+  } catch (error) {
+    const detail =
+      error instanceof Error
+        ? error.message
+        : t('integrations.whatsappDevices.errorSavePolicies')
+    toast.add({
+      severity: 'error',
+      summary: t('common.error'),
+      detail,
+      life: 3000,
+    })
+    console.error('Error saving device policies:', error)
   } finally {
     loading.value = false
   }
@@ -265,7 +365,8 @@ const getStatusLabel = (status: string) => {
 }
 
 const openCreateDialog = () => {
-  newDevice.value = { device_name: '' }
+  newDevice.value = { device_name: '', device_policies: emptyPolicies() }
+  loadPolicyForm()
   localPhone.value = ''
   selectedCountry.value = countries[0]
   showCreateDialog.value = true
@@ -283,6 +384,7 @@ const closeQRDialog = async () => {
 }
 
 onMounted(() => {
+  loadPolicyForm()
   loadDevices()
 })
 </script>
@@ -366,6 +468,23 @@ onMounted(() => {
           </template>
         </Column>
 
+        <Column :header="t('integrations.whatsappDevices.policies')">
+          <template #body="{ data }">
+            <div class="policy-summary">
+              <div class="policy-counts">
+                <span class="policy-count allowed-count">
+                  <i class="pi pi-check-circle"></i>
+                  {{ t('integrations.whatsappDevices.allowedCount', { count: data.device_policies?.allowed_numbers?.length || 0 }) }}
+                </span>
+                <span class="policy-count blocked-count">
+                  <i class="pi pi-ban"></i>
+                  {{ t('integrations.whatsappDevices.blockedCount', { count: data.device_policies?.blocked_numbers?.length || 0 }) }}
+                </span>
+              </div>
+            </div>
+          </template>
+        </Column>
+
         <Column
           field="last_connected_at"
           :header="t('integrations.whatsappDevices.lastConnection')"
@@ -383,9 +502,16 @@ onMounted(() => {
           <template #body="{ data }">
             <div class="action-buttons">
               <Button
+                icon="pi pi-shield"
+                severity="secondary"
+                size="small"
+                text
+                :disabled="loading"
+                @click="openPoliciesDialog(data)"
+              />
+              <Button
                 v-if="data.status === 'disconnected'"
                 icon="pi pi-qrcode"
-                :label="t('integrations.whatsappDevices.connect')"
                 severity="success"
                 size="small"
                 :disabled="loading"
@@ -394,7 +520,6 @@ onMounted(() => {
               <Button
                 v-else-if="data.status === 'authenticated' || data.status === 'connected'"
                 icon="pi pi-power-off"
-                :label="t('integrations.whatsappDevices.disconnect')"
                 severity="warning"
                 size="small"
                 :disabled="loading"
@@ -462,6 +587,81 @@ onMounted(() => {
           />
           <small class="field-hint">{{ t('integrations.whatsappDevices.deviceNameHint') }}</small>
         </div>
+
+        <div class="policies-editor">
+          <div class="section-heading">
+            <h3>{{ t('integrations.whatsappDevices.devicePoliciesTitle') }}</h3>
+            <p>{{ t('integrations.whatsappDevices.devicePoliciesDesc') }}</p>
+          </div>
+
+          <div class="policy-grid">
+            <div class="field">
+              <label for="incoming-filter">{{ t('integrations.whatsappDevices.incomingPolicy') }}</label>
+              <Dropdown
+                id="incoming-filter"
+                v-model="policyForm.incoming_filter_mode"
+                :options="filterModeOptions"
+                optionValue="value"
+                :disabled="loading"
+                class="w-full"
+              >
+                <template #value="{ value }">
+                  <span>{{ t(filterModeOptions.find((option) => option.value === value)?.labelKey || 'integrations.whatsappDevices.policyModeOff') }}</span>
+                </template>
+                <template #option="{ option }">
+                  <span>{{ t(option.labelKey) }}</span>
+                </template>
+              </Dropdown>
+            </div>
+
+            <div class="field">
+              <label for="outgoing-filter">{{ t('integrations.whatsappDevices.outgoingPolicy') }}</label>
+              <Dropdown
+                id="outgoing-filter"
+                v-model="policyForm.outgoing_filter_mode"
+                :options="filterModeOptions"
+                optionValue="value"
+                :disabled="loading"
+                class="w-full"
+              >
+                <template #value="{ value }">
+                  <span>{{ t(filterModeOptions.find((option) => option.value === value)?.labelKey || 'integrations.whatsappDevices.policyModeOff') }}</span>
+                </template>
+                <template #option="{ option }">
+                  <span>{{ t(option.labelKey) }}</span>
+                </template>
+              </Dropdown>
+            </div>
+          </div>
+
+          <div class="policy-grid">
+            <div class="field">
+              <label for="allowed-numbers">{{ t('integrations.whatsappDevices.allowedNumbers') }}</label>
+              <Textarea
+                id="allowed-numbers"
+                v-model="policyForm.allowed_numbers_text"
+                :disabled="loading"
+                :placeholder="t('integrations.whatsappDevices.allowedNumbersPlaceholder')"
+                rows="5"
+                autoResize
+              />
+              <small class="field-hint">{{ t('integrations.whatsappDevices.policyNumbersHint') }}</small>
+            </div>
+
+            <div class="field">
+              <label for="blocked-numbers">{{ t('integrations.whatsappDevices.blockedNumbers') }}</label>
+              <Textarea
+                id="blocked-numbers"
+                v-model="policyForm.blocked_numbers_text"
+                :disabled="loading"
+                :placeholder="t('integrations.whatsappDevices.blockedNumbersPlaceholder')"
+                rows="5"
+                autoResize
+              />
+              <small class="field-hint">{{ t('integrations.whatsappDevices.policyNumbersHint') }}</small>
+            </div>
+          </div>
+        </div>
       </div>
 
       <template #footer>
@@ -477,6 +677,103 @@ onMounted(() => {
           icon="pi pi-check"
           :loading="loading"
           @click="createDevice"
+        />
+      </template>
+    </Dialog>
+
+    <Dialog
+      v-model:visible="showPoliciesDialog"
+      :header="t('integrations.whatsappDevices.configurePolicies')"
+      :modal="true"
+      :style="{ width: '720px' }"
+      class="create-dialog"
+    >
+      <div class="form-container">
+        <div class="section-heading">
+          <h3>{{ selectedPolicyDevice?.device_name }}</h3>
+          <p>{{ t('integrations.whatsappDevices.devicePoliciesDesc') }}</p>
+        </div>
+
+        <div class="policy-grid">
+          <div class="field">
+            <label for="edit-incoming-filter">{{ t('integrations.whatsappDevices.incomingPolicy') }}</label>
+            <Dropdown
+              id="edit-incoming-filter"
+              v-model="policyForm.incoming_filter_mode"
+              :options="filterModeOptions"
+              optionValue="value"
+              :disabled="loading"
+              class="w-full"
+            >
+              <template #value="{ value }">
+                <span>{{ t(filterModeOptions.find((option) => option.value === value)?.labelKey || 'integrations.whatsappDevices.policyModeOff') }}</span>
+              </template>
+              <template #option="{ option }">
+                <span>{{ t(option.labelKey) }}</span>
+              </template>
+            </Dropdown>
+          </div>
+
+          <div class="field">
+            <label for="edit-outgoing-filter">{{ t('integrations.whatsappDevices.outgoingPolicy') }}</label>
+            <Dropdown
+              id="edit-outgoing-filter"
+              v-model="policyForm.outgoing_filter_mode"
+              :options="filterModeOptions"
+              optionValue="value"
+              :disabled="loading"
+              class="w-full"
+            >
+              <template #value="{ value }">
+                <span>{{ t(filterModeOptions.find((option) => option.value === value)?.labelKey || 'integrations.whatsappDevices.policyModeOff') }}</span>
+              </template>
+              <template #option="{ option }">
+                <span>{{ t(option.labelKey) }}</span>
+              </template>
+            </Dropdown>
+          </div>
+        </div>
+
+        <div class="policy-grid">
+          <div class="field">
+            <label for="edit-allowed-numbers">{{ t('integrations.whatsappDevices.allowedNumbers') }}</label>
+            <Textarea
+              id="edit-allowed-numbers"
+              v-model="policyForm.allowed_numbers_text"
+              :disabled="loading"
+              :placeholder="t('integrations.whatsappDevices.allowedNumbersPlaceholder')"
+              rows="6"
+              autoResize
+            />
+          </div>
+
+          <div class="field">
+            <label for="edit-blocked-numbers">{{ t('integrations.whatsappDevices.blockedNumbers') }}</label>
+            <Textarea
+              id="edit-blocked-numbers"
+              v-model="policyForm.blocked_numbers_text"
+              :disabled="loading"
+              :placeholder="t('integrations.whatsappDevices.blockedNumbersPlaceholder')"
+              rows="6"
+              autoResize
+            />
+          </div>
+        </div>
+      </div>
+
+      <template #footer>
+        <Button
+          :label="t('common.cancel')"
+          icon="pi pi-times"
+          text
+          :disabled="loading"
+          @click="showPoliciesDialog = false"
+        />
+        <Button
+          :label="t('common.save')"
+          icon="pi pi-check"
+          :loading="loading"
+          @click="savePolicies"
         />
       </template>
     </Dialog>
@@ -730,6 +1027,40 @@ onMounted(() => {
   display: flex;
   gap: 0.5rem;
   align-items: center;
+  flex-wrap: wrap;
+}
+
+.policy-summary {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  min-width: 140px;
+}
+
+.policy-counts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+}
+
+.policy-count {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  font-size: 0.8rem;
+  color: var(--do-text-muted);
+}
+
+.policy-count i {
+  font-size: 0.8rem;
+}
+
+.allowed-count i {
+  color: #2fbf71;
+}
+
+.blocked-count i {
+  color: #ef6b73;
 }
 
 /* ── Dialog overrides ────────────────────────────────────── */
@@ -768,6 +1099,32 @@ onMounted(() => {
   display: flex;
   flex-direction: column;
   gap: 1.25rem;
+}
+
+.policies-editor {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+  padding-top: 0.25rem;
+  border-top: 1px solid var(--do-border-light);
+}
+
+.section-heading h3 {
+  margin: 0;
+  font-size: 1rem;
+  color: var(--do-text);
+}
+
+.section-heading p {
+  margin: 0.25rem 0 0;
+  font-size: 0.875rem;
+  color: var(--do-text-muted);
+}
+
+.policy-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 1rem;
 }
 
 .field {
@@ -911,6 +1268,10 @@ onMounted(() => {
 
   .action-buttons :deep(button) {
     width: 100%;
+  }
+
+  .policy-grid {
+    grid-template-columns: 1fr;
   }
 }
 </style>

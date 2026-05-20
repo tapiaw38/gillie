@@ -6,6 +6,7 @@ from .authenticate_device_use_case import AuthenticateDeviceUseCase
 from .connect_device_use_case import ConnectDeviceUseCase
 from .disconnect_device_use_case import DisconnectDeviceUseCase
 from .send_message_use_case import SendMessageUseCase
+from .update_device_policies_use_case import UpdateDevicePoliciesUseCase
 
 __all__ = [
     "CreateDeviceUseCase",
@@ -16,4 +17,5 @@ __all__ = [
     "ConnectDeviceUseCase",
     "DisconnectDeviceUseCase",
     "SendMessageUseCase",
+    "UpdateDevicePoliciesUseCase",
 ]

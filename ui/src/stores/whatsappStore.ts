@@ -7,6 +7,7 @@ import type {
   CreateDeviceRequest,
   AuthenticateDeviceRequest,
   SendMessageRequest,
+  UpdateDevicePoliciesRequest,
 } from '@/services/whatsapp/whatsappService'
 
 export const useWhatsAppStore = (whatsappService: IWhatsAppService) =>
@@ -17,6 +18,7 @@ export const useWhatsAppStore = (whatsappService: IWhatsAppService) =>
       listDevicesQuery,
       createDeviceMutation,
       connectDeviceMutation,
+      updateDevicePoliciesMutation,
       authenticateDeviceMutation,
       disconnectDeviceMutation,
       deleteDeviceMutation,
@@ -37,6 +39,16 @@ export const useWhatsAppStore = (whatsappService: IWhatsAppService) =>
 
     const connectDevice = async (deviceId: string, method: 'qr' | 'pair' = 'qr') => {
       return connectDeviceMutation.mutateAsync({ deviceId, method })
+    }
+
+    const updateDevicePolicies = async (
+      deviceId: string,
+      request: UpdateDevicePoliciesRequest,
+    ) => {
+      const device = await updateDevicePoliciesMutation.mutateAsync({ deviceId, request })
+      const index = devices.value.findIndex((d) => d.id === deviceId)
+      if (index !== -1) devices.value[index] = device
+      return device
     }
 
     const authenticateDevice = async (
@@ -68,6 +80,7 @@ export const useWhatsAppStore = (whatsappService: IWhatsAppService) =>
       listDevices,
       createDevice,
       connectDevice,
+      updateDevicePolicies,
       authenticateDevice,
       disconnectDevice,
       deleteDevice,
@@ -84,6 +97,10 @@ export const useWhatsAppStore = (whatsappService: IWhatsAppService) =>
       isConnectDevicePending: connectDeviceMutation.isPending,
       isConnectDeviceError: connectDeviceMutation.isError,
       connectDeviceError: connectDeviceMutation.error,
+
+      isUpdateDevicePoliciesPending: updateDevicePoliciesMutation.isPending,
+      isUpdateDevicePoliciesError: updateDevicePoliciesMutation.isError,
+      updateDevicePoliciesError: updateDevicePoliciesMutation.error,
 
       isAuthenticateDevicePending: authenticateDeviceMutation.isPending,
       isAuthenticateDeviceError: authenticateDeviceMutation.isError,

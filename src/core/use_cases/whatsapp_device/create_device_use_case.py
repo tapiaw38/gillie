@@ -9,7 +9,7 @@ from src.core.platform.errors.mappings.whatsapp_device import (
     WhatsAppDeviceCreateError,
     WhatsAppDeviceNameRequiredError,
 )
-from src.core.domain.whatsapp import WhatsAppDevice
+from src.core.domain.whatsapp import WhatsAppDevice, WhatsAppDevicePolicies
 
 logger = logging.getLogger(__name__)
 
@@ -18,7 +18,13 @@ class CreateDeviceUseCase:
     def __init__(self, context_factory: Factory):
         self.context_factory = context_factory
 
-    async def execute(self, user_id: str, device_name: str, phone_number: Optional[str] = None) -> WhatsAppDevice:
+    async def execute(
+        self,
+        user_id: str,
+        device_name: str,
+        phone_number: Optional[str] = None,
+        device_policies: Optional[WhatsAppDevicePolicies] = None,
+    ) -> WhatsAppDevice:
         if not device_name or not device_name.strip():
             raise NewApplicationError(WhatsAppDeviceNameRequiredError)
 
@@ -28,6 +34,7 @@ class CreateDeviceUseCase:
             user_id=user_id,
             device_name=device_name.strip(),
             phone_number=phone_number.strip() if phone_number else None,
+            device_policies=device_policies or WhatsAppDevicePolicies(),
             status="disconnected",
             created_at=now,
             updated_at=now,
