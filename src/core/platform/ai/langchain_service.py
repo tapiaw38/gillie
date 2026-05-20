@@ -559,6 +559,18 @@ class LangChainService:
         """
         import json as _json
         import inspect
+        import re as _re
+
+        _FILE_URL_RE = _re.compile(
+            r"https?://[^\s\)\]\"\'<>]+"
+            r"\.(?:jpg|jpeg|png|gif|webp|bmp|svg"
+            r"|pdf|doc|docx|xls|xlsx|csv|txt|ppt|pptx"
+            r"|zip|tar|gz|json|xml|mp4|mp3|ogg|wav)"
+            r"(?:\?[^\s\)\]\"\'<>]*)?",
+            _re.IGNORECASE,
+        )
+        _FILE_TOOLS = {"send_screenshot", "send_file"}
+        _pending_file_urls: dict[str, str] = {}  # tool_name → last successful URL
 
         for round_num in range(max_rounds):
             tool_calls = getattr(response, "tool_calls", None)
@@ -653,6 +665,13 @@ class LangChainService:
                     except Exception:
                         pass
 
+                if tool_name in _FILE_TOOLS:
+                    urls = _FILE_URL_RE.findall(tool_result_str)
+                    if urls:
+                        _pending_file_urls[tool_name] = urls[-1]
+                    else:
+                        _pending_file_urls.pop(tool_name, None)
+
                 messages.append(ToolMessage(content=tool_result_str, tool_call_id=tool_id))
 
             logger.info(f"Invoking LLM after round {round_num + 1}")
@@ -677,12 +696,19 @@ class LangChainService:
                         "arg": _get_key_arg(tc.get("name", ""), tc.get("args", {})),
                     })
 
-        content = response.content or ""
+        content = _extract_text(response.content or "")
         if not content:
             logger.warning(
                 f"_handle_tool_calls exhausted {max_rounds} rounds without a final text response"
             )
             content = "(Las herramientas se ejecutaron correctamente. Tarea completada.)"
+
+        # Append file URLs from send_screenshot/send_file that the LLM didn't include
+        for url in _pending_file_urls.values():
+            if url not in content:
+                logger.info(f"Appending missing file URL to response: {url}")
+                content = f"{content}\n{url}"
+
         return content
 
     @staticmethod
