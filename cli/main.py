@@ -74,7 +74,6 @@ def status():
 
     table.add_row("User ID", config.user_id)
     table.add_row("Assistant", config.profile.assistant_name)
-    table.add_row("Business", config.profile.business_name)
     table.add_row("Model", f"{s.openai.model}")
     table.add_row("MongoDB", s.mongodb.uri)
     table.add_row("Server", f"{config.server.host}:{config.server.port}")

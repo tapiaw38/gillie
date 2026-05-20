@@ -1,3 +1,4 @@
+import asyncio
 import logging
 import os
 from contextlib import asynccontextmanager
@@ -339,11 +340,13 @@ def create_app() -> FastAPI:
 
     @asynccontextmanager
     async def lifespan(app: FastAPI):
+        app.state.main_loop = asyncio.get_running_loop()
         runtime = await _build_runtime(app.state.cli_config, app.state.config_service)
         app.state.usecases = runtime.usecases
         app.state.repositories = runtime.repositories
         app.state.scheduler = runtime.scheduler
         app.state.neonize_integration = runtime.neonize_integration
+        app.state.neonize_integration.set_app_loop(app.state.main_loop)
         app.state.integrations = runtime.integrations
         app.state.openai_integration = runtime.integrations.openai
         app.state.profile_client = runtime.profile_client

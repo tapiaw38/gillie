@@ -201,7 +201,7 @@ class AddMessageUseCase:
         if not context.platform_managers:
             return message.content
         try:
-            lang = getattr(profile, "response_language", "en") or "en"
+            lang = profile.response_language or "en"
             stt_lang = _LANG_MAP.get(lang, "en-US")
             transcription = await context.platform_managers.voice_transcription.transcribe_audio_file(
                 audio_file=message.voice_content,
@@ -355,7 +355,7 @@ class AddMessageUseCase:
         if not tts_active or not context.platform_managers:
             return None
         try:
-            lang = getattr(profile, "response_language", "en") or "en"
+            lang = profile.response_language or "en"
             return await context.platform_managers.text_to_speech.generate_and_store_audio(
                 text=text, user_id=user_id, conversation_id=conversation_id, language=lang,
             )

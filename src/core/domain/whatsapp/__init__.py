@@ -1,3 +1,3 @@
-from .whatsapp_device import WhatsAppDevice
+from .whatsapp_device import WhatsAppDevice, WhatsAppDevicePolicies
 
-__all__ = ["WhatsAppDevice"]
+__all__ = ["WhatsAppDevice", "WhatsAppDevicePolicies"]

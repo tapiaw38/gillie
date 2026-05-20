@@ -4,7 +4,7 @@ from .conversation import Conversation, Message
 from .file import File
 from .integration import Integration
 from .notion import NotionCredentials
-from .whatsapp import WhatsAppDevice
+from .whatsapp import WhatsAppDevice, WhatsAppDevicePolicies
 
 __all__ = [
     "SenderEnum",
@@ -16,4 +16,5 @@ __all__ = [
     "Message",
     "Conversation",
     "WhatsAppDevice",
+    "WhatsAppDevicePolicies",
 ]

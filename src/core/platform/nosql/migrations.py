@@ -64,6 +64,12 @@ def execute_migrations() -> List[Migration]:
             {"$set": {"created_at": datetime.now(timezone.utc)}}
         )
 
+    async def remove_business_name(db):
+        return await db["profiles"].update_many(
+            {"business_name": {"$exists": True}},
+            {"$unset": {"business_name": ""}}
+        )
+
     return [
         Migration(
             version=1,
@@ -100,5 +106,9 @@ def execute_migrations() -> List[Migration]:
         Migration(
             version=9,
             up=backfill_episodic_memory_created_at,
+        ),
+        Migration(
+            version=10,
+            up=remove_business_name,
         ),
     ]

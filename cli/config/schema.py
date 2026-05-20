@@ -5,7 +5,6 @@ from typing import Optional
 @dataclass
 class ProfileConfig:
     assistant_name: str
-    business_name: str = ""
     functions: str = ""
     response_language: str = "en"
 

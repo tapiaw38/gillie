@@ -72,7 +72,6 @@ class StartupService:
 
             profile_input = ProfileInput(
                 assistant_name=cli_config.profile.assistant_name,
-                business_name=cli_config.profile.business_name,
                 functions=cli_config.profile.functions,
                 response_language=cli_config.profile.response_language,
             )

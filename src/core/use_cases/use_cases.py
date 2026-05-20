@@ -130,6 +130,7 @@ from src.core.use_cases.whatsapp_device import (
     ConnectDeviceUseCase as WhatsAppDeviceConnectUseCase,
     DisconnectDeviceUseCase as WhatsAppDeviceDisconnectUseCase,
     SendMessageUseCase as WhatsAppDeviceSendMessageUseCase,
+    UpdateDevicePoliciesUseCase as WhatsAppDeviceUpdateDevicePoliciesUseCase,
 )
 
 
@@ -253,6 +254,7 @@ class WhatsAppDevice:
     connect_usecase: WhatsAppDeviceConnectUseCase
     disconnect_usecase: WhatsAppDeviceDisconnectUseCase
     send_message_usecase: WhatsAppDeviceSendMessageUseCase
+    update_policies_usecase: WhatsAppDeviceUpdateDevicePoliciesUseCase
 
 
 @dataclass
@@ -432,6 +434,7 @@ def create_usecases(context_factory: Factory) -> Usecases:
             connect_usecase=WhatsAppDeviceConnectUseCase(context_factory),
             disconnect_usecase=WhatsAppDeviceDisconnectUseCase(context_factory),
             send_message_usecase=WhatsAppDeviceSendMessageUseCase(context_factory),
+            update_policies_usecase=WhatsAppDeviceUpdateDevicePoliciesUseCase(context_factory),
         ),
         jobs=Jobs(
             create_usecase=CreateJobUseCase(context_factory),

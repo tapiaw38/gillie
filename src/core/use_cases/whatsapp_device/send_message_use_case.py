@@ -2,6 +2,7 @@ import logging
 
 from src.core.platform.appcontext.appcontext import Factory
 from src.core.platform.errors import NewApplicationError
+from src.core.platform.errors.mappings.common import ForbiddenError
 from src.core.platform.errors.mappings.whatsapp_device import (
     WhatsAppDeviceNotFoundError,
     WhatsAppDeviceSendError,
@@ -29,6 +30,8 @@ class SendMessageUseCase:
 
         if device.status not in ("authenticated", "connected"):
             raise NewApplicationError(WhatsAppDeviceNotConnectedError)
+        if not device.device_policies.contact_allowed(recipient_jid, "outgoing"):
+            raise NewApplicationError(ForbiddenError, Exception("recipient blocked by device policies"))
 
         try:
             message_id = await neonize_integration.send_text(device_id, recipient_jid, text)

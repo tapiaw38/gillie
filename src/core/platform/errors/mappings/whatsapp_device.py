@@ -80,3 +80,9 @@ WhatsAppDevicePhoneRequiredError = ErrorDetails(
     status_code=400,
     message="phone number is required for pair code authentication",
 )
+
+WhatsAppDeviceForbiddenError = ErrorDetails(
+    internal_code="whatsapp-device:update:forbidden",
+    status_code=403,
+    message="you do not have permission to modify this device",
+)

@@ -1,10 +1,12 @@
 import type { AxiosInstance } from 'axios'
+import { ApplicationError } from '@/types/error'
 
 export interface WhatsAppDevice {
   id: string
   user_id: string
   phone_number: string
   device_name: string
+  device_policies: DevicePolicies
   status: 'disconnected' | 'connecting' | 'connected' | 'authenticated'
   qr_code?: string
   pair_code?: string
@@ -13,9 +15,21 @@ export interface WhatsAppDevice {
   updated_at: string
 }
 
+export interface DevicePolicies {
+  allowed_numbers: string[]
+  blocked_numbers: string[]
+  incoming_filter_mode: 'off' | 'whitelist' | 'blacklist' | 'both'
+  outgoing_filter_mode: 'off' | 'whitelist' | 'blacklist' | 'both'
+}
+
 export interface CreateDeviceRequest {
   phone_number: string
   device_name: string
+  device_policies: DevicePolicies
+}
+
+export interface UpdateDevicePoliciesRequest {
+  device_policies: DevicePolicies
 }
 
 export interface ConnectDeviceResponse {
@@ -42,6 +56,10 @@ export interface IWhatsAppService {
   listDevices(): Promise<WhatsAppDevice[]>
   getDevice(deviceId: string): Promise<WhatsAppDevice>
   createDevice(request: CreateDeviceRequest): Promise<WhatsAppDevice>
+  updateDevicePolicies(
+    deviceId: string,
+    request: UpdateDevicePoliciesRequest
+  ): Promise<WhatsAppDevice>
   connectDevice(deviceId: string, method: 'qr' | 'pair'): Promise<ConnectDeviceResponse>
   authenticateDevice(deviceId: string, request: AuthenticateDeviceRequest): Promise<WhatsAppDevice>
   disconnectDevice(deviceId: string): Promise<void>
@@ -68,6 +86,22 @@ export class WhatsAppService implements IWhatsAppService {
       request
     )
     return data
+  }
+
+  async updateDevicePolicies(
+    deviceId: string,
+    request: UpdateDevicePoliciesRequest
+  ): Promise<WhatsAppDevice> {
+    try {
+      const { data } = await this.api.patch<WhatsAppDevice>(`/device/${deviceId}/policies`, request)
+      return data
+    } catch (error) {
+      if (error instanceof ApplicationError && (error.statusCode === 404 || error.statusCode === 405)) {
+        const { data } = await this.api.post<WhatsAppDevice>(`/device/${deviceId}/policies`, request)
+        return data
+      }
+      throw error
+    }
   }
 
   async connectDevice(

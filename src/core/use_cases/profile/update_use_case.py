@@ -23,7 +23,6 @@ class UpdateUseCase:
             context = self.context_factory()
             updated_profile = Profile(
                 assistant_name=profile.assistant_name,
-                business_name=profile.business_name,
                 functions=profile.functions,
                 tts_enabled=profile.tts_enabled,
                 tool_prompts=profile.tool_prompts,

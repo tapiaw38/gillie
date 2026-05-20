@@ -36,7 +36,6 @@ class CreateUseCase:
                     _id=profile.id,
                     user_id=profile.user_id,
                     assistant_name=profile.assistant_name,
-                    business_name=profile.business_name,
                     functions=profile.functions,
                     files=profile.files,
                     created_at=profile.created_at,

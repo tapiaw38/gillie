@@ -3,9 +3,17 @@ from typing import List, Optional
 from datetime import datetime
 
 
+class DevicePoliciesPayload(BaseModel):
+    allowed_numbers: List[str] = Field(default_factory=list)
+    blocked_numbers: List[str] = Field(default_factory=list)
+    incoming_filter_mode: str = Field("off", description="off | whitelist | blacklist | both")
+    outgoing_filter_mode: str = Field("off", description="off | whitelist | blacklist | both")
+
+
 class CreateDeviceRequest(BaseModel):
     device_name: str = Field(..., description="Human-readable name for this device", min_length=1)
     phone_number: Optional[str] = Field(None, description="Phone number in international format (optional)")
+    device_policies: DevicePoliciesPayload = Field(default_factory=DevicePoliciesPayload)
 
 
 class AuthenticateDeviceRequest(BaseModel):
@@ -39,6 +47,7 @@ class DeviceResponse(BaseModel):
     user_id: str
     device_name: str
     phone_number: Optional[str] = None
+    device_policies: DevicePoliciesPayload
     status: str
     qr_code: Optional[str] = None
     pair_code: Optional[str] = None
@@ -61,3 +70,7 @@ class AuthenticateResponse(BaseModel):
 class SendMessageResponse(BaseModel):
     message_id: str
     status: str = "sent"
+
+
+class UpdateDevicePoliciesRequest(BaseModel):
+    device_policies: DevicePoliciesPayload
