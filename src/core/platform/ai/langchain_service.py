@@ -669,6 +669,8 @@ class LangChainService:
                     urls = _FILE_URL_RE.findall(tool_result_str)
                     if urls:
                         _pending_file_urls[tool_name] = urls[-1]
+                    else:
+                        _pending_file_urls.pop(tool_name, None)
 
                 messages.append(ToolMessage(content=tool_result_str, tool_call_id=tool_id))
 

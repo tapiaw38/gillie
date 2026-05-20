@@ -132,13 +132,13 @@ async def _handle_incoming_message(
 
         for msg in new_assistant_msgs:
             segments = parse_message_segments(msg.content)
-            logger.info(f"[device:{device_id}] Segments for reply: {segments}")
+            logger.info(f"[device:{device_id}] Segments for reply: {[s['type'] for s in segments]}")
             for segment in segments:
                 if segment["type"] == "image":
-                    logger.info(f"[device:{device_id}] Sending image: {segment['content']}")
+                    logger.info(f"[device:{device_id}] Sending image segment")
                     await neonize.send_image(device_id, send_target, segment["content"])
                 elif segment["type"] == "document":
-                    logger.info(f"[device:{device_id}] Sending document: {segment['content']}")
+                    logger.info(f"[device:{device_id}] Sending document segment")
                     await neonize.send_document(device_id, send_target, segment["content"])
                 elif segment["content"]:
                     await neonize.send_text(device_id, send_target, segment["content"])
