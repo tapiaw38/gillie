@@ -570,7 +570,7 @@ class LangChainService:
             _re.IGNORECASE,
         )
         _FILE_TOOLS = {"send_screenshot", "send_file"}
-        _pending_file_urls: list[str] = []
+        _pending_file_urls: dict[str, str] = {}  # tool_name → last successful URL
 
         for round_num in range(max_rounds):
             tool_calls = getattr(response, "tool_calls", None)
@@ -666,9 +666,9 @@ class LangChainService:
                         pass
 
                 if tool_name in _FILE_TOOLS:
-                    for url in _FILE_URL_RE.findall(tool_result_str):
-                        if url not in _pending_file_urls:
-                            _pending_file_urls.append(url)
+                    urls = _FILE_URL_RE.findall(tool_result_str)
+                    if urls:
+                        _pending_file_urls[tool_name] = urls[-1]
 
                 messages.append(ToolMessage(content=tool_result_str, tool_call_id=tool_id))
 
@@ -702,7 +702,7 @@ class LangChainService:
             content = "(Las herramientas se ejecutaron correctamente. Tarea completada.)"
 
         # Append file URLs from send_screenshot/send_file that the LLM didn't include
-        for url in _pending_file_urls:
+        for url in _pending_file_urls.values():
             if url not in content:
                 logger.info(f"Appending missing file URL to response: {url}")
                 content = f"{content}\n{url}"
