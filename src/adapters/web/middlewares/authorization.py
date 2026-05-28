@@ -2,8 +2,14 @@ from fastapi import Request
 from fastapi.responses import JSONResponse
 from starlette.middleware.base import BaseHTTPMiddleware
 import logging
+import os
 
 logger = logging.getLogger(__name__)
+
+_PUBLIC_EXACT_PATHS = {
+    "/",
+    "/health",
+}
 
 _PUBLIC_PREFIXES = (
     "/docs",
@@ -33,6 +39,7 @@ class SingleUserMiddleware(BaseHTTPMiddleware):
         super().__init__(app)
         self.user_id = user_id
         self.profile_client = profile_client
+        self.trust_localhost = os.getenv("AUTH_TRUST_LOCALHOST", "true").lower() == "true"
 
     async def dispatch(self, request: Request, call_next):
         user_id = self.user_id or getattr(request.app.state, "user_id", "default-user")
@@ -42,7 +49,10 @@ class SingleUserMiddleware(BaseHTTPMiddleware):
         request.state.user = {"user_id": user_id}
 
         path = request.url.path
-        if any(path.startswith(prefix) for prefix in _PUBLIC_PREFIXES):
+        if path in _PUBLIC_EXACT_PATHS or any(path.startswith(prefix) for prefix in _PUBLIC_PREFIXES):
+            return await call_next(request)
+
+        if self.trust_localhost and request.client and request.client.host in {"127.0.0.1", "::1", "localhost"}:
             return await call_next(request)
 
         if profile_client is None:

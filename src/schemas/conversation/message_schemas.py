@@ -45,12 +45,37 @@ class MessageOutput(BaseModel):
 
     @staticmethod
     def from_output(message: Message):
+        attachments = None
+        if message.image_attachments:
+            attachments = [
+                MessageImageAttachmentOutput(
+                    id=attachment.id,
+                    name=attachment.name,
+                    mime_type=attachment.mime_type,
+                    size=attachment.size,
+                    storage_key=attachment.storage_key,
+                    url=attachment.url,
+                    analysis=(
+                        MessageImageAnalysisOutput(
+                            summary=attachment.analysis.summary,
+                            prompt=attachment.analysis.prompt,
+                            extracted_text=attachment.analysis.extracted_text,
+                            key_findings=attachment.analysis.key_findings,
+                            response_context=attachment.analysis.response_context,
+                        )
+                        if attachment.analysis
+                        else None
+                    ),
+                )
+                for attachment in message.image_attachments
+            ]
+
         return MessageOutput(
             data=MessageOutputData(
                 id=message.id,
                 content=message.content,
                 audio_url=message.audio_url,
-                image_attachments=message.image_attachments,
+                image_attachments=attachments,
                 sender=message.sender,
                 created_at=message.created_at,
             )
