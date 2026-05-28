@@ -4,6 +4,7 @@ from src.schemas import (
     ApiKeyInput,
     FileInput,
     IntegrationInput,
+    ContactInput,
 )
 from typing import List
 from src.adapters.web.dependencies import get_usecases
@@ -111,3 +112,43 @@ async def list_options(
 ):
     user_id = request.state.user.get("user_id", "")
     return await usecases.profile.list_options_usecase.execute(user_id)
+
+
+@router.get("/contacts", status_code=status.HTTP_200_OK)
+async def list_contacts(
+    request: Request,
+    usecases: Usecases = Depends(get_usecases),
+):
+    user_id = request.state.user.get("user_id")
+    return await usecases.profile.list_contacts_usecase.execute(user_id)
+
+
+@router.post("/contacts", status_code=status.HTTP_201_CREATED)
+async def add_contact(
+    contact: ContactInput,
+    request: Request,
+    usecases: Usecases = Depends(get_usecases),
+):
+    user_id = request.state.user.get("user_id")
+    return await usecases.profile.add_contact_usecase.execute(user_id, contact)
+
+
+@router.patch("/contacts/{contact_id}", status_code=status.HTTP_200_OK)
+async def update_contact(
+    contact_id: str,
+    contact: ContactInput,
+    request: Request,
+    usecases: Usecases = Depends(get_usecases),
+):
+    user_id = request.state.user.get("user_id")
+    return await usecases.profile.update_contact_usecase.execute(user_id, contact_id, contact)
+
+
+@router.delete("/contacts/{contact_id}", status_code=status.HTTP_200_OK)
+async def delete_contact(
+    contact_id: str,
+    request: Request,
+    usecases: Usecases = Depends(get_usecases),
+):
+    user_id = request.state.user.get("user_id")
+    return await usecases.profile.delete_contact_usecase.execute(user_id, contact_id)

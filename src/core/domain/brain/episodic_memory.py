@@ -8,6 +8,8 @@ from pydantic import BaseModel, Field
 class EpisodicMemory(BaseModel):
     id: Optional[str] = Field(alias="_id", default=None)
     user_id: str
+    owner_user_id: Optional[str] = None
+    memory_scope_id: Optional[str] = None
     type: str = "episode"  # "episode" | "fact" | "preference" | "goal"
     content: str
     importance: int = Field(default=5, ge=1, le=10)

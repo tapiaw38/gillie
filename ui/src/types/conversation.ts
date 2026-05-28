@@ -5,6 +5,8 @@ export interface AssistantConversation {
   title: string
   created_at: string
   profile: AssistantProfile
+  contact_id?: string
+  contact_name?: string
   messages: ConversationMessage[]
 }
 
@@ -20,4 +22,5 @@ export interface AssistantConversationResponse {
 
 export interface AssistantConversationParams {
   title: string
+  contact_id?: string
 }

@@ -447,6 +447,14 @@ const integrations = computed<IntegrationItem[]>(() => [
     to: 'my-account',
     enabled: true,
   },
+  {
+    name: t('dashboard.integrations.contacts.name'),
+    description: t('dashboard.integrations.contacts.description'),
+    icon: 'pi pi-users',
+    tone: 'info',
+    to: 'contacts',
+    enabled: true,
+  },
 ])
 
 const openGroups = ref(new Set<string>())
@@ -482,6 +490,7 @@ const AUTOMATION_ROUTES = [
   'tool-prompts',
   'functions',
   'my-account',
+  'contacts',
 ]
 
 const skillGroups = computed<SkillGroup[]>(() => [
@@ -801,6 +810,13 @@ const skillGroups = computed<SkillGroup[]>(() => [
                   <span class="qa-btn-desc">{{ t('dashboard.conversationsDesc') }}</span>
                 </div>
               </RouterLink>
+              <RouterLink class="qa-btn qa-btn--secondary" :to="{ name: 'contacts' }">
+                <i class="pi pi-users"></i>
+                <div>
+                  <span class="qa-btn-label">{{ t('dashboard.contacts') }}</span>
+                  <span class="qa-btn-desc">{{ t('dashboard.contactsDesc') }}</span>
+                </div>
+              </RouterLink>
             </div>
           </template>
         </Card>
@@ -912,12 +928,6 @@ const skillGroups = computed<SkillGroup[]>(() => [
                 <i class="pi pi-clock"></i>
               </div>
             </div>
-          </div>
-          <div class="stats-actions">
-            <RouterLink class="view-conversations-button" :to="{ name: 'conversation' }">
-              <i class="pi pi-eye"></i>
-              {{ t('dashboard.viewConversations') }}
-            </RouterLink>
           </div>
         </template>
       </Card>

@@ -14,6 +14,9 @@ export const useAssistant = () => {
 
   const {
     assistantProfile,
+    ownerMemories,
+    ownerMemoriesHasMore,
+    ownerMemoriesNextOffset,
 
     isAddAssistantProfilePending,
     isAddAssistantProfileSuccess,
@@ -39,6 +42,29 @@ export const useAssistant = () => {
     isRemoveApiKeySuccess,
     isRemoveApiKeyError,
     removeApiKeyError,
+
+    isListContactsPending,
+    isListContactsError,
+    listContactsError,
+
+    isAddContactPending,
+    isAddContactSuccess,
+    isAddContactError,
+    addContactError,
+
+    isUpdateContactPending,
+    isUpdateContactSuccess,
+    isUpdateContactError,
+    updateContactError,
+
+    isDeleteContactPending,
+    isDeleteContactSuccess,
+    isDeleteContactError,
+    deleteContactError,
+
+    isListOwnerMemoriesPending,
+    isListOwnerMemoriesError,
+    listOwnerMemoriesError,
 
     isAddFilesPending,
     isAddFilesSuccess,
@@ -67,6 +93,11 @@ export const useAssistant = () => {
     addApiKey,
     removeApiKey,
     addFiles,
+    listContacts,
+    addContact,
+    updateContact,
+    deleteContact,
+    listOwnerMemories,
     removeFileById,
     addIntegration,
     removeIntegrationById,
@@ -75,6 +106,9 @@ export const useAssistant = () => {
   return {
     // Data
     assistantProfile,
+    ownerMemories,
+    ownerMemoriesHasMore,
+    ownerMemoriesNextOffset,
 
     addAssistantProfileError,
     isAddAssistantProfilePending,
@@ -100,6 +134,29 @@ export const useAssistant = () => {
     isRemoveApiKeySuccess,
     isRemoveApiKeyError,
     removeApiKeyError,
+
+    isListContactsPending,
+    isListContactsError,
+    listContactsError,
+
+    isAddContactPending,
+    isAddContactSuccess,
+    isAddContactError,
+    addContactError,
+
+    isUpdateContactPending,
+    isUpdateContactSuccess,
+    isUpdateContactError,
+    updateContactError,
+
+    isDeleteContactPending,
+    isDeleteContactSuccess,
+    isDeleteContactError,
+    deleteContactError,
+
+    isListOwnerMemoriesPending,
+    isListOwnerMemoriesError,
+    listOwnerMemoriesError,
 
     isAddFilesPending,
     isAddFilesSuccess,
@@ -127,6 +184,11 @@ export const useAssistant = () => {
     addApiKey,
     removeApiKey,
     addFiles,
+    listContacts,
+    addContact,
+    updateContact,
+    deleteContact,
+    listOwnerMemories,
     removeFileById,
     addIntegration,
     removeIntegrationById,

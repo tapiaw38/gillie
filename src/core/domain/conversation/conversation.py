@@ -11,6 +11,8 @@ class Conversation(BaseModel):
     created_at: datetime
     client_id: str
     profile: Profile
+    contact_id: Optional[str] = None
+    contact_name: Optional[str] = None
     messages: Optional[List[Message]] = Field(default=None)
     is_sandbox: bool = Field(default=False)
     message_count: Optional[int] = Field(default=0)

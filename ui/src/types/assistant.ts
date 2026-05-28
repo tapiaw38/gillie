@@ -49,6 +49,7 @@ export interface AssistantProfile {
   response_language?: string
   iteration_limit: number
   api_keys: ApiKey[]
+  contacts?: Contact[]
   files?: AssistantFile[]
   integrations?: Integration[]
   tool_prompts?: string
@@ -61,6 +62,7 @@ export interface AssistantProfileResponse {
 
 export interface ApiKeyParams {
   description: string
+  contact_id: string
 }
 
 export interface ApiKey {
@@ -68,9 +70,59 @@ export interface ApiKey {
   user_id: string
   value: string
   description: string
+  contact_id: string
+  contact_name: string
   is_active: boolean
   limit: number
   created_at: string
+}
+
+export interface Contact {
+  id: string
+  name: string
+  channel?: string
+  external_id?: string
+  tags?: string[]
+  notes?: string
+}
+
+export interface ContactParams {
+  name: string
+  channel?: string
+  external_id?: string
+  tags?: string[]
+  notes?: string
+}
+
+export interface ContactResponse {
+  data: Contact
+}
+
+export interface ContactListResponse {
+  data: Contact[]
+}
+
+export interface ContactDeleteResponse {
+  deleted: boolean
+  id: string
+}
+
+export interface OwnerMemory {
+  id: string
+  owner_user_id?: string
+  memory_scope_id?: string
+  source_conversation_id?: string
+  content: string
+  importance: number
+  emotion?: string
+  tags: string[]
+  created_at: string
+}
+
+export interface OwnerMemoryListResponse {
+  data: OwnerMemory[]
+  has_more: boolean
+  next_offset?: number
 }
 
 export interface ApiKeyResponse {

@@ -11,11 +11,18 @@ import type {
   ApiKeyParams,
   ApiKeyRemoveResponse,
   IntegrationParams,
+  ContactParams,
+  ContactResponse,
+  ContactDeleteResponse,
+  OwnerMemory,
 } from '@/types/assistant.ts'
 
 export const useAssistantStore = (assistantService: IAssistantService) =>
   defineStore('assistant', () => {
     const assistantProfile = ref<AssistantProfile | null | undefined>(null)
+    const ownerMemories = ref<OwnerMemory[]>([])
+    const ownerMemoriesHasMore = ref(false)
+    const ownerMemoriesNextOffset = ref<number | null>(null)
 
     const {
       addAssistantProfileMutation,
@@ -23,6 +30,11 @@ export const useAssistantStore = (assistantService: IAssistantService) =>
       updateAssistantProfileMutation,
       addApiKeyMutation,
       removeApiKeyMutation,
+      listContactsQuery,
+      addContactMutation,
+      updateContactMutation,
+      deleteContactMutation,
+      listOwnerMemoriesMutation,
       addFilesMutation,
       removeFileByIdMutation,
       addIntegrationMutation,
@@ -37,6 +49,17 @@ export const useAssistantStore = (assistantService: IAssistantService) =>
       } catch (error) {
         console.error('Failed to add assistant profile:', error)
         throw error
+      }
+    }
+
+    const ensureAssistantProfileLoaded = async () => {
+      if (assistantProfile.value) {
+        return
+      }
+      const { data } = await getAssistantProfileQuery.refetch()
+      assistantProfile.value = data?.data || null
+      if (!assistantProfile.value) {
+        throw new Error('Assistant profile is not available')
       }
     }
 
@@ -62,6 +85,7 @@ export const useAssistantStore = (assistantService: IAssistantService) =>
 
     const addApiKey = async (params: ApiKeyParams) => {
       try {
+        await ensureAssistantProfileLoaded()
         const data: ApiKeyResponse = await addApiKeyMutation.mutateAsync(params)
         assistantProfile.value!.api_keys = [...data?.data]
       } catch (error) {
@@ -72,6 +96,7 @@ export const useAssistantStore = (assistantService: IAssistantService) =>
 
     const removeApiKey = async (apiKeyId: string) => {
       try {
+        await ensureAssistantProfileLoaded()
         const data: ApiKeyRemoveResponse = await removeApiKeyMutation.mutateAsync(apiKeyId)
         const apiKey = assistantProfile.value!.api_keys.find(
           (apiKey) => apiKey.id === data?.data.id,
@@ -91,6 +116,76 @@ export const useAssistantStore = (assistantService: IAssistantService) =>
         assistantProfile.value!.files = [...data?.data]
       } catch (error) {
         console.error('Failed to add files:', error)
+        throw error
+      }
+    }
+
+    const listContacts = async () => {
+      try {
+        await ensureAssistantProfileLoaded()
+        const { data } = await listContactsQuery.refetch()
+        assistantProfile.value!.contacts = data?.data || []
+      } catch (error) {
+        console.error('Failed to list contacts:', error)
+        throw error
+      }
+    }
+
+    const addContact = async (contact: ContactParams) => {
+      try {
+        await ensureAssistantProfileLoaded()
+        const data: ContactResponse = await addContactMutation.mutateAsync(contact)
+        assistantProfile.value!.contacts = [...(assistantProfile.value!.contacts || []), data.data]
+      } catch (error) {
+        console.error('Failed to add contact:', error)
+        throw error
+      }
+    }
+
+    const updateContact = async (contactId: string, contact: ContactParams) => {
+      try {
+        await ensureAssistantProfileLoaded()
+        const data: ContactResponse = await updateContactMutation.mutateAsync({ contactId, contact })
+        assistantProfile.value!.contacts = (assistantProfile.value!.contacts || []).map((item) =>
+          item.id === data.data.id ? data.data : item,
+        )
+      } catch (error) {
+        console.error('Failed to update contact:', error)
+        throw error
+      }
+    }
+
+    const deleteContact = async (contactId: string) => {
+      try {
+        await ensureAssistantProfileLoaded()
+        const data: ContactDeleteResponse = await deleteContactMutation.mutateAsync(contactId)
+        assistantProfile.value!.contacts = (assistantProfile.value!.contacts || []).filter((item) => item.id !== data.id)
+      } catch (error) {
+        console.error('Failed to delete contact:', error)
+        throw error
+      }
+    }
+
+    const listOwnerMemories = async (
+      params?: { contact_id?: string; query?: string; limit?: number; offset?: number; append?: boolean },
+    ) => {
+      try {
+        const append = Boolean(params?.append)
+        const apiParams = params
+          ? {
+              contact_id: params.contact_id,
+              query: params.query,
+              limit: params.limit,
+              offset: params.offset,
+            }
+          : undefined
+        const data = await listOwnerMemoriesMutation.mutateAsync(apiParams)
+        const list = data?.data || []
+        ownerMemories.value = append ? [...ownerMemories.value, ...list] : list
+        ownerMemoriesHasMore.value = Boolean(data?.has_more)
+        ownerMemoriesNextOffset.value = data?.next_offset ?? null
+      } catch (error) {
+        console.error('Failed to list owner memories:', error)
         throw error
       }
     }
@@ -129,12 +224,20 @@ export const useAssistantStore = (assistantService: IAssistantService) =>
 
     return {
       assistantProfile,
+      ownerMemories,
+      ownerMemoriesHasMore,
+      ownerMemoriesNextOffset,
       addAssistantProfile,
       getAssistantProfile,
       updateAssistantProfile,
       addApiKey,
       removeApiKey,
       addFiles,
+      listContacts,
+      addContact,
+      updateContact,
+      deleteContact,
+      listOwnerMemories,
       removeFileById,
       addIntegration,
       removeIntegrationById,
@@ -163,6 +266,29 @@ export const useAssistantStore = (assistantService: IAssistantService) =>
       isRemoveApiKeySuccess: removeApiKeyMutation.isSuccess,
       isRemoveApiKeyError: removeApiKeyMutation.isError,
       removeApiKeyError: removeApiKeyMutation.error,
+
+      isListContactsPending: listContactsQuery.isPending,
+      isListContactsError: listContactsQuery.isError,
+      listContactsError: listContactsQuery.error,
+
+      isAddContactPending: addContactMutation.isPending,
+      isAddContactSuccess: addContactMutation.isSuccess,
+      isAddContactError: addContactMutation.isError,
+      addContactError: addContactMutation.error,
+
+      isUpdateContactPending: updateContactMutation.isPending,
+      isUpdateContactSuccess: updateContactMutation.isSuccess,
+      isUpdateContactError: updateContactMutation.isError,
+      updateContactError: updateContactMutation.error,
+
+      isDeleteContactPending: deleteContactMutation.isPending,
+      isDeleteContactSuccess: deleteContactMutation.isSuccess,
+      isDeleteContactError: deleteContactMutation.isError,
+      deleteContactError: deleteContactMutation.error,
+
+      isListOwnerMemoriesPending: listOwnerMemoriesMutation.isPending,
+      isListOwnerMemoriesError: listOwnerMemoriesMutation.isError,
+      listOwnerMemoriesError: listOwnerMemoriesMutation.error,
 
       isAddFilesPending: addFilesMutation.isPending,
       isAddFilesSuccess: addFilesMutation.isSuccess,

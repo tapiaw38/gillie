@@ -12,6 +12,8 @@ from .memory_schemas import (
     MemoryRootOutput,
     MemoryRootInput,
     MemoryResolvedOutput,
+    OwnerMemoryData,
+    OwnerMemoryListOutput,
 )
 
 __all__ = [
@@ -28,4 +30,6 @@ __all__ = [
     "MemoryRootOutput",
     "MemoryRootInput",
     "MemoryResolvedOutput",
+    "OwnerMemoryData",
+    "OwnerMemoryListOutput",
 ]

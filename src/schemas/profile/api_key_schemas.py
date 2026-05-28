@@ -6,12 +6,15 @@ from src.core.domain import ApiKey
 
 class ApiKeyInput(BaseModel):
     description: str
+    contact_id: str
 
 
 class ApiKeyOutputData(BaseModel):
     id: str
     value: str
     description: str
+    contact_id: str
+    contact_name: str
     is_active: bool
     created_at: datetime
 
@@ -26,6 +29,8 @@ class ApiKeyOutput(BaseModel):
                 id=api_key.id,
                 value=api_key.value,
                 description=api_key.description,
+                contact_id=api_key.contact_id or "",
+                contact_name=api_key.contact_name or "",
                 is_active=api_key.is_active,
                 created_at=api_key.created_at,
             )

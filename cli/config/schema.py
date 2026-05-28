@@ -97,6 +97,20 @@ class VisionServiceConfig:
 
 
 @dataclass
+class ImageGenerationServiceConfig:
+    api_key: str = ""
+    base_url: str = ""
+    model: str = ""
+
+
+@dataclass
+class VideoGenerationServiceConfig:
+    api_key: str = ""
+    base_url: str = ""
+    model: str = ""
+
+
+@dataclass
 class BrainServiceConfig:
     enabled: bool = False
 
@@ -177,6 +191,8 @@ class ServicesConfig:
     langsmith: LangSmithServiceConfig = field(default_factory=LangSmithServiceConfig)
     llm: LLMExtendedServiceConfig = field(default_factory=LLMExtendedServiceConfig)
     vision: VisionServiceConfig = field(default_factory=VisionServiceConfig)
+    image_generation: ImageGenerationServiceConfig = field(default_factory=ImageGenerationServiceConfig)
+    video_generation: VideoGenerationServiceConfig = field(default_factory=VideoGenerationServiceConfig)
 
 
 @dataclass

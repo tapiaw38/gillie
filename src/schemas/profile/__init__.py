@@ -11,6 +11,10 @@ from .profile_schemas import (
     ProfileStatusInput,
     ProfileOutput,
     ProfileOutputData,
+    ContactInput,
+    ContactOutput,
+    ContactOutputData,
+    ContactListOutput,
 )
 from .role_schemas import (
     RoleOutput,
@@ -31,6 +35,10 @@ __all__ = [
     "ProfileStatusInput",
     "ProfileOutput",
     "ProfileOutputData",
+    "ContactInput",
+    "ContactOutput",
+    "ContactOutputData",
+    "ContactListOutput",
     "RoleOutput",
     "RoleOutputData",
     "ProviderOutputData",

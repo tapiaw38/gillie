@@ -48,6 +48,36 @@ class Repository(RepositoryInterface):
         except PyMongoError as exc:
             raise NewApplicationError(CommonDatabaseQueryError, exc)
 
+    async def find_by_owner_user_id(
+        self,
+        owner_user_id: str,
+        contact_id: Optional[str] = None,
+        query: Optional[str] = None,
+        limit: int = 100,
+        offset: int = 0,
+    ) -> dict:
+        try:
+            filter_query: dict = {"owner_user_id": owner_user_id}
+            if contact_id:
+                filter_query["memory_scope_id"] = f"{owner_user_id}__contact__{contact_id}"
+            if query:
+                filter_query["content"] = {"$regex": query, "$options": "i"}
+
+            fetch_size = max(1, limit) + 1
+            cursor = self.client.find(filter_query).sort("created_at", -1).skip(max(0, offset)).limit(fetch_size)
+            documents = await cursor.to_list(length=None)
+            has_more = len(documents) > limit
+            page_docs = documents[:limit]
+            items = [EpisodicMemory(**_normalize_document_id(doc)) for doc in page_docs]
+            next_offset = offset + len(page_docs) if has_more else None
+            return {
+                "items": items,
+                "has_more": has_more,
+                "next_offset": next_offset,
+            }
+        except PyMongoError as exc:
+            raise NewApplicationError(CommonDatabaseQueryError, exc)
+
     async def find_by_ids(self, ids: List[str]) -> List[EpisodicMemory]:
         try:
             id_candidates = []
@@ -104,6 +134,7 @@ class Repository(RepositoryInterface):
         try:
             await self.client.create_index([("user_id", 1), ("created_at", -1)])
             await self.client.create_index([("user_id", 1), ("importance", -1)])
+            await self.client.create_index([("owner_user_id", 1), ("memory_scope_id", 1), ("created_at", -1)])
             logger.info("Episodic memory indexes ensured")
         except Exception as exc:
             logger.warning("Failed to ensure episodic memory indexes: %s", exc)

@@ -62,6 +62,8 @@ async def add_message(
     content: str = Form(...),
     context: Optional[str] = Form(None),
     voice_content: Optional[UploadFile] = File(None),
+    image_content: Optional[UploadFile] = File(None),
+    files: Optional[list[UploadFile]] = File(None),
     usecases: Usecases = Depends(get_usecases),
     has_image_processor: Optional[str] = Query(None, regex="^(activate|deactivate)$"),
     has_text_to_voice: Optional[str] = Query(None, regex="^(activate|deactivate)$")
@@ -79,7 +81,9 @@ async def add_message(
     message = MessageInput(
         content=content,
         context=context,
-        voice_content=voice_content
+        voice_content=voice_content,
+        image_content=image_content,
+        image_contents=files,
     )
 
     messages = await usecases.conversation.add_message_usecase.execute(

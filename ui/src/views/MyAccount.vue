@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { onMounted, reactive, ref, watch, computed } from 'vue'
+import { useRouter } from 'vue-router'
 import Card from 'primevue/card'
 import Toast from 'primevue/toast'
 import { useAssistant } from '@/composables/useAssistant'
@@ -9,6 +10,7 @@ import LoadingSpinner from '@/components/core/LoadingSpinner/LoadingSpinner.vue'
 import Button from 'primevue/button'
 import DefaultModal from '@/components/core/shared/DefaultModal/DefaultModal.vue'
 import InputText from 'primevue/inputtext'
+import Dropdown from 'primevue/dropdown'
 import Tag from 'primevue/tag'
 import InputSwitch from 'primevue/inputswitch'
 import { useToogle } from '@/composables/useToogle'
@@ -20,6 +22,7 @@ const { copyText } = useClipboard()
 
 const { toogleValue: isVisibleAddApiKey } = useToogle(false)
 const { toogleValue: isVisibleRemoveApiKey } = useToogle(false)
+const router = useRouter()
 
 const {
   assistantProfile,
@@ -27,6 +30,7 @@ const {
   updateAssistantProfile,
   addApiKey,
   removeApiKey,
+  listContacts,
 
   isGetAssistantProfilePending,
 
@@ -60,6 +64,7 @@ const { toast } = useErrorToast(errorWatchers)
 
 onMounted(async () => {
   await getAssistantProfile()
+  await listContacts()
 })
 
 watch(isAddApiKeySuccess, (value) => {
@@ -145,7 +150,9 @@ const setResponseLanguage = async (lang: 'en' | 'es') => {
 
 const addApiKeyParams = reactive<ApiKeyParams>({
   description: '',
+  contact_id: '',
 })
+
 
 const modalTitleAddApiKey = computed(() => t('myAccount.addKeyTitle'))
 const changeAddApiKeyVisible = (value: boolean) => {
@@ -154,13 +161,25 @@ const changeAddApiKeyVisible = (value: boolean) => {
 
 const addApiKeyHandler = async () => {
   try {
+    if (!addApiKeyParams.contact_id) {
+      toast.add({
+        severity: 'warn',
+        summary: t('myAccount.contactRequired'),
+        detail: t('myAccount.contactRequiredDesc'),
+        life: 3000,
+      })
+      return
+    }
     await addApiKey(addApiKeyParams)
     addApiKeyParams.description = ''
+    addApiKeyParams.contact_id = ''
     isVisibleAddApiKey.value = false
   } catch (error) {
     console.error('Error adding api key:', error)
   }
 }
+
+const goToContacts = () => router.push('/app/contacts')
 
 const removeApiKeyDeleteData = ref<string | null>(null)
 
@@ -295,6 +314,13 @@ const removeApiKeyOpenModal = (apiKeyID: string) => {
               </div>
             </div>
             <Button
+              icon="pi pi-users"
+              :label="t('myAccount.manageContacts')"
+              severity="secondary"
+              text
+              @click="goToContacts"
+            />
+            <Button
               icon="pi pi-plus"
               :label="t('myAccount.newKey')"
               severity="primary"
@@ -315,6 +341,7 @@ const removeApiKeyOpenModal = (apiKeyID: string) => {
                 <div class="key-info">
                   <div class="key-header">
                     <Tag :value="apiKey.description" severity="info" class="key-tag" />
+                    <Tag :value="apiKey.contact_name || 'No contact'" severity="success" class="key-tag" />
                     <span class="key-date">{{ t('myAccount.recentlyCreated') }}</span>
                   </div>
                   <div class="key-value-container">
@@ -379,6 +406,18 @@ const removeApiKeyOpenModal = (apiKeyID: string) => {
             :placeholder="t('myAccount.keyDescriptionPlaceholder')"
           />
           <small>{{ t('myAccount.keyDescriptionHelp') }}</small>
+        </div>
+        <div class="form-field">
+          <label for="api_key_contact">{{ t('myAccount.contactLabel') }}</label>
+          <Dropdown
+            id="api_key_contact"
+            v-model="addApiKeyParams.contact_id"
+            :options="assistantProfile?.contacts || []"
+            optionLabel="name"
+            optionValue="id"
+            :placeholder="t('myAccount.contactPlaceholder')"
+          />
+          <small>{{ t('myAccount.contactHelp') }}</small>
         </div>
       </div>
       <div class="modal-actions">

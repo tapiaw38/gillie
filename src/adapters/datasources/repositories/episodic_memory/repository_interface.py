@@ -14,6 +14,17 @@ class RepositoryInterface(ABC):
         pass
 
     @abstractmethod
+    async def find_by_owner_user_id(
+        self,
+        owner_user_id: str,
+        contact_id: Optional[str] = None,
+        query: Optional[str] = None,
+        limit: int = 100,
+        offset: int = 0,
+    ) -> dict:
+        pass
+
+    @abstractmethod
     async def find_by_ids(self, ids: List[str]) -> List[EpisodicMemory]:
         pass
 

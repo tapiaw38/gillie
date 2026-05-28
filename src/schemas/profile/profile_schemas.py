@@ -20,6 +20,33 @@ class ProfileStatusInput(BaseModel):
     is_active: bool
 
 
+class ContactInput(BaseModel):
+    name: str
+    channel: Optional[str] = None
+    external_id: Optional[str] = None
+    tags: Optional[List[str]] = None
+    notes: Optional[str] = None
+
+
+class ContactOutputData(BaseModel):
+    id: str
+    name: str
+    channel: Optional[str] = None
+    external_id: Optional[str] = None
+    tags: Optional[List[str]] = None
+    notes: Optional[str] = None
+    created_at: Optional[datetime] = None
+    updated_at: Optional[datetime] = None
+
+
+class ContactOutput(BaseModel):
+    data: ContactOutputData
+
+
+class ContactListOutput(BaseModel):
+    data: List[ContactOutputData]
+
+
 class ProfileOutputData(BaseModel):
     id: str
     user_id: str
@@ -36,6 +63,7 @@ class ProfileOutputData(BaseModel):
     created_at: Optional[datetime]
     updated_at: Optional[datetime]
     api_keys: Optional[List[ApiKeyOutputData]]
+    contacts: Optional[List[ContactOutputData]]
     files: Optional[List[FileOutputData]]
     integrations: Optional[List[IntegrationOutputData]]
 
@@ -67,6 +95,23 @@ class ProfileOutput(BaseModel):
                         for api_key in profile.api_keys
                     ]
                     if profile.api_keys
+                    else None
+                ),
+                contacts=(
+                    [
+                        ContactOutputData(
+                            id=contact.id,
+                            name=contact.name,
+                            channel=contact.channel,
+                            external_id=contact.external_id,
+                            tags=contact.tags,
+                            notes=contact.notes,
+                            created_at=contact.created_at,
+                            updated_at=contact.updated_at,
+                        )
+                        for contact in profile.contacts
+                    ]
+                    if profile.contacts
                     else None
                 ),
                 files=(

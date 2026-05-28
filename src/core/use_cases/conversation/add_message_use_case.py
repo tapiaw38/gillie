@@ -1,15 +1,21 @@
 import asyncio
+import io
 import logging
+import os
+import uuid
 from datetime import datetime, timezone
 from typing import Optional, Tuple
 
 from src.schemas import MessageInput, MessageListOutput
-from src.core.domain import Message, SenderEnum
+from src.core.domain import Message, SenderEnum, MessageImageAttachment, ImageAnalysis
 from src.core.platform.appcontext.appcontext import Factory
 from src.core.platform.errors import NewApplicationError
 from src.core.platform.errors.mappings.conversation import (
     ConversationGetNotFoundError,
     ConversationMessageValidationError,
+    ConversationMessageImageUnsupportedFormatError,
+    ConversationMessageImageTooLargeError,
+    ConversationMessageImageAnalysisError,
 )
 from src.core.platform.errors.mappings.common import ForbiddenError
 from src.core.use_cases.conversation.compact_use_case import CompactConversationUseCase
@@ -17,6 +23,14 @@ from src.core.use_cases.conversation.compact_use_case import CompactConversation
 logger = logging.getLogger(__name__)
 
 _LANG_MAP = {"en": "en-US", "es": "es-ES", "fr": "fr-FR", "de": "de-DE", "pt": "pt-BR"}
+_ALLOWED_IMAGE_MIME_TYPES = {
+    "image/jpeg",
+    "image/jpg",
+    "image/png",
+    "image/webp",
+    "image/gif",
+}
+_MAX_IMAGE_SIZE_BYTES = 10 * 1024 * 1024
 
 
 class AddMessageUseCase:
@@ -38,14 +52,35 @@ class AddMessageUseCase:
         profile = await context.repositories.profile.find_by_user_id(user_id)
 
         enhanced_content = await self._process_voice_content(message, profile, context)
+        conversation = await self._get_and_validate_conversation(conversation_id, user_id, context)
+        image_attachments, image_analysis_summary = await self._process_image_content(
+            message=message,
+            user_id=user_id,
+            context=context,
+            user_message_content=enhanced_content,
+            conversation=conversation,
+        )
+
+        if image_analysis_summary:
+            if enhanced_content.strip():
+                enhanced_content = (
+                    f"{enhanced_content.strip()}\n\n"
+                    f"[Attached image analysis]\n{image_analysis_summary}"
+                )
+            else:
+                enhanced_content = f"[Attached image analysis]\n{image_analysis_summary}"
 
         if message.voice_content and not enhanced_content.strip():
             logger.warning("Voice content provided but transcription returned no text — skipping")
-            conversation = await self._get_and_validate_conversation(conversation_id, user_id, context)
             return MessageListOutput.from_output(conversation.messages)
 
-        user_message = self._create_user_message(enhanced_content, sender)
-        conversation = await self._get_and_validate_conversation(conversation_id, user_id, context)
+        user_message = self._create_user_message(
+            enhanced_content,
+            sender,
+            image_attachments=image_attachments,
+        )
+        scoped_message_context = self._build_message_context(message.context, conversation)
+        memory_scope_id = self._build_memory_scope_id(conversation)
 
         compact_uc = CompactConversationUseCase(self.context_factory)
         await compact_uc.compact_if_needed(conversation, conversation_id, context)
@@ -55,7 +90,7 @@ class AddMessageUseCase:
         default_message, ai_response_text = await self._generate_ai_response(
             user_message=user_message,
             conversation=conversation,
-            message_context=message.context,
+            message_context=scoped_message_context,
             auth_token=auth_token,
             client_workspace=client_workspace,
             context=context,
@@ -68,7 +103,7 @@ class AddMessageUseCase:
             has_image_processor=has_image_processor,
             user_message=user_message,
             conversation=conversation,
-            message_context=message.context,
+            message_context=scoped_message_context,
             context=context,
         )
 
@@ -89,11 +124,12 @@ class AddMessageUseCase:
         await context.repositories.conversation.update_messages_by_id(conversation_id, conversation.messages)
 
         self._schedule_memory_extraction(
-            user_id=user_id,
+            user_id=memory_scope_id,
             user_message=user_message.content,
             assistant_response=ai_response_text,
             conversation_id=conversation_id,
             context=context,
+            owner_user_id=conversation.profile.user_id,
         )
 
         return MessageListOutput.from_output(conversation.messages)
@@ -116,11 +152,17 @@ class AddMessageUseCase:
         if compaction_event:
             yield compaction_event
 
+        memory_scope_id = self._build_memory_scope_id(conversation)
+
         user_message = self._create_user_message(content, SenderEnum.user)
         self._add_message_to_conversation(conversation, user_message)
 
+        scoped_message_context = self._build_message_context(None, conversation)
         enhanced_context = await self._inject_skill_context(
-            None, content, context, user_id=conversation.profile.user_id or ""
+            scoped_message_context,
+            content,
+            context,
+            user_id=memory_scope_id,
         )
         conversation_history = (
             context.platform_managers.message_history.convert_messages_to_string(conversation.messages[-20:])
@@ -162,11 +204,12 @@ class AddMessageUseCase:
         await context.repositories.conversation.update_messages_by_id(conversation_id, conversation.messages)
 
         self._schedule_memory_extraction(
-            user_id=user_id,
+            user_id=memory_scope_id,
             user_message=content,
             assistant_response=full_text,
             conversation_id=conversation_id,
             context=context,
+            owner_user_id=conversation.profile.user_id,
         )
 
     async def _get_and_validate_conversation(self, conversation_id: str, user_id: str, context):
@@ -184,8 +227,18 @@ class AddMessageUseCase:
             conversation.messages = []
         return conversation
 
-    def _create_user_message(self, content: str, sender: SenderEnum) -> Message:
-        return Message(content=content, sender=sender, created_at=datetime.now(timezone.utc))
+    def _create_user_message(
+        self,
+        content: str,
+        sender: SenderEnum,
+        image_attachments: Optional[list[MessageImageAttachment]] = None,
+    ) -> Message:
+        return Message(
+            content=content,
+            sender=sender,
+            image_attachments=image_attachments,
+            created_at=datetime.now(timezone.utc),
+        )
 
     def _create_assistant_message(self, content: str, audio_url: Optional[str] = None) -> Message:
         return Message(content=content, audio_url=audio_url, sender="assistant", created_at=datetime.now(timezone.utc))
@@ -216,6 +269,159 @@ class AddMessageUseCase:
             logger.error(f"Error processing voice content: {e}")
         return message.content
 
+    async def _process_image_content(
+        self,
+        message: MessageInput,
+        user_id: str,
+        context,
+        user_message_content: str,
+        conversation,
+    ) -> tuple[Optional[list[MessageImageAttachment]], Optional[str]]:
+        incoming_images = []
+        if message.image_content:
+            incoming_images.append(message.image_content)
+        if message.image_contents:
+            incoming_images.extend(message.image_contents)
+
+        if not incoming_images:
+            return None, None
+
+        attachments: list[MessageImageAttachment] = []
+        summaries: list[str] = []
+
+        analysis_prompt = self._build_generic_image_context_prompt(user_message_content, conversation)
+
+        for image in incoming_images:
+            mime_type = (image.content_type or "").lower()
+            if mime_type not in _ALLOWED_IMAGE_MIME_TYPES:
+                raise NewApplicationError(ConversationMessageImageUnsupportedFormatError)
+
+            image_bytes = await image.read()
+            if not image_bytes:
+                raise NewApplicationError(ConversationMessageValidationError)
+            if len(image_bytes) > _MAX_IMAGE_SIZE_BYTES:
+                raise NewApplicationError(ConversationMessageImageTooLargeError)
+
+            ext = os.path.splitext(image.filename or "")[1] or self._mime_to_extension(mime_type)
+            object_id = str(uuid.uuid4())
+
+            try:
+                storage_key = context.store_service.put_object(
+                    file=io.BytesIO(image_bytes),
+                    user_file=user_id,
+                    filename=image.filename or f"message-image{ext}",
+                    size=len(image_bytes),
+                    object_id=object_id,
+                )
+                url = context.store_service.generate_url(storage_key)
+            except Exception as exc:
+                logger.error(f"Error uploading message image: {exc}")
+                raise NewApplicationError(ConversationMessageImageAnalysisError, exc)
+
+            try:
+                analysis = await context.integrations.openai.analyze_uploaded_image(
+                    image_bytes=image_bytes,
+                    prompt=analysis_prompt,
+                )
+            except Exception as exc:
+                logger.error(f"Error analyzing uploaded image: {exc}")
+                raise NewApplicationError(ConversationMessageImageAnalysisError, exc)
+
+            summary = (analysis or {}).get("summary", "")
+            prompt = (analysis or {}).get("prompt")
+            parsed = self._parse_image_analysis(summary)
+            if summary:
+                summaries.append(summary)
+
+            attachments.append(
+                MessageImageAttachment(
+                    name=image.filename or f"message-image{ext}",
+                    mime_type=mime_type,
+                    size=len(image_bytes),
+                    storage_key=storage_key,
+                    url=url,
+                    analysis=ImageAnalysis(
+                        summary=summary,
+                        prompt=prompt,
+                        extracted_text=parsed.get("extracted_text"),
+                        key_findings=parsed.get("key_findings"),
+                        response_context=parsed.get("response_context"),
+                    ),
+                )
+            )
+
+        combined_summary = "\n\n".join(summaries) if summaries else None
+        return attachments, combined_summary
+
+    def _build_generic_image_context_prompt(self, user_message_content: str, conversation) -> str:
+        contact_context = self._contact_context_string(conversation)
+        return (
+            "Analyze this image as conversation context. "
+            "Return concise structured output with the following labels:\n"
+            "TEXT_FOUND: exact visible text transcription if any.\n"
+            "KEY_FINDINGS: relevant visual findings.\n"
+            "RESPONSE_CONTEXT: what should be used to answer the user.\n\n"
+            f"Conversation scope: {contact_context}\n"
+            f"User message: {user_message_content or 'No additional user message provided.'}"
+        )
+
+    def _build_message_context(self, message_context: Optional[str], conversation) -> str:
+        contact_context = self._contact_context_string(conversation)
+        owner_contacts = len(getattr(conversation.profile, "contacts", None) or [])
+        scoped = (
+            f"Conversation scope: {contact_context}\n"
+            f"Owner contacts count: {owner_contacts}\n"
+            "If the user asks about contacts or memories, answer using this owner context first."
+        )
+        if message_context:
+            return f"{scoped}\n\n{message_context}"
+        return scoped
+
+    def _contact_context_string(self, conversation) -> str:
+        if getattr(conversation, "contact_id", None):
+            contact_name = getattr(conversation, "contact_name", None) or "unknown-contact"
+            return f"contact_id={conversation.contact_id}, contact_name={contact_name}"
+        return "owner-direct-conversation"
+
+    def _build_memory_scope_id(self, conversation) -> str:
+        owner_user_id = (getattr(conversation.profile, "user_id", None) or "").strip()
+        if not owner_user_id:
+            return "owner__unknown"
+        contact_id = (getattr(conversation, "contact_id", None) or "").strip()
+        if contact_id:
+            return f"{owner_user_id}__contact__{contact_id}"
+        return f"{owner_user_id}__owner"
+
+    def _parse_image_analysis(self, summary: str) -> dict[str, Optional[str]]:
+        if not summary:
+            return {"extracted_text": None, "key_findings": None, "response_context": None}
+
+        parsed = {"extracted_text": None, "key_findings": None, "response_context": None}
+        lines = summary.splitlines()
+        for line in lines:
+            if ":" not in line:
+                continue
+            key, value = line.split(":", 1)
+            normalized_key = key.strip().upper()
+            text_value = value.strip() or None
+            if normalized_key == "TEXT_FOUND":
+                parsed["extracted_text"] = text_value
+            elif normalized_key == "KEY_FINDINGS":
+                parsed["key_findings"] = text_value
+            elif normalized_key == "RESPONSE_CONTEXT":
+                parsed["response_context"] = text_value
+        return parsed
+
+    def _mime_to_extension(self, mime_type: str) -> str:
+        mapping = {
+            "image/jpeg": ".jpg",
+            "image/jpg": ".jpg",
+            "image/png": ".png",
+            "image/webp": ".webp",
+            "image/gif": ".gif",
+        }
+        return mapping.get(mime_type, ".img")
+
     async def _generate_ai_response(
         self,
         user_message: Message,
@@ -230,8 +436,12 @@ class AddMessageUseCase:
                 user_message, conversation, message_context, client_workspace, context
             ))
         try:
+            memory_scope_id = self._build_memory_scope_id(conversation)
             enhanced_context = await self._inject_skill_context(
-                message_context, user_message.content, context, user_id=conversation.profile.user_id or ""
+                message_context,
+                user_message.content,
+                context,
+                user_id=memory_scope_id,
             )
             chat_history = context.platform_managers.message_history.build_chat_history(
                 messages=conversation.messages, max_messages=20
@@ -257,7 +467,12 @@ class AddMessageUseCase:
         client_workspace: str, context,
     ) -> str:
         try:
-            enhanced_context = await self._inject_skill_context(message_context, context=context)
+            enhanced_context = await self._inject_skill_context(
+                message_context,
+                user_message.content,
+                context,
+                user_id=self._build_memory_scope_id(conversation),
+            )
             conversation_history = " - ".join(
                 f"{msg.sender}: {msg.content}" for msg in conversation.messages
             )
@@ -312,6 +527,7 @@ class AddMessageUseCase:
         assistant_response: str,
         conversation_id: str,
         context,
+        owner_user_id: Optional[str] = None,
     ) -> None:
         brain = getattr(context.platform_managers, "brain", None) if context.platform_managers else None
         if not brain:
@@ -322,6 +538,8 @@ class AddMessageUseCase:
                 user_message=user_message,
                 assistant_response=assistant_response,
                 conversation_id=conversation_id,
+                owner_user_id=owner_user_id,
+                memory_scope_id=user_id,
             )
         )
 

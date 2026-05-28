@@ -1,6 +1,7 @@
 import base64
 import io
 import requests
+import logging
 from typing import List, Dict, Optional, Any, Tuple
 from PIL import Image, ImageEnhance, ImageFilter
 from src.core.platform.config.service import ConfigurationService
@@ -16,6 +17,9 @@ except ImportError:
     cv2 = None
 import numpy as np
 from io import BytesIO
+
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass
@@ -63,9 +67,17 @@ class BaseFileProcessor:
         if vision_cfg and vision_cfg.api_key:
             self._vision_client = AsyncOpenAI(api_key=vision_cfg.api_key, base_url=vision_cfg.base_url)
             self._vision_model = vision_cfg.model
+            self._vision_base_url = vision_cfg.base_url
+            logger.info(
+                "Vision configured: model=%s base_url=%s",
+                self._vision_model,
+                self._vision_base_url,
+            )
         else:
             self._vision_client = None
             self._vision_model = None
+            self._vision_base_url = ""
+            logger.info("Vision not configured: using technical-only image analysis")
 
     def _extract_keywords_from_phrase_common(self, phrase: str) -> List[str]:
         """Extract unique keywords from a short search phrase."""
@@ -150,9 +162,30 @@ class BaseFileProcessor:
             text = pytesseract.image_to_string(image, config="--psm 3").strip()
             # Clean up excessive whitespace
             lines = [l.strip() for l in text.splitlines() if l.strip()]
-            return "\n".join(lines)
+            normalized = "\n".join(lines)
+            return self._sanitize_ocr_text(normalized)
         except Exception:
             return ""
+
+    def _sanitize_ocr_text(self, text: str, max_chars: int = 600) -> str:
+        """Keep OCR text bounded and printable to prevent prompt/context blowups."""
+        if not text:
+            return ""
+
+        cleaned = re.sub(r"[^\x09\x0A\x0D\x20-\x7E\u00A0-\u024F]", " ", text)
+        cleaned = re.sub(r"\s+", " ", cleaned).strip()
+        if len(cleaned) > max_chars:
+            cleaned = f"{cleaned[:max_chars]} ...[truncated]"
+        return cleaned
+
+    def _truncate_text(self, text: str, max_chars: int = 800) -> str:
+        """Bound free-form text to avoid oversized prompt/report payloads."""
+        if not text:
+            return ""
+        compact = re.sub(r"\s+", " ", str(text)).strip()
+        if len(compact) > max_chars:
+            return f"{compact[:max_chars]} ...[truncated]"
+        return compact
 
     def _detect_faces(self, img_array: np.ndarray) -> int:
         """Detect faces using OpenCV Haar cascades"""
@@ -623,9 +656,17 @@ class BaseFileProcessor:
             return f"Technically analyzed image. Possible relation to {search_term}."
 
     async def describe_image(self, image_base64: str, prompt: str = None) -> str:
+        python_analysis = self._analyze_image_with_python_tools(image_base64)
+
         if self._vision_client:
             try:
-                user_prompt = prompt or "Describe this image in detail. Be specific about what you see: objects, text, colors, context, and any relevant information."
+                logger.info(
+                    "Vision describe_image call: model=%s base_url=%s prompt_provided=%s",
+                    self._vision_model,
+                    self._vision_base_url,
+                    bool(prompt),
+                )
+                user_prompt = prompt or "Analyze this image."
                 response = await self._vision_client.chat.completions.create(
                     model=self._vision_model,
                     messages=[{
@@ -637,25 +678,79 @@ class BaseFileProcessor:
                             },
                             {
                                 "type": "text",
-                                "text": user_prompt
+                                "text": (
+                                    "Return grounded analysis only.\n"
+                                    "Format:\n"
+                                    "- observed_text: literal text visible in image (or 'none')\n"
+                                    "- observed_objects: bullets with directly visible items\n"
+                                    "- uncertainties: what is unclear/ambiguous\n"
+                                    "- final_summary: concise summary without guessing identities, brands, songs, events, or people unless text in image confirms it\n\n"
+                                    f"User focus: {user_prompt}"
+                                )
                             }
                         ]
                     }],
-                    max_tokens=500,
+                    max_tokens=300,
                 )
-                return response.choices[0].message.content.strip()
+                vision_text = self._truncate_text(response.choices[0].message.content, max_chars=700)
+                return self._build_grounded_report(python_analysis, vision_text, vision_enabled=True)
             except Exception as e:
-                pass
+                logger.warning(
+                    "Vision describe_image failed: model=%s base_url=%s error=%s",
+                    self._vision_model,
+                    self._vision_base_url,
+                    e,
+                )
+                return self._build_grounded_report(
+                    python_analysis,
+                    self._truncate_text(f"Vision model error: {e}", max_chars=220),
+                    vision_enabled=False,
+                )
 
-        try:
-            python_analysis = self._analyze_image_with_python_tools(image_base64)
-            description = self._create_detailed_description(python_analysis)
-            enhanced_description = await self._enhance_description_with_ai(
-                description, python_analysis, user_prompt=prompt
+        logger.info("Vision describe_image fallback: technical-only mode")
+        return self._build_grounded_report(python_analysis, None, vision_enabled=False)
+
+    def _build_grounded_report(self, analysis: Dict[str, Any], vision_text: str = None, vision_enabled: bool = False) -> str:
+        """Create strict, evidence-first image report."""
+        dimensions = analysis.get("dimensions", (0, 0))
+        ocr_text = self._sanitize_ocr_text((analysis.get("ocr_text") or "").strip())
+        objects_detected = analysis.get("objects_detected", 0)
+        faces_detected = analysis.get("faces_detected", 0)
+        color_names = analysis.get("color_names", [])
+
+        observed_text = ocr_text if ocr_text else "none"
+        observed_objects = [
+            f"estimated objects detected: {objects_detected}",
+            f"faces detected: {faces_detected}",
+            f"image dimensions: {dimensions[0]}x{dimensions[1]}",
+        ]
+        if color_names:
+            observed_objects.append(f"main colors: {', '.join(color_names[:6])}")
+
+        uncertainties = [
+            "object detector and OCR are approximate",
+            "semantic identity (brand/person/event) may be wrong without clear visible text",
+        ]
+
+        lines = [
+            "Observed evidence:",
+            f"- observed_text: {observed_text}",
+            "- observed_objects:",
+        ]
+        lines.extend([f"  - {item}" for item in observed_objects])
+        lines.append("- uncertainties:")
+        lines.extend([f"  - {item}" for item in uncertainties])
+
+        if vision_enabled and vision_text:
+            lines.append("- final_summary:")
+            lines.append(f"  {self._truncate_text(vision_text, max_chars=700)}")
+        else:
+            lines.append("- final_summary:")
+            lines.append(
+                "  Technical-only analysis provided. No strong semantic claims about brand/person/event are made."
             )
-            return enhanced_description
-        except Exception as e:
-            return f"Error describing image: {str(e)}"
+
+        return "\n".join(lines)
 
     def _create_detailed_description(self, analysis: Dict[str, Any]) -> str:
         """Create detailed description based on technical analysis"""
@@ -706,7 +801,7 @@ class BaseFileProcessor:
     ) -> str:
         """Enhance technical description using AI"""
         try:
-            ocr_text = analysis.get("ocr_text", "")
+            ocr_text = self._sanitize_ocr_text(analysis.get("ocr_text", ""))
             faces = analysis.get("faces_detected", 0)
             image_type = analysis.get("image_type", "image")
             color_names = analysis.get("color_names", [])
@@ -716,7 +811,7 @@ class BaseFileProcessor:
             colors_section = f"\n- Main colors: {', '.join(color_names)}" if color_names else ""
             focus = f"\n\nQUESTION TO ANSWER: {user_prompt}" if user_prompt else ""
 
-            prompt = f"""You are analyzing an image using technical data. Describe it as accurately as possible based on the information below.
+            prompt = f"""You are analyzing an image using technical data only. Describe only what data supports.
 
 IMAGE TYPE: {image_type}
 DIMENSIONS: {analysis.get('dimensions', 'N/A')}
@@ -727,7 +822,8 @@ Rules:
 - If OCR text is present, it is the most important clue — use it to infer the image content
 - If faces are detected, mention people are present
 - Be direct and specific, not generic
-- Do NOT say "I cannot see the image" — work with the data provided
+- Do not guess identities (people, songs, brands, places) unless OCR explicitly shows them
+- If evidence is insufficient, say uncertainty explicitly
 - Max 150 words
 """
 

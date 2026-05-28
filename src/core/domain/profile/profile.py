@@ -2,6 +2,7 @@ from pydantic import BaseModel, Field
 from typing import Optional, List, Dict, Any
 from datetime import datetime
 from .api_key import ApiKey
+from .contact import Contact
 from ..file.file import File
 from ..integration.integration import Integration
 
@@ -22,6 +23,7 @@ class Profile(BaseModel):
     provider_keys: Optional[Dict[str, str]] = Field(default=None)
     custom_providers: Optional[Dict[str, Any]] = Field(default=None)
     api_keys: Optional[List[ApiKey]] = Field(default=None)
+    contacts: Optional[List[Contact]] = Field(default=None)
     files: Optional[List[File]] = Field(default=None)
     integrations: Optional[List[Integration]] = Field(default=None)
 

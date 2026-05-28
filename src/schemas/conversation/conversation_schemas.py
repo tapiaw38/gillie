@@ -7,6 +7,7 @@ from src.core.domain import Conversation, Message, Profile
 class ConversationInput(BaseModel):
     title: str
     is_sandbox: bool = False
+    contact_id: Optional[str] = None
 
 
 class ConversationOutputData(BaseModel):
@@ -15,6 +16,8 @@ class ConversationOutputData(BaseModel):
     created_at: datetime
     client_id: str
     profile: Profile
+    contact_id: Optional[str] = None
+    contact_name: Optional[str] = None
     messages: Optional[List[Message]]
     is_sandbox: bool = False
 
@@ -31,6 +34,8 @@ class ConversationOutput(BaseModel):
                 created_at=conversation.created_at,
                 client_id=conversation.client_id,
                 profile=conversation.profile,
+                contact_id=conversation.contact_id,
+                contact_name=conversation.contact_name,
                 messages=conversation.messages,
                 is_sandbox=conversation.is_sandbox,
             )

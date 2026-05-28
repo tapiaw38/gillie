@@ -15,6 +15,7 @@ from .find_with_active_slack_integration_by_team_id_use_case import FindWithActi
 from .find_with_active_telegram_integration_use_case import FindWithActiveTelegramIntegrationUseCase
 from .find_with_active_teams_integration_by_tenant_id_use_case import FindWithActiveTeamsIntegrationByTenantIdUseCase
 from .find_with_active_teams_integration_use_case import FindWithActiveTeamsIntegrationUseCase
+from .contact_use_cases import AddContactUseCase, ListContactsUseCase, UpdateContactUseCase, DeleteContactUseCase
 
 __all__ = [
     "CreateUseCase",
@@ -37,4 +38,8 @@ __all__ = [
     "FindWithActiveTelegramIntegrationUseCase",
     "FindWithActiveTeamsIntegrationByTenantIdUseCase",
     "FindWithActiveTeamsIntegrationUseCase",
+    "AddContactUseCase",
+    "ListContactsUseCase",
+    "UpdateContactUseCase",
+    "DeleteContactUseCase",
 ]

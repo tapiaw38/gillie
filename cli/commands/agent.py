@@ -844,9 +844,11 @@ def _print_history(messages: list, assistant_name: str) -> None:
 
 
 _AT_URL_RE  = re.compile(r'@(https?://[^\s]+)')
-_AT_GLOB_RE = re.compile(r'@@([^\s]+)')
-_AT_DIR_RE  = re.compile(r'@([^\s@]+/)')
-_AT_FILE_RE = re.compile(r'@([^\s@]+\.[^\s@/]*)')  # path (abs or rel) ending with .extension
+# Keep @ reference parsing strict/ascii-safe to avoid binary-garbage expansions
+# when terminals accidentally paste non-text bytes (e.g. drag/drop glitches).
+_AT_GLOB_RE = re.compile(r'@@([A-Za-z0-9_./~*?\[\]\-]+)')
+_AT_DIR_RE  = re.compile(r'@([A-Za-z0-9_./~\-]+/)')
+_AT_FILE_RE = re.compile(r'@([A-Za-z0-9_./~\-]+\.[A-Za-z0-9_]+)')  # path (abs or rel) ending with .extension
 _FILE_PATH_RE = re.compile(r'(?:file://)?(/[^\s]+)')
 
 _LOCAL_DOC_EXTS = {".xlsx", ".xls", ".docx", ".doc", ".csv", ".pdf"}

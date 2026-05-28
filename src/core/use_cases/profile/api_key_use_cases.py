@@ -10,6 +10,7 @@ from src.core.platform.appcontext.appcontext import Factory
 from src.core.platform.errors import NewApplicationError
 from src.core.platform.errors.mappings.profile import (
     ProfileGetNotFoundError,
+    ProfileContactNotFoundError,
     ProfileApiKeyNotFoundError,
     ProfileApiKeyValidationError,
     ProfileApiKeyCreateError,
@@ -46,6 +47,16 @@ class AddApiKeyUseCase:
 
             if any(existing.id == new_api_key.id for existing in profile.api_keys):
                 raise NewApplicationError(ProfileApiKeyValidationError)
+
+            contact = next(
+                (item for item in (profile.contacts or []) if item.id == api_key.contact_id),
+                None,
+            )
+            if not contact:
+                raise NewApplicationError(ProfileContactNotFoundError)
+
+            new_api_key.contact_id = contact.id
+            new_api_key.contact_name = contact.name
 
             profile.api_keys.append(new_api_key)
 
