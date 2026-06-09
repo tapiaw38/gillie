@@ -261,7 +261,7 @@ def read_config() -> ConfigurationService:
         host=get_env("APP_HOST", "localhost"),
         jwt_secret=get_env("APP_JWT_SECRET", "secret"),
         encryption_algorithm=get_env("APP_ENCRYPTION_ALGORITHM", "HS256"),
-        auth_trust_localhost=get_env("AUTH_TRUST_LOCALHOST", "false").lower() == "true",
+        auth_trust_localhost=get_env("AUTH_TRUST_LOCALHOST", "true"),
     )
 
     nosql_config = NoSQLConfig(
@@ -599,7 +599,7 @@ def init_config_from_json(config_data: "AssistantConfig") -> None:
             host=config_data.server.host,
             jwt_secret="single-user-no-auth",
             encryption_algorithm="HS256",
-            auth_trust_localhost=getattr(config_data.server, "auth_trust_localhost", False),
+            auth_trust_localhost=getattr(config_data.server, "auth_trust_localhost", True),
         ),
         nosql_config=nosql_config,
         openai_config=OpenAIConfig(
