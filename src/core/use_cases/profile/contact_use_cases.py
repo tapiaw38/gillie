@@ -1,7 +1,7 @@
 from datetime import datetime, timezone
 
 from src.schemas import ContactInput, ContactOutput, ContactListOutput, ContactOutputData
-from src.core.domain import Contact, Profile
+from src.core.domain import Contact
 from src.core.platform.appcontext.appcontext import Factory
 from src.core.platform.errors import NewApplicationError
 from src.core.platform.errors.mappings.profile import (
@@ -37,10 +37,7 @@ class AddContactUseCase:
         )
         contacts.append(new_contact)
 
-        await context.repositories.profile.update(
-            profile.id,
-            Profile(contacts=contacts, updated_at=now),
-        )
+        await context.repositories.profile.update_contacts(user_id, contacts)
 
         return ContactOutput(data=_to_output(new_contact))
 
@@ -90,10 +87,7 @@ class UpdateContactUseCase:
         if target is None:
             raise NewApplicationError(ProfileContactNotFoundError)
 
-        await context.repositories.profile.update(
-            profile.id,
-            Profile(contacts=contacts, updated_at=datetime.now(timezone.utc)),
-        )
+        await context.repositories.profile.update_contacts(user_id, contacts)
 
         return ContactOutput(data=_to_output(target))
 
@@ -113,11 +107,7 @@ class DeleteContactUseCase:
         if len(remaining) == len(contacts):
             raise NewApplicationError(ProfileContactNotFoundError)
 
-        now = datetime.now(timezone.utc)
-        await context.repositories.profile.update(
-            profile.id,
-            Profile(contacts=remaining, updated_at=now),
-        )
+        await context.repositories.profile.update_contacts(user_id, remaining)
 
         if profile.api_keys:
             for api_key in profile.api_keys:

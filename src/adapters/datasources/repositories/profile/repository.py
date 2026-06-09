@@ -1,8 +1,10 @@
+from datetime import datetime, timezone
 from src.adapters.datasources.datasources import Datasources
 from .repository_interface import RepositoryInterface
 from src.core.domain import (
     Profile,
     ApiKey,
+    Contact,
     File,
     Integration,
 )
@@ -149,6 +151,18 @@ class Repository(RepositoryInterface):
                 raise NewApplicationError(ProfileUpdateNotFoundError)
         except PyMongoError as exc:
             raise NewApplicationError(ProfileFileUploadError, exc)
+
+    async def update_contacts(self, user_id: str, contacts: List[Contact]) -> None:
+        try:
+            contacts_dict = [contact.dict(by_alias=True, exclude_none=True) for contact in contacts]
+            result = await self.client.update_one(
+                {"user_id": user_id},
+                {"$set": {"contacts": contacts_dict, "updated_at": datetime.now(timezone.utc)}},
+            )
+            if result.matched_count == 0:
+                raise NewApplicationError(ProfileUpdateNotFoundError)
+        except PyMongoError as exc:
+            raise NewApplicationError(ProfileUpdateQueryError, exc)
 
     async def delete_file_by_id(self, user_id: str, file_id: str) -> None:
         try:
