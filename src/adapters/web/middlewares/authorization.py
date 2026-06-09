@@ -2,7 +2,8 @@ from fastapi import Request
 from fastapi.responses import JSONResponse
 from starlette.middleware.base import BaseHTTPMiddleware
 import logging
-import os
+
+from src.core.platform.config.service import get_config_service
 
 logger = logging.getLogger(__name__)
 
@@ -39,13 +40,12 @@ class SingleUserMiddleware(BaseHTTPMiddleware):
         super().__init__(app)
         self.user_id = user_id
         self.profile_client = profile_client
-        self.trust_localhost = os.getenv("AUTH_TRUST_LOCALHOST", "true").lower() == "true"
+        self.trust_localhost = get_config_service().server_config.auth_trust_localhost
 
     async def dispatch(self, request: Request, call_next):
         user_id = self.user_id or getattr(request.app.state, "user_id", "default-user")
         profile_client = self.profile_client or getattr(request.app.state, "profile_client", None)
 
-        # Always inject the user context
         request.state.user = {"user_id": user_id}
 
         path = request.url.path

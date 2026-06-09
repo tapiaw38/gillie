@@ -41,6 +41,7 @@ class ServerConfig:
     host: str
     jwt_secret: str
     encryption_algorithm: str
+    auth_trust_localhost: bool
 
 _PROVIDER_PRESETS: dict = {
     "deepseek":   {"base_url": "https://api.deepseek.com",                               "model": "deepseek-chat",                "auth_type": "api_key"},
@@ -260,6 +261,7 @@ def read_config() -> ConfigurationService:
         host=get_env("APP_HOST", "localhost"),
         jwt_secret=get_env("APP_JWT_SECRET", "secret"),
         encryption_algorithm=get_env("APP_ENCRYPTION_ALGORITHM", "HS256"),
+        auth_trust_localhost=get_env("AUTH_TRUST_LOCALHOST", "false").lower() == "true",
     )
 
     nosql_config = NoSQLConfig(
@@ -597,6 +599,7 @@ def init_config_from_json(config_data: "AssistantConfig") -> None:
             host=config_data.server.host,
             jwt_secret="single-user-no-auth",
             encryption_algorithm="HS256",
+            auth_trust_localhost=getattr(config_data.server, "auth_trust_localhost", False),
         ),
         nosql_config=nosql_config,
         openai_config=OpenAIConfig(
