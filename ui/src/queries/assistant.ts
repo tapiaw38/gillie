@@ -11,6 +11,11 @@ import type {
   AssistantFileRemoveResponse,
   IntegrationResponse,
   IntegrationParams,
+  ContactParams,
+  ContactResponse,
+  ContactListResponse,
+  ContactDeleteResponse,
+  OwnerMemoryListResponse,
 } from '@/types/assistant.ts'
 
 export const useAssistantQueries = (assistantService: IAssistantService) => {
@@ -43,6 +48,32 @@ export const useAssistantQueries = (assistantService: IAssistantService) => {
     mutationFn: assistantService.removeApiKey.bind(assistantService),
   })
 
+  const listContactsQuery = useQuery<ContactListResponse, Error>({
+    queryKey: ['listContacts'],
+    queryFn: assistantService.listContacts.bind(assistantService),
+    enabled: false,
+  })
+
+  const addContactMutation = useMutation<ContactResponse, Error, ContactParams>({
+    mutationFn: assistantService.addContact.bind(assistantService),
+  })
+
+  const updateContactMutation = useMutation<ContactResponse, Error, { contactId: string; contact: ContactParams }>({
+    mutationFn: ({ contactId, contact }) => assistantService.updateContact(contactId, contact),
+  })
+
+  const deleteContactMutation = useMutation<ContactDeleteResponse, Error, string>({
+    mutationFn: assistantService.deleteContact.bind(assistantService),
+  })
+
+  const listOwnerMemoriesMutation = useMutation<
+    OwnerMemoryListResponse,
+    Error,
+    { contact_id?: string; query?: string; limit?: number; offset?: number } | undefined
+  >({
+    mutationFn: assistantService.listOwnerMemories.bind(assistantService),
+  })
+
   const addFilesMutation = useMutation<AssistantFileResponse, Error, File[]>({
     mutationFn: assistantService.addFiles.bind(assistantService),
   })
@@ -65,6 +96,11 @@ export const useAssistantQueries = (assistantService: IAssistantService) => {
     updateAssistantProfileMutation,
     addApiKeyMutation,
     removeApiKeyMutation,
+    listContactsQuery,
+    addContactMutation,
+    updateContactMutation,
+    deleteContactMutation,
+    listOwnerMemoriesMutation,
     addFilesMutation,
     removeFileByIdMutation,
     addIntegrationMutation,

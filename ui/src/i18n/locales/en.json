@@ -70,6 +70,8 @@
     "chatUIDesc": "Real-time AI conversation",
     "conversations": "Conversations",
     "conversationsDesc": "History of all conversations",
+    "contacts": "Contacts",
+    "contactsDesc": "Manage people your assistant talks to",
     "availableIntegrations": "Available Integrations",
     "availableIntegrationsDesc": "Connect your assistant to different platforms",
     "integrationsDesc": "Connect your assistant to different platforms",
@@ -194,6 +196,10 @@
       "apiKeys": {
         "name": "API Keys",
         "description": "Manage API keys to access the assistant from external applications"
+      },
+      "contacts": {
+        "name": "Contacts",
+        "description": "Manage conversation contacts and identities"
       }
     }
   },
@@ -237,7 +243,56 @@
     "responseLanguage": "Response Language",
     "responseLanguageDesc": "Language the assistant uses to reply to messages",
     "langSetEn": "Assistant will respond in English",
-    "langSetEs": "Assistant will respond in Spanish"
+    "langSetEs": "Assistant will respond in Spanish",
+    "manageContacts": "Manage Contacts",
+    "contactRequired": "Contact required",
+    "contactRequiredDesc": "Select a contact first",
+    "contactLabel": "Contact",
+    "contactPlaceholder": "Select contact",
+    "contactHelp": "API key will be scoped to this contact."
+  },
+  "contacts": {
+    "title": "Contacts",
+    "subtitle": "Manage people your assistant talks to",
+    "createTitle": "Create Contact",
+    "listTitle": "Contacts",
+    "loading": "Loading contacts...",
+    "empty": "No contacts yet.",
+    "created": "Contact created",
+    "updated": "Contact updated",
+    "deleted": "Contact deleted",
+    "errorLoad": "Error loading contacts",
+    "errorCreate": "Error creating contact",
+    "errorUpdate": "Error updating contact",
+    "errorDelete": "Error deleting contact",
+    "errorMemoryLoad": "Error loading memories",
+    "nameRequired": "Contact name is required",
+    "generalChannel": "general",
+    "ownerScope": "Owner",
+    "unknownScope": "Unknown scope",
+    "memoryTitle": "Contact Memories",
+    "memoryContactFilter": "Contact filter",
+    "allContacts": "All contacts",
+    "memorySearch": "Search memory",
+    "memorySearchPlaceholder": "error, preference, decision...",
+    "memoryLoading": "Loading memories...",
+    "memoryEmpty": "No memories found.",
+    "loadMoreMemories": "Load more",
+    "importance": "Importance",
+    "fields": {
+      "name": "Name",
+      "channel": "Channel",
+      "externalId": "External ID"
+    },
+    "placeholders": {
+      "name": "John Doe",
+      "channel": "whatsapp, telegram, email",
+      "externalId": "phone, username or customer id"
+    },
+    "actions": {
+      "create": "Create",
+      "save": "Save"
+    }
   },
   "conversations": {
     "title": "Conversations",

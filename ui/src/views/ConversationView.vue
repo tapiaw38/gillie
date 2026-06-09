@@ -180,6 +180,13 @@ const conversationSelectedHandler = computed(() => {
                     </div>
                   </template>
                 </Column>
+                <Column field="contact_name" header="Contact" class="contact-column">
+                  <template #body="slotProps">
+                    <div class="date-info">
+                      <span class="date-text">{{ slotProps.data.contact_name || 'Owner' }}</span>
+                    </div>
+                  </template>
+                </Column>
                 <Column
                   field="created_at"
                   :header="t('conversations.date_col')"

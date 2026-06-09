@@ -41,6 +41,7 @@ class ServerConfig:
     host: str
     jwt_secret: str
     encryption_algorithm: str
+    auth_trust_localhost: bool
 
 _PROVIDER_PRESETS: dict = {
     "deepseek":   {"base_url": "https://api.deepseek.com",                               "model": "deepseek-chat",                "auth_type": "api_key"},
@@ -49,7 +50,8 @@ _PROVIDER_PRESETS: dict = {
     "openai":     {"base_url": "https://api.openai.com/v1",                              "model": "gpt-4o",                       "auth_type": "api_key"},
     "kimi":       {"base_url": "https://api.moonshot.ai/v1",                            "model": "kimi-k2-turbo-preview",        "auth_type": "api_key"},
     "gemini":     {"base_url": "https://generativelanguage.googleapis.com/v1beta/openai/","model": "gemini-2.0-flash",             "auth_type": "api_key"},
-    "groq":       {"base_url": "https://api.groq.com/openai/v1",                         "model": "llama-3.3-70b-versatile",      "auth_type": "api_key"},
+    "grok":       {"base_url": "https://api.x.ai/v1",                                 "model": "grok-4-fast",                 "auth_type": "api_key"},
+    "minimax":    {"base_url": "https://api.minimax.io/v1",                            "model": "MiniMax-M2.7",                 "auth_type": "api_key"},
 }
 
 
@@ -183,6 +185,20 @@ class VisionConfig:
 
 
 @dataclass
+class ImageGenerationConfig:
+    api_key: str = ""
+    base_url: str = ""
+    model: str = ""
+
+
+@dataclass
+class VideoGenerationConfig:
+    api_key: str = ""
+    base_url: str = ""
+    model: str = ""
+
+
+@dataclass
 class SingleUserConfig:
     """Configuration for single-user mode (set by CLI init)."""
     user_id: str
@@ -211,6 +227,8 @@ class ConfigurationService:
     notion_config: Optional[NotionConfig] = None
     storage_config: Optional[StorageConfig] = None
     vision_config: Optional[VisionConfig] = None
+    image_generation_config: Optional[ImageGenerationConfig] = None
+    video_generation_config: Optional[VideoGenerationConfig] = None
 
 
 _config_service: Optional[ConfigurationService] = None
@@ -243,6 +261,7 @@ def read_config() -> ConfigurationService:
         host=get_env("APP_HOST", "localhost"),
         jwt_secret=get_env("APP_JWT_SECRET", "secret"),
         encryption_algorithm=get_env("APP_ENCRYPTION_ALGORITHM", "HS256"),
+        auth_trust_localhost=get_env("AUTH_TRUST_LOCALHOST", "false").lower() == "true",
     )
 
     nosql_config = NoSQLConfig(
@@ -419,6 +438,18 @@ def read_config() -> ConfigurationService:
         model=get_env("VISION_MODEL", ""),
     )
 
+    image_generation_config = ImageGenerationConfig(
+        api_key=get_env("IMAGE_GENERATION_API_KEY", ""),
+        base_url=get_env("IMAGE_GENERATION_BASE_URL", ""),
+        model=get_env("IMAGE_GENERATION_MODEL", ""),
+    )
+
+    video_generation_config = VideoGenerationConfig(
+        api_key=get_env("VIDEO_GENERATION_API_KEY", ""),
+        base_url=get_env("VIDEO_GENERATION_BASE_URL", ""),
+        model=get_env("VIDEO_GENERATION_MODEL", ""),
+    )
+
     google_gmail_config = GoogleGmailConfig(
         client_id=get_env("GOOGLE_GMAIL_CLIENT_ID", ""),
         client_secret=get_env("GOOGLE_GMAIL_CLIENT_SECRET", ""),
@@ -450,6 +481,8 @@ def read_config() -> ConfigurationService:
         notion_config=notion_config,
         storage_config=storage_config,
         vision_config=vision_config,
+        image_generation_config=image_generation_config,
+        video_generation_config=video_generation_config,
     )
 
 
@@ -566,6 +599,7 @@ def init_config_from_json(config_data: "AssistantConfig") -> None:
             host=config_data.server.host,
             jwt_secret="single-user-no-auth",
             encryption_algorithm="HS256",
+            auth_trust_localhost=getattr(config_data.server, "auth_trust_localhost", False),
         ),
         nosql_config=nosql_config,
         openai_config=OpenAIConfig(
@@ -672,6 +706,16 @@ def init_config_from_json(config_data: "AssistantConfig") -> None:
             api_key=s.vision.api_key if hasattr(s, "vision") else "",
             base_url=s.vision.base_url if hasattr(s, "vision") else "",
             model=s.vision.model if hasattr(s, "vision") else "",
+        ),
+        image_generation_config=ImageGenerationConfig(
+            api_key=s.image_generation.api_key if hasattr(s, "image_generation") else "",
+            base_url=s.image_generation.base_url if hasattr(s, "image_generation") else "",
+            model=s.image_generation.model if hasattr(s, "image_generation") else "",
+        ),
+        video_generation_config=VideoGenerationConfig(
+            api_key=s.video_generation.api_key if hasattr(s, "video_generation") else "",
+            base_url=s.video_generation.base_url if hasattr(s, "video_generation") else "",
+            model=s.video_generation.model if hasattr(s, "video_generation") else "",
         ),
     )
 

@@ -257,6 +257,18 @@ class OpenAIIntegration:
         return await self.image_processor.describe_image(image_base64, prompt=prompt)
 
     @log_function_call
+    async def analyze_uploaded_image(self, image_bytes: bytes, prompt: str = None) -> dict:
+        self.logger.debug("Analyzing uploaded image")
+        import base64
+
+        encoded = base64.b64encode(image_bytes).decode("utf-8")
+        summary = await self.describe_image_from_base64(encoded, prompt=prompt)
+        return {
+            "summary": summary,
+            "prompt": prompt,
+        }
+
+    @log_function_call
     async def analyze_excel_file(self, excel_url: str) -> dict:
         self.logger.info(f"Analyzing Excel file: {excel_url}")
         return await self.excel_processor.analyze_excel_data(excel_url)

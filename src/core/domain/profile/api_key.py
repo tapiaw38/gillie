@@ -8,6 +8,8 @@ class ApiKey(BaseModel):
     user_id: str
     value: str
     description: str
+    contact_id: Optional[str] = None
+    contact_name: Optional[str] = None
     is_active: bool = True
     created_at: datetime
 

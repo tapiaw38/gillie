@@ -3,6 +3,7 @@ from typing import List, Optional
 from src.core.domain import (
     Profile,
     ApiKey,
+    Contact,
     File,
     Integration,
 )
@@ -51,6 +52,10 @@ class RepositoryInterface(ABC):
 
     @abstractmethod
     async def update_files(self, user_id: str, files: List[File]) -> None:
+        pass
+
+    @abstractmethod
+    async def update_contacts(self, user_id: str, contacts: List[Contact]) -> None:
         pass
 
     @abstractmethod

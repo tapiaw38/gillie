@@ -11,6 +11,7 @@ from src.core.platform.errors.mappings.conversation import (
     ConversationCreateNotFoundAfterCreationError
 )
 from src.core.platform.errors.mappings.profile import ProfileGetNotFoundError
+from src.core.platform.errors.mappings.profile import ProfileContactNotFoundError
 from uuid import uuid4
 
 
@@ -28,6 +29,18 @@ class CreateUseCase:
             if not profile:
                 raise NewApplicationError(ConversationCreateProfileNotFoundError)
 
+            contact_id = None
+            contact_name = None
+            if conversation.contact_id:
+                contact_id = conversation.contact_id
+                contact = next(
+                    (item for item in (profile.contacts or []) if item.id == contact_id),
+                    None,
+                )
+                if not contact:
+                    raise NewApplicationError(ProfileContactNotFoundError)
+                contact_name = contact.name
+
             generated_id = str(uuid4())
             generated_client_id = str(uuid4())
             new_conversation = Conversation(
@@ -44,6 +57,8 @@ class CreateUseCase:
                 title=conversation.title,
                 created_at=datetime.now(timezone.utc),
                 client_id=generated_client_id,
+                contact_id=contact_id,
+                contact_name=contact_name,
                 is_sandbox=conversation.is_sandbox,
             )
 

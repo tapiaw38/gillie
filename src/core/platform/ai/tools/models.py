@@ -141,8 +141,20 @@ _DEFAULT_TOOL_PROMPTS: Dict[str, str] = {
         "Do NOT use Unsplash URLs (they return 404 without API authentication)."
     ),
     "describe_image": (
-        "Describe the visual content of an image using its URL. "
-        "Use after search_images returns image URLs and the user wants to know what an image shows."
+        "Describe the visual content of an image from a source. "
+        "image_source supports URL, local file path, or file:// URI. "
+        "Use after search_images returns image URLs or when user provides a local image path. "
+        "For local image analysis, use this tool directly. "
+        "WORKFLOW: call describe_image exactly once with the given source, then answer from that result. Never call it a second time for same request. "
+        "Do NOT call take_screenshot, send_screenshot, send_file, or run_shell for image description tasks."
+    ),
+    "generate_image": (
+        "Generate an image from text, text+images, or text+videos. "
+        "Use when the user asks to create a new image asset."
+    ),
+    "generate_video": (
+        "Generate a normal-quality 6-second video from text, text+images, or text+videos. "
+        "Use when the user asks to create a short video clip."
     ),
     "search_documents": (
         "Search for information in the user's uploaded documents. "
@@ -195,6 +207,11 @@ _DEFAULT_TOOL_PROMPTS: Dict[str, str] = {
     "search_memory": (
         "Search previously saved facts about the user. "
         "Use when the user refers to past conversations or when context about the user is needed."
+    ),
+    "owner_insights": (
+        "Get owner-level insights from backend APIs: contacts, conversations, and owner memories. "
+        "Use when the owner asks things like how many contacts they have, which contacts have activity, "
+        "or memory/conversation counts by contact."
     ),
     "save_solution": (
         "Save a problem-solution pair to long-term memory (solutions.skill.md). "
@@ -288,6 +305,7 @@ _DEFAULT_TOOL_PROMPTS: Dict[str, str] = {
         "Upload a local file to storage and send it to the user through the current chat "
         "(WhatsApp, Telegram, Slack, etc.). "
         "Use whenever the user asks to receive a file, report, PDF, CSV, or any other file. "
+        "Do NOT use this for image analysis requests; use describe_image instead. "
         "Works with any file type. "
         "IMPORTANT: You MUST call this tool to get a real URL. NEVER invent or guess a URL. "
         "Only include the URL returned by this tool in your response."
@@ -304,7 +322,8 @@ _DEFAULT_TOOL_PROMPTS: Dict[str, str] = {
         "Take a screenshot of the current desktop screen and describe what is visible. "
         "Use when the user asks what is on their screen, what windows are open, "
         "what a specific application looks like, or anything about the visual state "
-        "of the desktop. Optionally focus on a specific region or window."
+        "of the desktop. Optionally focus on a specific region or window. "
+        "Do NOT use this to analyze a local image file path; use describe_image for file/URL images."
     ),
     "browser_act": (
         "Perform one or more browser actions using natural language on the connected browser. "
@@ -579,8 +598,38 @@ class InsertImagePptxArgs(BaseModel):
 
 class DescribeImageArgs(BaseModel):
     """Arguments for describing an image"""
-    image_url: str = Field(
-        description="URL of the image to describe (e.g. obtained from search_images results)"
+    image_source: str = Field(
+        description="Image source to describe: URL, local file path, or file:// URI"
+    )
+
+
+class GenerateImageArgs(BaseModel):
+    """Arguments for image generation"""
+    prompt: str = Field(description="Main text prompt describing the desired image")
+    image_sources: List[str] = Field(
+        default_factory=list,
+        description="Optional reference images (URLs or data URIs)"
+    )
+    video_sources: List[str] = Field(
+        default_factory=list,
+        description="Optional reference videos (URLs)."
+    )
+    size: str = Field(
+        default="1024x1024",
+        description="Output image size, for example 1024x1024"
+    )
+
+
+class GenerateVideoArgs(BaseModel):
+    """Arguments for 6-second video generation"""
+    prompt: str = Field(description="Main text prompt describing the desired video")
+    image_sources: List[str] = Field(
+        default_factory=list,
+        description="Optional reference images (URLs or data URIs)"
+    )
+    video_sources: List[str] = Field(
+        default_factory=list,
+        description="Optional reference videos (URLs)."
     )
 
 
@@ -764,6 +813,20 @@ class SearchMemoryArgs(BaseModel):
     """Arguments for searching the assistant memory"""
     query: str = Field(description="Término a buscar en la memoria del asistente")
     max_results: int = Field(default=5, ge=1, le=10)
+
+
+class OwnerInsightsArgs(BaseModel):
+    """Arguments for owner-level analytics across contacts, conversations and memories"""
+    contact_id: Optional[str] = Field(
+        default=None,
+        description="Optional contact ID to focus counts on one contact"
+    )
+    memory_limit: int = Field(
+        default=200,
+        ge=1,
+        le=500,
+        description="Max owner memory episodes to scan when aggregating"
+    )
 
 
 class SaveSolutionArgs(BaseModel):
@@ -2185,26 +2248,267 @@ def create_langchain_tools(openai_integration, profile, skill_manager=None, stor
 
     # ─────────────────────────────────────────────────────────────────────────
 
-    async def describe_image_tool(image_url: str) -> str:
-        """Describe an image from its URL or local file path"""
-        import aiohttp, base64 as b64, os
+    async def describe_image_tool(image_source: str) -> str:
+        """Describe an image from URL, local file path, or file URI."""
+        import aiohttp
+        import base64 as b64
+        import os
+        from pathlib import Path
         from urllib.parse import urlparse, unquote
+
+        max_bytes = 8 * 1024 * 1024
+
         try:
-            parsed = urlparse(image_url)
-            if parsed.scheme in ("", "file") or os.path.exists(image_url):
-                # Local file
-                file_path = unquote(parsed.path) if parsed.scheme == "file" else image_url
+            source = (image_source or "").strip()
+            if not source:
+                return "Error fetching image source: image_source is required"
+
+            parsed = urlparse(source)
+            if parsed.scheme in ("", "file"):
+                if parsed.scheme == "file":
+                    file_path = Path(unquote(parsed.path)).expanduser()
+                else:
+                    local = _find_local_file(source, client_workspace)
+                    file_path = local or Path(source).expanduser()
+
+                if not file_path.exists() or not file_path.is_file():
+                    return f"Error fetching image source: file not found: {file_path}"
+
+                file_size = os.path.getsize(file_path)
+                if file_size > max_bytes:
+                    return f"Error fetching image source: file too large ({file_size} bytes), max allowed is {max_bytes}"
+
                 with open(file_path, "rb") as f:
                     image_bytes = f.read()
-            else:
-                async with aiohttp.ClientSession() as session:
-                    async with session.get(image_url) as resp:
+            elif parsed.scheme in ("http", "https"):
+                timeout = aiohttp.ClientTimeout(total=20)
+                async with aiohttp.ClientSession(timeout=timeout) as session:
+                    async with session.get(source) as resp:
                         resp.raise_for_status()
+                        content_length = int(resp.headers.get("Content-Length", "0") or 0)
+                        if content_length and content_length > max_bytes:
+                            return f"Error fetching image source: remote file too large ({content_length} bytes), max allowed is {max_bytes}"
                         image_bytes = await resp.read()
+                        if len(image_bytes) > max_bytes:
+                            return f"Error fetching image source: remote file too large ({len(image_bytes)} bytes), max allowed is {max_bytes}"
+            else:
+                return f"Error fetching image source: unsupported scheme '{parsed.scheme}'"
+
             image_base64 = b64.b64encode(image_bytes).decode()
             return await openai_integration.describe_image_from_base64(image_base64)
         except Exception as e:
-            return f"Error fetching image from URL: {e}"
+            return f"Error fetching image source: {e}"
+
+    def _as_data_url(source: str, default_mime: str) -> str:
+        """Normalize source into a data URL when possible."""
+        import base64 as _b64
+        import mimetypes as _mimetypes
+        from pathlib import Path as _Path
+
+        if source.startswith("data:"):
+            return source
+        if source.startswith("http://") or source.startswith("https://"):
+            return source
+
+        local = _find_local_file(source, client_workspace)
+        local_path = local or (_Path(source) if _Path(source).exists() else None)
+        if local_path is None:
+            raise FileNotFoundError(f"Media source not found: {source}")
+
+        mime = _mimetypes.guess_type(str(local_path))[0] or default_mime
+        with open(local_path, "rb") as f:
+            encoded = _b64.b64encode(f.read()).decode("utf-8")
+        return f"data:{mime};base64,{encoded}"
+
+    async def _upload_generated_asset(file_bytes: bytes, filename: str) -> Dict[str, Any]:
+        """Upload generated media to store_service when available."""
+        import io
+        from uuid import uuid4
+
+        if not store_service:
+            return {"uploaded": False, "reason": "store_service unavailable"}
+
+        key = store_service.put_object(
+            file=io.BytesIO(file_bytes),
+            user_file=profile.user_id,
+            filename=filename,
+            size=len(file_bytes),
+            object_id=uuid4().hex[:12],
+        )
+        return {
+            "uploaded": True,
+            "storage_key": key,
+            "url": store_service.generate_url(key),
+        }
+
+    def _get_generation_client(kind: str):
+        """Return an OpenAI-compatible client and model for image/video generation."""
+        from openai import AsyncOpenAI
+
+        config_service = getattr(openai_integration, "_config_service", None)
+        specific_cfg = getattr(config_service, f"{kind}_generation_config", None) if config_service else None
+        fallback_cfg = openai_integration._config_service.openai_config
+
+        if specific_cfg and specific_cfg.api_key and specific_cfg.base_url and specific_cfg.model:
+            return {
+                "client": AsyncOpenAI(api_key=specific_cfg.api_key, base_url=specific_cfg.base_url),
+                "model": specific_cfg.model,
+                "base_url": specific_cfg.base_url,
+                "kind": kind,
+                "uses_fallback": False,
+            }
+
+        return {
+            "client": openai_integration.client,
+            "model": openai_integration.model,
+            "base_url": fallback_cfg.base_url,
+            "kind": kind,
+            "uses_fallback": True,
+        }
+
+    async def generate_image_tool(
+        prompt: str,
+        image_sources: List[str] = None,
+        video_sources: List[str] = None,
+        size: str = "1024x1024",
+    ) -> Dict[str, Any]:
+        """Generate image from text, text+images, or text+videos."""
+        import base64 as _b64
+
+        image_sources = image_sources or []
+        video_sources = video_sources or []
+
+        input_payload: List[Dict[str, Any]] = [{"role": "user", "content": [{"type": "input_text", "text": prompt}]}]
+        user_content = input_payload[0]["content"]
+
+        for src in image_sources:
+            normalized = _as_data_url(src, "image/png")
+            user_content.append({"type": "input_image", "image_url": normalized})
+
+        for src in video_sources:
+            normalized = _as_data_url(src, "video/mp4")
+            user_content.append({"type": "input_video", "video_url": normalized})
+
+        client_info = _get_generation_client("image")
+
+        try:
+            response = await client_info["client"].responses.create(
+                model=client_info["model"],
+                input=input_payload,
+                modalities=["image"],
+                image={"size": size},
+            )
+        except Exception as e:
+            return {
+                "ok": False,
+                "error": str(e),
+                "hint": "Current provider/model may not support image generation via Responses API.",
+            }
+
+        response_dump = response.model_dump() if hasattr(response, "model_dump") else {}
+        image_b64 = None
+        image_url = None
+        for item in response_dump.get("output", []) if isinstance(response_dump, dict) else []:
+            for content in item.get("content", []) if isinstance(item, dict) else []:
+                if content.get("type") == "output_image":
+                    image_b64 = content.get("b64_json") or image_b64
+                    image_url = content.get("url") or image_url
+
+        result: Dict[str, Any] = {
+            "ok": True,
+            "provider_model": client_info["model"],
+            "provider_base_url": client_info["base_url"],
+            "uses_fallback_provider": client_info["uses_fallback"],
+            "prompt": prompt,
+            "size": size,
+            "image_url": image_url,
+            "has_b64": bool(image_b64),
+        }
+
+        if image_b64:
+            file_bytes = _b64.b64decode(image_b64)
+            upload = await _upload_generated_asset(file_bytes, "generated_image.png")
+            result["stored"] = upload
+            if upload.get("uploaded"):
+                result["deliver_to_user_url"] = upload.get("url")
+
+        if not image_b64 and not image_url:
+            result["warning"] = "No image payload found in response."
+            result["raw_response"] = response_dump
+
+        return result
+
+    async def generate_video_tool(
+        prompt: str,
+        image_sources: List[str] = None,
+        video_sources: List[str] = None,
+    ) -> Dict[str, Any]:
+        """Generate a 6-second normal-quality video from multimodal input."""
+        import base64 as _b64
+
+        image_sources = image_sources or []
+        video_sources = video_sources or []
+
+        input_payload: List[Dict[str, Any]] = [{"role": "user", "content": [{"type": "input_text", "text": prompt}]}]
+        user_content = input_payload[0]["content"]
+
+        for src in image_sources:
+            normalized = _as_data_url(src, "image/png")
+            user_content.append({"type": "input_image", "image_url": normalized})
+
+        for src in video_sources:
+            normalized = _as_data_url(src, "video/mp4")
+            user_content.append({"type": "input_video", "video_url": normalized})
+
+        client_info = _get_generation_client("video")
+
+        try:
+            response = await client_info["client"].responses.create(
+                model=client_info["model"],
+                input=input_payload,
+                modalities=["video"],
+                video={"duration": 6, "quality": "standard"},
+            )
+        except Exception as e:
+            return {
+                "ok": False,
+                "error": str(e),
+                "hint": "Current provider/model may not support video generation via Responses API.",
+            }
+
+        response_dump = response.model_dump() if hasattr(response, "model_dump") else {}
+        video_b64 = None
+        video_url = None
+        for item in response_dump.get("output", []) if isinstance(response_dump, dict) else []:
+            for content in item.get("content", []) if isinstance(item, dict) else []:
+                if content.get("type") == "output_video":
+                    video_b64 = content.get("b64_json") or video_b64
+                    video_url = content.get("url") or video_url
+
+        result: Dict[str, Any] = {
+            "ok": True,
+            "provider_model": client_info["model"],
+            "provider_base_url": client_info["base_url"],
+            "uses_fallback_provider": client_info["uses_fallback"],
+            "prompt": prompt,
+            "duration_seconds": 6,
+            "quality": "standard",
+            "video_url": video_url,
+            "has_b64": bool(video_b64),
+        }
+
+        if video_b64:
+            file_bytes = _b64.b64decode(video_b64)
+            upload = await _upload_generated_asset(file_bytes, "generated_video.mp4")
+            result["stored"] = upload
+            if upload.get("uploaded"):
+                result["deliver_to_user_url"] = upload.get("url")
+
+        if not video_b64 and not video_url:
+            result["warning"] = "No video payload found in response."
+            result["raw_response"] = response_dump
+
+        return result
 
     async def _capture_screen() -> str:
         """
@@ -4086,10 +4390,141 @@ If data is not found, say so clearly."""
 
         return {"found": False, "error": last_error, "message": f"All backends failed: {last_error}"}
 
+    async def owner_insights_tool(contact_id: Optional[str] = None, memory_limit: int = 200) -> Dict[str, Any]:
+        """Fetch owner-level counts from backend endpoints."""
+        import httpx
+
+        base_url = os.getenv("GILLIE_API_BASE_URL", "http://localhost:8000").rstrip("/")
+        active_api_key = next(
+            (k.value for k in (getattr(profile, "api_keys", None) or []) if getattr(k, "is_active", False) and getattr(k, "value", None)),
+            None,
+        )
+
+        headers: Dict[str, str] = {}
+        if active_api_key:
+            headers["x-api-key"] = active_api_key
+
+        endpoint_errors: Dict[str, str] = {}
+        contacts_payload: Any = []
+        conversations_payload: Any = []
+        memories_payload: Any = {"data": [], "has_more": False, "next_offset": None}
+
+        timeout = httpx.Timeout(15.0)
+        async with httpx.AsyncClient(timeout=timeout) as client:
+            try:
+                contacts_resp = await client.get(f"{base_url}/profile/contacts", headers=headers)
+                contacts_resp.raise_for_status()
+                contacts_payload = contacts_resp.json()
+            except Exception as e:
+                endpoint_errors["contacts"] = str(e)
+
+            try:
+                conv_resp = await client.get(f"{base_url}/conversation/user", headers=headers)
+                conv_resp.raise_for_status()
+                conversations_payload = conv_resp.json()
+            except Exception as e:
+                endpoint_errors["conversations"] = str(e)
+
+            memory_params: Dict[str, Any] = {"limit": memory_limit, "offset": 0}
+            if contact_id:
+                memory_params["contact_id"] = contact_id
+            try:
+                memory_resp = await client.get(
+                    f"{base_url}/api/v1/memory/owner/episodes",
+                    headers=headers,
+                    params=memory_params,
+                )
+                memory_resp.raise_for_status()
+                memories_payload = memory_resp.json()
+            except Exception as e:
+                endpoint_errors["owner_memories"] = str(e)
+
+        contacts_list = contacts_payload if isinstance(contacts_payload, list) else contacts_payload.get("data", []) if isinstance(contacts_payload, dict) else []
+        conversations_list = conversations_payload if isinstance(conversations_payload, list) else conversations_payload.get("data", []) if isinstance(conversations_payload, dict) else []
+        memory_items = memories_payload.get("data", []) if isinstance(memories_payload, dict) else []
+
+        contact_index: Dict[str, Dict[str, Any]] = {}
+        for c in contacts_list:
+            if not isinstance(c, dict):
+                continue
+            cid = c.get("id") or c.get("contact_id")
+            if not cid:
+                continue
+            contact_index[cid] = {
+                "contact_id": cid,
+                "name": c.get("name") or c.get("contact_name") or "",
+                "conversation_count": 0,
+                "memory_count": 0,
+            }
+
+        owner_conversation_count = 0
+        for conv in conversations_list:
+            if not isinstance(conv, dict):
+                continue
+            conv_contact_id = conv.get("contact_id")
+            if conv_contact_id:
+                if conv_contact_id not in contact_index:
+                    contact_index[conv_contact_id] = {
+                        "contact_id": conv_contact_id,
+                        "name": conv.get("contact_name") or "",
+                        "conversation_count": 0,
+                        "memory_count": 0,
+                    }
+                contact_index[conv_contact_id]["conversation_count"] += 1
+            else:
+                owner_conversation_count += 1
+
+        owner_memory_count = 0
+        for mem in memory_items:
+            if not isinstance(mem, dict):
+                continue
+            scope = (mem.get("memory_scope_id") or "")
+            inferred_contact_id = None
+            marker = "__contact__"
+            if marker in scope:
+                inferred_contact_id = scope.split(marker, 1)[1] or None
+
+            if inferred_contact_id:
+                if inferred_contact_id not in contact_index:
+                    contact_index[inferred_contact_id] = {
+                        "contact_id": inferred_contact_id,
+                        "name": "",
+                        "conversation_count": 0,
+                        "memory_count": 0,
+                    }
+                contact_index[inferred_contact_id]["memory_count"] += 1
+            else:
+                owner_memory_count += 1
+
+        contacts_summary = list(contact_index.values())
+        if contact_id:
+            contacts_summary = [row for row in contacts_summary if row.get("contact_id") == contact_id]
+
+        return {
+            "ok": len(endpoint_errors) < 3,
+            "base_url": base_url,
+            "filter": {"contact_id": contact_id, "memory_limit": memory_limit},
+            "totals": {
+                "contacts": len(contacts_list),
+                "conversations": len(conversations_list),
+                "owner_only_conversations": owner_conversation_count,
+                "owner_memories_scanned": len(memory_items),
+                "owner_only_memories": owner_memory_count,
+            },
+            "contacts": contacts_summary,
+            "memory_pagination": {
+                "has_more": bool(memories_payload.get("has_more", False)) if isinstance(memories_payload, dict) else False,
+                "next_offset": memories_payload.get("next_offset") if isinstance(memories_payload, dict) else None,
+            },
+            "errors": endpoint_errors,
+            "note": "Counts are aggregated from /profile/contacts, /conversation/user and /api/v1/memory/owner/episodes.",
+        }
+
     tools = list(filter(None, [
         _tool("fetch_url",              prompts.get("fetch_url",  _DEFAULT_TOOL_PROMPTS["fetch_url"]),  fetch_url_tool,  FetchUrlArgs),
         _tool("download_file",          prompts.get("download_file", _DEFAULT_TOOL_PROMPTS["download_file"]), download_file_tool, DownloadFileArgs),
         _tool("web_search",             prompts.get("web_search", _DEFAULT_TOOL_PROMPTS["web_search"]), web_search_tool, WebSearchArgs),
+        _tool("owner_insights",         prompts.get("owner_insights", _DEFAULT_TOOL_PROMPTS["owner_insights"]), owner_insights_tool, OwnerInsightsArgs),
         _tool("read_file",              prompts.get("read_file",  _DEFAULT_TOOL_PROMPTS["read_file"]),  read_file_tool,  ReadFileArgs),
         _tool("write_file",             prompts.get("write_file", _DEFAULT_TOOL_PROMPTS["write_file"]), write_file_tool, WriteFileArgs),
         _tool("edit_file",              prompts.get("edit_file",  _DEFAULT_TOOL_PROMPTS["edit_file"]),  edit_file_tool,  EditFileArgs),
@@ -4115,6 +4550,8 @@ If data is not found, say so clearly."""
         _tool("insert_image_docx",      prompts.get("insert_image_docx",  _DEFAULT_TOOL_PROMPTS["insert_image_docx"]),  insert_image_docx_tool,  InsertImageDocxArgs),
         _tool("insert_image_excel",     prompts.get("insert_image_excel", _DEFAULT_TOOL_PROMPTS["insert_image_excel"]), insert_image_excel_tool, InsertImageExcelArgs),
         _tool("describe_image",         prompts["describe_image"],         describe_image_tool,  DescribeImageArgs),
+        _tool("generate_image",         prompts.get("generate_image", _DEFAULT_TOOL_PROMPTS["generate_image"]), generate_image_tool, GenerateImageArgs),
+        _tool("generate_video",         prompts.get("generate_video", _DEFAULT_TOOL_PROMPTS["generate_video"]), generate_video_tool, GenerateVideoArgs),
         _tool("send_file",              prompts.get("send_file",          _DEFAULT_TOOL_PROMPTS["send_file"]),          send_file_tool,          SendFileArgs),
         _tool("send_screenshot",        prompts.get("send_screenshot",    _DEFAULT_TOOL_PROMPTS["send_screenshot"]),    send_screenshot_tool,    SendScreenshotArgs),
         _tool("take_screenshot",        prompts.get("take_screenshot",    _DEFAULT_TOOL_PROMPTS["take_screenshot"]),    take_screenshot_tool,    TakeScreenshotArgs),

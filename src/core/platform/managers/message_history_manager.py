@@ -17,6 +17,10 @@ from src.core.domain import Message
 
 logger = logging.getLogger(__name__)
 
+_MAX_IMAGE_ATTACHMENTS_IN_CONTEXT = 3
+_MAX_IMAGE_FIELD_CHARS = 280
+_MAX_IMAGE_CONTEXT_CHARS = 900
+
 
 class MessageHistoryService:
     """
@@ -41,12 +45,17 @@ class MessageHistoryService:
         if not messages:
             return ""
 
-        message_objects = [
-            f"system: {message.content}"
-            if str(message.sender) == "summary"
-            else f"{message.sender}: {message.content}"
-            for message in messages
-        ]
+        message_objects = []
+        for message in messages:
+            base_text = (
+                f"system: {message.content}"
+                if str(message.sender) == "summary"
+                else f"{message.sender}: {message.content}"
+            )
+            image_context = self._format_image_context(message)
+            if image_context:
+                base_text = f"{base_text} | image_context: {image_context}"
+            message_objects.append(base_text)
         return " - ".join(message_objects)
 
     def build_chat_history(
@@ -73,10 +82,13 @@ class MessageHistoryService:
         # Take the last N messages
         recent_messages = messages[-max_messages:] if len(messages) > max_messages else messages
 
-        chat_history = [
-            f"{msg.sender}: {msg.content}"
-            for msg in recent_messages
-        ]
+        chat_history = []
+        for msg in recent_messages:
+            base_text = f"{msg.sender}: {msg.content}"
+            image_context = self._format_image_context(msg)
+            if image_context:
+                base_text = f"{base_text} | image_context: {image_context}"
+            chat_history.append(base_text)
 
         logger.info(
             f"Built chat history with {len(chat_history)} messages "
@@ -167,3 +179,35 @@ class MessageHistoryService:
         )
 
         return f"[{message.sender}] {content_preview}"
+
+    def _format_image_context(self, message: Message) -> str:
+        attachments = getattr(message, "image_attachments", None) or []
+        if not attachments:
+            return ""
+
+        parts = []
+        for attachment in attachments[:_MAX_IMAGE_ATTACHMENTS_IN_CONTEXT]:
+            analysis = getattr(attachment, "analysis", None)
+            if not analysis:
+                continue
+            extracted_text = self._truncate_text((getattr(analysis, "extracted_text", None) or "").strip())
+            key_findings = self._truncate_text((getattr(analysis, "key_findings", None) or "").strip())
+            response_context = self._truncate_text((getattr(analysis, "response_context", None) or "").strip())
+
+            image_bits = []
+            if extracted_text:
+                image_bits.append(f"text={extracted_text}")
+            if key_findings:
+                image_bits.append(f"findings={key_findings}")
+            if response_context:
+                image_bits.append(f"context={response_context}")
+
+            if image_bits:
+                parts.append("{" + "; ".join(image_bits) + "}")
+
+        return self._truncate_text(" ".join(parts), _MAX_IMAGE_CONTEXT_CHARS)
+
+    def _truncate_text(self, value: str, max_chars: int = _MAX_IMAGE_FIELD_CHARS) -> str:
+        if not value or len(value) <= max_chars:
+            return value
+        return value[: max_chars - 3] + "..."

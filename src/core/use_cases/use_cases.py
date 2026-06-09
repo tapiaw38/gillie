@@ -30,6 +30,10 @@ from src.core.use_cases.profile import (
     FindWithActiveTelegramIntegrationUseCase as ProfileFindWithActiveTelegramIntegrationUseCase,
     FindWithActiveTeamsIntegrationByTenantIdUseCase as ProfileFindWithActiveTeamsIntegrationByTenantIdUseCase,
     FindWithActiveTeamsIntegrationUseCase as ProfileFindWithActiveTeamsIntegrationUseCase,
+    AddContactUseCase as ProfileAddContactUseCase,
+    ListContactsUseCase as ProfileListContactsUseCase,
+    UpdateContactUseCase as ProfileUpdateContactUseCase,
+    DeleteContactUseCase as ProfileDeleteContactUseCase,
 )
 from src.core.use_cases.memory import (
     GetFAQsUseCase,
@@ -38,6 +42,7 @@ from src.core.use_cases.memory import (
     DeleteFAQUseCase,
     GetSkillsUseCase,
     ExtractMemoryUseCase,
+    ListOwnerMemoriesUseCase,
 )
 from src.core.use_cases.whatsapp import (
     ProcessWhatsAppMessageUseCase,
@@ -156,6 +161,10 @@ class Profile:
     find_with_active_teams_integration_by_tenant_id_usecase: ProfileFindWithActiveTeamsIntegrationByTenantIdUseCase
     find_with_active_teams_integration_usecase: ProfileFindWithActiveTeamsIntegrationUseCase
     update_provider_usecase: ProfileUpdateProviderUseCase
+    add_contact_usecase: ProfileAddContactUseCase
+    list_contacts_usecase: ProfileListContactsUseCase
+    update_contact_usecase: ProfileUpdateContactUseCase
+    delete_contact_usecase: ProfileDeleteContactUseCase
 
 
 @dataclass
@@ -177,6 +186,7 @@ class Memory:
     delete_faq_usecase: DeleteFAQUseCase
     get_skills_usecase: GetSkillsUseCase
     extract_memory_usecase: ExtractMemoryUseCase
+    list_owner_memories_usecase: ListOwnerMemoriesUseCase
 
 
 @dataclass
@@ -352,6 +362,10 @@ def create_usecases(context_factory: Factory) -> Usecases:
             find_with_active_teams_integration_by_tenant_id_usecase=ProfileFindWithActiveTeamsIntegrationByTenantIdUseCase(context_factory),
             find_with_active_teams_integration_usecase=ProfileFindWithActiveTeamsIntegrationUseCase(context_factory),
             update_provider_usecase=ProfileUpdateProviderUseCase(context_factory),
+            add_contact_usecase=ProfileAddContactUseCase(context_factory),
+            list_contacts_usecase=ProfileListContactsUseCase(context_factory),
+            update_contact_usecase=ProfileUpdateContactUseCase(context_factory),
+            delete_contact_usecase=ProfileDeleteContactUseCase(context_factory),
         ),
         conversation=Conversation(
             create_usecase=ConversationCreateUseCase(context_factory),
@@ -369,6 +383,7 @@ def create_usecases(context_factory: Factory) -> Usecases:
             delete_faq_usecase=DeleteFAQUseCase(context_factory),
             get_skills_usecase=GetSkillsUseCase(context_factory),
             extract_memory_usecase=ExtractMemoryUseCase(context_factory),
+            list_owner_memories_usecase=ListOwnerMemoriesUseCase(context_factory),
         ),
         whatsapp=WhatsApp(
             process_message_usecase=ProcessWhatsAppMessageUseCase(context_factory),

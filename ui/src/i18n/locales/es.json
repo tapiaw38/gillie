@@ -70,6 +70,8 @@
     "chatUIDesc": "Conversación con IA en tiempo real",
     "conversations": "Conversaciones",
     "conversationsDesc": "Historial de todas las conversaciones",
+    "contacts": "Contactos",
+    "contactsDesc": "Gestiona con quién conversa tu asistente",
     "availableIntegrations": "Integraciones Disponibles",
     "availableIntegrationsDesc": "Conecta tu asistente con diferentes plataformas",
     "integrationsDesc": "Conecta tu asistente con diferentes plataformas",
@@ -194,6 +196,10 @@
       "apiKeys": {
         "name": "API Keys",
         "description": "Gestiona las API keys para acceder al asistente desde aplicaciones externas"
+      },
+      "contacts": {
+        "name": "Contactos",
+        "description": "Gestiona contactos e identidades de conversación"
       }
     }
   },
@@ -237,7 +243,56 @@
     "responseLanguage": "Idioma de respuesta",
     "responseLanguageDesc": "Idioma que usa el asistente para responder los mensajes",
     "langSetEn": "El asistente responderá en inglés",
-    "langSetEs": "El asistente responderá en español"
+    "langSetEs": "El asistente responderá en español",
+    "manageContacts": "Gestionar contactos",
+    "contactRequired": "Contacto requerido",
+    "contactRequiredDesc": "Primero selecciona un contacto",
+    "contactLabel": "Contacto",
+    "contactPlaceholder": "Seleccionar contacto",
+    "contactHelp": "La API key quedará asociada a este contacto."
+  },
+  "contacts": {
+    "title": "Contactos",
+    "subtitle": "Gestiona las personas con las que conversa tu asistente",
+    "createTitle": "Crear contacto",
+    "listTitle": "Contactos",
+    "loading": "Cargando contactos...",
+    "empty": "Todavía no hay contactos.",
+    "created": "Contacto creado",
+    "updated": "Contacto actualizado",
+    "deleted": "Contacto eliminado",
+    "errorLoad": "Error al cargar contactos",
+    "errorCreate": "Error al crear contacto",
+    "errorUpdate": "Error al actualizar contacto",
+    "errorDelete": "Error al eliminar contacto",
+    "errorMemoryLoad": "Error al cargar memorias",
+    "nameRequired": "El nombre del contacto es obligatorio",
+    "generalChannel": "general",
+    "ownerScope": "Owner",
+    "unknownScope": "Ambito desconocido",
+    "memoryTitle": "Memorias por contacto",
+    "memoryContactFilter": "Filtro de contacto",
+    "allContacts": "Todos los contactos",
+    "memorySearch": "Buscar memoria",
+    "memorySearchPlaceholder": "error, preferencia, decision...",
+    "memoryLoading": "Cargando memorias...",
+    "memoryEmpty": "No se encontraron memorias.",
+    "loadMoreMemories": "Cargar mas",
+    "importance": "Importancia",
+    "fields": {
+      "name": "Nombre",
+      "channel": "Canal",
+      "externalId": "ID externo"
+    },
+    "placeholders": {
+      "name": "Juan Perez",
+      "channel": "whatsapp, telegram, email",
+      "externalId": "telefono, username o id de cliente"
+    },
+    "actions": {
+      "create": "Crear",
+      "save": "Guardar"
+    }
   },
   "conversations": {
     "title": "Conversaciones",

@@ -1,4 +1,4 @@
 from .conversation import Conversation
-from .message import Message
+from .message import Message, MessageImageAttachment, ImageAnalysis
 
-__all__ = ["Conversation", "Message"]
+__all__ = ["Conversation", "Message", "MessageImageAttachment", "ImageAnalysis"]

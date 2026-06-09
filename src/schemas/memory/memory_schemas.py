@@ -1,5 +1,6 @@
 from pydantic import BaseModel
 from typing import Optional, List
+from datetime import datetime
 
 
 class FAQInput(BaseModel):
@@ -61,3 +62,21 @@ class MemoryRootInput(BaseModel):
 
 class MemoryResolvedOutput(BaseModel):
     content: str
+
+
+class OwnerMemoryData(BaseModel):
+    id: str
+    owner_user_id: Optional[str] = None
+    memory_scope_id: Optional[str] = None
+    source_conversation_id: Optional[str] = None
+    content: str
+    importance: int
+    emotion: Optional[str] = None
+    tags: List[str]
+    created_at: datetime
+
+
+class OwnerMemoryListOutput(BaseModel):
+    data: List[OwnerMemoryData]
+    has_more: bool = False
+    next_offset: Optional[int] = None

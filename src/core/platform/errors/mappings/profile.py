@@ -202,3 +202,28 @@ ProfileIterationLimitValidationError = ErrorDetails(
     status_code=400,
     message="invalid iteration limit value"
 )
+
+# Contact Errors
+ProfileContactCreateError = ErrorDetails(
+    internal_code="profile:contact:create-error",
+    status_code=500,
+    message="failed to create contact"
+)
+
+ProfileContactListError = ErrorDetails(
+    internal_code="profile:contact:list-error",
+    status_code=500,
+    message="failed to list contacts"
+)
+
+ProfileContactNotFoundError = ErrorDetails(
+    internal_code="profile:contact:not-found",
+    status_code=404,
+    message="contact not found"
+)
+
+ProfileContactValidationError = ErrorDetails(
+    internal_code="profile:contact:validation-error",
+    status_code=400,
+    message="invalid contact data"
+)

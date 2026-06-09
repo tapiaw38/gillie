@@ -18,11 +18,15 @@ from src.core.platform.config.service import (
     _PROVIDER_PRESETS,
     get_available_providers,
 )
-from cli.config.db import update_provider, save_custom_provider, delete_custom_provider, get_provider_data
+from cli.config.db import update_provider, save_custom_provider, delete_custom_provider, delete_provider, get_provider_data
 
 app = typer.Typer(help="Manage AI provider (DeepSeek, OpenRouter, Anthropic, OpenAI, etc.)")
 vision_app = typer.Typer(help="Configure vision AI provider for image description")
+image_app = typer.Typer(help="Configure image generation provider")
+video_app = typer.Typer(help="Configure video generation provider")
 app.add_typer(vision_app, name="vision")
+app.add_typer(image_app, name="image")
+app.add_typer(video_app, name="video")
 console = Console()
 
 _OPENROUTER_BASE = "https://openrouter.ai/api/v1"
@@ -36,8 +40,17 @@ def _provider_display_name(name: str, preset: dict) -> str:
 _VISION_PRESETS: dict = {
     "deepseek": {"base_url": "https://api.deepseek.com",                                "model": "deepseek-vl2"},
     "gemini":   {"base_url": "https://generativelanguage.googleapis.com/v1beta/openai/", "model": "gemini-2.0-flash"},
-    "groq":     {"base_url": "https://api.groq.com/openai/v1",                          "model": "meta-llama/llama-4-scout-17b-16e-instruct"},
     "openai":   {"base_url": "https://api.openai.com/v1",                               "model": "gpt-4o"},
+}
+
+_IMAGE_PRESETS: dict = {
+    "openai": {"base_url": "https://api.openai.com/v1", "model": "gpt-image-1"},
+    "grok": {"base_url": "https://api.x.ai/v1", "model": "grok-2-image"},
+}
+
+_VIDEO_PRESETS: dict = {
+    "openai": {"base_url": "https://api.openai.com/v1", "model": "sora"},
+    "grok": {"base_url": "https://api.x.ai/v1", "model": "grok-video"},
 }
 
 
@@ -108,7 +121,7 @@ def provider_list():
 
 @app.command("use")
 def provider_use(
-    provider: Optional[str] = typer.Argument(None, help="Provider name (deepseek-chat, kimi-k2, anthropic, openai, claude, kimi, gemini, groq, deepseek)"),
+    provider: Optional[str] = typer.Argument(None, help="Provider name (deepseek, kimi-k2, anthropic, openai, kimi, gemini, grok, minimax)"),
     api_key: Optional[str] = typer.Option(None, "--api-key", "-k", help="API key (skips interactive prompt)"),
     model: Optional[str] = typer.Option(None, "--model", "-m", help="Model name (overrides preset default)"),
 ):
@@ -397,37 +410,46 @@ def provider_edit(
 
 @app.command("delete")
 def provider_delete(
-    name: Optional[str] = typer.Argument(None, help="Custom provider name to delete"),
+    name: Optional[str] = typer.Argument(None, help="Provider name to delete (built-in or custom)"),
     yes: bool = typer.Option(False, "--yes", "-y", help="Skip confirmation prompt"),
 ):
-    """Delete a custom provider."""
+    """Delete a provider reference (custom entry and/or stored key)."""
     from InquirerPy import inquirer as _inquirer
-    from cli.config.manager import config_exists
+    from cli.config.manager import config_exists, load_config, save_config
 
     if not config_exists():
         console.print("[red]Not initialized.[/red] Run [bold cyan]gillie init[/bold cyan] first.")
         raise typer.Exit(1)
 
     profile_data = get_provider_data()
-    custom = profile_data.get("custom_providers") or {}
+    all_providers = get_available_providers(
+        provider_keys=profile_data.get("provider_keys"),
+        custom_providers=profile_data.get("custom_providers"),
+    )
 
-    if not custom:
-        console.print("[yellow]No custom providers found.[/yellow]")
+    if not all_providers:
+        console.print("[yellow]No providers found.[/yellow]")
         raise typer.Exit(0)
 
     if name is None:
         try:
             name = _inquirer.select(
                 message="Select provider to delete:",
-                choices=list(custom.keys()),
+                choices=[
+                    {
+                        "name": f"{n}{' (custom)' if not p.get('is_builtin', True) else ' (built-in)'}",
+                        "value": n,
+                    }
+                    for n, p in all_providers.items()
+                ],
                 pointer="❯",
                 qmark="",
             ).execute()
         except KeyboardInterrupt:
             raise typer.Exit(0)
 
-    if name not in custom:
-        console.print(f"[red]Custom provider not found:[/red] {name}")
+    if name not in all_providers:
+        console.print(f"[red]Provider not found:[/red] {name}")
         raise typer.Exit(1)
 
     if not yes:
@@ -442,13 +464,26 @@ def provider_delete(
             console.print("[dim]Cancelled.[/dim]")
             raise typer.Exit(0)
 
-    delete_custom_provider(name)
+    cfg = load_config()
+    is_active = profile_data.get("active_provider", "") == name
+    is_active_local = cfg.services.openai.active_provider == name
 
-    active = profile_data.get("active_provider", "")
-    if active == name:
+    cfg.services.provider_keys.pop(name, None)
+    if is_active_local:
+        cfg.services.openai.active_provider = ""
+    save_config(cfg)
+
+    if not all_providers[name].get("is_builtin", True):
+        delete_custom_provider(name)
+    else:
+        delete_provider(name, clear_active=is_active)
+
+    if is_active or is_active_local:
         console.print(f"[yellow]⚠[/yellow]  Deleted the active provider. Run [bold cyan]gillie provider use[/bold cyan] to switch.")
 
     console.print(f"[green]Provider[/green] [bold cyan]{name}[/bold cyan] [green]deleted.[/green]")
+    if all_providers[name].get("is_builtin", True):
+        console.print("[dim]Built-in preset remains available in code; this removed stored key/reference only.[/dim]")
     console.print()
 
 
@@ -476,7 +511,7 @@ def provider_status():
 
 @vision_app.command("set")
 def vision_set(
-    provider: Optional[str] = typer.Argument(None, help="Preset provider (gemini, groq, openai, openrouter)"),
+    provider: Optional[str] = typer.Argument(None, help="Preset provider (deepseek, gemini, openai)"),
     api_key: Optional[str] = typer.Option(None, "--api-key", "-k", help="API key"),
     base_url: Optional[str] = typer.Option(None, "--base-url", help="Base URL (overrides preset)"),
     model: Optional[str] = typer.Option(None, "--model", "-m", help="Model name (overrides preset)"),
@@ -579,6 +614,15 @@ def vision_status():
     console.print()
 
 
+@vision_app.command("use")
+def vision_use(
+    provider: Optional[str] = typer.Argument(None, help="Provider name (preset or custom from `provider add`)"),
+    api_key: Optional[str] = typer.Option(None, "--api-key", "-k", help="API key override"),
+):
+    """Use an existing provider (preset/custom) for describe_image tool."""
+    _use_media_provider("vision", provider, api_key)
+
+
 @vision_app.command("clear")
 def vision_clear():
     """Remove the vision provider configuration (falls back to technical analysis)."""
@@ -596,3 +640,285 @@ def vision_clear():
 
     console.print("[yellow]Vision provider cleared.[/yellow] Falling back to technical analysis.")
     _restart_service_if_running()
+
+
+def _set_media_provider(target: str, presets: dict, provider: Optional[str], api_key: Optional[str], base_url: Optional[str], model: Optional[str]) -> None:
+    from cli.config.manager import config_exists, load_config, save_config
+    from InquirerPy import inquirer as _inquirer
+
+    if not config_exists():
+        console.print("[red]Not initialized.[/red] Run [bold cyan]gillie init[/bold cyan] first.")
+        raise typer.Exit(1)
+
+    cfg = load_config()
+
+    profile_data = get_provider_data()
+    all_providers = get_available_providers(
+        provider_keys=profile_data.get("provider_keys"),
+        custom_providers=profile_data.get("custom_providers"),
+    )
+
+    if provider is None and not base_url and not model:
+        current = getattr(cfg.services, target)
+        current_url = current.base_url or ""
+        current_model = current.model or ""
+        choices = [
+            {
+                "name": f"{'*' if p['base_url'] == current_url else ' '}  {n:<10} {p['model']}",
+                "value": n,
+            }
+            for n, p in presets.items()
+        ]
+
+        custom_choices = [
+            {
+                "name": f"{'*' if (entry.get('base_url') == current_url and entry.get('model') == current_model) else ' '}  {name:<10} {entry.get('model', '')} (custom)",
+                "value": name,
+            }
+            for name, entry in all_providers.items()
+            if not entry.get("is_builtin", True)
+        ]
+        choices.extend(custom_choices)
+        choices.append({"name": "    custom     (enter base-url and model manually)", "value": "__custom__"})
+
+        default_provider = next(
+            (
+                name for name, entry in all_providers.items()
+                if entry.get("base_url") == current_url and entry.get("model") == current_model
+            ),
+            choices[0]["value"],
+        )
+
+        try:
+            provider = _inquirer.select(
+                message=f"Select {target.replace('_', ' ')} provider:",
+                choices=choices,
+                default=default_provider,
+                pointer="❯",
+                qmark="",
+            ).execute()
+        except KeyboardInterrupt:
+            raise typer.Exit(0)
+
+        if provider == "__custom__":
+            provider = None
+
+    preset = presets.get(provider, {}) if provider else {}
+    if not preset and provider:
+        candidate = all_providers.get(provider)
+        if candidate:
+            preset = {
+                "base_url": candidate.get("base_url", ""),
+                "model": candidate.get("model", ""),
+                "auth_type": candidate.get("auth_type", "api_key"),
+                "api_key": candidate.get("api_key", ""),
+            }
+        else:
+            valid = ", ".join(sorted(set(list(presets.keys()) + list(all_providers.keys()))))
+            console.print(f"[red]Unknown provider:[/red] {provider}")
+            console.print(f"[dim]Known providers: {valid}[/dim]")
+            raise typer.Exit(1)
+
+    resolved_key = api_key or preset.get("api_key") or typer.prompt(f"Enter {target.replace('_', ' ')} API key", hide_input=True)
+    if not resolved_key:
+        console.print("[red]API key cannot be empty.[/red]")
+        raise typer.Exit(1)
+
+    resolved_base_url = base_url or preset.get("base_url", "")
+    resolved_model = model or preset.get("model", "")
+    if not resolved_base_url:
+        resolved_base_url = typer.prompt("Base URL")
+    if not resolved_model:
+        resolved_model = typer.prompt("Model name")
+
+    service_cfg = getattr(cfg.services, target)
+    service_cfg.api_key = resolved_key
+    service_cfg.base_url = resolved_base_url
+    service_cfg.model = resolved_model
+    save_config(cfg)
+
+    label = provider or "custom"
+    console.print(f"\n[green]{target.replace('_', ' ').title()} provider set:[/green] [bold cyan]{label}[/bold cyan]")
+    console.print(f"  Base URL : {resolved_base_url}")
+    console.print(f"  Model    : {resolved_model}")
+    console.print()
+    _restart_service_if_running()
+
+
+def _use_media_provider(target: str, provider: Optional[str], api_key: Optional[str] = None) -> None:
+    from cli.config.manager import config_exists, load_config, save_config
+    from InquirerPy import inquirer as _inquirer
+
+    if not config_exists():
+        console.print("[red]Not initialized.[/red] Run [bold cyan]gillie init[/bold cyan] first.")
+        raise typer.Exit(1)
+
+    profile_data = get_provider_data()
+    all_providers = get_available_providers(
+        provider_keys=profile_data.get("provider_keys"),
+        custom_providers=profile_data.get("custom_providers"),
+    )
+
+    if not all_providers:
+        console.print("[red]No providers available.[/red]")
+        raise typer.Exit(1)
+
+    if provider is None:
+        choices = [
+            {
+                "name": f"{name:<16} {entry.get('model', '')}{' (custom)' if not entry.get('is_builtin', True) else ''}",
+                "value": name,
+            }
+            for name, entry in all_providers.items()
+        ]
+        try:
+            provider = _inquirer.select(
+                message=f"Select provider for {target.replace('_', ' ')}:",
+                choices=choices,
+                pointer="❯",
+                qmark="",
+            ).execute()
+        except KeyboardInterrupt:
+            raise typer.Exit(0)
+
+    selected = all_providers.get(provider)
+    if not selected:
+        valid = ", ".join(all_providers.keys())
+        console.print(f"[red]Unknown provider:[/red] {provider}")
+        console.print(f"[dim]Valid providers: {valid}[/dim]")
+        raise typer.Exit(1)
+
+    resolved_key = api_key or selected.get("api_key", "")
+    auth_type = selected.get("auth_type", "api_key")
+    if auth_type == "none":
+        resolved_key = "ollama"
+    elif auth_type == "api_key" and not resolved_key:
+        resolved_key = typer.prompt(f"Enter API key for {provider}", hide_input=True)
+
+    if auth_type != "none" and not resolved_key:
+        console.print("[red]API key cannot be empty.[/red]")
+        raise typer.Exit(1)
+
+    cfg = load_config()
+    service_cfg = getattr(cfg.services, target)
+    service_cfg.api_key = resolved_key
+    service_cfg.base_url = selected.get("base_url", "")
+    service_cfg.model = selected.get("model", "")
+    save_config(cfg)
+
+    console.print(f"[green]{target.replace('_', ' ').title()} provider switched to[/green] [bold cyan]{provider}[/bold cyan]")
+    console.print(f"  Base URL : {service_cfg.base_url}")
+    console.print(f"  Model    : {service_cfg.model}")
+    console.print()
+    _restart_service_if_running()
+
+
+def _media_provider_status(target: str, presets: dict) -> None:
+    from cli.config.manager import config_exists, load_config
+
+    if not config_exists():
+        console.print("[red]Not initialized.[/red] Run [bold cyan]gillie init[/bold cyan] first.")
+        raise typer.Exit(1)
+
+    cfg = load_config()
+    p = getattr(cfg.services, target)
+    profile_data = get_provider_data()
+    all_providers = get_available_providers(
+        provider_keys=profile_data.get("provider_keys"),
+        custom_providers=profile_data.get("custom_providers"),
+    )
+    active = next(
+        (
+            name for name, entry in all_providers.items()
+            if entry.get("base_url") == p.base_url and entry.get("model") == p.model
+        ),
+        "custom" if p.base_url else "not configured",
+    )
+    console.print()
+    console.print(f"[bold]Provider :[/bold] [cyan]{active}[/cyan]")
+    console.print(f"[bold]Base URL :[/bold] {p.base_url or '[dim]-[/dim]'}")
+    console.print(f"[bold]Model    :[/bold] {p.model or '[dim]-[/dim]'}")
+    key_status = "[green]present[/green]" if p.api_key else "[red]missing[/red]"
+    console.print(f"[bold]API key  :[/bold] {key_status}")
+    console.print()
+
+
+def _media_provider_clear(target: str) -> None:
+    from cli.config.manager import config_exists, load_config, save_config
+
+    if not config_exists():
+        console.print("[red]Not initialized.[/red] Run [bold cyan]gillie init[/bold cyan] first.")
+        raise typer.Exit(1)
+
+    cfg = load_config()
+    p = getattr(cfg.services, target)
+    p.api_key = ""
+    p.base_url = ""
+    p.model = ""
+    save_config(cfg)
+    console.print(f"[yellow]{target.replace('_', ' ').title()} provider cleared.[/yellow]")
+    _restart_service_if_running()
+
+
+@image_app.command("set")
+def image_set(
+    provider: Optional[str] = typer.Argument(None, help="Preset provider (openai, grok)"),
+    api_key: Optional[str] = typer.Option(None, "--api-key", "-k", help="API key"),
+    base_url: Optional[str] = typer.Option(None, "--base-url", help="Base URL (overrides preset)"),
+    model: Optional[str] = typer.Option(None, "--model", "-m", help="Model name (overrides preset)"),
+):
+    """Set provider used by generate_image tool."""
+    _set_media_provider("image_generation", _IMAGE_PRESETS, provider, api_key, base_url, model)
+
+
+@image_app.command("status")
+def image_status():
+    """Show image generation provider configuration."""
+    _media_provider_status("image_generation", _IMAGE_PRESETS)
+
+
+@image_app.command("use")
+def image_use(
+    provider: Optional[str] = typer.Argument(None, help="Provider name (preset or custom from `provider add`)"),
+    api_key: Optional[str] = typer.Option(None, "--api-key", "-k", help="API key override"),
+):
+    """Use an existing provider (preset/custom) for generate_image tool."""
+    _use_media_provider("image_generation", provider, api_key)
+
+
+@image_app.command("clear")
+def image_clear():
+    """Clear image generation provider configuration."""
+    _media_provider_clear("image_generation")
+
+
+@video_app.command("set")
+def video_set(
+    provider: Optional[str] = typer.Argument(None, help="Preset provider (openai, grok)"),
+    api_key: Optional[str] = typer.Option(None, "--api-key", "-k", help="API key"),
+    base_url: Optional[str] = typer.Option(None, "--base-url", help="Base URL (overrides preset)"),
+    model: Optional[str] = typer.Option(None, "--model", "-m", help="Model name (overrides preset)"),
+):
+    """Set provider used by generate_video tool."""
+    _set_media_provider("video_generation", _VIDEO_PRESETS, provider, api_key, base_url, model)
+
+
+@video_app.command("status")
+def video_status():
+    """Show video generation provider configuration."""
+    _media_provider_status("video_generation", _VIDEO_PRESETS)
+
+
+@video_app.command("use")
+def video_use(
+    provider: Optional[str] = typer.Argument(None, help="Provider name (preset or custom from `provider add`)"),
+    api_key: Optional[str] = typer.Option(None, "--api-key", "-k", help="API key override"),
+):
+    """Use an existing provider (preset/custom) for generate_video tool."""
+    _use_media_provider("video_generation", provider, api_key)
+
+
+@video_app.command("clear")
+def video_clear():
+    """Clear video generation provider configuration."""
+    _media_provider_clear("video_generation")

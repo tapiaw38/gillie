@@ -48,6 +48,8 @@ class EpisodicMemoryWriter:
         user_message: str,
         assistant_response: str,
         conversation_id: Optional[str] = None,
+        owner_user_id: Optional[str] = None,
+        memory_scope_id: Optional[str] = None,
     ) -> None:
         """Extract episodic memories from the exchange and persist them.
 
@@ -58,11 +60,16 @@ class EpisodicMemoryWriter:
                 logger.debug("Skipped memory extraction for trivial exchange (user=%s)", user_id)
                 return
 
+            scope_id = memory_scope_id or user_id
+            owner_id = owner_user_id or self._extract_owner_from_scope(scope_id)
+
             memories = await self._extract(user_message, assistant_response)
             for memory_data in memories:
                 memory = EpisodicMemory(
                     **{"_id": str(uuid4())},
-                    user_id=user_id,
+                    user_id=scope_id,
+                    owner_user_id=owner_id,
+                    memory_scope_id=scope_id,
                     type=memory_data.get("type", "episode"),
                     content=memory_data.get("content", ""),
                     importance=max(1, min(10, int(memory_data.get("importance", 5)))),
@@ -74,21 +81,28 @@ class EpisodicMemoryWriter:
                 if not memory.content.strip():
                     continue
 
-                if self.vector_service.is_duplicate(user_id, memory.content):
+                if self.vector_service.is_duplicate(scope_id, memory.content):
                     logger.debug(
                         "Skipped duplicate episodic memory for user %s: %s",
-                        user_id, memory.content[:60],
+                        scope_id, memory.content[:60],
                     )
                     continue
 
                 memory_id = await self.repo.create(memory)
                 memory.id = memory_id
-                self.vector_service.store_episode(user_id, memory)
+                self.vector_service.store_episode(scope_id, memory)
 
             if memories:
-                logger.debug("Stored %d episodic memories for user %s", len(memories), user_id)
+                logger.debug("Stored %d episodic memories for scope %s", len(memories), scope_id)
         except Exception as exc:
             logger.warning("Episodic memory extraction failed for user %s: %s", user_id, exc)
+
+    @staticmethod
+    def _extract_owner_from_scope(scope_id: str) -> Optional[str]:
+        if not scope_id:
+            return None
+        owner, sep, _rest = scope_id.partition("__")
+        return owner if sep else scope_id
 
     @staticmethod
     def _is_worth_extracting(user_message: str, assistant_response: str) -> bool:

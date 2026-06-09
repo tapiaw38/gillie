@@ -120,6 +120,38 @@ def delete_custom_provider(name: str) -> bool:
         return False
 
 
+def delete_provider(name: str, clear_active: bool = False) -> bool:
+    """Remove provider data for any provider name (custom or built-in)."""
+    user_id = _get_user_id()
+    if not user_id:
+        return False
+
+    col = _get_profiles_collection()
+    if col is None:
+        return False
+
+    try:
+        unset_payload: Dict[str, Any] = {
+            f"provider_keys.{name}": "",
+            f"custom_providers.{name}": "",
+        }
+        set_payload: Dict[str, Any] = {"updated_at": datetime.now(timezone.utc)}
+        if clear_active:
+            set_payload["active_provider"] = ""
+
+        result = col.update_one(
+            {"user_id": user_id},
+            {
+                "$unset": unset_payload,
+                "$set": set_payload,
+            },
+        )
+        return result.matched_count > 0
+    except Exception as e:
+        logger.warning(f"Could not delete provider from MongoDB: {e}")
+        return False
+
+
 def get_provider_data() -> Dict[str, Any]:
     """Return provider_keys and custom_providers from the profile."""
     user_id = _get_user_id()

@@ -126,3 +126,21 @@ ConversationMessageContentRequiredError = ErrorDetails(
     status_code=400,
     message="message content is required"
 )
+
+ConversationMessageImageUnsupportedFormatError = ErrorDetails(
+    internal_code="conversation:message:image-unsupported-format",
+    status_code=400,
+    message="unsupported image format"
+)
+
+ConversationMessageImageTooLargeError = ErrorDetails(
+    internal_code="conversation:message:image-too-large",
+    status_code=400,
+    message="image exceeds maximum allowed size"
+)
+
+ConversationMessageImageAnalysisError = ErrorDetails(
+    internal_code="conversation:message:image-analysis-failed",
+    status_code=500,
+    message="failed to analyze image"
+)

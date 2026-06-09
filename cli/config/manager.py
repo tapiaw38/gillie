@@ -23,6 +23,9 @@ from cli.config.schema import (
     MercadoLibreServiceConfig,
     LangSmithServiceConfig,
     LLMExtendedServiceConfig,
+    VisionServiceConfig,
+    ImageGenerationServiceConfig,
+    VideoGenerationServiceConfig,
     LoggingConfig,
     TunnelConfig,
     ExposeConfig,
@@ -78,6 +81,9 @@ def _build_services(services_data: dict) -> ServicesConfig:
         mercadolibre=MercadoLibreServiceConfig(**services_data.get("mercadolibre", {})),
         langsmith=LangSmithServiceConfig(**services_data.get("langsmith", {})),
         llm=LLMExtendedServiceConfig(**services_data.get("llm", {})),
+        vision=VisionServiceConfig(**services_data.get("vision", {})),
+        image_generation=ImageGenerationServiceConfig(**services_data.get("image_generation", {})),
+        video_generation=VideoGenerationServiceConfig(**services_data.get("video_generation", {})),
         provider_keys=services_data.get("provider_keys", {}),
     )
 

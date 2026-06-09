@@ -19,6 +19,7 @@ from cli.commands.reset import app as reset_app
 from cli.commands.provider import app as provider_app
 from cli.commands.brain import app as brain_app
 from cli.commands.build import app as build_app
+from cli.commands.contact import app as contact_app
 
 console = Console()
 
@@ -46,6 +47,8 @@ app.add_typer(agent_app, name="agent", help="Interactive chat with the assistant
 app.add_typer(reset_app, name="reset", help="Reset Gillie to factory state")
 app.add_typer(brain_app, name="brain", help="Manage episodic memory (brain)")
 app.add_typer(provider_app, name="provider", help="Manage AI provider (DeepSeek, OpenRouter, Claude, etc.)")
+app.add_typer(contact_app, name="contact", help="Manage contacts and owner memories")
+app.add_typer(contact_app, name="contacts", help="Alias for 'contact' commands")
 app.add_typer(build_app, name="build", hidden=True)
 
 

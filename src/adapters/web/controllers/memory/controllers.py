@@ -1,4 +1,5 @@
 from fastapi import APIRouter, status, Request, Depends
+from typing import Optional
 from starlette.concurrency import run_in_threadpool
 from src.schemas.memory import (
     FAQInput,
@@ -14,6 +15,8 @@ from src.schemas.memory import (
     MemoryRootOutput,
     MemoryRootInput,
     MemoryResolvedOutput,
+    OwnerMemoryData,
+    OwnerMemoryListOutput,
 )
 from src.core.use_cases.use_cases import Usecases
 from src.adapters.web.dependencies import get_usecases
@@ -117,3 +120,41 @@ async def extract_memory(request: Request, usecases: Usecases = Depends(get_usec
     user_id = request.state.user.get("user_id")
     result = await usecases.memory.extract_memory_usecase.execute(user_id)
     return ExtractMemoryOutput(**result)
+
+
+@router.get("/owner/episodes", status_code=status.HTTP_200_OK)
+async def list_owner_episodes(
+    request: Request,
+    contact_id: Optional[str] = None,
+    query: Optional[str] = None,
+    limit: int = 100,
+    offset: int = 0,
+    usecases: Usecases = Depends(get_usecases),
+):
+    owner_user_id = request.state.user.get("user_id")
+    result = await usecases.memory.list_owner_memories_usecase.execute(
+        owner_user_id=owner_user_id,
+        contact_id=contact_id,
+        query=query,
+        limit=limit,
+        offset=offset,
+    )
+    episodes = result.get("items", [])
+    return OwnerMemoryListOutput(
+        data=[
+            OwnerMemoryData(
+                id=item.id or "",
+                owner_user_id=getattr(item, "owner_user_id", None),
+                memory_scope_id=getattr(item, "memory_scope_id", None),
+                source_conversation_id=item.source_conversation_id,
+                content=item.content,
+                importance=item.importance,
+                emotion=item.emotion,
+                tags=item.tags or [],
+                created_at=item.created_at,
+            )
+            for item in episodes
+        ],
+        has_more=bool(result.get("has_more", False)),
+        next_offset=result.get("next_offset"),
+    )

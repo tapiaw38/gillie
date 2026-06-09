@@ -12,6 +12,11 @@ import type {
   IntegrationResponse,
   ProfileOptionsResponse,
   CustomProviderInput,
+  ContactParams,
+  ContactResponse,
+  ContactListResponse,
+  ContactDeleteResponse,
+  OwnerMemoryListResponse,
 } from '@/types/assistant.ts'
 
 export interface IAssistantService {
@@ -23,6 +28,11 @@ export interface IAssistantService {
   addProvider(input: CustomProviderInput): Promise<{ data: { name: string; model: string } }>
   addApiKey(apiKey: ApiKeyParams): Promise<ApiKeyResponse>
   removeApiKey(apiKeyId: string): Promise<ApiKeyRemoveResponse>
+  listContacts(): Promise<ContactListResponse>
+  addContact(contact: ContactParams): Promise<ContactResponse>
+  updateContact(contactId: string, contact: ContactParams): Promise<ContactResponse>
+  deleteContact(contactId: string): Promise<ContactDeleteResponse>
+  listOwnerMemories(params?: { contact_id?: string; query?: string; limit?: number }): Promise<OwnerMemoryListResponse>
   addFiles(files: File[]): Promise<AssistantFileResponse>
   removeFileById(fileId: string): Promise<AssistantFileRemoveResponse>
   addIntegration(integration: IntegrationParams): Promise<IntegrationResponse>
@@ -73,6 +83,31 @@ export class AssistantService implements IAssistantService {
 
   async removeApiKey(apiKeyId: string): Promise<ApiKeyRemoveResponse> {
     const { data } = await this.api.delete<ApiKeyRemoveResponse>(`/profile/api-key/${apiKeyId}`)
+    return data
+  }
+
+  async listContacts(): Promise<ContactListResponse> {
+    const { data } = await this.api.get<ContactListResponse>('/profile/contacts')
+    return data
+  }
+
+  async addContact(contact: ContactParams): Promise<ContactResponse> {
+    const { data } = await this.api.post<ContactResponse>('/profile/contacts', contact)
+    return data
+  }
+
+  async updateContact(contactId: string, contact: ContactParams): Promise<ContactResponse> {
+    const { data } = await this.api.patch<ContactResponse>(`/profile/contacts/${contactId}`, contact)
+    return data
+  }
+
+  async deleteContact(contactId: string): Promise<ContactDeleteResponse> {
+    const { data } = await this.api.delete<ContactDeleteResponse>(`/profile/contacts/${contactId}`)
+    return data
+  }
+
+  async listOwnerMemories(params?: { contact_id?: string; query?: string; limit?: number }): Promise<OwnerMemoryListResponse> {
+    const { data } = await this.api.get<OwnerMemoryListResponse>('/api/v1/memory/owner/episodes', { params })
     return data
   }
 
