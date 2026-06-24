@@ -297,6 +297,44 @@ class QdrantVectorStoreAdapter:
             logger.error(f"Error listing collections: {e}")
             return []
 
+    def document_exists(self, collection_name: str, document_id: str) -> bool:
+        """
+        Check if a document with specific document_id exists in collection.
+
+        Args:
+            collection_name: Name of the collection
+            document_id: Document ID to check (stored in metadata)
+
+        Returns:
+            True if document exists, False otherwise
+        """
+        try:
+            collections = self.client.get_collections().collections
+            if collection_name not in [c.name for c in collections]:
+                return False
+
+            results = self.client.scroll(
+                collection_name=collection_name,
+                scroll_filter=models.Filter(
+                    must=[
+                        models.FieldCondition(
+                            key="document_id",
+                            match=models.MatchValue(value=document_id)
+                        )
+                    ]
+                ),
+                limit=1
+            )
+
+            points, _ = results
+            exists = len(points) > 0
+            logger.debug(f"Document '{document_id}' exists in '{collection_name}': {exists}")
+            return exists
+
+        except Exception as e:
+            logger.error(f"Error checking document existence: {e}")
+            return False
+
     def _build_filter(self, filter_dict: Dict[str, Any]) -> models.Filter:
         """
         Build Qdrant filter from dictionary.

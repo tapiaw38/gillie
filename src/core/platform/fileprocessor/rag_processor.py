@@ -91,14 +91,12 @@ class RAGDocumentProcessor:
             logger.info(f"Processing document for RAG: {file_url}")
 
             if self.use_qdrant:
-                existing_info = self.qdrant_adapter.get_collection_info(collection_name)
-                if existing_info and existing_info.get("points_count", 0) > 0:
+                if self.qdrant_adapter.document_exists(collection_name, document_id):
                     logger.info(f"Document already processed in Qdrant: {document_id}")
                     return {
                         "document_id": document_id,
                         "status": "already_processed",
                         "collection_name": collection_name,
-                        "vector_count": existing_info.get("points_count", 0),
                         "storage": "qdrant"
                     }
             else:
