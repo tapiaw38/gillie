@@ -14,6 +14,7 @@ from pathlib import Path
 if TYPE_CHECKING:
     from src.core.platform.fileprocessor.pdf_processor import FileImageProcessor
     from src.core.platform.fileprocessor.xlsx_processor import ExcelImageProcessor
+    from src.core.platform.fileprocessor.docx_processor import DocxProcessor
     from src.core.platform.fileprocessor.processor import ImageSearchResult
     from src.core.platform.fileprocessor.hybrid_processor import HybridDocumentProcessor
     from src.core.platform.fileprocessor.rag_processor import RAGDocumentProcessor
@@ -36,6 +37,7 @@ class OpenAIIntegration:
         self._config_service = config_service
         self._image_processor = None
         self._excel_processor = None
+        self._docx_processor = None
         self._hybrid_processor = None
         self._rag_processor = None
         self._processed_documents = {}
@@ -78,6 +80,13 @@ class OpenAIIntegration:
             from src.core.platform.fileprocessor.xlsx_processor import ExcelImageProcessor
             self._excel_processor = ExcelImageProcessor(self._config_service)
         return self._excel_processor
+
+    @property
+    def docx_processor(self) -> "DocxProcessor":
+        if self._docx_processor is None:
+            from src.core.platform.fileprocessor.docx_processor import DocxProcessor
+            self._docx_processor = DocxProcessor(self._config_service)
+        return self._docx_processor
 
     @property
     def hybrid_processor(self) -> "HybridDocumentProcessor":

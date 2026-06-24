@@ -1024,7 +1024,7 @@
     "tools": {
       "search_documents": {
         "label": "Search documents",
-        "hint": "When to search inside uploaded PDFs and Excel files."
+        "hint": "When to search inside uploaded PDFs, Excel and Word files."
       },
       "query_database": {
         "label": "Query DB",
@@ -1479,7 +1479,7 @@
     "successUpload": "Files uploaded",
     "successUploadDetail": "Files were uploaded successfully",
     "invalidTypes": "Invalid file types",
-    "invalidTypesDetail": "Only PDF and Excel files (.xls, .xlsx) are allowed.",
+    "invalidTypesDetail": "Only PDF, Excel (.xls, .xlsx) and Word (.doc, .docx) files are allowed.",
     "filesTooBig": "Files too large",
     "filesTooBigDetail": "The following files exceed the 250 MiB limit: {files}",
     "filesSelected": "Files selected",

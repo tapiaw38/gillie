@@ -1024,7 +1024,7 @@
     "tools": {
       "search_documents": {
         "label": "Buscar documentos",
-        "hint": "Cuándo buscar información dentro de PDFs y Excels subidos."
+        "hint": "Cuándo buscar información dentro de PDFs, Excels y documentos Word subidos."
       },
       "query_database": {
         "label": "Consultar BD",
@@ -1479,7 +1479,7 @@
     "successUpload": "Archivos subidos",
     "successUploadDetail": "Los archivos se subieron correctamente",
     "invalidTypes": "Tipos de archivo no válidos",
-    "invalidTypesDetail": "Solo se permiten archivos PDF y Excel (.xls, .xlsx).",
+    "invalidTypesDetail": "Solo se permiten archivos PDF, Excel (.xls, .xlsx) y Word (.doc, .docx).",
     "filesTooBig": "Archivos demasiado grandes",
     "filesTooBigDetail": "Los siguientes archivos superan el límite de 250 MiB: {files}",
     "filesSelected": "Archivos seleccionados",

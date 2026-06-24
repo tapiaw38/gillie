@@ -48,6 +48,8 @@ const allowedTypes = [
   'application/pdf',
   'application/vnd.ms-excel',
   'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+  'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+  'application/msword',
 ]
 
 const onRemoveTemplatingFile = (
@@ -143,7 +145,7 @@ const formatSize = (bytes: number) => {
       name="demo[]"
       @upload="onTemplatedUpload"
       :multiple="true"
-      accept=".pdf,application/pdf,application/vnd.ms-excel,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+      accept=".pdf,.doc,.docx,application/pdf,application/vnd.ms-excel,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.openxmlformats-officedocument.wordprocessingml.document,application/msword"
       :maxFileSize="262144000"
       @select="onSelectedFiles"
     >
@@ -263,7 +265,7 @@ const formatSize = (bytes: number) => {
             class="pi pi-cloud-upload !border-2 !rounded-full !p-8 !text-4xl !text-muted-color"
           ></i>
           <p class="mt-2 mb-0">
-            Arrastra y suelta archivos PDF o Excel aquí para subirlos (máximo 250 MiB por archivo).
+            Arrastra y suelta archivos PDF, Excel o Word aquí para subirlos (máximo 250 MiB por archivo).
           </p>
         </div>
       </template>
