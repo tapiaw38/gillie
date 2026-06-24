@@ -318,7 +318,7 @@ class QdrantVectorStoreAdapter:
                 scroll_filter=models.Filter(
                     must=[
                         models.FieldCondition(
-                            key="document_id",
+                            key="metadata.document_id",
                             match=models.MatchValue(value=document_id)
                         )
                     ]
