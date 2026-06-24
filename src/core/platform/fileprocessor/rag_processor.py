@@ -317,10 +317,11 @@ class RAGDocumentProcessor:
             import fitz
             doc = fitz.open(stream=pdf_data, filetype="pdf")
             total_text = ""
+            page_count = doc.page_count
             for page in doc:
                 total_text += page.get_text()
             doc.close()
-            min_chars = 50 * doc.page_count
+            min_chars = 50 * page_count
             return len(total_text.strip()) >= min_chars
         except Exception as e:
             logger.warning(f"Error checking PDF text: {e}")
