@@ -334,6 +334,10 @@ class RAGDocumentProcessor:
             from src.core.platform.fileprocessor.pdf_processor import FileImageProcessor
 
             processor = FileImageProcessor(self.config_service)
+
+            if not processor._vision_client:
+                logger.info("Vision API not configured, skipping vision extraction")
+                return []
             images = convert_from_bytes(pdf_data, dpi=150)
             documents = []
 
