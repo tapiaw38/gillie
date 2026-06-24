@@ -52,8 +52,14 @@ langgraph==1.1.2
 langgraph-checkpoint==4.0.1
 langsmith==0.7.20
 faiss-cpu==1.13.2
+--extra-index-url https://download.pytorch.org/whl/cpu
+torch==2.12.1+cpu
+torchvision==0.27.1+cpu
 sentence-transformers==5.3.0
 unstructured[pdf]==0.18.32
+unstructured-inference==1.2.0
+unstructured-pytesseract==0.3.15
+pi-heif==1.4.0
 python-magic==0.4.27
 qdrant-client==1.17.1
 pdfminer.six==20260107

@@ -160,6 +160,12 @@ _DEFAULT_TOOL_PROMPTS: Dict[str, str] = {
         "Search for information in the user's uploaded documents. "
         "Use when the user asks a question that may be answered by their uploaded files."
     ),
+    "list_storage_files": (
+        "List all files the user has uploaded to their storage. "
+        "Returns file names, types, sizes, and upload dates. "
+        "Use when the user asks 'what files do I have?', 'show my documents', "
+        "'list my uploads', or before searching to know available files."
+    ),
     "query_database": (
         "Query the LIVE connected PostgreSQL database and return actual rows of data. "
         "Use this tool — NOT code exploration tools — when the user asks about records, "
@@ -754,6 +760,11 @@ class SearchDocumentsArgs(BaseModel):
         ge=1,
         le=10
     )
+
+
+class ListStorageFilesArgs(BaseModel):
+    """Arguments for listing storage files (no parameters required)"""
+    pass
 
 
 class SearchFAQsArgs(BaseModel):
@@ -3363,6 +3374,42 @@ If data is not found, say so clearly."""
         logger.warning(f"No results found in Qdrant for profile {profile.user_id}")
         return {"found": False, "context": "No hay información disponible en el catálogo.", "results": []}
 
+    async def list_storage_files_tool() -> Dict[str, Any]:
+        """List all files in user's storage"""
+        if not profile.files:
+            return {
+                "total": 0,
+                "files": [],
+                "message": "No hay archivos subidos. El usuario puede subir archivos PDF, Excel o Word."
+            }
+
+        files_list = []
+        for f in profile.files:
+            # Detect file type from extension
+            name = f.name.lower() if f.name else ""
+            if name.endswith(".pdf"):
+                file_type = "PDF"
+            elif name.endswith((".xlsx", ".xls")):
+                file_type = "Excel"
+            elif name.endswith((".docx", ".doc")):
+                file_type = "Word"
+            else:
+                file_type = "Otro"
+
+            files_list.append({
+                "id": str(f.id) if hasattr(f, "id") else f._id if hasattr(f, "_id") else None,
+                "name": f.name,
+                "type": file_type,
+                "url": f.url,
+                "created_at": f.created_at.isoformat() if f.created_at else None,
+            })
+
+        return {
+            "total": len(files_list),
+            "files": files_list,
+            "message": f"El usuario tiene {len(files_list)} archivo(s) disponible(s)."
+        }
+
     # ── File editing tools ────────────────────────────────────────────────────
 
     import os as _os
@@ -4568,6 +4615,7 @@ If data is not found, say so clearly."""
         _tool("browser_screenshot",     prompts.get("browser_screenshot", _DEFAULT_TOOL_PROMPTS["browser_screenshot"]), browser_screenshot_tool, BrowserScreenshotArgs),
         _tool("browser_close",          prompts.get("browser_close",      _DEFAULT_TOOL_PROMPTS["browser_close"]),      browser_close_tool,      BrowserCloseArgs),
         _tool("search_documents",       prompts["search_documents"],       search_documents_tool, SearchDocumentsArgs),
+        _tool("list_storage_files",     prompts["list_storage_files"],     list_storage_files_tool, ListStorageFilesArgs),
     ]))
 
     for _db_slug, _db_inst in sql_integrations:

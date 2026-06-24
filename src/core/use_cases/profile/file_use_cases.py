@@ -28,6 +28,8 @@ def _detect_file_type(filename: str) -> Optional[str]:
         return "xlsx"
     if lower.endswith(".pdf"):
         return "pdf"
+    if lower.endswith((".docx", ".doc")):
+        return "docx"
     return None
 
 
