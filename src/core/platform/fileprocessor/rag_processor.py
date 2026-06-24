@@ -124,6 +124,8 @@ class RAGDocumentProcessor:
                 documents = await self._process_pdf(file_url)
             elif file_type.lower() in ["xlsx", "xls"]:
                 documents = await self._process_xlsx(file_url)
+            elif file_type.lower() in ["docx", "doc"]:
+                documents = await self._process_docx(file_url)
             else:
                 return {"error": f"Unsupported file type: {file_type}"}
 
@@ -398,6 +400,57 @@ class RAGDocumentProcessor:
 
         except Exception as e:
             logger.error(f"Error processing XLSX: {e}")
+            return []
+
+    async def _process_docx(self, docx_url: str) -> List[Document]:
+        import aiohttp
+        import tempfile
+        import os
+
+        try:
+            async with aiohttp.ClientSession() as session:
+                async with session.get(docx_url) as response:
+                    response.raise_for_status()
+                    docx_data = await response.read()
+
+            with tempfile.NamedTemporaryFile(suffix=".docx", delete=False) as temp_file:
+                temp_path = temp_file.name
+                temp_file.write(docx_data)
+
+            try:
+                from docx import Document as DocxDocument
+                doc = DocxDocument(temp_path)
+                documents = []
+
+                full_text = []
+                for para in doc.paragraphs:
+                    if para.text.strip():
+                        full_text.append(para.text.strip())
+
+                if full_text:
+                    documents.append(Document(
+                        page_content="\n".join(full_text),
+                        metadata={"source": docx_url, "type": "docx"}
+                    ))
+
+                for table_idx, table in enumerate(doc.tables):
+                    table_content = []
+                    for row in table.rows:
+                        row_text = [cell.text.strip() for cell in row.cells if cell.text.strip()]
+                        if row_text:
+                            table_content.append(" | ".join(row_text))
+                    if table_content:
+                        documents.append(Document(
+                            page_content="\n".join(table_content),
+                            metadata={"source": docx_url, "type": "docx", "table": table_idx + 1}
+                        ))
+
+                return documents
+            finally:
+                os.unlink(temp_path)
+
+        except Exception as e:
+            logger.error(f"Error processing DOCX: {e}")
             return []
 
     async def search_relevant_content(

@@ -383,6 +383,20 @@ class OpenAIIntegration:
                         f"Error searching images in Excel {file.url}: {e}"
                     )
                     continue
+            elif file.url.lower().endswith((".docx", ".doc")):
+                try:
+                    results = await self.docx_processor.search_images_in_docx(
+                        file.url, search_term, max_results
+                    )
+                    all_results.extend(results)
+                    self.logger.debug(
+                        f"Found {len(results)} images in DOCX: {file.url}"
+                    )
+                except Exception as e:
+                    self.logger.error(
+                        f"Error searching images in DOCX {file.url}: {e}"
+                    )
+                    continue
 
         all_results.sort(key=lambda x: x.confidence, reverse=True)
         final_results = all_results[:max_results]
