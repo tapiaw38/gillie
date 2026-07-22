@@ -14,6 +14,8 @@ const {
   assistantProfile,
   getAssistantProfile,
   removeFileById,
+  filesVectorStatuses,
+  getFilesVectorStatus,
 
   isGetAssistantProfilePending,
   isGetAssistantProfileError,
@@ -24,6 +26,25 @@ const {
   isRemoveFileByIdError,
   removeFileByIdError,
 } = useAssistant()
+
+let refreshToken = 0
+const REFRESH_DELAYS = [2000, 4000, 8000, 15000]
+
+const hasProcessing = () =>
+  (assistantProfile.value?.files ?? []).some(
+    (f) => (filesVectorStatuses.value[f.id] ?? 'processing') === 'processing',
+  )
+
+const refreshUntilSettled = async () => {
+  const token = ++refreshToken
+  await getFilesVectorStatus()
+  for (const delay of REFRESH_DELAYS) {
+    if (token !== refreshToken || !hasProcessing()) return
+    await new Promise((r) => setTimeout(r, delay))
+    if (token !== refreshToken) return
+    await getFilesVectorStatus()
+  }
+}
 
 const errorWatchers = [
   {
@@ -40,9 +61,17 @@ const errorWatchers = [
 
 const { toast } = useErrorToast(errorWatchers)
 
-onMounted(() => {
-  getAssistantProfile()
+onMounted(async () => {
+  await getAssistantProfile()
+  await refreshUntilSettled()
 })
+
+watch(
+  () => (assistantProfile.value?.files ?? []).map((f) => f.id).join(','),
+  () => {
+    refreshUntilSettled()
+  },
+)
 
 watch(isRemoveFileByIdSuccess, (value) => {
   if (value) {
@@ -60,9 +89,34 @@ const removeFile = async (fileId: string) => {
     await removeFileById(fileId)
     if (isRemoveFileByIdSuccess.value) {
       await getAssistantProfile()
+      // status refresh handled by the files watcher
     }
   } catch (error) {
     console.error('Error deleting file:', error)
+  }
+}
+
+const statusMeta = (fileId: string): { label: string; cls: string; icon: string } => {
+  const status = filesVectorStatuses.value[fileId] ?? 'processing'
+  switch (status) {
+    case 'indexed':
+      return {
+        label: t('integrations.store.vectorIndexed'),
+        cls: 'status-indexed',
+        icon: 'pi pi-check-circle',
+      }
+    case 'not_indexed':
+      return {
+        label: t('integrations.store.vectorNotIndexed'),
+        cls: 'status-not-indexed',
+        icon: 'pi pi-minus-circle',
+      }
+    default:
+      return {
+        label: t('integrations.store.vectorProcessing'),
+        cls: 'status-processing',
+        icon: 'pi pi-spin pi-spinner',
+      }
   }
 }
 </script>
@@ -132,7 +186,10 @@ const removeFile = async (fileId: string) => {
             </div>
             <div class="header-text">
               <h3>{{ t('integrations.store.storedFiles') }}</h3>
-              <p>{{ assistantProfile?.files?.length || 0 }} {{ t('integrations.store.availableFiles') }}</p>
+              <p>
+                {{ assistantProfile?.files?.length || 0 }}
+                {{ t('integrations.store.availableFiles') }}
+              </p>
             </div>
           </div>
         </template>
@@ -162,7 +219,10 @@ const removeFile = async (fileId: string) => {
                     <a :href="file.url" target="_blank" rel="noopener noreferrer" class="file-name">
                       {{ file.name }}
                     </a>
-                    <span class="file-meta">{{ t('integrations.store.fileAvailable') }}</span>
+                    <span class="file-status" :class="statusMeta(file.id).cls">
+                      <i :class="statusMeta(file.id).icon"></i>
+                      {{ statusMeta(file.id).label }}
+                    </span>
                   </div>
                 </div>
                 <button
@@ -264,7 +324,7 @@ const removeFile = async (fileId: string) => {
   overflow: hidden;
   box-shadow: 0 4px 20px rgba(0, 0, 0, 0.08);
   border: 1px solid var(--vt-c-gray-200);
-  background: rgba(59,130,246,0.08);
+  background: rgba(59, 130, 246, 0.08);
 }
 
 :deep(.info-card .p-card-content) {
@@ -363,7 +423,7 @@ const removeFile = async (fileId: string) => {
 }
 
 :deep(.upload-card .p-card-header) {
-  background: rgba(16,185,129,0.08);
+  background: rgba(16, 185, 129, 0.08);
   border-bottom: 1px solid var(--vt-c-gray-200);
 }
 
@@ -393,7 +453,7 @@ const removeFile = async (fileId: string) => {
 }
 
 :deep(.files-card .p-card-header) {
-  background: rgba(139,92,246,0.08);
+  background: rgba(139, 92, 246, 0.08);
   border-bottom: 1px solid var(--vt-c-gray-200);
 }
 
@@ -466,14 +526,14 @@ const removeFile = async (fileId: string) => {
   align-items: center;
   justify-content: space-between;
   padding: 1rem;
-  background: rgba(255,255,255,0.04);
+  background: rgba(255, 255, 255, 0.04);
   border-radius: 0.75rem;
   border: 1px solid var(--vt-c-gray-200);
   transition: all 0.3s ease;
 }
 
 .file-item:hover {
-  background: rgba(255,255,255,0.07);
+  background: rgba(255, 255, 255, 0.07);
   box-shadow: 0 4px 20px rgba(0, 0, 0, 0.08);
   transform: translateY(-1px);
 }
@@ -524,12 +584,36 @@ const removeFile = async (fileId: string) => {
   color: var(--do-text-muted);
 }
 
+.file-status {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  font-size: 0.75rem;
+  font-weight: 600;
+}
+
+.file-status i {
+  font-size: 0.75rem;
+}
+
+.status-indexed {
+  color: var(--green-500, #22c55e);
+}
+
+.status-processing {
+  color: var(--yellow-500, #eab308);
+}
+
+.status-not-indexed {
+  color: var(--do-text-muted);
+}
+
 .delete-button {
   width: 2.5rem;
   height: 2.5rem;
   border-radius: 0.5rem;
   border: none;
-  background: rgba(255,68,68,0.15);
+  background: rgba(255, 68, 68, 0.15);
   color: #fca5a5;
   display: flex;
   align-items: center;
@@ -540,7 +624,7 @@ const removeFile = async (fileId: string) => {
 }
 
 .delete-button:hover:not(:disabled) {
-  background: rgba(255,68,68,0.25);
+  background: rgba(255, 68, 68, 0.25);
   transform: scale(1.05);
 }
 
@@ -553,7 +637,7 @@ const removeFile = async (fileId: string) => {
 .action-error {
   margin-top: 1rem;
   padding: 1rem;
-  background: rgba(255,255,255,0.04);
+  background: rgba(255, 255, 255, 0.04);
   border-radius: 0.75rem;
   border: 1px solid var(--vt-c-gray-200);
 }
@@ -622,13 +706,13 @@ const removeFile = async (fileId: string) => {
   }
 
   .icon-wrapper {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-size: 2rem;
-  color: var(--do-blue);
-  flex-shrink: 0;
-}
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 2rem;
+    color: var(--do-blue);
+    flex-shrink: 0;
+  }
 
   .integration-title {
     font-size: 1.75rem;
@@ -639,13 +723,13 @@ const removeFile = async (fileId: string) => {
   }
 
   .header-icon {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-size: 2rem;
-  color: var(--do-blue);
-  flex-shrink: 0;
-}
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 2rem;
+    color: var(--do-blue);
+    flex-shrink: 0;
+  }
 
   :deep(.upload-card .p-card-content),
   :deep(.files-card .p-card-content),

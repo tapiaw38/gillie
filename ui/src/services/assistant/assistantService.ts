@@ -8,6 +8,7 @@ import type {
   ApiKeyRemoveResponse,
   AssistantFileResponse,
   AssistantFileRemoveResponse,
+  AssistantFileVectorStatusResponse,
   IntegrationParams,
   IntegrationResponse,
   ProfileOptionsResponse,
@@ -35,6 +36,7 @@ export interface IAssistantService {
   listOwnerMemories(params?: { contact_id?: string; query?: string; limit?: number }): Promise<OwnerMemoryListResponse>
   addFiles(files: File[]): Promise<AssistantFileResponse>
   removeFileById(fileId: string): Promise<AssistantFileRemoveResponse>
+  getFilesVectorStatus(): Promise<AssistantFileVectorStatusResponse>
   addIntegration(integration: IntegrationParams): Promise<IntegrationResponse>
   removeIntegrationById(integrationId: string): Promise<IntegrationResponse>
 }
@@ -127,6 +129,11 @@ export class AssistantService implements IAssistantService {
 
   async removeFileById(fileId: string): Promise<AssistantFileRemoveResponse> {
     const { data } = await this.api.delete<AssistantFileRemoveResponse>(`/profile/files/${fileId}`)
+    return data
+  }
+
+  async getFilesVectorStatus(): Promise<AssistantFileVectorStatusResponse> {
+    const { data } = await this.api.get<AssistantFileVectorStatusResponse>('/profile/files/status')
     return data
   }
 

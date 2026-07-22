@@ -9,6 +9,7 @@ import type {
   ApiKeyRemoveResponse,
   AssistantFileResponse,
   AssistantFileRemoveResponse,
+  AssistantFileVectorStatusResponse,
   IntegrationResponse,
   IntegrationParams,
   ContactParams,
@@ -82,6 +83,12 @@ export const useAssistantQueries = (assistantService: IAssistantService) => {
     mutationFn: assistantService.removeFileById.bind(assistantService),
   })
 
+  const getFilesVectorStatusQuery = useQuery<AssistantFileVectorStatusResponse, Error>({
+    queryKey: ['getFilesVectorStatus'],
+    queryFn: assistantService.getFilesVectorStatus.bind(assistantService),
+    enabled: false,
+  })
+
   const addIntegrationMutation = useMutation<IntegrationResponse, Error, IntegrationParams>({
     mutationFn: assistantService.addIntegration.bind(assistantService),
   })
@@ -103,6 +110,7 @@ export const useAssistantQueries = (assistantService: IAssistantService) => {
     listOwnerMemoriesMutation,
     addFilesMutation,
     removeFileByIdMutation,
+    getFilesVectorStatusQuery,
     addIntegrationMutation,
     removeIntegrationByIdMutation,
   }

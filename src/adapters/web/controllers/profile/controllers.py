@@ -72,6 +72,15 @@ async def upload_files(
     return files
 
 
+@router.get("/files/status", status_code=status.HTTP_200_OK)
+async def get_files_vector_status(
+    request: Request,
+    usecases: Usecases = Depends(get_usecases)
+):
+    user_id = request.state.user.get("user_id")
+    return await usecases.profile.get_files_vector_status_usecase.execute(user_id)
+
+
 @router.delete("/files/{file_id}", status_code=status.HTTP_200_OK)
 async def delete_file(
     file_id: str,

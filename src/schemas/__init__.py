@@ -36,6 +36,7 @@ from .file import (
     FileListOutput,
     FileDeleteOutput,
     FileDeleteOutputData,
+    FileVectorStatusOutput,
 )
 from .integration import (
     IntegrationInput,
@@ -115,6 +116,7 @@ __all__ = [
     "FileListOutput",
     "FileDeleteOutput",
     "FileDeleteOutputData",
+    "FileVectorStatusOutput",
     # Integration schemas
     "IntegrationInput",
     "IntegrationOutput",

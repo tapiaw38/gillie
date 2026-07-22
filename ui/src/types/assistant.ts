@@ -148,6 +148,14 @@ export interface AssistantFileResponse {
   data: AssistantFile[]
 }
 
+export type FileVectorStatus = 'indexed' | 'processing' | 'not_indexed'
+
+export interface AssistantFileVectorStatusResponse {
+  data: {
+    statuses: Record<string, FileVectorStatus>
+  }
+}
+
 export interface AssistantFileRemoveID {
   id: string
 }
