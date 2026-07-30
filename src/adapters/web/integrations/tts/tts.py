@@ -314,6 +314,8 @@ class TTSIntegration:
         "]+"
     )
 
+    _MARKUP_LEFTOVERS = re.compile(r"[*_~`|#^]+")
+
     def _strip_unspeakable(self, text: str, language: str = "en") -> str:
         """Remove everything a voice should never read out: emoji, code, URLs."""
         spanish = language == "es"
@@ -329,8 +331,14 @@ class TTSIntegration:
         cleaned = re.sub(r"\b(?:https?://|www\.)\S+", f" {link_word} ", cleaned)
         cleaned = re.sub(r"(?<![\w.])(?:~|\.{1,2})?/[\w./-]{2,}", f" {path_word} ", cleaned)
         cleaned = re.sub(r"^\s{0,3}#{1,6}\s+", "", cleaned, flags=re.MULTILINE)
+        cleaned = re.sub(r"^\s*>+\s?", "", cleaned, flags=re.MULTILINE)
         cleaned = re.sub(r"^\s*[-*+]\s+", "", cleaned, flags=re.MULTILINE)
+        cleaned = re.sub(r"^\s*[-*_]{3,}\s*$", " ", cleaned, flags=re.MULTILINE)
+        cleaned = re.sub(r"\*{1,3}([^*\n]+)\*{1,3}", r"\1", cleaned)
+        cleaned = re.sub(r"(?<![\w])_{1,2}([^_\n]+)_{1,2}(?![\w])", r"\1", cleaned)
+        cleaned = re.sub(r"~~([^~\n]+)~~", r"\1", cleaned)
         cleaned = self._EMOJI_AND_SYMBOLS.sub(" ", cleaned)
+        cleaned = self._MARKUP_LEFTOVERS.sub(" ", cleaned)
         return re.sub(r"[ \t]{2,}", " ", cleaned).strip()
 
     def _preprocess_text_for_natural_speech(self, text: str, language: str = "en") -> str:

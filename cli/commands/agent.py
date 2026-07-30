@@ -403,6 +403,50 @@ def _print_assistant(name: str, text: str) -> None:
     console.print()
 
 
+class AudioQueue:
+    """Play audio URLs in arrival order on a worker thread.
+
+    Segments arrive while the model is still writing, so enqueueing must never
+    block the stream reader; playback stays strictly sequential so sentences are
+    not spoken on top of each other.
+    """
+
+    def __init__(self) -> None:
+        import queue
+        import threading
+
+        self._queue: queue.Queue = queue.Queue()
+        self._done = threading.Event()
+        self._thread = threading.Thread(target=self._run, daemon=True)
+        self._started = False
+
+    def add(self, url: str) -> None:
+        if not self._started:
+            self._started = True
+            self._thread.start()
+        self._queue.put(url)
+
+    def _run(self) -> None:
+        while True:
+            url = self._queue.get()
+            if url is None:
+                self._queue.task_done()
+                return
+            try:
+                _play_audio(url)
+            except Exception:
+                pass
+            finally:
+                self._queue.task_done()
+
+    def wait(self) -> None:
+        if not self._started:
+            return
+        self._queue.join()
+        self._queue.put(None)
+        self._thread.join(timeout=5)
+
+
 def _play_audio(url: str) -> None:
     """Play an audio URL using the first available system player."""
     if not url.startswith("http"):
@@ -1101,7 +1145,7 @@ def _resolve_at_references(text: str) -> tuple[str, list[str]]:
 
 @app.command("listen")
 def listen(
-    silence: float = typer.Option(2.5, "--silence", "-s", help="Seconds of silence to detect end of phrase"),
+    silence: float = typer.Option(1.2, "--silence", "-s", help="Seconds of silence to detect end of phrase"),
     threshold: float = typer.Option(0.01, "--threshold", "-t", help="RMS silence threshold (0.0–1.0)"),
     new: bool = typer.Option(False, "--new", "-n", help="Force a new conversation"),
     conv_id: str = typer.Option(None, "--id", help="Attach to a specific conversation ID"),
@@ -1143,6 +1187,7 @@ def listen(
 
     SAMPLE_RATE = 16000
     CHUNK = int(SAMPLE_RATE * 0.1)  # 100ms chunks
+    _MIN_UTTERANCE_CHUNKS = int(1.0 / 0.1)
     silence_chunks_needed = int(silence / 0.1)
 
     _vad = None
@@ -1193,6 +1238,10 @@ def listen(
 
     _VOICE_STREAK_NEEDED = 3  # 300ms of continuous voice required to start recording
 
+    def _trim_trailing_silence(chunks: list, silence_chunks: int, keep: int = 3) -> list:
+        trimmed = len(chunks) - max(0, silence_chunks - keep)
+        return chunks[:trimmed] if trimmed >= _MIN_UTTERANCE_CHUNKS else chunks
+
     def _record_utterance() -> bytes | None:
         """Record until N seconds of silence detected. Returns WAV bytes."""
         audio_chunks = []
@@ -1237,10 +1286,10 @@ def listen(
         if not audio_chunks:
             return None
 
-        _MIN_CHUNKS = int(1.0 / 0.1)  # 10 chunks × 100ms
-        if len(audio_chunks) < _MIN_CHUNKS:
+        if len(audio_chunks) < _MIN_UTTERANCE_CHUNKS:
             return None
 
+        audio_chunks = _trim_trailing_silence(audio_chunks, silence_chunks_needed)
         audio_np = np.concatenate(audio_chunks, axis=0)
         audio_int16 = (np.clip(audio_np, -1.0, 1.0) * 32767).astype(np.int16)
 
@@ -1252,26 +1301,70 @@ def listen(
             wf.writeframes(audio_int16.tobytes())
         return buf.getvalue()
 
-    def _send_voice(conv_id: str, wav_bytes: bytes) -> tuple[str, str | None]:
-        """Send audio to the message endpoint and return (reply_text, audio_url)."""
+    def _transcribe(conv_id: str, wav_bytes: bytes) -> str | None:
+        """Upload the recording and return the transcribed text."""
         try:
             resp = requests.post(
-                _base_url() + f"/conversation/{conv_id}/message",
-                data={"content": " "},  # required by multipart form
+                _base_url() + f"/conversation/{conv_id}/transcribe",
                 files={"voice_content": ("audio.wav", wav_bytes, "audio/wav")},
                 headers=_workspace_headers(),
                 timeout=60,
             )
             resp.raise_for_status()
-            messages = resp.json().get("data", [])
-            if messages:
-                last = messages[-1]
-                return last.get("content", "(no reply)"), last.get("audio_url")
+            return (resp.json().get("data") or {}).get("text") or None
         except requests.exceptions.ConnectionError:
             console.print("\n[red]✗[/red] Cannot connect to the API.")
         except requests.exceptions.HTTPError as e:
             console.print(f"\n[red]✗[/red] API error {e.response.status_code}: {e.response.text}")
-        return "(no reply)", None
+        return None
+
+    def _stream_reply(conv_id: str, text: str, audio: "AudioQueue") -> str:
+        """Stream the reply, queueing each speech segment as soon as it lands."""
+        import json as _json
+
+        reply = ""
+        printed_header = False
+        try:
+            resp = requests.post(
+                _base_url() + f"/conversation/{conv_id}/message/stream",
+                data={"content": text},
+                headers=_workspace_headers(),
+                stream=True,
+                timeout=900,
+            )
+            resp.raise_for_status()
+            for raw_line in resp.iter_lines():
+                if not raw_line:
+                    continue
+                line = raw_line.decode("utf-8") if isinstance(raw_line, bytes) else raw_line
+                if not line.startswith("data: "):
+                    continue
+                payload = line[6:]
+                try:
+                    token = _json.loads(payload)
+                except _json.JSONDecodeError:
+                    token = payload
+                if token == "[DONE]":
+                    break
+                if isinstance(token, dict):
+                    if token.get("type") == "audio" and token.get("url"):
+                        audio.add(token["url"])
+                    continue
+                if not isinstance(token, str):
+                    continue
+                if not printed_header:
+                    console.print(f"\n[bold cyan]{assistant_name}[/bold cyan]")
+                    printed_header = True
+                reply += token
+                sys.stdout.write(token)
+                sys.stdout.flush()
+        except requests.exceptions.ConnectionError:
+            console.print("\n[red]✗[/red] Cannot connect to the API.")
+        except requests.exceptions.HTTPError as e:
+            console.print(f"\n[red]✗[/red] API error {e.response.status_code}: {e.response.text}")
+        if printed_header:
+            console.print()
+        return reply
 
     def _voice_loop(avatar_proc=None) -> None:
         while True:
@@ -1288,14 +1381,20 @@ def listen(
             if not wav_bytes:
                 continue
 
-            console.print("[dim]⏳ Processing...[/dim]     ", end="\r")
-            reply, audio_url = _send_voice(current_id, wav_bytes)
-            console.print(" " * 40, end="\r")  # clear line
-            _print_assistant(assistant_name, reply)
+            console.print("[dim]⏳ Transcribing...[/dim]  ", end="\r")
+            said = _transcribe(current_id, wav_bytes)
+            console.print(" " * 40, end="\r")
+            if not said:
+                console.print("[dim]…no te escuché bien, probá de nuevo.[/dim]")
+                continue
+
+            _print_user(said)
+            audio = AudioQueue()
+            try:
+                _stream_reply(current_id, said, audio)
+            finally:
+                audio.wait()
             console.print(Rule(style="dim"))
-            if audio_url:
-                console.print("[dim]🔊 Playing audio...[/dim]")
-                _play_audio(audio_url)
 
     if not avatar:
         _voice_loop()

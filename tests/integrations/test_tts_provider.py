@@ -295,3 +295,93 @@ class UnspeakableTextTests(unittest.TestCase):
         self.assertFalse(
             self.tts._EMOJI_AND_SYMBOLS.search(out), f"emoji survived: {out!r}"
         )
+
+
+class MarkdownMarkupTests(unittest.TestCase):
+    def setUp(self):
+        self.tts = _integration(TTSConfig())
+
+    def clean(self, text):
+        return self.tts._preprocess_text_for_natural_speech(text, "es")
+
+    def test_does_not_read_blockquote_markers_as_greater_than(self):
+        out = self.clean("> Todo bien, todo bien, a pesar de los problemas")
+        self.assertNotIn("mayor que", out)
+        self.assertIn("Todo bien", out)
+
+    def test_strips_nested_blockquote_markers(self):
+        self.assertNotIn("mayor que", self.clean(">> cita anidada bastante larga acá"))
+
+    def test_keeps_a_real_greater_than_comparison(self):
+        self.assertIn("mayor que", self.clean("El precio 5 > 3 es verdadero"))
+
+    def test_removes_emphasis_markers_but_keeps_the_words(self):
+        out = self.clean("**negrita** y *cursiva* y ~~tachado~~ juntos acá")
+        for word in ("negrita", "cursiva", "tachado"):
+            self.assertIn(word, out)
+        self.assertNotIn("*", out)
+        self.assertNotIn("~", out)
+
+    def test_drops_horizontal_rules(self):
+        self.assertEqual(self.clean("---"), "")
+
+    def test_handles_a_full_quoted_song_reply(self):
+        out = self.clean(
+            "🎵\n\n> *\"Todo bien, todo bien...*\n> *a pesar de los problemas...*\n\n"
+            "🎶👈😎\n\nAhí va, un temita para vos."
+        )
+        for banned in ("mayor que", "*", "🎵", "🎶", "👈", "😎"):
+            self.assertNotIn(banned, out)
+        self.assertIn("Todo bien", out)
+        self.assertIn("temita", out)
+
+
+class StreamSentinelTests(unittest.TestCase):
+    def test_the_done_sentinel_only_matches_after_json_parsing(self):
+        import json
+
+        payload = json.dumps("[DONE]")
+        self.assertNotEqual(payload, "[DONE]")
+        self.assertEqual(json.loads(payload), "[DONE]")
+
+
+class StreamedFragmentMarkupTests(unittest.TestCase):
+    """Sentence-level streaming cuts replies mid-markup, so a fragment can hold
+    an opening marker whose partner lives in the next segment."""
+
+    def setUp(self):
+        self.tts = _integration(TTSConfig())
+
+    def clean(self, text):
+        return self.tts._preprocess_text_for_natural_speech(text, "es")
+
+    def test_drops_an_unmatched_opening_asterisk(self):
+        self.assertNotIn("*", self.clean('*"Todo bien, todo bien, a pesar de todo'))
+
+    def test_drops_an_unmatched_closing_asterisk(self):
+        self.assertNotIn("*", self.clean("a pesar de los problemas, todo bien...*"))
+
+    def test_drops_a_stray_asterisk_mid_sentence(self):
+        out = self.clean("texto con * suelto en el medio de la frase")
+        self.assertNotIn("*", out)
+        self.assertIn("suelto", out)
+
+    def test_drops_unmatched_double_asterisks(self):
+        self.assertNotIn("*", self.clean("**sin cerrar del todo esta frase"))
+
+    def test_drops_orphan_backticks_and_pipes(self):
+        for text in ("codigo `sin cerrar en el fragmento", "col a | col b | col c"):
+            out = self.clean(text)
+            self.assertNotIn("`", out)
+            self.assertNotIn("|", out)
+
+    def test_every_segment_of_a_split_song_is_clean(self):
+        fragments = [
+            '> *"Todo bien, todo bien...',
+            "*a pesar de los problemas, todo bien...*",
+            "*La vida sigue y vamos viendo...*",
+        ]
+        for fragment in fragments:
+            out = self.clean(fragment)
+            self.assertNotIn("*", out)
+            self.assertNotIn("mayor que", out)

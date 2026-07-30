@@ -10,6 +10,7 @@ from src.schemas import MessageInput, MessageListOutput
 from src.core.domain import Message, SenderEnum, MessageImageAttachment, ImageAnalysis
 from src.core.platform.appcontext.appcontext import Factory
 from src.core.platform.errors import NewApplicationError
+from src.core.platform.managers.speech_segmentation import split_leading_sentence
 from src.core.platform.errors.mappings.conversation import (
     ConversationGetNotFoundError,
     ConversationMessageValidationError,
@@ -174,6 +175,18 @@ class AddMessageUseCase:
         shell_output_queue: asyncio.Queue = asyncio.Queue()
 
         full_text = ""
+        pending_speech = ""
+        speech_tasks: list = []
+        audio_url = None
+        emitted = 0
+        speech_enabled = self._tts_active(None, profile) and bool(context.platform_managers)
+
+        def speak(fragment: str) -> None:
+            speech_tasks.append(asyncio.create_task(self._generate_audio_if_enabled(
+                has_text_to_voice=None, text=fragment, profile=profile,
+                user_id=user_id, conversation_id=conversation_id, context=context,
+            )))
+
         async for token in context.integrations.openai.ask_stream(
             question=content,
             context=enhanced_context,
@@ -185,20 +198,38 @@ class AddMessageUseCase:
             plan_mode=plan_mode,
         ):
             yield token
-            if isinstance(token, str):
-                full_text += token
+            if not isinstance(token, str):
+                continue
+            full_text += token
+            if not speech_enabled:
+                continue
+            pending_speech += token
+            sentence, pending_speech = split_leading_sentence(pending_speech)
+            if sentence:
+                speak(sentence)
+            while speech_tasks and speech_tasks[0].done():
+                url = self._segment_url(speech_tasks.pop(0))
+                if url:
+                    audio_url = audio_url or url
+                    yield {"type": "audio", "url": url, "index": emitted, "final": False}
+                    emitted += 1
 
-        audio_url = await self._generate_audio_if_enabled(
-            has_text_to_voice=None,
-            text=full_text,
-            profile=profile,
-            user_id=user_id,
-            conversation_id=conversation_id,
-            context=context,
-        )
+        if speech_enabled and pending_speech.strip():
+            speak(pending_speech)
+        if speech_enabled and not speech_tasks and not emitted and full_text.strip():
+            speak(full_text)
 
-        if audio_url:
-            yield {"type": "audio", "url": audio_url}
+        while speech_tasks:
+            task = speech_tasks.pop(0)
+            try:
+                url = await task
+            except Exception as e:
+                logger.error(f"Error generating streamed audio segment: {e}")
+                continue
+            if url:
+                audio_url = audio_url or url
+                yield {"type": "audio", "url": url, "index": emitted, "final": not speech_tasks}
+                emitted += 1
 
         assistant_message = self._create_assistant_message(content=full_text, audio_url=audio_url)
         self._add_message_to_conversation(conversation, assistant_message)
@@ -253,6 +284,23 @@ class AddMessageUseCase:
         if any(msg.id == message.id for msg in conversation.messages):
             raise NewApplicationError(ConversationMessageValidationError)
         conversation.messages.append(message)
+
+    async def transcribe(self, voice_content, user_id: str) -> Optional[str]:
+        """Transcribe a recording on its own, so a caller can show the text
+        before the reply is generated."""
+        context = self.context_factory()
+        if not context.platform_managers:
+            return None
+        profile = await context.repositories.profile.find_by_user_id(user_id)
+        lang = (profile.response_language if profile else None) or "en"
+        try:
+            return await context.platform_managers.voice_transcription.transcribe_audio_file(
+                audio_file=voice_content,
+                language=_LANG_MAP.get(lang, "en-US"),
+            )
+        except Exception as e:
+            logger.error(f"Error transcribing voice content: {e}")
+            return None
 
     async def _process_voice_content(self, message: MessageInput, profile, context) -> str:
         if not message.voice_content:
@@ -569,14 +617,25 @@ class AddMessageUseCase:
             logger.error(f"Error processing images: {e}")
             return None
 
+    @staticmethod
+    def _tts_active(has_text_to_voice: Optional[str], profile) -> bool:
+        return has_text_to_voice == "activate" or bool(
+            profile and getattr(profile, "tts_enabled", False)
+        )
+
+    @staticmethod
+    def _segment_url(task) -> Optional[str]:
+        try:
+            return task.result()
+        except Exception as e:
+            logger.error(f"Error generating streamed audio segment: {e}")
+            return None
+
     async def _generate_audio_if_enabled(
         self, has_text_to_voice: Optional[str], text: str,
         profile, user_id: str, conversation_id: str, context,
     ) -> Optional[str]:
-        tts_active = has_text_to_voice == "activate" or (
-            profile and getattr(profile, "tts_enabled", False)
-        )
-        if not tts_active or not context.platform_managers:
+        if not self._tts_active(has_text_to_voice, profile) or not context.platform_managers:
             return None
         try:
             lang = profile.response_language or "en"

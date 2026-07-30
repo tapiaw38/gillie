@@ -98,6 +98,21 @@ async def add_message(
     )
     return messages
 
+@router.post("/{conversation_id}/transcribe")
+async def transcribe_voice(
+    conversation_id: str,
+    request: Request,
+    voice_content: UploadFile = File(...),
+    usecases: Usecases = Depends(get_usecases),
+):
+    """Transcribe a recording without generating a reply."""
+    user_id = request.state.user.get("user_id")
+    text = await usecases.conversation.add_message_usecase.transcribe(
+        voice_content, user_id
+    )
+    return {"data": {"text": text or ""}}
+
+
 @router.post("/{conversation_id}/message/stream")
 async def add_message_stream(
     conversation_id: str,
