@@ -104,6 +104,7 @@ class Integrations:
         logger.info("Notion integration initialized")
 
         self.mcp = MCPClient()
+        self.openai.set_persona_mcp(self.mcp)
         logger.info("MCPClient (in-process) initialized")
 
         Integrations._instance = self

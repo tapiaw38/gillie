@@ -53,6 +53,7 @@ class AddMessageUseCase:
 
         enhanced_content = await self._process_voice_content(message, profile, context)
         conversation = await self._get_and_validate_conversation(conversation_id, user_id, context)
+        await self._show_persona(context)
         image_attachments, image_analysis_summary = await self._process_image_content(
             message=message,
             user_id=user_id,
@@ -115,7 +116,6 @@ class AddMessageUseCase:
             conversation_id=conversation_id,
             context=context,
         )
-
         assistant_message = self._create_assistant_message(content=ai_response_text, audio_url=audio_url)
         if formatted_images:
             assistant_message.content = f"{ai_response_text}\n\n{formatted_images}"
@@ -146,6 +146,7 @@ class AddMessageUseCase:
         context = self.context_factory()
         profile = await context.repositories.profile.find_by_user_id(user_id)
         conversation = await self._get_and_validate_conversation(conversation_id, user_id, context)
+        await self._show_persona(context)
 
         compact_uc = CompactConversationUseCase(self.context_factory)
         compaction_event = await compact_uc.compact_if_needed(conversation, conversation_id, context)
@@ -226,6 +227,11 @@ class AddMessageUseCase:
         if not hasattr(conversation, "messages") or conversation.messages is None:
             conversation.messages = []
         return conversation
+
+    async def _show_persona(self, context) -> None:
+        mcp = getattr(context.integrations, "mcp", None)
+        if mcp is not None:
+            await mcp.persona_control_window("show")
 
     def _create_user_message(
         self,

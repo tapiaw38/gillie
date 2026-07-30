@@ -3,7 +3,11 @@ MCP datetime/context tools — in-process implementation.
 Replaces the former HTTP client to the mcp-context-server microservice.
 """
 import logging
+import os
+import uuid
 from typing import Dict, Any, Optional
+
+import httpx
 
 from src.core.platform.utils.datetime_tools import DatetimeTools
 
@@ -15,7 +19,97 @@ class MCPClient:
 
     def __init__(self, **kwargs):
         self._tools = DatetimeTools()
+        self._persona_url = os.getenv("PERSONA_MCP_URL", "http://127.0.0.1:47831/mcp")
+        self._persona_timeout = float(os.getenv("PERSONA_MCP_TIMEOUT", "2.0"))
         logger.info("MCPClient initialized (in-process DatetimeTools)")
+
+    async def _persona_call(self, tool: str, arguments: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
+        """Call Persona's stateless Streamable HTTP MCP endpoint."""
+        request_id = str(uuid.uuid4())
+        async with httpx.AsyncClient(timeout=self._persona_timeout) as client:
+            initialize = await client.post(
+                self._persona_url,
+                json={
+                    "jsonrpc": "2.0",
+                    "id": request_id,
+                    "method": "initialize",
+                    "params": {
+                        "protocolVersion": "2025-03-26",
+                        "capabilities": {},
+                        "clientInfo": {"name": "gillie", "version": "1.0"},
+                    },
+                },
+                headers={"Accept": "application/json, text/event-stream"},
+            )
+            initialize.raise_for_status()
+            result = initialize.json()
+            if "error" in result:
+                raise RuntimeError(result["error"].get("message", "Persona MCP initialize failed"))
+
+            response = await client.post(
+                self._persona_url,
+                json={
+                    "jsonrpc": "2.0",
+                    "id": str(uuid.uuid4()),
+                    "method": "tools/call",
+                    "params": {"name": tool, "arguments": arguments or {}},
+                },
+                headers={"Accept": "application/json, text/event-stream"},
+            )
+            response.raise_for_status()
+            payload = response.json()
+            if "error" in payload:
+                raise RuntimeError(payload["error"].get("message", f"Persona MCP tool failed: {tool}"))
+            return payload.get("result", {})
+
+    async def persona_play_animation(self, animation: str) -> bool:
+        try:
+            await self._persona_call("play_animation", {"animation": animation})
+            return True
+        except Exception as exc:
+            logger.debug("Persona MCP unavailable while playing %s: %s", animation, exc)
+            return False
+
+    async def persona_control_window(self, action: str) -> bool:
+        try:
+            await self._persona_call("control_window", {"action": action})
+            return True
+        except Exception as exc:
+            logger.debug("Persona MCP unavailable while controlling window: %s", exc)
+            return False
+
+    async def persona_status(self) -> Dict[str, Any]:
+        return await self._persona_call("get_status")
+
+    async def persona_set_voice_state(
+        self,
+        phase: str,
+        activity: str,
+        microphone_muted: bool = False,
+        output_muted: bool = False,
+    ) -> bool:
+        try:
+            await self._persona_call(
+                "set_voice_state",
+                {
+                    "phase": phase,
+                    "activity": activity,
+                    "microphoneMuted": microphone_muted,
+                    "outputMuted": output_muted,
+                },
+            )
+            return True
+        except Exception as exc:
+            logger.debug("Persona MCP unavailable while setting voice state: %s", exc)
+            return False
+
+    async def persona_set_audio_level(self, level: float) -> bool:
+        try:
+            await self._persona_call("set_audio_level", {"level": max(0.0, min(1.0, level))})
+            return True
+        except Exception as exc:
+            logger.debug("Persona MCP unavailable while setting audio level: %s", exc)
+            return False
 
     async def get_current_datetime(
         self, timezone: Optional[str] = None, format_type: str = "rfc3339"

@@ -13,8 +13,10 @@ In-chat commands:
   /exit    — quit (also Ctrl+C or Ctrl+D)
 """
 
+import contextlib
 import os
 import re
+import subprocess
 import sys
 import glob as _glob
 import mimetypes
@@ -403,7 +405,6 @@ def _print_assistant(name: str, text: str) -> None:
 
 def _play_audio(url: str) -> None:
     """Play an audio URL using the first available system player."""
-    import subprocess
     if not url.startswith("http"):
         return
     players = [
@@ -773,11 +774,12 @@ def _stream_assistant(
             full_text += token
             sys.stdout.write(token)
             sys.stdout.flush()
-    except requests.exceptions.ConnectionError:
+    except (requests.exceptions.ConnectionError, requests.exceptions.ChunkedEncodingError,
+            requests.exceptions.ContentDecodingError, AttributeError) as e:
         if not _cancel_requested.is_set():
             _stop_live()
             _had_error = True
-            console.print("[red]✗[/red] Cannot connect to API.")
+            console.print(f"[red]✗[/red] API stream disconnected: {e}")
     except requests.exceptions.HTTPError as e:
         _stop_live()
         _had_error = True
@@ -1103,6 +1105,9 @@ def listen(
     threshold: float = typer.Option(0.01, "--threshold", "-t", help="RMS silence threshold (0.0–1.0)"),
     new: bool = typer.Option(False, "--new", "-n", help="Force a new conversation"),
     conv_id: str = typer.Option(None, "--id", help="Attach to a specific conversation ID"),
+    avatar: bool = typer.Option(
+        False, "--avatar", "-a", help="Open the Persona avatar and hide this terminal until it closes"
+    ),
 ):
     """Voice listen mode: record your voice, assistant replies in text."""
     if not config_exists():
@@ -1268,25 +1273,56 @@ def listen(
             console.print(f"\n[red]✗[/red] API error {e.response.status_code}: {e.response.text}")
         return "(no reply)", None
 
-    while True:
-        try:
-            console.print("[dim]🎙  Ready — speak whenever you like...[/dim]")
-            wav_bytes = _record_utterance()
-        except KeyboardInterrupt:
-            console.print("\n[dim]Goodbye 👋[/dim]")
-            break
+    def _voice_loop(avatar_proc=None) -> None:
+        while True:
+            if avatar_proc is not None and avatar_proc.poll() is not None:
+                console.print("\n[dim]Avatar closed — leaving listen mode 👋[/dim]")
+                return
+            try:
+                console.print("[dim]🎙  Ready — speak whenever you like...[/dim]")
+                wav_bytes = _record_utterance()
+            except KeyboardInterrupt:
+                console.print("\n[dim]Goodbye 👋[/dim]")
+                return
 
-        if not wav_bytes:
-            continue
+            if not wav_bytes:
+                continue
 
-        console.print("[dim]⏳ Processing...[/dim]     ", end="\r")
-        reply, audio_url = _send_voice(current_id, wav_bytes)
-        console.print(" " * 40, end="\r")  # clear line
-        _print_assistant(assistant_name, reply)
-        console.print(Rule(style="dim"))
-        if audio_url:
-            console.print("[dim]🔊 Playing audio...[/dim]")
-            _play_audio(audio_url)
+            console.print("[dim]⏳ Processing...[/dim]     ", end="\r")
+            reply, audio_url = _send_voice(current_id, wav_bytes)
+            console.print(" " * 40, end="\r")  # clear line
+            _print_assistant(assistant_name, reply)
+            console.print(Rule(style="dim"))
+            if audio_url:
+                console.print("[dim]🔊 Playing audio...[/dim]")
+                _play_audio(audio_url)
+
+    if not avatar:
+        _voice_loop()
+        return
+
+    from cli.commands import avatar as avatar_cmd
+
+    avatar_proc = avatar_cmd.spawn()
+    if not avatar_cmd.wait_for_bridge():
+        console.print("[yellow]⚠[/yellow] Avatar did not start; staying in the terminal.")
+        avatar_proc.terminate()
+        _voice_loop()
+        return
+
+    try:
+        with avatar_cmd.terminal_hidden() as hidden:
+            if not hidden:
+                console.print(
+                    "[yellow]⚠[/yellow] Cannot hide this terminal "
+                    "(needs a wlroots Wayland session with [bold]wlrctl[/bold]); keeping it visible."
+                )
+            _voice_loop(avatar_proc)
+    finally:
+        if avatar_proc.poll() is None:
+            avatar_proc.terminate()
+            with contextlib.suppress(subprocess.TimeoutExpired):
+                avatar_proc.wait(timeout=5)
 
 
 @app.command("list")

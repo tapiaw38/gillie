@@ -40,6 +40,15 @@ _SYSTEM_DEPS = [
         "check_bin": "ffplay",
     },
     {
+        "package": "wlrctl",
+        "purpose": "Hide the terminal while the avatar is on screen — wlroots Wayland only (gillie agent listen --avatar)",
+        "required": False,
+        "apt": "wlrctl",
+        "pacman": "wlrctl",
+        "brew": None,
+        "check_bin": "wlrctl",
+    },
+    {
         "package": "tesseract",
         "purpose": "OCR for scanned PDF processing",
         "required": False,
