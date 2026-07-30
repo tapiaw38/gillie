@@ -25,6 +25,8 @@ class UpdateUseCase:
                 assistant_name=profile.assistant_name,
                 functions=profile.functions,
                 tts_enabled=profile.tts_enabled,
+                tts_voice=profile.tts_voice,
+                tts_engine=profile.tts_engine,
                 tool_prompts=profile.tool_prompts,
                 disabled_tools=profile.disabled_tools,
                 response_language=profile.response_language,

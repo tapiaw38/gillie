@@ -18,6 +18,8 @@ from .profile import (
     ProviderOutputData,
     ListOptionsOutput,
     ListOptionsOutputData,
+    VoiceEngineOutputData,
+    VoiceOptionData,
 )
 from .conversation import (
     ConversationInput,
@@ -100,6 +102,8 @@ __all__ = [
     "ProviderOutputData",
     "ListOptionsOutput",
     "ListOptionsOutputData",
+    "VoiceEngineOutputData",
+    "VoiceOptionData",
     # Conversation schemas
     "ConversationInput",
     "ConversationOutput",

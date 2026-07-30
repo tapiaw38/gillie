@@ -580,8 +580,17 @@ class AddMessageUseCase:
             return None
         try:
             lang = profile.response_language or "en"
+            overrides = {
+                key: value
+                for key, value in (
+                    ("voice", getattr(profile, "tts_voice", None)),
+                    ("engine", getattr(profile, "tts_engine", None)),
+                )
+                if value
+            }
             return await context.platform_managers.text_to_speech.generate_and_store_audio(
                 text=text, user_id=user_id, conversation_id=conversation_id, language=lang,
+                settings=overrides or None,
             )
         except Exception as e:
             logger.error(f"Error generating audio: {e}")

@@ -28,11 +28,28 @@ class RoleOutput(BaseModel):
         )
 
 
+class VoiceOptionData(BaseModel):
+    """A single selectable voice within a speech engine"""
+    id: str
+    label: str
+
+
+class VoiceEngineOutputData(BaseModel):
+    """A speech engine and the voices it offers"""
+    key: str
+    label: str
+    description: str = ""
+    requires_key: bool = False
+    key_available: bool = True
+    voices: List[VoiceOptionData] = []
+
+
 class ListOptionsOutputData(BaseModel):
     """Output data structure for role list options"""
     roles: List[RoleOutputData]
     providers: List[ProviderOutputData] = []
     active_provider: str = ""
+    voice_engines: List[VoiceEngineOutputData] = []
 
 
 class ListOptionsOutput(BaseModel):

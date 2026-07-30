@@ -22,6 +22,8 @@ from .role_schemas import (
     ProviderOutputData,
     ListOptionsOutput,
     ListOptionsOutputData,
+    VoiceEngineOutputData,
+    VoiceOptionData,
 )
 
 __all__ = [
@@ -44,4 +46,6 @@ __all__ = [
     "ProviderOutputData",
     "ListOptionsOutput",
     "ListOptionsOutputData",
+    "VoiceEngineOutputData",
+    "VoiceOptionData",
 ]

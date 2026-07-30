@@ -13,6 +13,8 @@ class ProfileInput(BaseModel):
     tool_prompts: Optional[str] = None
     disabled_tools: Optional[List[str]] = None
     tts_enabled: Optional[bool] = None
+    tts_voice: Optional[str] = None
+    tts_engine: Optional[str] = None
     response_language: Optional[str] = None
 
 
@@ -56,6 +58,8 @@ class ProfileOutputData(BaseModel):
     disabled_tools: Optional[List[str]] = None
     is_active: bool
     tts_enabled: Optional[bool] = False
+    tts_voice: Optional[str] = None
+    tts_engine: Optional[str] = None
     response_language: Optional[str] = "en"
     active_provider: Optional[str] = None
     provider_keys: Optional[Dict[str, str]] = None
@@ -83,6 +87,8 @@ class ProfileOutput(BaseModel):
                 disabled_tools=profile.disabled_tools,
                 is_active=profile.is_active,
                 tts_enabled=profile.tts_enabled or False,
+                tts_voice=profile.tts_voice,
+                tts_engine=profile.tts_engine,
                 response_language=profile.response_language or "en",
                 active_provider=profile.active_provider,
                 provider_keys=profile.provider_keys,

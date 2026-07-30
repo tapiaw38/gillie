@@ -62,8 +62,7 @@ class TextToSpeechService:
         try:
             logger.info("Starting text-to-speech generation...")
 
-            if settings is None:
-                settings = self._get_default_settings()
+            settings = {**self._get_default_settings(), **(settings or {})}
             settings["language"] = language
 
             audio_data = await self._generate_audio(text, settings)

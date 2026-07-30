@@ -18,6 +18,8 @@ class Profile(BaseModel):
     updated_at: Optional[datetime] = Field(default=None)
     is_active: Optional[bool] = Field(default=True)
     tts_enabled: Optional[bool] = Field(default=False)
+    tts_voice: Optional[str] = Field(default=None)
+    tts_engine: Optional[str] = Field(default=None)
     response_language: Optional[str] = Field(default="en")
     active_provider: Optional[str] = Field(default=None)
     provider_keys: Optional[Dict[str, str]] = Field(default=None)

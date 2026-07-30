@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { onMounted, reactive, ref, watch, computed } from 'vue'
+import { computed, inject, onMounted, reactive, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import Card from 'primevue/card'
 import Toast from 'primevue/toast'
@@ -14,10 +14,12 @@ import Dropdown from 'primevue/dropdown'
 import Tag from 'primevue/tag'
 import InputSwitch from 'primevue/inputswitch'
 import { useToogle } from '@/composables/useToogle'
-import type { ApiKeyParams } from '@/types/assistant.ts'
+import type { ApiKeyParams, VoiceEngineOption } from '@/types/assistant.ts'
+import type { IAssistantService } from '@/services/assistant/assistantService'
 import { useI18n } from 'vue-i18n'
 
 const { t } = useI18n()
+const services = inject<{ assistantService: IAssistantService }>('services')
 const { copyText } = useClipboard()
 
 const { toogleValue: isVisibleAddApiKey } = useToogle(false)
@@ -65,6 +67,12 @@ const { toast } = useErrorToast(errorWatchers)
 onMounted(async () => {
   await getAssistantProfile()
   await listContacts()
+  try {
+    const options = await services!.assistantService.getOptions()
+    voiceEngines.value = options.data.voice_engines ?? []
+  } catch {
+    voiceEngines.value = []
+  }
 })
 
 watch(isAddApiKeySuccess, (value) => {
@@ -91,10 +99,46 @@ watch(isRemoveApiKeySuccess, (value) => {
 
 const ttsEnabled = ref(false)
 const responseLang = ref<'en' | 'es'>('en')
+const ttsVoice = ref('')
+const ttsEngine = ref('')
+const voiceEngines = ref<VoiceEngineOption[]>([])
+
+const engineOptions = computed(() =>
+  voiceEngines.value.map((engine) => ({
+    label: engine.requires_key && !engine.key_available
+      ? `${engine.label} — ${t('myAccount.voiceEngineNoKey')}`
+      : engine.label,
+    value: engine.key,
+    disabled: engine.requires_key && !engine.key_available,
+  })),
+)
+
+const selectedEngine = computed(() =>
+  voiceEngines.value.find((engine) => engine.key === ttsEngine.value),
+)
+
+const voiceOptions = computed(() =>
+  (selectedEngine.value?.voices ?? []).map((voice) => ({
+    label: voice.label,
+    value: voice.id,
+  })),
+)
 
 watch(
   () => assistantProfile.value?.tts_enabled,
   (val) => { ttsEnabled.value = val ?? false },
+  { immediate: true },
+)
+
+watch(
+  () => assistantProfile.value?.tts_voice,
+  (val) => { ttsVoice.value = val ?? '' },
+  { immediate: true },
+)
+
+watch(
+  () => assistantProfile.value?.tts_engine,
+  (val) => { ttsEngine.value = val ?? 'edge' },
   { immediate: true },
 )
 
@@ -117,6 +161,55 @@ const toggleTts = async (value: boolean) => {
     })
   } catch {
     ttsEnabled.value = !value
+    toast.add({
+      severity: 'error',
+      summary: t('common.error'),
+      detail: t('myAccount.errorUpdateConfig'),
+      life: 3000,
+    })
+  }
+}
+
+const setTtsVoice = async (voice: string) => {
+  const prev = ttsVoice.value
+  ttsVoice.value = voice
+  try {
+    await updateAssistantProfile({ tts_voice: voice })
+    toast.add({
+      severity: 'success',
+      summary: t('myAccount.configSaved'),
+      detail: t('myAccount.voiceSet', { voice }),
+      life: 3000,
+    })
+  } catch {
+    ttsVoice.value = prev
+    toast.add({
+      severity: 'error',
+      summary: t('common.error'),
+      detail: t('myAccount.errorUpdateConfig'),
+      life: 3000,
+    })
+  }
+}
+
+const setTtsEngine = async (engine: string) => {
+  const prevEngine = ttsEngine.value
+  const prevVoice = ttsVoice.value
+  const target = voiceEngines.value.find((item) => item.key === engine)
+  const nextVoice = target?.voices[0]?.id ?? ''
+  ttsEngine.value = engine
+  ttsVoice.value = nextVoice
+  try {
+    await updateAssistantProfile({ tts_engine: engine, tts_voice: nextVoice })
+    toast.add({
+      severity: 'success',
+      summary: t('myAccount.configSaved'),
+      detail: t('myAccount.voiceEngineSet', { engine: target?.label ?? engine }),
+      life: 3000,
+    })
+  } catch {
+    ttsEngine.value = prevEngine
+    ttsVoice.value = prevVoice
     toast.add({
       severity: 'error',
       summary: t('common.error'),
@@ -262,6 +355,61 @@ const removeApiKeyOpenModal = (apiKeyID: string) => {
               v-model="ttsEnabled"
               :disabled="isUpdateAssistantProfilePending"
               @change="toggleTts(ttsEnabled)"
+            />
+          </div>
+        </template>
+      </Card>
+
+      <!-- Voice Provider Card -->
+      <Card v-if="ttsEnabled" class="tts-card">
+        <template #content>
+          <div class="tts-row">
+            <div class="tts-info">
+              <div class="tts-icon">
+                <i class="pi pi-server"></i>
+              </div>
+              <div class="tts-details">
+                <h3>{{ t('myAccount.voiceEngine') }}</h3>
+                <p>{{ selectedEngine?.description || t('myAccount.voiceEngineDesc') }}</p>
+              </div>
+            </div>
+            <Dropdown
+              v-model="ttsEngine"
+              :options="engineOptions"
+              optionLabel="label"
+              optionValue="value"
+              optionDisabled="disabled"
+              :placeholder="t('myAccount.voiceEngineDesc')"
+              :disabled="isUpdateAssistantProfilePending"
+              class="voice-dropdown"
+              @change="setTtsEngine(ttsEngine)"
+            />
+          </div>
+        </template>
+      </Card>
+
+      <!-- Voice List Card -->
+      <Card v-if="ttsEnabled && voiceOptions.length" class="tts-card">
+        <template #content>
+          <div class="tts-row">
+            <div class="tts-info">
+              <div class="tts-icon">
+                <i class="pi pi-microphone"></i>
+              </div>
+              <div class="tts-details">
+                <h3>{{ t('myAccount.voice') }}</h3>
+                <p>{{ t('myAccount.voiceDesc') }}</p>
+              </div>
+            </div>
+            <Dropdown
+              v-model="ttsVoice"
+              :options="voiceOptions"
+              optionLabel="label"
+              optionValue="value"
+              :placeholder="t('myAccount.voiceDefault')"
+              :disabled="isUpdateAssistantProfilePending"
+              class="voice-dropdown"
+              @change="setTtsVoice(ttsVoice)"
             />
           </div>
         </template>
@@ -584,6 +732,11 @@ const removeApiKeyOpenModal = (apiKeyID: string) => {
 }
 
 /* Language toggle */
+.voice-dropdown {
+  min-width: 10rem;
+  flex-shrink: 0;
+}
+
 .lang-toggle {
   display: flex;
   border: 1px solid var(--do-border-light);
