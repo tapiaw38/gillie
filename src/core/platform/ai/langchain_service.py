@@ -859,7 +859,7 @@ class LangChainService:
         except Exception as e:
             logger.warning(f"Could not inject global workflows into system prompt: {e}")
 
-        if self.avatar_mcp is not None:
+        if self.avatar_mcp is not None and self.avatar_mcp.avatar_available():
             system_prompt += EMBODIMENT_INSTRUCTION.format(
                 assistant_name=profile.assistant_name or "Assistant",
             )

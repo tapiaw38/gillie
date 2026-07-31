@@ -4,14 +4,20 @@ Replaces the former HTTP client to the mcp-context-server microservice.
 """
 import logging
 import os
+import socket
+import time
 import uuid
 from typing import Dict, Any, Optional
+from urllib.parse import urlparse
 
 import httpx
 
 from src.core.platform.utils.datetime_tools import DatetimeTools
 
 logger = logging.getLogger(__name__)
+
+_AVATAR_PROBE_TTL_SECONDS = 5.0
+_AVATAR_PROBE_TIMEOUT_SECONDS = 0.2
 
 
 class MCPClient:
@@ -21,7 +27,35 @@ class MCPClient:
         self._tools = DatetimeTools()
         self._avatar_url = os.getenv("AVATAR_MCP_URL", "http://127.0.0.1:47850/mcp")
         self._avatar_timeout = float(os.getenv("AVATAR_MCP_TIMEOUT", "2.0"))
+        self._avatar_probe_at = 0.0
+        self._avatar_probe_result = False
         logger.info("MCPClient initialized (in-process DatetimeTools)")
+
+    def avatar_available(self) -> bool:
+        """Whether the companion app is accepting connections right now.
+
+        The app is started and stopped independently of the API, so this is
+        probed instead of configured. The result is cached briefly because it
+        is consulted once per request while building the prompt and the tools.
+        """
+        now = time.monotonic()
+        if now - self._avatar_probe_at < _AVATAR_PROBE_TTL_SECONDS:
+            return self._avatar_probe_result
+
+        parsed = urlparse(self._avatar_url)
+        host = parsed.hostname or "127.0.0.1"
+        port = parsed.port or 80
+        try:
+            with socket.create_connection((host, port), _AVATAR_PROBE_TIMEOUT_SECONDS):
+                available = True
+        except OSError:
+            available = False
+
+        if available != self._avatar_probe_result:
+            logger.info("Avatar app %s", "detected" if available else "no longer reachable")
+        self._avatar_probe_at = now
+        self._avatar_probe_result = available
+        return available
 
     async def _avatar_call(self, tool: str, arguments: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
         """Call the avatar's stateless Streamable HTTP MCP endpoint."""

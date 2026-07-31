@@ -4934,7 +4934,7 @@ If data is not found, say so clearly."""
             coroutine=insert_image_pptx_tool,
         ))
 
-    if avatar_mcp is not None:
+    if avatar_mcp is not None and avatar_mcp.avatar_available():
         async def avatar_play_animation_tool(animation: str) -> Dict[str, Any]:
             requested = animation
             animation = normalize_avatar_animation(animation)

@@ -304,6 +304,15 @@ def get_env(key: str, fallback: str) -> str:
     return os.getenv(key, fallback)
 
 
+def _as_bool(value, fallback: bool) -> bool:
+    """Read a flag that may arrive as a real bool or as text from a config file."""
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, str):
+        return value.strip().lower() == "true"
+    return fallback
+
+
 def read_config() -> ConfigurationService:
     load_dotenv()
 
@@ -318,7 +327,7 @@ def read_config() -> ConfigurationService:
         host=get_env("APP_HOST", "localhost"),
         jwt_secret=get_env("APP_JWT_SECRET", "secret"),
         encryption_algorithm=get_env("APP_ENCRYPTION_ALGORITHM", "HS256"),
-        auth_trust_localhost=get_env("AUTH_TRUST_LOCALHOST", "true"),
+        auth_trust_localhost=get_env("AUTH_TRUST_LOCALHOST", "true").lower() == "true",
     )
 
     nosql_config = NoSQLConfig(
@@ -665,7 +674,9 @@ def init_config_from_json(config_data: "AssistantConfig") -> None:
             host=config_data.server.host,
             jwt_secret="single-user-no-auth",
             encryption_algorithm="HS256",
-            auth_trust_localhost=getattr(config_data.server, "auth_trust_localhost", True),
+            auth_trust_localhost=_as_bool(
+                getattr(config_data.server, "auth_trust_localhost", True), True
+            ),
         ),
         nosql_config=nosql_config,
         openai_config=OpenAIConfig(
