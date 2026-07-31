@@ -1262,7 +1262,7 @@ def _resolve_at_references(text: str) -> tuple[str, list[str]]:
 
 @app.command("listen")
 def listen(
-    silence: float = typer.Option(0.8, "--silence", "-s", help="Seconds of silence to detect end of phrase"),
+    silence: float = typer.Option(1.0, "--silence", "-s", help="Seconds of silence to detect end of phrase"),
     threshold: float = typer.Option(0.01, "--threshold", "-t", help="RMS silence threshold (0.0–1.0)"),
     new: bool = typer.Option(False, "--new", "-n", help="Force a new conversation"),
     conv_id: str = typer.Option(None, "--id", help="Attach to a specific conversation ID"),

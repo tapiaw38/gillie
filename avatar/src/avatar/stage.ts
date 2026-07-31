@@ -13,6 +13,8 @@ import { applyCharacterTextures, loadVrm } from './vrm-loader'
 
 const MODEL_URL = './assets/model.vrm'
 const MAX_PIXEL_RATIO = 1.5
+const TARGET_FPS = 60
+const FRAME_INTERVAL = 1 / TARGET_FPS
 
 export interface AvatarStage {
   ready: Promise<void>
@@ -61,11 +63,7 @@ export function createAvatarStage(canvas: HTMLCanvasElement): AvatarStage {
   const directionalLight = new THREE.DirectionalLight(0xffffff, Math.PI)
   directionalLight.position.set(-3, 3, 3)
   const ambientLight = new THREE.AmbientLight(
-    new THREE.Color(
-      0.0036765073221525194,
-      0.0036765073221525194,
-      0.0036765073221525194,
-    ),
+    new THREE.Color(0.0036765073221525194, 0.0036765073221525194, 0.0036765073221525194),
     Math.PI,
   )
   scene.add(directionalLight, ambientLight)
@@ -112,11 +110,23 @@ export function createAvatarStage(canvas: HTMLCanvasElement): AvatarStage {
   resizeObserver.observe(canvas)
   resize()
 
+  let pending = 0
+
   renderer.setAnimationLoop(() => {
-    const delta = clock.getDelta()
+    pending += clock.getDelta()
+    if (pending < FRAME_INTERVAL) return
+    const delta = pending
+    pending = 0
+
     if (vrm && animator) {
       animator.update(delta)
-      updateProceduralMotion(delta, animation, audioLevel, speaking, animator.isClipDriving())
+      updateProceduralMotion(
+        delta,
+        animation,
+        audioLevel,
+        speaking,
+        animator.isClipDriving(),
+      )
       updateBlink(delta)
       updateLipSync(delta, audioLevel, speaking)
       vrm.update(delta)
@@ -136,7 +146,10 @@ export function createAvatarStage(canvas: HTMLCanvasElement): AvatarStage {
     scene.add(loaded.scene)
     resize()
     frameCamera(camera, controls, loaded.scene)
-    const request = pendingPlay ?? { animation, options: { playback: 'loop' as AnimationPlayback } }
+    const request = pendingPlay ?? {
+      animation,
+      options: { playback: 'loop' as AnimationPlayback },
+    }
     pendingPlay = null
     void animator.play(request.animation, request.options)
   })

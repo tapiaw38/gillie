@@ -102,6 +102,26 @@ def start(
     subprocess.run(cmd, cwd=AVATAR_DIR, env=env)
 
 
+def _cpu_limit_prefix() -> list[str]:
+    """Pin the avatar to a slice of the CPUs.
+
+    Software rendering falls back to SwiftShader, whose worker pool spins on
+    every core it can see: measured at ~1250% CPU on a 16-core machine even
+    with the window hidden. Pinning caps the heat without changing the app.
+    Set AVATAR_MAX_CORES=0 to disable.
+    """
+    if sys.platform != "linux" or not shutil.which("taskset"):
+        return []
+    total = os.cpu_count() or 1
+    try:
+        cores = int(os.environ.get("AVATAR_MAX_CORES", max(1, total // 4)))
+    except ValueError:
+        cores = max(1, total // 4)
+    if cores <= 0 or cores >= total:
+        return []
+    return ["taskset", "-c", f"0-{cores - 1}"]
+
+
 def _build_launch(background: bool = False, port: int | None = None) -> tuple[list[str], dict]:
     electron_bin = AVATAR_DIR / "node_modules" / ".bin" / "electron"
     if not electron_bin.exists():
@@ -110,7 +130,7 @@ def _build_launch(background: bool = False, port: int | None = None) -> tuple[li
 
     # Arch + Wayland can initialize Electron without rendering a visible window
     # when VA-API fails. The avatar only needs software compositing here.
-    cmd = [
+    cmd = _cpu_limit_prefix() + [
         str(electron_bin),
         "--disable-gpu",
         "--disable-gpu-compositing",
