@@ -15,6 +15,7 @@ import logging
 import io
 from typing import Optional, Dict, Any
 from datetime import datetime
+from uuid import uuid4
 
 logger = logging.getLogger(__name__)
 
@@ -37,6 +38,7 @@ class TextToSpeechService:
         """
         self.tts_integration = tts_integration
         self.store_service = store_service
+        self._phrase_cache: Dict[tuple, str] = {}
 
     async def generate_and_store_audio(
         self,
@@ -84,6 +86,41 @@ class TextToSpeechService:
             logger.error(f"Error in text-to-speech process: {e}")
             return None
 
+    async def generate_and_store_cached_audio(
+        self,
+        text: str,
+        user_id: str,
+        conversation_id: str,
+        settings: Optional[Dict[str, Any]] = None,
+        language: str = "en",
+    ) -> Optional[str]:
+        """
+        Same as generate_and_store_audio, but reuses the stored file for a
+        phrase already synthesized with the same voice.
+
+        Meant for the handful of fixed phrases the assistant repeats, where
+        paying the synthesis latency every time would defeat their purpose.
+
+        Returns:
+            URL of the stored audio file or None if generation fails
+        """
+        settings = settings or {}
+        key = (text, language, settings.get("voice"), settings.get("engine"))
+        cached = self._phrase_cache.get(key)
+        if cached:
+            return cached
+
+        url = await self.generate_and_store_audio(
+            text=text,
+            user_id=user_id,
+            conversation_id=conversation_id,
+            settings=settings or None,
+            language=language,
+        )
+        if url:
+            self._phrase_cache[key] = url
+        return url
+
     async def _generate_audio(
         self,
         text: str,
@@ -106,6 +143,9 @@ class TextToSpeechService:
             )
             return audio_data
 
+        except ValueError as e:
+            logger.info(f"Skipping segment without speakable text: {e}")
+            return None
         except Exception as e:
             logger.error(f"Error generating audio with TTS integration: {e}")
             return None
@@ -133,7 +173,9 @@ class TextToSpeechService:
         try:
             audio_file = io.BytesIO(audio_data)
 
-            filename = self._generate_audio_filename(conversation_id)
+            filename = self._generate_audio_filename(
+                conversation_id, self._audio_extension(audio_data)
+            )
 
             s3_key = self.store_service.put_object(
                 file=audio_file,
@@ -151,18 +193,39 @@ class TextToSpeechService:
             logger.error(f"Error uploading audio to storage: {e}")
             raise Exception(f"Failed to upload audio: {e}")
 
-    def _generate_audio_filename(self, conversation_id: str) -> str:
+    @staticmethod
+    def _audio_extension(audio_data: bytes) -> str:
+        """
+        Resolves the container extension from the audio bytes themselves.
+
+        Args:
+            audio_data: Raw audio data
+
+        Returns:
+            ".wav" for RIFF/PCM payloads, ".mp3" otherwise
+        """
+        return ".wav" if audio_data[:4] == b"RIFF" else ".mp3"
+
+    def _generate_audio_filename(
+        self, conversation_id: str, extension: str = ".wav"
+    ) -> str:
         """
         Generates a unique filename for the audio file.
 
+        A reply is spoken one sentence per segment and the segments are
+        generated concurrently, so several land inside the same second. A
+        second-resolution name made them share a storage key, and the survivor
+        was played once per colliding segment — the same sentence heard twice.
+
         Args:
             conversation_id: ID of the conversation
+            extension: Container extension for the stored file
 
         Returns:
             Generated filename with timestamp
         """
-        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-        return f"tts_audio_{conversation_id}_{timestamp}.wav"
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S_%f")
+        return f"tts_audio_{conversation_id}_{timestamp}_{uuid4().hex[:8]}{extension}"
 
     def _get_default_settings(self) -> Dict[str, Any]:
         """

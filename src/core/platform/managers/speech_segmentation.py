@@ -1,7 +1,7 @@
 import re
 
 _SENTENCE_END = re.compile(r"[.!?…]+[\"'”’)\]]*\s")
-_MIN_SEGMENT_CHARS = 24
+_MIN_SEGMENT_CHARS = 12
 _MAX_SEGMENT_CHARS = 320
 _SOFT_BREAK = re.compile(r"[,;:][\"'”’)\]]*\s")
 

@@ -223,7 +223,6 @@ function createWindow(): void {
 }
 
 app.commandLine.appendSwitch('disable-gpu')
-app.commandLine.appendSwitch('disable-software-rasterizer')
 
 app.whenReady().then(() => {
   electronApp.setAppUserModelId('ai.gillie')

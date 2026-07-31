@@ -509,6 +509,11 @@ class AudioQueue:
                 self.playing.set()
                 if self._stopped:
                     process.terminate()
+            elif self._queue.empty():
+                # A reply is spoken one sentence per player, so the flag must
+                # survive the gaps between them: it means "still speaking",
+                # not "a player is alive right now".
+                self.playing.clear()
 
     def _run(self) -> None:
         while True:
@@ -557,9 +562,9 @@ def _play_audio(url: str, on_process=None) -> None:
     if not url.startswith("http"):
         return
     players = [
-        ["mpv", "--no-video", "--really-quiet", "--speed=1.3", url],
-        ["ffplay", "-nodisp", "-autoexit", "-loglevel", "quiet", "-af", "atempo=1.3", url],
-        ["vlc", "--intf", "dummy", "--play-and-exit", "--quiet", "--rate=1.3", url],
+        ["mpv", "--no-video", "--really-quiet", url],
+        ["ffplay", "-nodisp", "-autoexit", "-loglevel", "quiet", url],
+        ["vlc", "--intf", "dummy", "--play-and-exit", "--quiet", url],
     ]
     for cmd in players:
         try:
@@ -1257,7 +1262,7 @@ def _resolve_at_references(text: str) -> tuple[str, list[str]]:
 
 @app.command("listen")
 def listen(
-    silence: float = typer.Option(1.2, "--silence", "-s", help="Seconds of silence to detect end of phrase"),
+    silence: float = typer.Option(0.8, "--silence", "-s", help="Seconds of silence to detect end of phrase"),
     threshold: float = typer.Option(0.01, "--threshold", "-t", help="RMS silence threshold (0.0–1.0)"),
     new: bool = typer.Option(False, "--new", "-n", help="Force a new conversation"),
     conv_id: str = typer.Option(None, "--id", help="Attach to a specific conversation ID"),
@@ -1268,7 +1273,7 @@ def listen(
         True, "--barge-in/--no-barge-in", help="Let speaking over the assistant cut it off"
     ),
     barge_in_sensitivity: float = typer.Option(
-        6.0,
+        1.5,
         "--barge-in-sensitivity",
         help="How many times the measured room noise an interruption must reach. "
              "Lower it with headphones, raise it if the speakers trigger false cut-offs.",
@@ -1351,6 +1356,8 @@ def listen(
     _VOICE_STREAK_NEEDED = 3  # 300ms of continuous voice required to start recording
     _BARGE_IN_STREAK_NEEDED = 6  # 600ms, so a stray speaker echo does not interrupt
     _BARGE_IN_PREBUFFER_CHUNKS = 12  # 1.2s kept so the interruption is not clipped
+    _BARGE_IN_ECHO_MARGIN = 1.8  # how far above the measured echo a voice must sit
+    _BARGE_IN_ECHO_WINDOW = 30  # 3s of levels; a 600ms burst cannot move its median
 
     def _measure_noise_floor(seconds: float = 0.8) -> float:
         """Sample the room so the interrupt bar sits above this mic, not a constant.
@@ -1377,9 +1384,9 @@ def listen(
     barge_in_level = 0.0
     if barge_in:
         console.print("[dim]calibrando micrófono...[/dim]", end="\r")
-        barge_in_level = max(
-            _measure_noise_floor() * barge_in_sensitivity, threshold * barge_in_sensitivity
-        )
+        # The floor is ordinary speech level, not a multiple of it: multiplying
+        # `threshold` too put the bar so high that normal talking never cut in.
+        barge_in_level = max(_measure_noise_floor() * barge_in_sensitivity, threshold)
         console.print(" " * 40, end="\r")
         barge_status = f"barge-in: on (nivel {barge_in_level:.3f})"
     else:
@@ -1423,8 +1430,11 @@ def listen(
             return self
 
         def _run(self) -> None:
+            import collections
+
             keep = _BARGE_IN_PREBUFFER_CHUNKS
             streak = 0
+            levels = collections.deque(maxlen=_BARGE_IN_ECHO_WINDOW)
             rolling: list = []
             try:
                 with sd.InputStream(
@@ -1439,9 +1449,17 @@ def listen(
                             return
                         if not self._audio.playing.is_set():
                             streak = 0
+                            levels.clear()
                             continue
                         rms = float(np.sqrt(np.mean(chunk ** 2)))
-                        if rms > self._trigger_level and _is_voice(chunk):
+                        levels.append(rms)
+                        # The speakers feed the assistant's own voice back into
+                        # the microphone. The median of the recent levels is
+                        # that echo, and a real interruption has to rise above
+                        # it; a 600ms burst cannot shift a 3s median.
+                        echo = float(np.median(levels))
+                        bar = max(self._trigger_level, echo * _BARGE_IN_ECHO_MARGIN)
+                        if rms > bar and _is_voice(chunk):
                             streak += 1
                             if streak >= _BARGE_IN_STREAK_NEEDED:
                                 self.pre_buffer = list(rolling)

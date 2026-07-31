@@ -48,18 +48,50 @@ def _ensure_dependencies(pm: str):
         console.print()
 
 
+BUILD_INPUTS = (
+    "src",
+    "electron",
+    "public",
+    "package.json",
+    "electron.vite.config.ts",
+    "index.html",
+    ".env",
+)
+
+
+def _sources_newer_than(target: Path) -> bool:
+    stamp = target.stat().st_mtime
+    for name in BUILD_INPUTS:
+        path = UI_DIR / name
+        if not path.exists():
+            continue
+        if path.is_file():
+            if path.stat().st_mtime > stamp:
+                return True
+            continue
+        for file in path.rglob("*"):
+            if file.is_file() and file.stat().st_mtime > stamp:
+                return True
+    return False
+
+
 def _ensure_build(pm: str, force: bool = False):
     renderer_index = UI_DIR / "out" / "renderer" / "index.html"
-    if force or not renderer_index.exists():
-        if force:
-            console.print("  [yellow]⚠[/yellow]  Forced rebuild...")
-        else:
-            console.print("  [yellow]⚠[/yellow]  Build not found. Compiling...")
-        console.print()
-        _run([pm, "run", "build"])
-        console.print()
-        console.print("  [green]✓[/green] Build completed.")
-        console.print()
+    if force:
+        reason = "Forced rebuild..."
+    elif not renderer_index.exists():
+        reason = "Build not found. Compiling..."
+    elif _sources_newer_than(renderer_index):
+        reason = "Sources changed since the last build. Recompiling..."
+    else:
+        return
+
+    console.print(f"  [yellow]⚠[/yellow]  {reason}")
+    console.print()
+    _run([pm, "run", "build"])
+    console.print()
+    console.print("  [green]✓[/green] Build completed.")
+    console.print()
 
 
 @app.callback(invoke_without_command=True)

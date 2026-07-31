@@ -98,5 +98,35 @@ class WaitForBridgeTests(unittest.TestCase):
             self.assertFalse(avatar.wait_for_bridge(port=47831, timeout=0.5))
 
 
+
+class SpawnOutputTests(unittest.TestCase):
+    def test_electron_output_goes_to_a_log_file_not_the_conversation(self):
+        captured = {}
+
+        def fake_popen(cmd, **kwargs):
+            captured.update(kwargs)
+            return mock.Mock()
+
+        with mock.patch.object(avatar, "_check_avatar_dir"), \
+             mock.patch.object(avatar, "_ensure_dependencies"), \
+             mock.patch.object(avatar, "_ensure_build"), \
+             mock.patch.object(avatar, "_build_launch", return_value=(["electron"], {})), \
+             mock.patch.object(avatar.subprocess, "Popen", side_effect=fake_popen):
+            avatar.spawn()
+
+        self.assertIsNotNone(captured.get("stdout"))
+        self.assertIsNotNone(captured.get("stderr"))
+        self.assertNotEqual(captured["stdout"], 1)
+        self.assertEqual(captured["stdin"], subprocess.DEVNULL)
+
+    def test_the_log_lives_under_the_state_directory(self):
+        import tempfile
+
+        with tempfile.TemporaryDirectory() as tmp:
+            with mock.patch.dict(avatar.os.environ, {"XDG_STATE_HOME": tmp}):
+                path = avatar.log_path()
+        self.assertTrue(str(path).endswith("gillie/avatar.log"))
+
+
 if __name__ == "__main__":
     unittest.main()

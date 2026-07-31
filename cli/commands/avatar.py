@@ -43,8 +43,35 @@ def _ensure_dependencies() -> None:
     _run(["npm", "install"])
 
 
+BUILD_INPUTS = (
+    "src",
+    "electron",
+    "public",
+    "package.json",
+    "electron.vite.config.ts",
+    "index.html",
+)
+
+
+def _sources_newer_than(target: Path) -> bool:
+    stamp = target.stat().st_mtime
+    for name in BUILD_INPUTS:
+        path = AVATAR_DIR / name
+        if not path.exists():
+            continue
+        if path.is_file():
+            if path.stat().st_mtime > stamp:
+                return True
+            continue
+        for file in path.rglob("*"):
+            if file.is_file() and file.stat().st_mtime > stamp:
+                return True
+    return False
+
+
 def _ensure_build(rebuild: bool) -> None:
-    if not rebuild and (AVATAR_DIR / "out" / "renderer" / "index.html").exists():
+    renderer_index = AVATAR_DIR / "out" / "renderer" / "index.html"
+    if not rebuild and renderer_index.exists() and not _sources_newer_than(renderer_index):
         return
     console.print("  [cyan]▶[/cyan] Building avatar...")
     _run(["npm", "run", "build"])
@@ -106,13 +133,31 @@ def _build_launch(background: bool = False, port: int | None = None) -> tuple[li
     return cmd, env
 
 
+def log_path() -> Path:
+    directory = Path(
+        os.environ.get("XDG_STATE_HOME", Path.home() / ".local" / "state")
+    ) / "gillie"
+    directory.mkdir(parents=True, exist_ok=True)
+    return directory / "avatar.log"
+
+
 def spawn(port: int | None = None) -> subprocess.Popen:
-    """Launch the avatar without blocking the caller."""
+    """Launch the avatar without blocking the caller.
+
+    Electron writes GPU, WebGL and Wayland teardown noise to stderr, which would
+    otherwise land in the middle of a conversation, so it goes to a log file.
+    """
     _check_avatar_dir()
     _ensure_dependencies()
     _ensure_build(rebuild=False)
     cmd, env = _build_launch(port=port)
-    return subprocess.Popen(cmd, cwd=AVATAR_DIR, env=env)
+    handle = open(log_path(), "ab", buffering=0)
+    try:
+        return subprocess.Popen(
+            cmd, cwd=AVATAR_DIR, env=env, stdout=handle, stderr=handle, stdin=subprocess.DEVNULL
+        )
+    finally:
+        handle.close()
 
 
 def wait_for_bridge(port: int | None = None, timeout: float = 25.0) -> bool:

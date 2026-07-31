@@ -67,7 +67,7 @@ class MCPClient:
             await self._avatar_call("play_animation", {"animation": animation})
             return True
         except Exception as exc:
-            logger.debug("Avatar MCP unavailable while playing %s: %s", animation, exc)
+            logger.warning("Avatar MCP unavailable while playing %s: %s", animation, exc)
             return False
 
     async def avatar_control_window(self, action: str) -> bool:
@@ -75,7 +75,7 @@ class MCPClient:
             await self._avatar_call("control_window", {"action": action})
             return True
         except Exception as exc:
-            logger.debug("Avatar MCP unavailable while controlling window: %s", exc)
+            logger.warning("Avatar MCP unavailable while controlling window: %s", exc)
             return False
 
     async def avatar_status(self) -> Dict[str, Any]:

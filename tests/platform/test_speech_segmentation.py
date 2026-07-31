@@ -165,6 +165,14 @@ class AudioQueueStopTests(unittest.TestCase):
         queue = agent.AudioQueue()
         self.assertFalse(queue.playing.is_set())
 
+    def test_playing_clears_once_the_player_finishes(self):
+        played, players = [], []
+        queue, patcher = self._queue_with_player(played, players)
+        with patcher:
+            queue.add("a")
+            queue.wait()
+        self.assertFalse(queue.playing.is_set())
+
 
 class SleepToggleTests(unittest.TestCase):
     def _drive(self, keystrokes, samples=30, sample_delay=0.1):

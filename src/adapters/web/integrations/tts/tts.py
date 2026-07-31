@@ -11,6 +11,8 @@ logger = logging.getLogger(__name__)
 
 
 class TTSIntegration:
+    DEFAULT_SPEECH_SPEED = 1.3
+
     def __init__(self, config_service: ConfigurationService):
         self.config_service = config_service
         self._executor = ThreadPoolExecutor(max_workers=2)
@@ -44,6 +46,11 @@ class TTSIntegration:
 
         tts_settings = {**self.default_settings, **(settings or {})}
 
+        if not self._prepare_neural_text(
+            text, tts_settings.get("language", "en")
+        ).strip():
+            raise ValueError("Text has nothing speakable")
+
         if output_path is None:
             temp_dir = tempfile.gettempdir()
             output_path = os.path.join(
@@ -52,12 +59,27 @@ class TTSIntegration:
 
         os.makedirs(os.path.dirname(output_path), exist_ok=True)
 
-        loop = asyncio.get_event_loop()
-        await loop.run_in_executor(
-            self._executor, self._generate_speech_file, text, output_path, tts_settings
+        config = self._tts_config()
+        if self._resolve_engine(config, tts_settings.get("engine")) == "edge":
+            try:
+                await self._synthesize_edge(text, output_path, tts_settings, config)
+                return output_path
+            except Exception as e:
+                logger.warning("TTS (edge): failed, falling back to gTTS — %s", e)
+                await self._run_blocking(
+                    self._generate_gtts_speech_file, text, output_path, tts_settings
+                )
+                return output_path
+
+        await self._run_blocking(
+            self._generate_speech_file, text, output_path, tts_settings
         )
 
         return output_path
+
+    async def _run_blocking(self, func, *args):
+        loop = asyncio.get_event_loop()
+        return await loop.run_in_executor(self._executor, func, *args)
 
     def _tts_config(self):
         return getattr(self.config_service, "tts_config", None)
@@ -86,43 +108,35 @@ class TTSIntegration:
 
     @staticmethod
     def _resolve_engine(config, requested: Optional[str] = None) -> str:
-        if config is None:
-            return "gtts"
         engine = (requested or getattr(config, "engine", "") or "").strip().lower()
-        if engine == "openai" and not config.api_key:
+        if engine == "openai" and not getattr(config, "api_key", ""):
             logger.warning("TTS: openai engine requested without an API key, using gTTS")
             return "gtts"
         if engine:
             return engine
-        return "openai" if config.api_key else "gtts"
+        return "openai" if getattr(config, "api_key", "") else "gtts"
 
     def _generate_edge_speech_file(
         self, text: str, output_path: str, settings: Dict[str, Any], config
     ) -> None:
-        import asyncio
+        asyncio.run(self._synthesize_edge(text, output_path, settings, config))
 
+    async def _synthesize_edge(
+        self, text: str, output_path: str, settings: Dict[str, Any], config
+    ) -> None:
         import edge_tts
 
         voice = settings.get("voice") or config.voice or self._default_edge_voice(
             settings.get("language", "en")
         )
-        logger.info("TTS (edge): voice='%s'", voice)
+        rate = self._edge_rate(settings, config)
+        logger.info("TTS (edge): voice='%s' rate='%s'", voice, rate)
 
-        processed_text = self._preprocess_text_for_natural_speech(
+        processed_text = self._prepare_neural_text(
             text, language=settings.get("language", "en")
         )
-        temp_source_path = output_path + ".edge.mp3"
 
-        async def synthesize() -> None:
-            await edge_tts.Communicate(processed_text, voice).save(temp_source_path)
-
-        asyncio.run(synthesize())
-
-        try:
-            self._transcode_to_pcm(temp_source_path, output_path)
-        finally:
-            if os.path.exists(temp_source_path):
-                os.unlink(temp_source_path)
+        await edge_tts.Communicate(processed_text, voice, rate=rate).save(output_path)
 
         if not os.path.exists(output_path) or os.path.getsize(output_path) <= 1000:
             raise RuntimeError("edge TTS produced no usable audio")
@@ -130,6 +144,21 @@ class TTSIntegration:
             "TTS (edge): SUCCESS — %d bytes at %s",
             os.path.getsize(output_path), output_path,
         )
+
+    @classmethod
+    def _speech_speed(cls, settings: Dict[str, Any], config) -> float:
+        for candidate in (settings.get("speed"), getattr(config, "speed", None)):
+            if not candidate:
+                continue
+            try:
+                return float(candidate)
+            except (TypeError, ValueError):
+                logger.warning("TTS: ignoring invalid speed %r", candidate)
+        return cls.DEFAULT_SPEECH_SPEED
+
+    @classmethod
+    def _edge_rate(cls, settings: Dict[str, Any], config) -> str:
+        return f"{round((cls._speech_speed(settings, config) - 1) * 100):+d}%"
 
     @staticmethod
     def _default_edge_voice(language: str) -> str:
@@ -151,9 +180,10 @@ class TTSIntegration:
             json={
                 "model": model,
                 "voice": voice,
-                "input": self._preprocess_text_for_natural_speech(
+                "input": self._prepare_neural_text(
                     text, language=settings.get("language", "en")
                 ),
+                "speed": self._speech_speed(settings, config),
                 "response_format": "wav",
             },
             timeout=60,
@@ -341,6 +371,45 @@ class TTSIntegration:
         cleaned = self._MARKUP_LEFTOVERS.sub(" ", cleaned)
         return re.sub(r"[ \t]{2,}", " ", cleaned).strip()
 
+    _ABBREVIATIONS = {
+        "es": {
+            "Dr.": "Doctor", "Dra.": "Doctora",
+            "Sr.": "Señor", "Sra.": "Señora", "Srta.": "Señorita",
+            "etc.": "etcétera", "p.ej.": "por ejemplo", "vs.": "versus",
+            "ej.": "ejemplo", "pág.": "página", "págs.": "páginas",
+            "cap.": "capítulo", "art.": "artículo", "núm.": "número",
+            "tel.": "teléfono", "dir.": "dirección",
+            "admin.": "administración", "info.": "información",
+            "config.": "configuración", "app.": "aplicación",
+            "API": "A P I", "URL": "U R L", "HTTP": "H T T P",
+            "JSON": "J S O N", "XML": "X M L", "PDF": "P D F",
+            "TTS": "T T S", "AI": "A I", "IA": "I A",
+        },
+        "en": {
+            "Dr.": "Doctor", "Mrs.": "Missus", "Mr.": "Mister", "Ms.": "Miss",
+            "etc.": "etcetera", "e.g.": "for example", "i.e.": "that is",
+            "vs.": "versus", "approx.": "approximately",
+            "API": "A P I", "URL": "U R L", "HTTP": "H T T P",
+            "JSON": "J S O N", "XML": "X M L", "PDF": "P D F",
+            "TTS": "T T S", "STT": "S T T", "AI": "A I",
+        },
+    }
+
+    def _expand_abbreviations(self, text: str, language: str = "en") -> str:
+        abbreviations = self._ABBREVIATIONS.get(language, self._ABBREVIATIONS["en"])
+        for abbrev, expansion in abbreviations.items():
+            text = text.replace(abbrev, expansion)
+        return text
+
+    def _prepare_neural_text(self, text: str, language: str = "en") -> str:
+        """Neural voices handle punctuation, numbers and symbols on their own."""
+        try:
+            return self._expand_abbreviations(
+                self._strip_unspeakable(text, language), language
+            )
+        except Exception:
+            return text
+
     def _preprocess_text_for_natural_speech(self, text: str, language: str = "en") -> str:
         """Pre-process text to make it sound more natural when spoken."""
         try:
@@ -351,31 +420,7 @@ class TTSIntegration:
             processed_text = re.sub(r"([.!?])\s+", r"\1... ", processed_text)
             processed_text = re.sub(r"([,;:])\s+", r"\1.. ", processed_text)
 
-            if language == "es":
-                abbreviations = {
-                    "Dr.": "Doctor", "Dra.": "Doctora",
-                    "Sr.": "Señor", "Sra.": "Señora", "Srta.": "Señorita",
-                    "etc.": "etcétera", "p.ej.": "por ejemplo", "vs.": "versus",
-                    "ej.": "ejemplo", "pág.": "página", "págs.": "páginas",
-                    "cap.": "capítulo", "art.": "artículo", "núm.": "número",
-                    "tel.": "teléfono", "dir.": "dirección",
-                    "admin.": "administración", "info.": "información",
-                    "config.": "configuración", "app.": "aplicación",
-                    "API": "A P I", "URL": "U R L", "HTTP": "H T T P",
-                    "JSON": "J S O N", "XML": "X M L", "PDF": "P D F",
-                    "TTS": "T T S", "AI": "A I", "IA": "I A",
-                }
-            else:
-                abbreviations = {
-                    "Dr.": "Doctor", "Mrs.": "Missus", "Mr.": "Mister", "Ms.": "Miss",
-                    "etc.": "etcetera", "e.g.": "for example", "i.e.": "that is",
-                    "vs.": "versus", "approx.": "approximately",
-                    "API": "A P I", "URL": "U R L", "HTTP": "H T T P",
-                    "JSON": "J S O N", "XML": "X M L", "PDF": "P D F",
-                    "TTS": "T T S", "STT": "S T T", "AI": "A I",
-                }
-            for abbrev, expansion in abbreviations.items():
-                processed_text = processed_text.replace(abbrev, expansion)
+            processed_text = self._expand_abbreviations(processed_text, language)
 
             if language == "es":
                 number_words = {

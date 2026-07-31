@@ -2,6 +2,7 @@ import asyncio
 import io
 import logging
 import os
+import random
 import uuid
 from datetime import datetime, timezone
 from typing import Optional, Tuple
@@ -24,6 +25,16 @@ from src.core.use_cases.conversation.compact_use_case import CompactConversation
 logger = logging.getLogger(__name__)
 
 _LANG_MAP = {"en": "en-US", "es": "es-ES", "fr": "fr-FR", "de": "de-DE", "pt": "pt-BR"}
+
+_FILLER_PHRASES = {
+    "en": ["Let me check.", "One moment.", "Hang on a second."],
+    "es": ["A ver, dejame ver.", "Dame un segundo.", "Ahí voy, un momento."],
+    "pt": ["Deixa eu ver.", "Um momento."],
+    "fr": ["Laisse-moi voir.", "Un instant."],
+    "de": ["Lass mich nachsehen.", "Einen Moment."],
+}
+
+_FILLER_WAIT_SECONDS = 0.2
 _ALLOWED_IMAGE_MIME_TYPES = {
     "image/jpeg",
     "image/jpg",
@@ -147,7 +158,7 @@ class AddMessageUseCase:
         context = self.context_factory()
         profile = await context.repositories.profile.find_by_user_id(user_id)
         conversation = await self._get_and_validate_conversation(conversation_id, user_id, context)
-        await self._show_avatar(context)
+        asyncio.create_task(self._show_avatar(context))
 
         compact_uc = CompactConversationUseCase(self.context_factory)
         compaction_event = await compact_uc.compact_if_needed(conversation, conversation_id, context)
@@ -187,6 +198,15 @@ class AddMessageUseCase:
                 user_id=user_id, conversation_id=conversation_id, context=context,
             )))
 
+        filler_spoken = False
+        filler_task = None
+        if speech_enabled:
+            phrase = self._filler_phrase(profile)
+            if phrase:
+                filler_task = self._filler_task(
+                    phrase, profile, user_id, conversation_id, context
+                )
+
         async for token in context.integrations.openai.ask_stream(
             question=content,
             context=enhanced_context,
@@ -199,6 +219,16 @@ class AddMessageUseCase:
         ):
             yield token
             if not isinstance(token, str):
+                if (
+                    speech_enabled
+                    and not filler_spoken
+                    and isinstance(token, dict)
+                    and token.get("type") == "tool_call"
+                ):
+                    filler_spoken = True
+                    filler_url = await self._filler_audio_url(filler_task)
+                    if filler_url:
+                        yield {"type": "audio", "url": filler_url, "index": -1, "final": False}
                 continue
             full_text += token
             if not speech_enabled:
@@ -629,6 +659,52 @@ class AddMessageUseCase:
             return task.result()
         except Exception as e:
             logger.error(f"Error generating streamed audio segment: {e}")
+            return None
+
+    def _filler_task(
+        self, phrase: str, profile, user_id: str, conversation_id: str, context,
+    ):
+        """Start synthesis of a fixed phrase, reusing the cached clip if any."""
+        lang = (profile.response_language if profile else None) or "en"
+        overrides = {
+            key: value
+            for key, value in (
+                ("voice", getattr(profile, "tts_voice", None)),
+                ("engine", getattr(profile, "tts_engine", None)),
+            )
+            if value
+        }
+        task = asyncio.create_task(
+            context.platform_managers.text_to_speech.generate_and_store_cached_audio(
+                text=phrase, user_id=user_id, conversation_id=conversation_id,
+                language=lang, settings=overrides or None,
+            )
+        )
+        task.add_done_callback(lambda finished: finished.exception())
+        return task
+
+    @staticmethod
+    def _filler_phrase(profile) -> Optional[str]:
+        lang = (profile.response_language if profile else None) or "en"
+        phrases = _FILLER_PHRASES.get(lang)
+        return random.choice(phrases) if phrases else None
+
+    async def _filler_audio_url(self, task) -> Optional[str]:
+        """Return the filler clip only if it is ready, never waiting on it.
+
+        Synthesizing on the spot would add the very delay the clip exists to
+        hide, so a warm-up task is started when the turn begins and this only
+        collects it.
+        """
+        if task is None:
+            return None
+        done, _ = await asyncio.wait({task}, timeout=_FILLER_WAIT_SECONDS)
+        if task not in done:
+            return None
+        try:
+            return task.result()
+        except Exception as e:
+            logger.error(f"Error generating filler audio: {e}")
             return None
 
     async def _generate_audio_if_enabled(

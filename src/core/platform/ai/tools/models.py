@@ -10,8 +10,8 @@ import fnmatch
 import json
 import logging
 import os
-from typing import Optional, List, Dict, Any
-from pydantic import BaseModel, Field
+from typing import Optional, List, Dict, Any, Literal
+from pydantic import BaseModel, Field, field_validator
 from langchain_core.tools import StructuredTool
 
 logger = logging.getLogger(__name__)
@@ -749,12 +749,49 @@ class CronRunArgs(BaseModel):
     job_id: str = Field(description="The job ID to run now")
 
 
+AVATAR_ANIMATIONS = ("greeting", "happy", "finger-gun", "dance")
+
+_AVATAR_ANIMATION_SYNONYMS = {
+    "wave": "greeting",
+    "hello": "greeting",
+    "hi": "greeting",
+    "greet": "greeting",
+    "smile": "happy",
+    "cheer": "happy",
+    "fingergun": "finger-gun",
+    "gun": "finger-gun",
+    "dancing": "dance",
+}
+
+
+def normalize_avatar_animation(value: str) -> str:
+    """Map what a model actually writes onto the installed animation names."""
+    cleaned = str(value).strip().lower().replace(" ", "-").replace("_", "-")
+    if cleaned in AVATAR_ANIMATIONS:
+        return cleaned
+    return _AVATAR_ANIMATION_SYNONYMS.get(cleaned.replace("-", ""), cleaned)
+
+
 class AvatarPlayAnimationArgs(BaseModel):
-    animation: str = Field(description="The gesture to make: greeting, happy, finger-gun, or dance")
+    animation: Literal["greeting", "happy", "finger-gun", "dance"] = Field(
+        description="The gesture to make: greeting, happy, finger-gun, or dance"
+    )
+
+    @field_validator("animation", mode="before")
+    @classmethod
+    def _normalize(cls, value):
+        return normalize_avatar_animation(value) if isinstance(value, str) else value
 
 
 class AvatarControlWindowArgs(BaseModel):
-    action: str = Field(description="Window action: show, hide, or toggle")
+    action: Literal["show", "hide", "toggle"] = Field(
+        description="Window action: show, hide, or toggle"
+    )
+
+    @field_validator("action", mode="before")
+    @classmethod
+    def _normalize(cls, value):
+        return str(value).strip().lower() if isinstance(value, str) else value
 
 
 class SearchDocumentsArgs(BaseModel):
@@ -4899,15 +4936,38 @@ If data is not found, say so clearly."""
 
     if avatar_mcp is not None:
         async def avatar_play_animation_tool(animation: str) -> Dict[str, Any]:
-            allowed = {"greeting", "happy", "finger-gun", "dance"}
-            if animation not in allowed:
-                return {"success": False, "error": f"Unsupported avatar animation: {animation}"}
-            return {"success": await avatar_mcp.avatar_play_animation(animation), "animation": animation}
+            requested = animation
+            animation = normalize_avatar_animation(animation)
+            if animation not in AVATAR_ANIMATIONS:
+                logger.warning("Avatar animation not installed: %r", requested)
+                return {
+                    "success": False,
+                    "error": f"Unsupported avatar animation: {animation}",
+                    "valid": list(AVATAR_ANIMATIONS),
+                }
+            if not await avatar_mcp.avatar_play_animation(animation):
+                return {
+                    "success": False,
+                    "error": "The avatar app is not reachable, so the gesture was not played.",
+                    "animation": animation,
+                }
+            return {"success": True, "animation": animation}
 
         async def avatar_control_window_tool(action: str) -> Dict[str, Any]:
+            action = str(action).strip().lower()
             if action not in {"show", "hide", "toggle"}:
-                return {"success": False, "error": f"Unsupported avatar window action: {action}"}
-            return {"success": await avatar_mcp.avatar_control_window(action), "action": action}
+                return {
+                    "success": False,
+                    "error": f"Unsupported avatar window action: {action}",
+                    "valid": ["show", "hide", "toggle"],
+                }
+            if not await avatar_mcp.avatar_control_window(action):
+                return {
+                    "success": False,
+                    "error": "The avatar app is not reachable, so the window was not changed.",
+                    "action": action,
+                }
+            return {"success": True, "action": action}
 
         async def avatar_get_status_tool() -> Dict[str, Any]:
             return await avatar_mcp.avatar_status()
