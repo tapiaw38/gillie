@@ -277,8 +277,8 @@ FAQs are stored as structured blocks inside `faqs.skill.md` and referenced autom
 
 Configuration is stored in a single file under `~/.gillie/`, created by `./gillie init`:
 
-| File                    | Contents                                                           |
-| ----------------------- | ------------------------------------------------------------------ |
+| File                    | Contents                                                            |
+| ----------------------- | ------------------------------------------------------------------- |
 | `~/.gillie/config.json` | Assistant identity, profile, server settings, services, and logging |
 
 They can be edited manually or interactively via `./gillie config edit`, `./gillie profile edit`, and `./gillie services edit`.
@@ -364,6 +364,75 @@ Key patterns:
 
 ---
 
+## Avatar — companion app
+
+`avatar/` is a realtime character presence for voice sessions: a transparent, always-on-top
+Electron overlay that renders a VRM character, lip-syncs it to whatever the voice app is
+playing, and exposes an MCP server so the assistant can drive its own body. Built with
+Vue 3, TypeScript, three.js and electron-vite, following the same layout as `ui/`.
+
+```bash
+./gillie avatar start              # install, build if stale, and launch
+./gillie avatar start --rebuild    # force a renderer rebuild first
+./gillie avatar stop
+./gillie agent listen -a           # voice mode with the avatar on screen
+```
+
+Inside `avatar/`, the usual npm scripts are available: `dev`, `build`, `test`,
+`type-check`, `lint`, `assets:check` (verifies the character asset contract), and
+`dist:linux` / `dist:windows` / `dist:mac` for packaging.
+
+### Layout
+
+```sh
+avatar/
+├── electron/
+│   ├── main/        # Window, tray, avatar:// protocol, HTTP bridge, MCP server,
+│   │                # and the audio listeners (PipeWire on Linux, native helper elsewhere)
+│   └── preload/     # Sandboxed CommonJS preload exposing window.avatarBridge
+├── src/
+│   ├── avatar/      # Framework-free three.js layer: VRM loading, animation mixer,
+│   │                # procedural motion, lip sync, blink, camera framing, render stage
+│   ├── components/  # AvatarStage.vue, the canvas the stage draws into
+│   ├── composables/ # useAvatarBridge, turning bridge events into body animation
+│   └── types/       # Shared renderer-side bridge types
+├── public/assets/   # model.vrm plus the .vrma animation clips
+├── native/          # C++/Objective-C audio listener helpers
+└── scripts/         # Asset contract, native build, packaging, release helpers
+```
+
+### Integration surface
+
+The main process listens on `127.0.0.1:47850` (override with `AVATAR_BRIDGE_PORT`):
+
+| Method | Path      | Description                                            |
+| ------ | --------- | ------------------------------------------------------ |
+| POST   | `/events` | Accepts `state`, `audio-level`, and `animation` events |
+| POST   | `/mcp`    | Streamable HTTP MCP endpoint (see tools below)         |
+| GET    | `/health` | Liveness plus the last voice state                     |
+
+The MCP endpoint exposes `play_animation`, `control_window`, `get_status`,
+`set_voice_state` and `set_audio_level`. The API reaches it through
+`AVATAR_MCP_URL` (default `http://127.0.0.1:47850/mcp`, timeout `AVATAR_MCP_TIMEOUT`),
+which is what backs the assistant's `avatar_play_animation`, `avatar_control_window`
+and `avatar_get_status` tools.
+
+The `avatar://` URL scheme is also handled (`avatar://show`,
+`avatar://speaking?level=0.4`, `avatar://dance`, and so on). Set `AVATAR_DEBUG=1` for
+verbose listener logging and `AVATAR_TARGET_PROCESS_PATTERN` to change which
+application's audio is followed.
+
+Environment lighting is generated at runtime with three.js `RoomEnvironment`, so no HDRI
+file is fetched or shipped.
+
+### Character assets
+
+`avatar/public/assets/model.vrm` and the clips under `avatar/public/assets/animations/`
+are local media and are ignored by Git. See `avatar/ASSET_LICENSES.md` before
+distributing any build that contains them.
+
+---
+
 ## API Endpoints
 
 All endpoints are prefixed according to the domain. Authentication is handled automatically by the single-user middleware — no token required.
@@ -432,3 +501,17 @@ The API includes advanced PDF processing with OCR support:
 - RAG integration with FAISS or Qdrant vector stores
 
 Requires `tesseract` installed on the system.
+
+---
+
+## License
+
+MIT, Copyright (c) 2026 tapiaw38. See [`LICENSE`](LICENSE).
+
+The MIT license covers the source of Gillie and its companion applications (`ui/`,
+`avatar/`). It does **not** cover third-party media shipped alongside them: the VRM model
+and `.vrma` animation clips under `avatar/public/assets/` are local media, ignored by Git,
+and governed by their own terms. Read [`avatar/ASSET_LICENSES.md`](avatar/ASSET_LICENSES.md)
+before publishing a repository or a release that contains them — it also documents how to
+replace the assets and how the release gate (`npm run assets:release`, inside `avatar/`)
+enforces the license metadata.
