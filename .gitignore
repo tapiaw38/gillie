@@ -77,3 +77,6 @@ ui/QWEN.*
 ui/CLAUDE.*
 # Build output
 release/
+
+# Persona avatar companion app
+avatar/

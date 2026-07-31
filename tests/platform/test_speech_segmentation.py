@@ -66,7 +66,9 @@ class AudioQueueTests(unittest.TestCase):
 
         played = []
         queue = agent.AudioQueue()
-        with mock.patch.object(agent, "_play_audio", side_effect=played.append):
+        with mock.patch.object(
+            agent, "_play_audio", side_effect=lambda url, on_process=None: played.append(url)
+        ):
             for url in ("a", "b", "c"):
                 queue.add(url)
             queue.wait()
@@ -78,7 +80,7 @@ class AudioQueueTests(unittest.TestCase):
 
         played = []
 
-        def player(url):
+        def player(url, on_process=None):
             if url == "b":
                 raise OSError("player missing")
             played.append(url)
@@ -94,6 +96,170 @@ class AudioQueueTests(unittest.TestCase):
         import cli.commands.agent as agent
 
         agent.AudioQueue().wait()
+
+
+
+class AudioQueueStopTests(unittest.TestCase):
+    def _queue_with_player(self, played, players):
+        from unittest import mock
+        import cli.commands.agent as agent
+
+        def fake_play(url, on_process=None):
+            process = mock.Mock()
+            process.wait.side_effect = lambda timeout=None: None
+            players.append(process)
+            if on_process:
+                on_process(process)
+            played.append(url)
+            if on_process:
+                on_process(None)
+
+        return agent.AudioQueue(), mock.patch.object(agent, "_play_audio", side_effect=fake_play)
+
+    def test_stop_terminates_the_running_player(self):
+        played, players = [], []
+        queue, patcher = self._queue_with_player(played, players)
+        with patcher:
+            queue.add("a")
+            queue.wait()
+            queue._player = players[0]
+            queue.stop()
+        players[0].terminate.assert_called_once()
+
+    def test_stop_discards_everything_still_queued(self):
+        import threading
+        from unittest import mock
+        import cli.commands.agent as agent
+
+        gate = threading.Event()
+        played = []
+
+        def blocking_play(url, on_process=None):
+            played.append(url)
+            gate.wait(timeout=2)
+
+        queue = agent.AudioQueue()
+        with mock.patch.object(agent, "_play_audio", side_effect=blocking_play):
+            for url in ("a", "b", "c"):
+                queue.add(url)
+            queue.stop()
+            gate.set()
+            queue.wait()
+        self.assertNotIn("c", played)
+
+    def test_add_after_stop_is_ignored(self):
+        from unittest import mock
+        import cli.commands.agent as agent
+
+        played = []
+        queue = agent.AudioQueue()
+        with mock.patch.object(agent, "_play_audio", side_effect=lambda u, on_process=None: played.append(u)):
+            queue.stop()
+            queue.add("a")
+            queue.wait()
+        self.assertEqual(played, [])
+
+    def test_playing_stays_unset_until_a_player_actually_starts(self):
+        import cli.commands.agent as agent
+
+        queue = agent.AudioQueue()
+        self.assertFalse(queue.playing.is_set())
+
+
+class SleepToggleTests(unittest.TestCase):
+    def _drive(self, keystrokes, samples=30, sample_delay=0.1):
+        import os
+        import pty
+        import sys
+        import time
+
+        master, slave = pty.openpty()
+        read_fd, write_fd = os.pipe()
+        pid = os.fork()
+        if pid == 0:
+            os.close(master)
+            os.close(read_fd)
+            os.dup2(slave, 0)
+            os.dup2(slave, 1)
+            os.close(slave)
+            sys.stdin = open(0, closefd=False)
+            import cli.commands.agent as agent
+
+            toggle = agent.SleepToggle().start()
+            states = []
+            for _ in range(samples):
+                states.append(toggle.resting)
+                time.sleep(sample_delay)
+            toggle.close()
+            os.write(write_fd, "".join("1" if s else "0" for s in states).encode())
+            os.close(write_fd)
+            os._exit(0)
+
+        os.close(slave)
+        os.close(write_fd)
+        for delay, key in keystrokes:
+            time.sleep(delay)
+            os.write(master, key)
+        os.waitpid(pid, 0)
+        result = os.read(read_fd, 4096).decode()
+        os.close(read_fd)
+        os.close(master)
+        return result
+
+    def test_ctrl_p_toggles_rest_on_and_off(self):
+        states = self._drive([(0.6, b"\x10"), (0.9, b"\x10")])
+        self.assertTrue(states.startswith("0"))
+        self.assertIn("1", states)
+        self.assertTrue(states.endswith("0"))
+
+    def test_other_keys_do_not_toggle_rest(self):
+        states = self._drive([(0.6, b"x"), (0.4, b"\x03")], samples=15)
+        self.assertNotIn("1", states)
+
+    def test_restores_the_terminal_it_took_over(self):
+        import os
+        import pty
+        import sys
+        import termios
+        import time
+
+        master, slave = pty.openpty()
+        read_fd, write_fd = os.pipe()
+        pid = os.fork()
+        if pid == 0:
+            os.close(master)
+            os.close(read_fd)
+            os.dup2(slave, 0)
+            os.dup2(slave, 1)
+            os.close(slave)
+            sys.stdin = open(0, closefd=False)
+            import cli.commands.agent as agent
+
+            before = termios.tcgetattr(sys.stdin)
+            toggle = agent.SleepToggle().start()
+            during = termios.tcgetattr(sys.stdin)
+            toggle.close()
+            after = termios.tcgetattr(sys.stdin)
+            os.write(write_fd, f"{before != during},{before == after}".encode())
+            os.close(write_fd)
+            os._exit(0)
+
+        os.close(slave)
+        os.close(write_fd)
+        time.sleep(1.0)
+        os.waitpid(pid, 0)
+        raw_applied, restored = os.read(read_fd, 64).decode().split(",")
+        os.close(read_fd)
+        os.close(master)
+        self.assertEqual(raw_applied, "True")
+        self.assertEqual(restored, "True")
+
+    def test_is_inert_without_a_terminal(self):
+        import cli.commands.agent as agent
+
+        toggle = agent.SleepToggle().start()
+        self.assertFalse(toggle.resting)
+        toggle.close()
 
 
 if __name__ == "__main__":

@@ -18,6 +18,7 @@ import os
 import re
 import subprocess
 import sys
+import time
 import glob as _glob
 import mimetypes
 import typer
@@ -403,6 +404,76 @@ def _print_assistant(name: str, text: str) -> None:
     console.print()
 
 
+class SleepToggle:
+    """Toggle a rest mode from the keyboard while the microphone loop runs.
+
+    Ctrl+C already leaves listen mode, so resting needs its own key. Ctrl+S and
+    Ctrl+Q are flow control and would freeze the terminal, and Ctrl+Z suspends
+    the process, so Ctrl+P is the default.
+    """
+
+    def __init__(self, key: str = "\x10") -> None:
+        import threading
+
+        self._key = key
+        self._resting = threading.Event()
+        self._stop = threading.Event()
+        self._thread = None
+        self._settings = None
+
+    @property
+    def resting(self) -> bool:
+        return self._resting.is_set()
+
+    def start(self) -> "SleepToggle":
+        import termios
+        import threading
+        import tty
+
+        if not sys.stdin.isatty():
+            return self
+        try:
+            self._settings = termios.tcgetattr(sys.stdin)
+            tty.setcbreak(sys.stdin.fileno())
+        except Exception:
+            self._settings = None
+            return self
+        self._thread = threading.Thread(target=self._run, daemon=True)
+        self._thread.start()
+        return self
+
+    def _run(self) -> None:
+        import select
+
+        while not self._stop.is_set():
+            try:
+                ready, _, _ = select.select([sys.stdin], [], [], 0.2)
+                if not ready:
+                    continue
+                char = sys.stdin.read(1)
+            except Exception:
+                return
+            if char != self._key:
+                continue
+            if self._resting.is_set():
+                self._resting.clear()
+                console.print("\n[green]▶[/green] listening again")
+            else:
+                self._resting.set()
+                console.print("\n[yellow]⏸[/yellow]  resting — Ctrl+P to wake me up")
+
+    def close(self) -> None:
+        import termios
+
+        self._stop.set()
+        if self._settings is not None:
+            try:
+                termios.tcsetattr(sys.stdin, termios.TCSADRAIN, self._settings)
+            except Exception:
+                pass
+            self._settings = None
+
+
 class AudioQueue:
     """Play audio URLs in arrival order on a worker thread.
 
@@ -416,15 +487,28 @@ class AudioQueue:
         import threading
 
         self._queue: queue.Queue = queue.Queue()
-        self._done = threading.Event()
+        self._lock = threading.Lock()
         self._thread = threading.Thread(target=self._run, daemon=True)
         self._started = False
+        self._player = None
+        self._stopped = False
+        self.playing = threading.Event()
 
     def add(self, url: str) -> None:
+        if self._stopped:
+            return
         if not self._started:
             self._started = True
             self._thread.start()
         self._queue.put(url)
+
+    def _track(self, process) -> None:
+        with self._lock:
+            self._player = process
+            if process is not None:
+                self.playing.set()
+                if self._stopped:
+                    process.terminate()
 
     def _run(self) -> None:
         while True:
@@ -433,11 +517,29 @@ class AudioQueue:
                 self._queue.task_done()
                 return
             try:
-                _play_audio(url)
+                if not self._stopped:
+                    _play_audio(url, on_process=self._track)
             except Exception:
                 pass
             finally:
                 self._queue.task_done()
+
+    def stop(self) -> None:
+        """Cut playback immediately and discard anything still queued."""
+        self._stopped = True
+        with self._lock:
+            player = self._player
+        if player is not None:
+            try:
+                player.terminate()
+            except Exception:
+                pass
+        while True:
+            try:
+                self._queue.get_nowait()
+            except Exception:
+                break
+            self._queue.task_done()
 
     def wait(self) -> None:
         if not self._started:
@@ -447,8 +549,11 @@ class AudioQueue:
         self._thread.join(timeout=5)
 
 
-def _play_audio(url: str) -> None:
-    """Play an audio URL using the first available system player."""
+def _play_audio(url: str, on_process=None) -> None:
+    """Play an audio URL using the first available system player.
+
+    `on_process` receives the running player so a caller can stop it early.
+    """
     if not url.startswith("http"):
         return
     players = [
@@ -458,12 +563,19 @@ def _play_audio(url: str) -> None:
     ]
     for cmd in players:
         try:
-            subprocess.run(cmd, timeout=120, check=True)
-            return
+            process = subprocess.Popen(cmd)
         except FileNotFoundError:
             continue
-        except subprocess.CalledProcessError:
-            return
+        if on_process is not None:
+            on_process(process)
+        try:
+            process.wait(timeout=120)
+        except subprocess.TimeoutExpired:
+            process.kill()
+        finally:
+            if on_process is not None:
+                on_process(None)
+        return
     console.print("[yellow]⚠[/yellow] No audio player found. Install [bold]mpv[/bold] or [bold]ffplay[/bold].")
 
 
@@ -1152,6 +1264,15 @@ def listen(
     avatar: bool = typer.Option(
         False, "--avatar", "-a", help="Open the Persona avatar and hide this terminal until it closes"
     ),
+    barge_in: bool = typer.Option(
+        True, "--barge-in/--no-barge-in", help="Let speaking over the assistant cut it off"
+    ),
+    barge_in_sensitivity: float = typer.Option(
+        6.0,
+        "--barge-in-sensitivity",
+        help="How many times the measured room noise an interruption must reach. "
+             "Lower it with headphones, raise it if the speakers trigger false cut-offs.",
+    ),
 ):
     """Voice listen mode: record your voice, assistant replies in text."""
     if not config_exists():
@@ -1198,15 +1319,6 @@ def listen(
     except ImportError:
         vad_status = "voice detection: off (pip install webrtcvad)"
 
-    console.print()
-    console.print(Panel(
-        f"✨🐙 [bold cyan]{assistant_name}[/bold cyan] — listen mode\n"
-        f"[dim]Speak when you see the mic. {silence}s of silence to send. Ctrl+C to quit.[/dim]\n"
-        f"[dim]{vad_status}[/dim]",
-        border_style="cyan",
-    ))
-    console.print()
-
     BAR_WIDTH = 20
     _VAD_FRAME = int(SAMPLE_RATE * 0.03)  # 30ms frames required by webrtcvad
 
@@ -1237,18 +1349,135 @@ def listen(
             return f"[dim]🎙  [{bar}][/dim]"
 
     _VOICE_STREAK_NEEDED = 3  # 300ms of continuous voice required to start recording
+    _BARGE_IN_STREAK_NEEDED = 6  # 600ms, so a stray speaker echo does not interrupt
+    _BARGE_IN_PREBUFFER_CHUNKS = 12  # 1.2s kept so the interruption is not clipped
+
+    def _measure_noise_floor(seconds: float = 0.8) -> float:
+        """Sample the room so the interrupt bar sits above this mic, not a constant.
+
+        Ambient level varies enormously between machines, and webrtcvad reports
+        speech on roughly two thirds of silent chunks, so a fixed RMS threshold
+        either never triggers or triggers constantly.
+        """
+        levels = []
+        try:
+            with sd.InputStream(
+                samplerate=SAMPLE_RATE, channels=1, dtype="float32"
+            ) as stream:
+                for _ in range(max(1, int(seconds / 0.1))):
+                    chunk, _ = stream.read(CHUNK)
+                    levels.append(float(np.sqrt(np.mean(chunk ** 2))))
+        except Exception:
+            return threshold
+        if not levels:
+            return threshold
+        levels.sort()
+        return levels[len(levels) // 2]
+
+    barge_in_level = 0.0
+    if barge_in:
+        console.print("[dim]calibrando micrófono...[/dim]", end="\r")
+        barge_in_level = max(
+            _measure_noise_floor() * barge_in_sensitivity, threshold * barge_in_sensitivity
+        )
+        console.print(" " * 40, end="\r")
+        barge_status = f"barge-in: on (nivel {barge_in_level:.3f})"
+    else:
+        barge_status = "barge-in: off"
+
+    console.print()
+    console.print(Panel(
+        f"✨🐙 [bold cyan]{assistant_name}[/bold cyan] — listen mode\n"
+        f"[dim]Speak when you see the mic. {silence}s of silence to send.[/dim]\n"
+        f"[dim]Ctrl+P to rest, Ctrl+C to quit.[/dim]\n"
+        f"[dim]{vad_status} · {barge_status}[/dim]",
+        border_style="cyan",
+    ))
+    console.print()
+
+    class BargeInWatcher:
+        """Listen while the assistant speaks and cut it off when the user does.
+
+        The microphone also picks up the assistant coming out of the speakers,
+        so the bar to interrupt is deliberately higher than the one used to
+        start a normal recording: a louder signal, held for longer. The audio
+        that triggered the interruption is kept so the first words of the
+        interruption are not lost.
+        """
+
+        def __init__(
+            self, audio: "AudioQueue", trigger_level: float, rest=None
+        ) -> None:
+            import threading
+
+            self._audio = audio
+            self._trigger_level = trigger_level
+            self._rest = rest
+            self._triggered = threading.Event()
+            self._stop = threading.Event()
+            self._thread = threading.Thread(target=self._run, daemon=True)
+            self.pre_buffer: list = []
+
+        def start(self) -> "BargeInWatcher":
+            self._thread.start()
+            return self
+
+        def _run(self) -> None:
+            keep = _BARGE_IN_PREBUFFER_CHUNKS
+            streak = 0
+            rolling: list = []
+            try:
+                with sd.InputStream(
+                    samplerate=SAMPLE_RATE, channels=1, dtype="float32"
+                ) as stream:
+                    while not self._stop.is_set():
+                        chunk, _ = stream.read(CHUNK)
+                        rolling.append(chunk.copy())
+                        del rolling[:-keep]
+                        if self._rest is not None and self._rest.resting:
+                            self._audio.stop()
+                            return
+                        if not self._audio.playing.is_set():
+                            streak = 0
+                            continue
+                        rms = float(np.sqrt(np.mean(chunk ** 2)))
+                        if rms > self._trigger_level and _is_voice(chunk):
+                            streak += 1
+                            if streak >= _BARGE_IN_STREAK_NEEDED:
+                                self.pre_buffer = list(rolling)
+                                self._triggered.set()
+                                self._audio.stop()
+                                return
+                        else:
+                            streak = 0
+            except Exception:
+                return
+
+        @property
+        def triggered(self) -> bool:
+            return self._triggered.is_set()
+
+        def close(self) -> None:
+            self._stop.set()
+            self._thread.join(timeout=2)
 
     def _trim_trailing_silence(chunks: list, silence_chunks: int, keep: int = 3) -> list:
         trimmed = len(chunks) - max(0, silence_chunks - keep)
         return chunks[:trimmed] if trimmed >= _MIN_UTTERANCE_CHUNKS else chunks
 
-    def _record_utterance() -> bytes | None:
-        """Record until N seconds of silence detected. Returns WAV bytes."""
-        audio_chunks = []
+    def _record_utterance(
+        carry_over: list | None = None, rest: "SleepToggle | None" = None
+    ) -> bytes | None:
+        """Record until N seconds of silence detected. Returns WAV bytes.
+
+        `carry_over` holds audio captured before this call — the words that
+        interrupted the assistant — so the recording starts mid-sentence.
+        """
+        audio_chunks = list(carry_over or [])
         pre_buffer = []   # holds chunks before speech confirmed
         silence_count = 0
         voice_streak = 0
-        started = False
+        started = bool(audio_chunks)
 
         with sd.InputStream(samplerate=SAMPLE_RATE, channels=1, dtype="float32") as stream:
             while True:
@@ -1278,6 +1507,10 @@ def listen(
                 bar = _level_bar(rms, started)
                 print(f"\r{' ' * 50}\r", end="", flush=True)
                 console.print(bar + "  ", end="\r")
+
+                if rest is not None and rest.resting:
+                    print(f"\r{' ' * 50}\r", end="", flush=True)
+                    return None
 
                 if started and silence_count >= silence_chunks_needed:
                     print(f"\r{' ' * 50}\r", end="", flush=True)
@@ -1366,14 +1599,21 @@ def listen(
             console.print()
         return reply
 
-    def _voice_loop(avatar_proc=None) -> None:
+    def _voice_loop(avatar_proc=None, rest: "SleepToggle | None" = None) -> None:
+        carry_over = None
         while True:
             if avatar_proc is not None and avatar_proc.poll() is not None:
                 console.print("\n[dim]Avatar closed — leaving listen mode 👋[/dim]")
                 return
             try:
-                console.print("[dim]🎙  Ready — speak whenever you like...[/dim]")
-                wav_bytes = _record_utterance()
+                if rest is not None and rest.resting:
+                    carry_over = None
+                    time.sleep(0.2)
+                    continue
+                if not carry_over:
+                    console.print("[dim]🎙  Ready — speak whenever you like...[/dim]")
+                wav_bytes = _record_utterance(carry_over, rest)
+                carry_over = None
             except KeyboardInterrupt:
                 console.print("\n[dim]Goodbye 👋[/dim]")
                 return
@@ -1386,18 +1626,33 @@ def listen(
             console.print(" " * 40, end="\r")
             if not said:
                 console.print("[dim]…no te escuché bien, probá de nuevo.[/dim]")
+                carry_over = None
                 continue
 
             _print_user(said)
             audio = AudioQueue()
+            watcher = (
+                BargeInWatcher(audio, barge_in_level, rest).start() if barge_in else None
+            )
             try:
                 _stream_reply(current_id, said, audio)
-            finally:
                 audio.wait()
+            finally:
+                if watcher is not None:
+                    watcher.close()
+
+            carry_over = watcher.pre_buffer if watcher and watcher.triggered else None
+            if carry_over:
+                console.print("[dim]⏹  te escucho...[/dim]")
             console.print(Rule(style="dim"))
 
+    rest = SleepToggle().start()
+
     if not avatar:
-        _voice_loop()
+        try:
+            _voice_loop(rest=rest)
+        finally:
+            rest.close()
         return
 
     from cli.commands import avatar as avatar_cmd
@@ -1406,7 +1661,10 @@ def listen(
     if not avatar_cmd.wait_for_bridge():
         console.print("[yellow]⚠[/yellow] Avatar did not start; staying in the terminal.")
         avatar_proc.terminate()
-        _voice_loop()
+        try:
+            _voice_loop(rest=rest)
+        finally:
+            rest.close()
         return
 
     try:
@@ -1416,8 +1674,9 @@ def listen(
                     "[yellow]⚠[/yellow] Cannot hide this terminal "
                     "(needs a wlroots Wayland session with [bold]wlrctl[/bold]); keeping it visible."
                 )
-            _voice_loop(avatar_proc)
+            _voice_loop(avatar_proc, rest)
     finally:
+        rest.close()
         if avatar_proc.poll() is None:
             avatar_proc.terminate()
             with contextlib.suppress(subprocess.TimeoutExpired):

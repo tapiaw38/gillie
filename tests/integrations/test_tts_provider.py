@@ -75,9 +75,6 @@ class VoiceResolutionTests(unittest.TestCase):
         self.assertEqual(payload["response_format"], "wav")
 
 
-if __name__ == "__main__":
-    unittest.main()
-
 
 class OpenAIKeyResolutionTests(unittest.TestCase):
     def _resolve(self, api_key, current_key, provider_keys):
@@ -385,3 +382,7 @@ class StreamedFragmentMarkupTests(unittest.TestCase):
             out = self.clean(fragment)
             self.assertNotIn("*", out)
             self.assertNotIn("mayor que", out)
+
+
+if __name__ == "__main__":
+    unittest.main()
