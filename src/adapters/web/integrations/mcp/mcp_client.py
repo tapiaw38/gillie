@@ -19,16 +19,16 @@ class MCPClient:
 
     def __init__(self, **kwargs):
         self._tools = DatetimeTools()
-        self._persona_url = os.getenv("PERSONA_MCP_URL", "http://127.0.0.1:47831/mcp")
-        self._persona_timeout = float(os.getenv("PERSONA_MCP_TIMEOUT", "2.0"))
+        self._avatar_url = os.getenv("AVATAR_MCP_URL", "http://127.0.0.1:47850/mcp")
+        self._avatar_timeout = float(os.getenv("AVATAR_MCP_TIMEOUT", "2.0"))
         logger.info("MCPClient initialized (in-process DatetimeTools)")
 
-    async def _persona_call(self, tool: str, arguments: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
-        """Call Persona's stateless Streamable HTTP MCP endpoint."""
+    async def _avatar_call(self, tool: str, arguments: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
+        """Call the avatar's stateless Streamable HTTP MCP endpoint."""
         request_id = str(uuid.uuid4())
-        async with httpx.AsyncClient(timeout=self._persona_timeout) as client:
+        async with httpx.AsyncClient(timeout=self._avatar_timeout) as client:
             initialize = await client.post(
-                self._persona_url,
+                self._avatar_url,
                 json={
                     "jsonrpc": "2.0",
                     "id": request_id,
@@ -44,10 +44,10 @@ class MCPClient:
             initialize.raise_for_status()
             result = initialize.json()
             if "error" in result:
-                raise RuntimeError(result["error"].get("message", "Persona MCP initialize failed"))
+                raise RuntimeError(result["error"].get("message", "Avatar MCP initialize failed"))
 
             response = await client.post(
-                self._persona_url,
+                self._avatar_url,
                 json={
                     "jsonrpc": "2.0",
                     "id": str(uuid.uuid4()),
@@ -59,29 +59,29 @@ class MCPClient:
             response.raise_for_status()
             payload = response.json()
             if "error" in payload:
-                raise RuntimeError(payload["error"].get("message", f"Persona MCP tool failed: {tool}"))
+                raise RuntimeError(payload["error"].get("message", f"Avatar MCP tool failed: {tool}"))
             return payload.get("result", {})
 
-    async def persona_play_animation(self, animation: str) -> bool:
+    async def avatar_play_animation(self, animation: str) -> bool:
         try:
-            await self._persona_call("play_animation", {"animation": animation})
+            await self._avatar_call("play_animation", {"animation": animation})
             return True
         except Exception as exc:
-            logger.debug("Persona MCP unavailable while playing %s: %s", animation, exc)
+            logger.debug("Avatar MCP unavailable while playing %s: %s", animation, exc)
             return False
 
-    async def persona_control_window(self, action: str) -> bool:
+    async def avatar_control_window(self, action: str) -> bool:
         try:
-            await self._persona_call("control_window", {"action": action})
+            await self._avatar_call("control_window", {"action": action})
             return True
         except Exception as exc:
-            logger.debug("Persona MCP unavailable while controlling window: %s", exc)
+            logger.debug("Avatar MCP unavailable while controlling window: %s", exc)
             return False
 
-    async def persona_status(self) -> Dict[str, Any]:
-        return await self._persona_call("get_status")
+    async def avatar_status(self) -> Dict[str, Any]:
+        return await self._avatar_call("get_status")
 
-    async def persona_set_voice_state(
+    async def avatar_set_voice_state(
         self,
         phase: str,
         activity: str,
@@ -89,7 +89,7 @@ class MCPClient:
         output_muted: bool = False,
     ) -> bool:
         try:
-            await self._persona_call(
+            await self._avatar_call(
                 "set_voice_state",
                 {
                     "phase": phase,
@@ -100,15 +100,15 @@ class MCPClient:
             )
             return True
         except Exception as exc:
-            logger.debug("Persona MCP unavailable while setting voice state: %s", exc)
+            logger.debug("Avatar MCP unavailable while setting voice state: %s", exc)
             return False
 
-    async def persona_set_audio_level(self, level: float) -> bool:
+    async def avatar_set_audio_level(self, level: float) -> bool:
         try:
-            await self._persona_call("set_audio_level", {"level": max(0.0, min(1.0, level))})
+            await self._avatar_call("set_audio_level", {"level": max(0.0, min(1.0, level))})
             return True
         except Exception as exc:
-            logger.debug("Persona MCP unavailable while setting audio level: %s", exc)
+            logger.debug("Avatar MCP unavailable while setting audio level: %s", exc)
             return False
 
     async def get_current_datetime(

@@ -749,11 +749,11 @@ class CronRunArgs(BaseModel):
     job_id: str = Field(description="The job ID to run now")
 
 
-class PersonaPlayAnimationArgs(BaseModel):
+class AvatarPlayAnimationArgs(BaseModel):
     animation: str = Field(description="The gesture to make: greeting, happy, finger-gun, or dance")
 
 
-class PersonaControlWindowArgs(BaseModel):
+class AvatarControlWindowArgs(BaseModel):
     action: str = Field(description="Window action: show, hide, or toggle")
 
 
@@ -1262,7 +1262,7 @@ import atexit as _atexit
 _atexit.register(_browser_cleanup_sync)
 
 
-def create_langchain_tools(openai_integration, profile, skill_manager=None, store_service=None, job_usecases=None, shell_output_callback=None, client_workspace: str = "", approval_callback=None, plan_mode: bool = False, brain=None, persona_mcp=None) -> List[StructuredTool]:
+def create_langchain_tools(openai_integration, profile, skill_manager=None, store_service=None, job_usecases=None, shell_output_callback=None, client_workspace: str = "", approval_callback=None, plan_mode: bool = False, brain=None, avatar_mcp=None) -> List[StructuredTool]:
     """
     Create LangChain StructuredTool instances with Pydantic validation.
 
@@ -4897,42 +4897,42 @@ If data is not found, say so clearly."""
             coroutine=insert_image_pptx_tool,
         ))
 
-    if persona_mcp is not None:
-        async def persona_play_animation_tool(animation: str) -> Dict[str, Any]:
+    if avatar_mcp is not None:
+        async def avatar_play_animation_tool(animation: str) -> Dict[str, Any]:
             allowed = {"greeting", "happy", "finger-gun", "dance"}
             if animation not in allowed:
-                return {"success": False, "error": f"Unsupported Persona animation: {animation}"}
-            return {"success": await persona_mcp.persona_play_animation(animation), "animation": animation}
+                return {"success": False, "error": f"Unsupported avatar animation: {animation}"}
+            return {"success": await avatar_mcp.avatar_play_animation(animation), "animation": animation}
 
-        async def persona_control_window_tool(action: str) -> Dict[str, Any]:
+        async def avatar_control_window_tool(action: str) -> Dict[str, Any]:
             if action not in {"show", "hide", "toggle"}:
-                return {"success": False, "error": f"Unsupported Persona window action: {action}"}
-            return {"success": await persona_mcp.persona_control_window(action), "action": action}
+                return {"success": False, "error": f"Unsupported avatar window action: {action}"}
+            return {"success": await avatar_mcp.avatar_control_window(action), "action": action}
 
-        async def persona_get_status_tool() -> Dict[str, Any]:
-            return await persona_mcp.persona_status()
+        async def avatar_get_status_tool() -> Dict[str, Any]:
+            return await avatar_mcp.avatar_status()
 
         tools.extend([
             StructuredTool(
-                name="persona_play_animation",
+                name="avatar_play_animation",
                 description="Make a deliberate gesture with your own body, which the user can see on screen. Use it when you want to dance, wave, greet, or react. Afterwards refer to it in the first person: you danced, not the avatar. Your talking motion and lip sync happen on their own — never call this to look like you are speaking.",
-                func=persona_play_animation_tool,
-                args_schema=PersonaPlayAnimationArgs,
-                coroutine=persona_play_animation_tool,
+                func=avatar_play_animation_tool,
+                args_schema=AvatarPlayAnimationArgs,
+                coroutine=avatar_play_animation_tool,
             ),
             StructuredTool(
-                name="persona_control_window",
+                name="avatar_control_window",
                 description="Show or hide yourself on the user's screen.",
-                func=persona_control_window_tool,
-                args_schema=PersonaControlWindowArgs,
-                coroutine=persona_control_window_tool,
+                func=avatar_control_window_tool,
+                args_schema=AvatarControlWindowArgs,
+                coroutine=avatar_control_window_tool,
             ),
             StructuredTool(
-                name="persona_get_status",
+                name="avatar_get_status",
                 description="Check whether you are currently visible on screen and whether you are speaking.",
-                func=persona_get_status_tool,
+                func=avatar_get_status_tool,
                 args_schema=None,
-                coroutine=persona_get_status_tool,
+                coroutine=avatar_get_status_tool,
             ),
         ])
 

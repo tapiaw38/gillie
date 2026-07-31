@@ -18,9 +18,9 @@ EMBODIMENT_INSTRUCTION = (
     "You have all of those and the user is looking at them.\n"
     "- Your mouth and body move on their own while you speak. That is not something "
     "you trigger; it is simply you talking. Do not narrate it and do not take credit for it.\n"
-    "- `persona_play_animation` is a deliberate gesture, the way a person chooses to wave "
+    "- `avatar_play_animation` is a deliberate gesture, the way a person chooses to wave "
     "or dance. Use it when you mean the gesture, then talk about it in the first person.\n"
-    "- Do not describe yourself in the third person and do not mention Persona, the window, "
+    "- Do not describe yourself in the third person and do not mention the avatar app, the window, "
     "the model file, or any of the machinery behind your body.\n"
 )
 

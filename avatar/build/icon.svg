@@ -1,0 +1,57 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2=".6" y2="1">
+      <stop offset="0" stop-color="#1c2049"/>
+      <stop offset=".55" stop-color="#0d1030"/>
+      <stop offset="1" stop-color="#05060f"/>
+    </linearGradient>
+    <radialGradient id="halo" cx="50%" cy="48%" r="52%">
+      <stop offset="0" stop-color="#7c6bff" stop-opacity=".5"/>
+      <stop offset=".6" stop-color="#5b4fd6" stop-opacity=".16"/>
+      <stop offset="1" stop-color="#5b4fd6" stop-opacity="0"/>
+    </radialGradient>
+    <linearGradient id="ring" x1=".1" y1="0" x2=".9" y2="1">
+      <stop offset="0" stop-color="#8ae7ff"/>
+      <stop offset=".5" stop-color="#9b8bff"/>
+      <stop offset="1" stop-color="#7b5cff"/>
+    </linearGradient>
+    <linearGradient id="bars" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0" stop-color="#8ae7ff"/>
+      <stop offset="1" stop-color="#b8a4ff"/>
+    </linearGradient>
+    <linearGradient id="face" x1=".3" y1="0" x2=".7" y2="1">
+      <stop offset="0" stop-color="#0e1128"/>
+      <stop offset="1" stop-color="#05060f"/>
+    </linearGradient>
+    <filter id="soft" x="-40%" y="-40%" width="180%" height="180%">
+      <feGaussianBlur stdDeviation="14"/>
+    </filter>
+    <filter id="tight" x="-80%" y="-80%" width="260%" height="260%">
+      <feGaussianBlur stdDeviation="6"/>
+    </filter>
+  </defs>
+
+  <rect width="512" height="512" rx="112" fill="url(#bg)"/>
+  <rect width="512" height="512" rx="112" fill="url(#halo)"/>
+
+  <g transform="translate(256 256)">
+    <ellipse rx="150" ry="146" fill="url(#ring)" opacity=".38" filter="url(#soft)"/>
+    <ellipse rx="142" ry="138" fill="url(#ring)"/>
+    <ellipse rx="118" ry="114" fill="url(#face)"/>
+
+    <g fill="#eaf6ff">
+      <ellipse cx="-46" cy="-30" rx="18" ry="23" filter="url(#tight)" opacity=".6"/>
+      <ellipse cx="46" cy="-30" rx="18" ry="23" filter="url(#tight)" opacity=".6"/>
+      <ellipse cx="-46" cy="-30" rx="15" ry="20"/>
+      <ellipse cx="46" cy="-30" rx="15" ry="20"/>
+    </g>
+
+    <g fill="url(#bars)">
+      <rect x="-66" y="42" width="18" height="30" rx="9"/>
+      <rect x="-38" y="31" width="18" height="52" rx="9"/>
+      <rect x="-9" y="24" width="18" height="66" rx="9"/>
+      <rect x="20" y="31" width="18" height="52" rx="9"/>
+      <rect x="48" y="42" width="18" height="30" rx="9"/>
+    </g>
+  </g>
+</svg>

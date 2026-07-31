@@ -152,7 +152,7 @@ class LangChainService:
         enable_langsmith: bool = False,
         skill_manager=None,
         brain=None,
-        persona_mcp=None,
+        avatar_mcp=None,
     ):
         """
         Initialize the LangChain service.
@@ -169,7 +169,7 @@ class LangChainService:
         self.store_service = None
         self.job_usecases = None
         self.brain = brain
-        self.persona_mcp = persona_mcp
+        self.avatar_mcp = avatar_mcp
 
         self.llm = _build_llm(
             model=self.config.model,
@@ -215,10 +215,10 @@ class LangChainService:
     async def _route_tools(self, user_message: str, all_tools: list) -> list:
         """For Ollama: run a fast routing call to select only relevant tool groups."""
         routed = await _route_tools_ollama(self.llm, user_message, all_tools)
-        # Persona is local runtime control, not an Ollama tool category.
-        persona_tools = [tool for tool in all_tools if tool.name.startswith("persona_")]
+        # The avatar is local runtime control, not an Ollama tool category.
+        avatar_tools = [tool for tool in all_tools if tool.name.startswith("avatar_")]
         routed_names = {tool.name for tool in routed}
-        return routed + [tool for tool in persona_tools if tool.name not in routed_names]
+        return routed + [tool for tool in avatar_tools if tool.name not in routed_names]
 
     def _setup_langsmith(self):
         """Configure LangSmith tracing"""
@@ -336,7 +336,7 @@ class LangChainService:
                         job_usecases=self.job_usecases,
                         client_workspace=client_workspace,
                         brain=self.brain,
-                        persona_mcp=self.persona_mcp,
+                        avatar_mcp=self.avatar_mcp,
                     )
                     if _is_local_provider(self.config.base_url, self.config.model):
                         tools = await self._route_tools(question, tools)
@@ -468,7 +468,7 @@ class LangChainService:
                         approval_callback=approval_callback,
                         plan_mode=plan_mode,
                         brain=self.brain,
-                        persona_mcp=self.persona_mcp,
+                        avatar_mcp=self.avatar_mcp,
                     )
                     if _is_local_provider(self.config.base_url, self.config.model):
                         tools = await self._route_tools(question, tools)
@@ -859,7 +859,7 @@ class LangChainService:
         except Exception as e:
             logger.warning(f"Could not inject global workflows into system prompt: {e}")
 
-        if self.persona_mcp is not None:
+        if self.avatar_mcp is not None:
             system_prompt += EMBODIMENT_INSTRUCTION.format(
                 assistant_name=profile.assistant_name or "Assistant",
             )

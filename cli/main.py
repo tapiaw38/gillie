@@ -50,7 +50,7 @@ app.add_typer(brain_app, name="brain", help="Manage episodic memory (brain)")
 app.add_typer(provider_app, name="provider", help="Manage AI provider (DeepSeek, OpenRouter, Claude, etc.)")
 app.add_typer(contact_app, name="contact", help="Manage contacts and owner memories")
 app.add_typer(contact_app, name="contacts", help="Alias for 'contact' commands")
-app.add_typer(avatar_app, name="avatar", help="Manage the Persona avatar companion app")
+app.add_typer(avatar_app, name="avatar", help="Manage the Gillie Avatar companion app")
 app.add_typer(build_app, name="build", hidden=True)
 
 

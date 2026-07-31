@@ -47,7 +47,7 @@ class OpenAIIntegration:
         self.store_service = None
         self.job_usecases = None
         self.brain = None
-        self.persona_mcp = None
+        self.avatar_mcp = None
 
         langchain_config = config_service.langchain_config
         if langchain_config.service_enabled:
@@ -153,11 +153,11 @@ class OpenAIIntegration:
         if self.langchain_service is not None:
             self.langchain_service.brain = brain
 
-    def set_persona_mcp(self, persona_mcp) -> None:
-        """Inject the local Persona MCP client after integrations initialize."""
-        self.persona_mcp = persona_mcp
+    def set_avatar_mcp(self, avatar_mcp) -> None:
+        """Inject the local Avatar MCP client after integrations initialize."""
+        self.avatar_mcp = avatar_mcp
         if self.langchain_service is not None:
-            self.langchain_service.persona_mcp = persona_mcp
+            self.langchain_service.avatar_mcp = avatar_mcp
 
 
     @log_function_call

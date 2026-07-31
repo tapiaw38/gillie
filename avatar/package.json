@@ -1,0 +1,157 @@
+{
+  "name": "gillie-avatar",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "main": "out/main/index.js",
+  "description": "A realtime character presence for desktop voice experiences.",
+  "homepage": "https://gillie.ai",
+  "author": {
+    "name": "tapiaw38",
+    "email": "tapiaw38@gmail.com"
+  },
+  "license": "MIT",
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "dev": "electron-vite dev",
+    "build": "electron-vite build",
+    "preview": "electron-vite preview",
+    "start": "electron-vite preview",
+    "electron:build": "electron-vite build && electron-builder",
+    "test:unit": "vitest run",
+    "test": "vitest run && node --test scripts/*.test.cjs",
+    "type-check": "vue-tsc --build",
+    "lint": "eslint . --fix",
+    "format": "prettier --write src/ electron/",
+    "assets:check": "node scripts/check-assets.cjs",
+    "assets:release": "node scripts/check-assets.cjs --release",
+    "native:build": "node scripts/build-native.cjs",
+    "native:test": "node scripts/test-native.cjs",
+    "audit:production": "npm audit --omit=dev --audit-level=high",
+    "check": "npm run lint && npm test && npm run assets:check && npm run build",
+    "dist:linux": "npm run build && node scripts/build-linux.cjs",
+    "dist:appimage": "npm run build && electron-builder --linux AppImage --publish never",
+    "dist:windows": "npm run native:build && npm run native:test && npm run build && electron-builder --win nsis --publish never",
+    "dist:mac": "npm run native:build && npm run native:test && npm run build && electron-builder --mac dmg zip --publish never"
+  },
+  "build": {
+    "appId": "ai.gillie.avatar",
+    "productName": "Gillie Avatar",
+    "asar": true,
+    "directories": {
+      "output": "../release/avatar"
+    },
+    "protocols": [
+      {
+        "name": "Gillie Avatar",
+        "schemes": [
+          "avatar"
+        ]
+      }
+    ],
+    "files": [
+      "out/**/*",
+      "build/icon.png",
+      "LICENSE",
+      "package.json"
+    ],
+    "extraResources": [
+      {
+        "from": "resources/icon.png",
+        "to": "icon.png"
+      }
+    ],
+    "linux": {
+      "category": "Utility",
+      "executableName": "gillie-avatar",
+      "icon": "resources/icon.png",
+      "synopsis": "Realtime character presence for Gillie voice sessions",
+      "artifactName": "GillieAvatar-${version}-linux-${arch}.${ext}",
+      "target": [
+        "AppImage",
+        "deb"
+      ]
+    },
+    "win": {
+      "target": [
+        "nsis"
+      ],
+      "artifactName": "GillieAvatar-${version}-windows-${arch}-setup.${ext}",
+      "icon": "resources/icon.png",
+      "requestedExecutionLevel": "asInvoker",
+      "signExts": [
+        "avatar-audio-listener.exe"
+      ],
+      "extraResources": [
+        {
+          "from": "native/bin/win32/avatar-audio-listener.exe",
+          "to": "native/win32/avatar-audio-listener.exe"
+        }
+      ]
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "Gillie Avatar"
+    },
+    "mac": {
+      "target": [
+        "dmg",
+        "zip"
+      ],
+      "artifactName": "GillieAvatar-${version}-macos-${arch}.${ext}",
+      "category": "public.app-category.utilities",
+      "icon": "resources/icon.png",
+      "minimumSystemVersion": "14.2.0",
+      "hardenedRuntime": true,
+      "entitlements": "build/entitlements.mac.plist",
+      "entitlementsInherit": "build/entitlements.mac.plist",
+      "binaries": [
+        "Contents/Resources/native/darwin/avatar-audio-listener"
+      ],
+      "extendInfo": {
+        "NSAudioCaptureUsageDescription": "Gillie Avatar listens to supported voice-app output levels to animate your character. Audio is processed in memory and is never stored."
+      },
+      "extraResources": [
+        {
+          "from": "native/bin/darwin/avatar-audio-listener",
+          "to": "native/darwin/avatar-audio-listener"
+        }
+      ]
+    }
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.30.0",
+    "@pixiv/three-vrm": "^3.4.4",
+    "@pixiv/three-vrm-animation": "^3.4.4",
+    "three": "^0.182.0",
+    "vue": "^3.5.13",
+    "zod": "^4.4.3"
+  },
+  "devDependencies": {
+    "@electron-toolkit/preload": "^3.0.1",
+    "@electron-toolkit/utils": "^3.0.0",
+    "@tsconfig/node22": "^22.0.1",
+    "@types/node": "^22.14.0",
+    "@types/three": "^0.182.0",
+    "@vitejs/plugin-vue": "^5.2.3",
+    "@vue/eslint-config-prettier": "^10.2.0",
+    "@vue/eslint-config-typescript": "^14.5.0",
+    "@vue/tsconfig": "^0.7.0",
+    "electron": "^35.0.1",
+    "electron-builder": "^25.1.8",
+    "electron-vite": "^3.0.0",
+    "eslint": "^9.22.0",
+    "eslint-plugin-vue": "~10.0.0",
+    "jiti": "^2.4.2",
+    "prettier": "3.5.3",
+    "typescript": "~5.8.0",
+    "vite": "6.3.5",
+    "vitest": "^3.1.4",
+    "vue-tsc": "^2.2.8"
+  }
+}

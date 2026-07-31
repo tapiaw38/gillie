@@ -21,7 +21,7 @@ class EmbodimentInstructionTests(unittest.TestCase):
     def test_separates_automatic_speech_motion_from_deliberate_gestures(self):
         lowered = self.text.lower()
         self.assertIn("move on their own while you speak", lowered)
-        self.assertIn("persona_play_animation", lowered)
+        self.assertIn("avatar_play_animation", lowered)
 
 
 if __name__ == "__main__":

@@ -1262,7 +1262,7 @@ def listen(
     new: bool = typer.Option(False, "--new", "-n", help="Force a new conversation"),
     conv_id: str = typer.Option(None, "--id", help="Attach to a specific conversation ID"),
     avatar: bool = typer.Option(
-        False, "--avatar", "-a", help="Open the Persona avatar and hide this terminal until it closes"
+        False, "--avatar", "-a", help="Open the Gillie Avatar and hide this terminal until it closes"
     ),
     barge_in: bool = typer.Option(
         True, "--barge-in/--no-barge-in", help="Let speaking over the assistant cut it off"

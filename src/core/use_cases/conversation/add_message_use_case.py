@@ -54,7 +54,7 @@ class AddMessageUseCase:
 
         enhanced_content = await self._process_voice_content(message, profile, context)
         conversation = await self._get_and_validate_conversation(conversation_id, user_id, context)
-        await self._show_persona(context)
+        await self._show_avatar(context)
         image_attachments, image_analysis_summary = await self._process_image_content(
             message=message,
             user_id=user_id,
@@ -147,7 +147,7 @@ class AddMessageUseCase:
         context = self.context_factory()
         profile = await context.repositories.profile.find_by_user_id(user_id)
         conversation = await self._get_and_validate_conversation(conversation_id, user_id, context)
-        await self._show_persona(context)
+        await self._show_avatar(context)
 
         compact_uc = CompactConversationUseCase(self.context_factory)
         compaction_event = await compact_uc.compact_if_needed(conversation, conversation_id, context)
@@ -259,10 +259,10 @@ class AddMessageUseCase:
             conversation.messages = []
         return conversation
 
-    async def _show_persona(self, context) -> None:
+    async def _show_avatar(self, context) -> None:
         mcp = getattr(context.integrations, "mcp", None)
         if mcp is not None:
-            await mcp.persona_control_window("show")
+            await mcp.avatar_control_window("show")
 
     def _create_user_message(
         self,

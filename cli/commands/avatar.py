@@ -14,10 +14,10 @@ from rich.console import Console
 from rich.panel import Panel
 
 console = Console()
-app = typer.Typer(help="Manage the Persona avatar companion app.")
+app = typer.Typer(help="Manage the Gillie Avatar companion app.")
 
 AVATAR_DIR = Path(__file__).parent.parent.parent.resolve() / "avatar"
-DEFAULT_BRIDGE_PORT = 47831
+DEFAULT_BRIDGE_PORT = 47850
 
 
 def _check_avatar_dir() -> None:
@@ -44,7 +44,7 @@ def _ensure_dependencies() -> None:
 
 
 def _ensure_build(rebuild: bool) -> None:
-    if not rebuild and (AVATAR_DIR / "dist" / "index.html").exists():
+    if not rebuild and (AVATAR_DIR / "out" / "renderer" / "index.html").exists():
         return
     console.print("  [cyan]▶[/cyan] Building avatar...")
     _run(["npm", "run", "build"])
@@ -54,14 +54,14 @@ def _ensure_build(rebuild: bool) -> None:
 def start(
     rebuild: bool = typer.Option(False, "--rebuild", "-r", help="Force renderer rebuild"),
     background: bool = typer.Option(False, "--background", "-b", help="Start hidden in background"),
-    port: int | None = typer.Option(None, "--port", help="Persona bridge port"),
+    port: int | None = typer.Option(None, "--port", help="Avatar bridge port"),
 ):
-    """Install, build, and launch Persona avatar."""
+    """Install, build, and launch Gillie Avatar."""
     _check_avatar_dir()
 
     console.print()
     console.print(Panel(
-        "🐙 [bold cyan]Gillie Avatar[/bold cyan] — [bold]Starting Persona[/bold]\n"
+        "🐙 [bold cyan]Gillie Avatar[/bold cyan] — [bold]Starting Gillie Avatar[/bold]\n"
         f"[dim]{AVATAR_DIR}[/dim]",
         border_style="cyan",
     ))
@@ -82,7 +82,7 @@ def _build_launch(background: bool = False, port: int | None = None) -> tuple[li
         raise typer.Exit(1)
 
     # Arch + Wayland can initialize Electron without rendering a visible window
-    # when VA-API fails. Persona only needs software compositing here.
+    # when VA-API fails. The avatar only needs software compositing here.
     cmd = [
         str(electron_bin),
         "--disable-gpu",
@@ -94,7 +94,7 @@ def _build_launch(background: bool = False, port: int | None = None) -> tuple[li
 
     env = os.environ.copy()
     if port is not None:
-        env["PERSONA_BRIDGE_PORT"] = str(port)
+        env["AVATAR_BRIDGE_PORT"] = str(port)
 
     if os.environ.get("WAYLAND_DISPLAY"):
         cmd += ["--ozone-platform=wayland", "--enable-features=WaylandWindowDecorations"]
@@ -117,7 +117,7 @@ def spawn(port: int | None = None) -> subprocess.Popen:
 
 def wait_for_bridge(port: int | None = None, timeout: float = 25.0) -> bool:
     """Block until the avatar's local bridge accepts connections."""
-    target = port or int(os.environ.get("PERSONA_BRIDGE_PORT", DEFAULT_BRIDGE_PORT))
+    target = port or int(os.environ.get("AVATAR_BRIDGE_PORT", DEFAULT_BRIDGE_PORT))
     deadline = time.monotonic() + timeout
     while time.monotonic() < deadline:
         with contextlib.suppress(OSError), socket.create_connection(("127.0.0.1", target), 0.4):
@@ -197,7 +197,7 @@ def terminal_hidden(enabled: bool = True):
 
 @app.command("stop")
 def stop():
-    """Stop running Persona avatar processes."""
+    """Stop running Gillie Avatar processes."""
     killed = []
     for proc_path in Path("/proc").iterdir():
         if not proc_path.name.isdigit():
