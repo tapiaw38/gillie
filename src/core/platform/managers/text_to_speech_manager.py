@@ -11,6 +11,7 @@ Responsibilities:
 - Manage TTS voice selection and settings
 """
 
+import asyncio
 import logging
 import io
 from typing import Optional, Dict, Any
@@ -61,30 +62,36 @@ class TextToSpeechService:
         Returns:
             URL of the stored audio file or None if generation fails
         """
-        try:
-            logger.info("Starting text-to-speech generation...")
+        logger.info("Starting text-to-speech generation...")
 
-            settings = {**self._get_default_settings(), **(settings or {})}
-            settings["language"] = language
+        settings = {**self._get_default_settings(), **(settings or {})}
+        settings["language"] = language
 
-            audio_data = await self._generate_audio(text, settings)
+        for attempt in (1, 2):
+            try:
+                audio_data = await self._generate_audio(text, settings)
+                if audio_data is None:
+                    return None
+                if not audio_data:
+                    raise RuntimeError("TTS returned empty audio data")
 
-            if not audio_data:
-                logger.error("Failed to generate audio data")
-                return None
+                audio_url = await self._upload_audio_to_storage(
+                    audio_data=audio_data,
+                    user_id=user_id,
+                    conversation_id=conversation_id
+                )
 
-            audio_url = await self._upload_audio_to_storage(
-                audio_data=audio_data,
-                user_id=user_id,
-                conversation_id=conversation_id
-            )
+                logger.info(f"Audio generated and uploaded successfully: {audio_url}")
+                return audio_url
 
-            logger.info(f"Audio generated and uploaded successfully: {audio_url}")
-            return audio_url
+            except Exception as e:
+                logger.error(f"Text-to-speech attempt {attempt}/2 failed: {e}")
+                if attempt == 2:
+                    logger.error(f"Dropping speech segment after 2 attempts: {text[:60]!r}")
+                    return None
+                await asyncio.sleep(0.5)
 
-        except Exception as e:
-            logger.error(f"Error in text-to-speech process: {e}")
-            return None
+        return None
 
     async def generate_and_store_cached_audio(
         self,
@@ -134,20 +141,18 @@ class TextToSpeechService:
             settings: TTS settings
 
         Returns:
-            Audio data as bytes or None if generation fails
+            Audio data, or None when the segment holds nothing speakable.
+
+        Raises:
+            Exception: on a real synthesis failure, so the caller can retry it.
         """
         try:
-            audio_data = await self.tts_integration.text_to_speech_stream(
+            return await self.tts_integration.text_to_speech_stream(
                 text=text,
                 settings=settings
             )
-            return audio_data
-
         except ValueError as e:
             logger.info(f"Skipping segment without speakable text: {e}")
-            return None
-        except Exception as e:
-            logger.error(f"Error generating audio with TTS integration: {e}")
             return None
 
     async def _upload_audio_to_storage(
