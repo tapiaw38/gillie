@@ -565,20 +565,14 @@ class AudioQueue:
         if not self._started:
             self._started = True
             self._thread.start()
+        self.playing.set()
         self._queue.put(url)
 
     def _track(self, process) -> None:
         with self._lock:
             self._player = process
-            if process is not None:
-                self.playing.set()
-                if self._stopped:
-                    process.terminate()
-            elif self._queue.empty():
-                # A reply is spoken one sentence per player, so the flag must
-                # survive the gaps between them: it means "still speaking",
-                # not "a player is alive right now".
-                self.playing.clear()
+            if process is not None and self._stopped:
+                process.terminate()
 
     def _run(self) -> None:
         while True:
@@ -597,6 +591,7 @@ class AudioQueue:
     def stop(self) -> None:
         """Cut playback immediately and discard anything still queued."""
         self._stopped = True
+        self.playing.clear()
         with self._lock:
             player = self._player
         if player is not None:
@@ -615,6 +610,7 @@ class AudioQueue:
         if not self._started:
             return
         self._queue.join()
+        self.playing.clear()
         self._queue.put(None)
         self._thread.join(timeout=5)
 
@@ -631,24 +627,31 @@ def _play_audio(url: str, on_process=None) -> None:
         ["ffplay", "-nodisp", "-autoexit", "-loglevel", "quiet", url],
         ["vlc", "--intf", "dummy", "--play-and-exit", "--quiet", url],
     ]
+    found = False
     for cmd in players:
         try:
             process = subprocess.Popen(cmd)
         except FileNotFoundError:
             continue
+        found = True
         if on_process is not None:
             on_process(process)
+        code = 0
         try:
-            process.wait(timeout=120)
+            code = process.wait(timeout=120)
         except subprocess.TimeoutExpired:
             process.kill()
         finally:
             if on_process is not None:
                 on_process(None)
-        return
-    console.print(
-        "[yellow]⚠[/yellow] No audio player found. Install [bold]mpv[/bold] or [bold]ffplay[/bold]."
-    )
+        if code <= 0:
+            return
+    if not found:
+        console.print(
+            "[yellow]⚠[/yellow] No audio player found. Install [bold]mpv[/bold] or [bold]ffplay[/bold]."
+        )
+    else:
+        console.print(f"[dim]⚠ could not play a speech segment ({url})[/dim]")
 
 
 def _stream_assistant(
@@ -835,6 +838,8 @@ def _stream_assistant(
     console.print(f"[bold cyan]{name}[/bold cyan]")
     _start_live_spinner("Thinking...")
 
+    audio = AudioQueue()
+
     try:
         resp = requests.post(
             _base_url() + f"/conversation/{conv_id}/message/stream",
@@ -847,7 +852,6 @@ def _stream_assistant(
         _resp_holder[0] = resp
         import json as _json
 
-        audio_url = None
         for raw_line in resp.iter_lines():
             if _cancel_requested.is_set():
                 break
@@ -865,7 +869,8 @@ def _stream_assistant(
                 break
             if isinstance(token, dict):
                 if token.get("type") == "audio":
-                    audio_url = token.get("url")
+                    if token.get("url"):
+                        audio.add(token["url"])
                 elif token.get("type") == "tool_call":
                     _stop_live()
                     if full_text:
@@ -1082,11 +1087,13 @@ def _stream_assistant(
             _escape_thread.join(timeout=0.5)
 
     if _had_error:
+        audio.stop()
         console.print(Rule(style="dim red"))
         console.print()
         return full_text
 
     if _cancel_requested.is_set():
+        audio.stop()
         if full_text:
             if _streaming_text:
                 _replace_streamed_with_markdown(full_text)
@@ -1105,9 +1112,7 @@ def _stream_assistant(
     console.print(Rule(style="dim"))
     console.print()
 
-    if audio_url:
-        console.print(f"[dim]🔊 Playing audio...[/dim]")
-        _play_audio(audio_url)
+    audio.wait()
 
     _track_tokens(content, full_text)
     return full_text
