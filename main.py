@@ -282,6 +282,8 @@ async def _close_browser_sessions() -> None:
     _browser_state["page"] = None
     _browser_state["playwright"] = None
     _browser_state["connected"] = False
+    _browser_state["prev_indices"] = set()
+    _browser_state["frames"] = {}
     logger.info("Browser sessions closed")
 
 

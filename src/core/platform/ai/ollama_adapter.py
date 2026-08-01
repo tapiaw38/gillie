@@ -104,7 +104,7 @@ TOOL_GROUPS: dict[str, list[str]] = {
     "browser":   [
         "browser_connect", "browser_navigate", "browser_act", "browser_extract",
         "browser_get_content", "browser_click", "browser_type", "browser_screenshot",
-        "browser_close", "browser_switch_tab", "browser_evaluate", "browser_enable_remote_debug",
+        "browser_close", "browser_switch_tab", "browser_evaluate",
     ],
     "calendar":  ["calendar_list_events", "calendar_create_event", "calendar_update_event", "calendar_delete_event"],
     "memory":    ["organize_memory", "save_memory", "search_memory", "save_solution"],

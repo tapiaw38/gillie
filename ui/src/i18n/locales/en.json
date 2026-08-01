@@ -1261,10 +1261,6 @@
         "label": "Browser: Switch tab",
         "hint": "When to move between open browser tabs."
       },
-      "browser_enable_remote_debug": {
-        "label": "Browser: Remote debug",
-        "hint": "When to enable remote browser debugging."
-      },
       "browser_evaluate": {
         "label": "Browser: Evaluate JS",
         "hint": "When to execute JavaScript in the context of the open page."
