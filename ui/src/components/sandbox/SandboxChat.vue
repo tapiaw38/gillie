@@ -393,8 +393,6 @@ const handlePaste = (e: ClipboardEvent) => {
   }
 }
 
-// ── Streaming send ─────────────────────────────────────────────────────────────
-
 const sendMessage = async () => {
   if (!canSend.value) return
 
@@ -605,8 +603,6 @@ const processStreamEvent = async (msg: ChatMessage, payload: unknown) => {
       break
   }
 }
-
-// ── Approval ──────────────────────────────────────────────────────────────────
 
 const handleApproval = async (approved: boolean, feedback: string = '') => {
   if (!pendingApproval.value) return
