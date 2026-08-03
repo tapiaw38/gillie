@@ -386,6 +386,7 @@ class LangChainService:
         shell_output_queue: Optional[asyncio.Queue] = None,
         client_workspace: str = "",
         plan_mode: bool = False,
+        auth_token: Optional[str] = None,
     ):
         """
         Stream AI response tokens. Uses astream() for direct responses and
@@ -469,6 +470,7 @@ class LangChainService:
                         plan_mode=plan_mode,
                         brain=self.brain,
                         avatar_mcp=self.avatar_mcp,
+                        auth_token=auth_token,
                     )
                     if _is_local_provider(self.config.base_url, self.config.model):
                         tools = await self._route_tools(question, tools)
@@ -818,10 +820,12 @@ class LangChainService:
             get_language_instruction,
         )
 
+        from src.core.platform.functions.global_workflows import redact_functions_for_prompt
+
         language = getattr(profile, "response_language", None) or "en"
         system_prompt = CONTEXT_INFORMATION.format(
             assistant_name=profile.assistant_name or "Assistant",
-            functions=profile.functions or "",
+            functions=redact_functions_for_prompt(profile.functions),
             product_context=context or "",
             language_instruction=get_language_instruction(language),
         )
@@ -830,30 +834,25 @@ class LangChainService:
             from src.core.platform.functions.global_workflows import get_available_workflows
             available_workflows = get_available_workflows(profile)
             if available_workflows:
+                # Name and inputs only: the model calls run_workflow, so the
+                # per-step endpoints are the engine's business, not the prompt's.
                 workflow_lines = []
                 for wf in available_workflows:
-                    name = wf.get("name", "")
-                    description = wf.get("description", "")
-                    steps = wf.get("steps", [])
-                    for step in steps:
-                        method = step.get("method", "GET")
-                        url = step.get("url", "")
-                        required = step.get("required_params", [])
-                        body_template = step.get("body_template", "")
-                        line = f"- **{name}**: {description}\n  → {method} {url}"
-                        if required:
-                            line += f" | params: {', '.join(required)}"
-                        if body_template:
-                            line += f" | body: {body_template}"
-                        workflow_lines.append(line)
+                    line = f"- **{wf.get('name', '')}**: {wf.get('description', '')}"
+                    required = wf.get("input_params") or []
+                    optional = wf.get("optional_params") or []
+                    if required:
+                        line += f"\n  params: {', '.join(required)}"
+                    if optional:
+                        line += f"\n  optional: {', '.join(optional)}"
+                    workflow_lines.append(line)
 
                 system_prompt += (
                     "\n\n## Available Integrations\n"
-                    "You have access to the following APIs. Use them directly with `run_shell` "
-                    "(curl) when the user requests related information. "
-                    "Do NOT look for local files or answer that you have no access.\n"
-                    "The authentication header is managed internally; always use "
-                    "the URL as shown (http://localhost:8000/...).\n\n"
+                    "Run these with the `run_workflow` tool, passing the workflow name and "
+                    "its parameters. It handles authentication, parameter substitution and "
+                    "the chaining between steps. Do NOT call these endpoints with curl or "
+                    "fetch_url, and do NOT answer that you have no access.\n\n"
                     + "\n".join(workflow_lines)
                 )
         except Exception as e:

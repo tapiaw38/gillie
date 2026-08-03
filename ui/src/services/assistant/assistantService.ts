@@ -19,12 +19,14 @@ import type {
   ContactDeleteResponse,
   OwnerMemoryListResponse,
 } from '@/types/assistant.ts'
+import type { WorkflowStepTestParams, WorkflowStepTestResponse } from '@/types/workflow.types'
 
 export interface IAssistantService {
   addAssistant(assistantProfile: AssistantProfileParams): Promise<AssistantProfileResponse>
   getAssistant(): Promise<AssistantProfileResponse>
   updateAssistant(assistantProfile: AssistantProfileUpdateParams): Promise<AssistantProfileResponse>
   getOptions(): Promise<ProfileOptionsResponse>
+  testWorkflowStep(payload: WorkflowStepTestParams): Promise<WorkflowStepTestResponse>
   setProvider(provider: string, api_key?: string): Promise<{ data: { provider: string; model: string } }>
   addProvider(input: CustomProviderInput): Promise<{ data: { name: string; model: string } }>
   addApiKey(apiKey: ApiKeyParams): Promise<ApiKeyResponse>
@@ -65,6 +67,14 @@ export class AssistantService implements IAssistantService {
 
   async getOptions(): Promise<ProfileOptionsResponse> {
     const { data } = await this.api.get<ProfileOptionsResponse>('/profile/options')
+    return data
+  }
+
+  async testWorkflowStep(payload: WorkflowStepTestParams): Promise<WorkflowStepTestResponse> {
+    const { data } = await this.api.post<WorkflowStepTestResponse>(
+      '/profile/functions/test-step',
+      payload,
+    )
     return data
   }
 

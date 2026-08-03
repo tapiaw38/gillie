@@ -153,6 +153,7 @@ class AddMessageUseCase:
         user_id: str,
         client_workspace: str = "",
         plan_mode: bool = False,
+        auth_token: Optional[str] = None,
     ):
         """Streaming variant for CLI. Yields str tokens, shell_output dicts, and audio dicts."""
         context = self.context_factory()
@@ -216,6 +217,7 @@ class AddMessageUseCase:
             shell_output_queue=shell_output_queue,
             client_workspace=client_workspace,
             plan_mode=plan_mode,
+            auth_token=auth_token,
         ):
             yield token
             if not isinstance(token, str):

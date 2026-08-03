@@ -20,6 +20,8 @@ from .profile import (
     ListOptionsOutputData,
     VoiceEngineOutputData,
     VoiceOptionData,
+    WorkflowStepInput,
+    WorkflowStepTestInput,
 )
 from .conversation import (
     ConversationInput,
@@ -94,6 +96,8 @@ __all__ = [
     "ProfileOutput",
     "ProfileOutputData",
     "ContactInput",
+    "WorkflowStepInput",
+    "WorkflowStepTestInput",
     "ContactOutput",
     "ContactOutputData",
     "ContactListOutput",

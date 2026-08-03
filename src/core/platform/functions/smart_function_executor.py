@@ -1,6 +1,7 @@
 import json
 import logging
 import re
+import time
 from datetime import datetime
 from typing import List, Dict, Any, Optional
 from dataclasses import dataclass, field
@@ -14,6 +15,8 @@ from src.core.platform.config.service import ConfigurationService
 from src.core.domain import Profile
 
 logger = logging.getLogger(__name__)
+
+_PARAM_COLLECTION_TTL_SECONDS = 30 * 60
 
 
 @dataclass
@@ -37,6 +40,9 @@ class FunctionConfig:
     body_prompt: Optional[str] = None
     required_body_params: List[str] = field(default_factory=list)
     response_default_message: Optional[str] = None
+    # The workflow definition this config came from. Carried here so a run
+    # never has to look it up in a registry shared with every other tenant.
+    raw: Dict[str, Any] = field(default_factory=dict)
 
 
 @dataclass
@@ -150,12 +156,9 @@ CRITICAL OUTPUT RULES:
                     body_prompt=func.get("body_prompt"),
                     required_body_params=func.get("required_body_params", []),
                     response_default_message=func.get("response_default_message"),
+                    raw=func if isinstance(func, dict) else {},
                 )
                 parsed.append(config)
-
-                if config.type == "workflow":
-                    self.workflow_executor.register_workflow(config.name, func)
-                    logger.info(f"Registered workflow: {config.name}")
 
             return parsed
 
@@ -452,7 +455,7 @@ CRITICAL OUTPUT RULES:
         """Execute a registered workflow."""
         try:
             result = await self.workflow_executor.execute_workflow(
-                workflow_name=function_config.name,
+                workflow=function_config.raw,
                 input_params=params,
                 profile=profile,
                 auth_token=auth_token,
@@ -660,9 +663,10 @@ CRITICAL OUTPUT RULES:
 
     def _detect_ongoing_function(self, user_id: str) -> Optional[str]:
         """Return the name of the function currently awaiting parameters, or None."""
+        self._expire_stale_params(user_id)
         user_storage = self.function_params_storage.get(user_id, {})
         for function_name, params in user_storage.items():
-            if params:
+            if any(key != "__updated_at" for key in params):
                 return function_name
         return None
 
@@ -687,8 +691,8 @@ CRITICAL OUTPUT RULES:
 
             if matched_function.body_mode == "llm" and matched_function.required_body_params:
                 required_params = matched_function.required_body_params
-            elif matched_function.type == "workflow" and function_name in self.workflow_executor.workflows:
-                required_params = self.workflow_executor.workflows[function_name].get("input_params", [])
+            elif matched_function.type == "workflow" and matched_function.raw:
+                required_params = matched_function.raw.get("input_params", [])
             else:
                 required_params = self._extract_url_params(matched_function.url)
 
@@ -750,16 +754,39 @@ CRITICAL OUTPUT RULES:
             return FunctionResult(response=error_response)
 
     def _store_params(self, user_id: str, function_name: str, params: Dict[str, Any]):
-        self.function_params_storage.setdefault(user_id, {}).setdefault(function_name, {}).update(params)
+        stored = self.function_params_storage.setdefault(user_id, {}).setdefault(function_name, {})
+        stored.update(params)
+        stored["__updated_at"] = time.time()
 
     def _get_stored_params(self, user_id: str, function_name: str) -> Dict[str, Any]:
-        return self.function_params_storage.get(user_id, {}).get(function_name, {}).copy()
+        params = self.function_params_storage.get(user_id, {}).get(function_name, {}).copy()
+        params.pop("__updated_at", None)
+        return params
 
     def _clear_params(self, user_id: str, function_name: str):
         try:
             del self.function_params_storage[user_id][function_name]
         except KeyError:
             pass
+
+    def _expire_stale_params(self, user_id: str) -> None:
+        """Drop half-collected parameters the user walked away from.
+
+        Without this, an abandoned booking from weeks ago still counts as an
+        ongoing function and hijacks the next unrelated message.
+        """
+        user_storage = self.function_params_storage.get(user_id)
+        if not user_storage:
+            return
+        cutoff = time.time() - _PARAM_COLLECTION_TTL_SECONDS
+        for function_name in [
+            name for name, params in user_storage.items()
+            if params.get("__updated_at", 0) < cutoff
+        ]:
+            logger.info(f"Expiring stale parameters for '{function_name}' (user {user_id})")
+            del user_storage[function_name]
+        if not user_storage:
+            del self.function_params_storage[user_id]
 
     @staticmethod
     def _strip_metadata(params: Dict[str, Any]) -> Dict[str, Any]:

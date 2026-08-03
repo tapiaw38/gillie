@@ -38,7 +38,52 @@ To add a new workflow:
 2. Append it to GLOBAL_WORKFLOWS below.
 """
 
+import json
+import logging
 from typing import List, Dict, Any, Optional
+
+logger = logging.getLogger(__name__)
+
+# Anything under these keys can hold an API key or a bearer token.
+_SECRET_KEYS = ("headers", "auth", "authorization", "api_key", "token", "secret")
+
+
+def redact_functions_for_prompt(functions: Any) -> str:
+    """Render a profile's function config for a system prompt, without secrets.
+
+    The raw config carries the headers each workflow sends, and those headers
+    hold the customer's API keys. Handing that to the model ships the keys to
+    the provider on every message and lets the model repeat them back in an
+    answer, so they are stripped before the config is ever rendered.
+    """
+    if not functions:
+        return ""
+
+    try:
+        parsed = json.loads(functions) if isinstance(functions, str) else functions
+    except (json.JSONDecodeError, TypeError):
+        logger.warning("Could not parse profile functions for redaction; omitting from prompt")
+        return ""
+
+    if isinstance(parsed, dict):
+        parsed = parsed.get("functions", parsed)
+    if isinstance(parsed, dict):
+        parsed = [parsed]
+    if not isinstance(parsed, list):
+        return ""
+
+    return json.dumps([_redact_node(item) for item in parsed], ensure_ascii=False, indent=2)
+
+
+def _redact_node(node: Any) -> Any:
+    if isinstance(node, dict):
+        return {
+            key: "[redacted]" if key.lower() in _SECRET_KEYS else _redact_node(value)
+            for key, value in node.items()
+        }
+    if isinstance(node, list):
+        return [_redact_node(item) for item in node]
+    return node
 
 
 _CALENDAR_BASE = "http://localhost:8000/api/v1/calendar"

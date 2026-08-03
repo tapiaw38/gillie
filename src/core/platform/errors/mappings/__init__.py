@@ -174,6 +174,8 @@ __all__ = [
     "JiraIssueSummaryRequiredError",
     "JiraProjectKeyRequiredError",
 
+    "ProfileFunctionStepBlockedError",
+
     # Teams errors
     "TeamsIntegrationNotFoundError",
     "TeamsIntegrationConfigError",

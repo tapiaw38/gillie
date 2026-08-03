@@ -1,3 +1,5 @@
+import time
+
 from fastapi import APIRouter, status, Depends, Request, UploadFile, File
 from src.schemas import (
     ProfileInput,
@@ -5,9 +7,13 @@ from src.schemas import (
     FileInput,
     IntegrationInput,
     ContactInput,
+    WorkflowStepTestInput,
 )
 from typing import List
 from src.adapters.web.dependencies import get_usecases
+from src.core.platform.errors import NewApplicationError
+from src.core.platform.errors.mappings.profile import ProfileFunctionStepBlockedError
+from src.core.platform.functions.workflow_executor import WorkflowError, WorkflowExecutor
 from src.core.use_cases.use_cases import Usecases
 
 
@@ -112,6 +118,60 @@ async def delete_integration(
     user_id = request.state.user.get("user_id")
     result = await usecases.profile.delete_integration_usecase.execute(user_id, integration_id)
     return result
+
+
+@router.post("/functions/test-step", status_code=status.HTTP_200_OK)
+async def test_workflow_step(
+    payload: WorkflowStepTestInput,
+    request: Request,
+):
+    """Run a single workflow step and return the raw response.
+
+    Writing `response_mapping` means knowing the shape of the response, and
+    without this the only way to find out was to save the workflow, send a
+    real message and read the server logs.
+    """
+    executor = WorkflowExecutor()
+    context = dict(payload.context or {})
+    context.setdefault("user_id", request.state.user.get("user_id"))
+
+    started = time.monotonic()
+    try:
+        result = await executor.execute_single_step(
+            payload.step.model_dump(exclude_none=True), context
+        )
+    except WorkflowError as e:
+        raise NewApplicationError(ProfileFunctionStepBlockedError, e)
+    except Exception as e:
+        return {
+            "ok": False,
+            "error": str(e),
+            "elapsed_ms": int((time.monotonic() - started) * 1000),
+        }
+
+    return {
+        "ok": True,
+        "response": result,
+        "paths": _describe_paths(result),
+        "elapsed_ms": int((time.monotonic() - started) * 1000),
+    }
+
+
+def _describe_paths(node, prefix: str = "", depth: int = 0) -> List[str]:
+    """Flatten a response into dot-paths so the editor can offer them for mapping."""
+    if depth > 4:
+        return []
+    paths: List[str] = []
+    if isinstance(node, dict):
+        for key, value in node.items():
+            path = f"{prefix}.{key}" if prefix else key
+            if isinstance(value, (dict, list)):
+                paths.extend(_describe_paths(value, path, depth + 1))
+            else:
+                paths.append(path)
+    elif isinstance(node, list) and node:
+        paths.extend(_describe_paths(node[0], f"{prefix}.0" if prefix else "0", depth + 1))
+    return paths[:100]
 
 
 @router.get("/options", status_code=status.HTTP_200_OK)

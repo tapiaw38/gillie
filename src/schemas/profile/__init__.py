@@ -16,6 +16,10 @@ from .profile_schemas import (
     ContactOutputData,
     ContactListOutput,
 )
+from .workflow_schemas import (
+    WorkflowStepInput,
+    WorkflowStepTestInput,
+)
 from .role_schemas import (
     RoleOutput,
     RoleOutputData,
@@ -48,4 +52,6 @@ __all__ = [
     "ListOptionsOutputData",
     "VoiceEngineOutputData",
     "VoiceOptionData",
+    "WorkflowStepInput",
+    "WorkflowStepTestInput",
 ]

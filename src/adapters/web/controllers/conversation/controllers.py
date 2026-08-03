@@ -138,6 +138,8 @@ async def add_message_stream(
     user_id = request.state.user.get("user_id")
     client_workspace = request.headers.get("X-Gillie-Workspace", "")
     plan_mode = request.headers.get("X-Gillie-Mode", "") == "plan"
+    auth_header = request.headers.get("Authorization", "")
+    auth_token = auth_header.replace("Bearer ", "") if auth_header else None
     async def event_generator():
         try:
             async for token in usecases.conversation.add_message_usecase.execute_stream(
@@ -146,6 +148,7 @@ async def add_message_stream(
                 user_id=user_id,
                 client_workspace=client_workspace,
                 plan_mode=plan_mode,
+                auth_token=auth_token,
             ):
                 yield f"data: {json.dumps(token)}\n\n"
         except Exception as e:

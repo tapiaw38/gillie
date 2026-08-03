@@ -195,6 +195,7 @@ class OpenAIIntegration:
         shell_output_queue=None,
         client_workspace: str = "",
         plan_mode: bool = False,
+        auth_token: Optional[str] = None,
     ):
         """Stream AI response tokens via LangChain. Yields str tokens and shell_output dicts.
 
@@ -220,6 +221,7 @@ class OpenAIIntegration:
             shell_output_queue=shell_output_queue,
             client_workspace=client_workspace,
             plan_mode=plan_mode,
+            auth_token=auth_token,
         ):
             yield token
 

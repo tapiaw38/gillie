@@ -177,6 +177,13 @@ _DEFAULT_TOOL_PROMPTS: Dict[str, str] = {
         "tables, data, or wants to verify/inspect what is stored in the database. "
         "Do NOT use repo_map, find_files, or read_file for database questions."
     ),
+    "run_workflow": (
+        "Execute a configured multi-step workflow by name. Use this for the "
+        "assistant's configured integrations (calendar, bookings, business APIs) "
+        "instead of curl or fetch_url: it substitutes parameters, sends the right "
+        "authentication headers, chains the steps and passes values between them. "
+        "Call it with the workflow name and its input parameters."
+    ),
     "fetch_url": (
         "Fetch and extract the text content of a specific web page URL. "
         "Use when the user mentions a specific website by name or URL "
@@ -1013,6 +1020,14 @@ class SaveMemoryArgs(BaseModel):
     )
 
 
+class RunWorkflowArgs(BaseModel):
+    workflow_name: str = Field(description="Name of the configured workflow to execute")
+    params: Dict[str, Any] = Field(
+        default_factory=dict,
+        description="Input parameters for the workflow, keyed by parameter name",
+    )
+
+
 class FetchUrlArgs(BaseModel):
     """Arguments for fetching a web page"""
 
@@ -1687,6 +1702,7 @@ def create_langchain_tools(
     plan_mode: bool = False,
     brain=None,
     avatar_mcp=None,
+    auth_token: str = "",
 ) -> List[StructuredTool]:
     """
     Create LangChain StructuredTool instances with Pydantic validation.
@@ -5136,6 +5152,66 @@ If data is not found, say so clearly."""
             coroutine=func,
         )
 
+    def _available_workflows() -> Dict[str, Dict[str, Any]]:
+        """Every workflow this profile can run, keyed by name."""
+        from src.core.platform.functions.global_workflows import get_available_workflows
+
+        found: Dict[str, Dict[str, Any]] = {}
+        raw = getattr(profile, "functions", None)
+        if raw:
+            try:
+                parsed = json.loads(raw) if isinstance(raw, str) else raw
+                if isinstance(parsed, dict):
+                    parsed = parsed.get("functions", [parsed])
+                for item in parsed or []:
+                    if isinstance(item, dict) and item.get("type") == "workflow" and item.get("name"):
+                        found[item["name"]] = item
+            except (json.JSONDecodeError, TypeError):
+                logger.warning("Profile functions are not valid JSON; skipping workflows")
+
+        try:
+            for workflow in get_available_workflows(profile) or []:
+                if workflow.get("name"):
+                    found.setdefault(workflow["name"], workflow)
+        except Exception:
+            logger.warning("Could not load global workflows", exc_info=True)
+        return found
+
+    async def run_workflow_tool(workflow_name: str, params: Dict[str, Any] = None) -> Dict[str, Any]:
+        """Run a configured workflow through the workflow engine.
+
+        The streaming path used to hand the model a list of endpoints and tell
+        it to curl them, which skipped parameter substitution, the auth headers
+        and the step chaining entirely.
+        """
+        from src.core.platform.functions.workflow_executor import WorkflowExecutor
+
+        workflows = _available_workflows()
+        workflow = workflows.get(workflow_name)
+        if not workflow:
+            return {
+                "error": f"Workflow '{workflow_name}' is not configured.",
+                "available": sorted(workflows.keys()),
+            }
+
+        if plan_mode:
+            return {
+                "plan_only": True,
+                "would_do": f"Run workflow '{workflow_name}' ({len(workflow.get('steps', []))} steps)",
+                "diff": json.dumps(params or {}, ensure_ascii=False)[:500],
+            }
+
+        try:
+            return await WorkflowExecutor().execute_workflow(
+                workflow=workflow,
+                input_params=params or {},
+                profile=profile,
+                auth_token=auth_token or None,
+            )
+        except Exception as e:
+            logger.error(f"run_workflow '{workflow_name}' failed: {e}", exc_info=True)
+            return {"error": str(e), "workflow_name": workflow_name}
+
     async def fetch_url_tool(url: str) -> Dict[str, Any]:
         """Fetch and extract text from a URL."""
         import httpx
@@ -5461,6 +5537,12 @@ If data is not found, say so clearly."""
         filter(
             None,
             [
+                _tool(
+                    "run_workflow",
+                    prompts.get("run_workflow", _DEFAULT_TOOL_PROMPTS["run_workflow"]),
+                    run_workflow_tool,
+                    RunWorkflowArgs,
+                ),
                 _tool(
                     "fetch_url",
                     prompts.get("fetch_url", _DEFAULT_TOOL_PROMPTS["fetch_url"]),

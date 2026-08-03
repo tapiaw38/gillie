@@ -227,3 +227,10 @@ ProfileContactValidationError = ErrorDetails(
     status_code=400,
     message="invalid contact data"
 )
+
+
+ProfileFunctionStepBlockedError = ErrorDetails(
+    internal_code="profile:functions:step-blocked",
+    status_code=400,
+    message="the step url is not allowed"
+)
