@@ -128,5 +128,150 @@ class SpawnOutputTests(unittest.TestCase):
         self.assertTrue(str(path).endswith("gillie/avatar.log"))
 
 
+
+class LayoutEnvTests(unittest.TestCase):
+    def _env(self, layout):
+        with mock.patch.object(avatar, "get_avatar_layout", return_value=layout):
+            return avatar._layout_env()
+
+    def test_passes_saved_layout_to_the_launcher(self):
+        self.assertEqual(
+            self._env({"avatar_width": 500, "avatar_height": 900, "avatar_zoom": 2.0}),
+            {
+                "AVATAR_WINDOW_WIDTH": "500",
+                "AVATAR_WINDOW_HEIGHT": "900",
+                "AVATAR_ZOOM": "2.0",
+            },
+        )
+
+    def test_an_unset_profile_leaves_the_app_defaults_alone(self):
+        self.assertEqual(self._env({}), {})
+
+    def test_drops_individual_fields_that_were_never_set(self):
+        self.assertEqual(self._env({"avatar_zoom": 1.2}), {"AVATAR_ZOOM": "1.2"})
+
+    def test_rejects_values_that_would_produce_an_unusable_window(self):
+        self.assertEqual(self._env({"avatar_width": 0, "avatar_height": -10}), {})
+
+    def test_survives_a_non_numeric_value(self):
+        self.assertEqual(self._env({"avatar_width": "wide", "avatar_zoom": 1.5}),
+                         {"AVATAR_ZOOM": "1.5"})
+
+    def test_reaches_the_launch_environment(self):
+        with mock.patch.object(avatar, "get_avatar_layout", return_value={"avatar_zoom": 2.5}), \
+             mock.patch.object(avatar.Path, "exists", return_value=True):
+            _, env = avatar._build_launch()
+        self.assertEqual(env["AVATAR_ZOOM"], "2.5")
+
+
+
+class ChatAvatarLifecycleTests(unittest.TestCase):
+    def test_starting_registers_cleanup_and_leaves_the_terminal_visible(self):
+        import cli.commands.agent as agent
+
+        process = mock.Mock()
+        process.poll.return_value = None
+        with mock.patch.object(avatar, "spawn", return_value=process), \
+             mock.patch.object(avatar, "wait_for_bridge", return_value=True), \
+             mock.patch.object(avatar, "terminal_hidden") as hide, \
+             mock.patch.object(agent.atexit, "register") as register:
+            started = agent._start_avatar()
+
+        self.assertIs(started, process)
+        hide.assert_not_called()
+        register.assert_called_once_with(agent._stop_avatar, process)
+
+    def test_a_bridge_that_never_answers_stops_the_process_and_continues(self):
+        import cli.commands.agent as agent
+
+        process = mock.Mock()
+        process.poll.return_value = None
+        with mock.patch.object(avatar, "spawn", return_value=process), \
+             mock.patch.object(avatar, "wait_for_bridge", return_value=False):
+            self.assertIsNone(agent._start_avatar())
+        process.terminate.assert_called_once()
+
+    def test_stopping_is_a_no_op_when_nothing_was_started(self):
+        import cli.commands.agent as agent
+
+        agent._stop_avatar(None)
+
+    def test_stopping_skips_a_process_that_already_exited(self):
+        import cli.commands.agent as agent
+
+        process = mock.Mock()
+        process.poll.return_value = 0
+        agent._stop_avatar(process)
+        process.terminate.assert_not_called()
+
+
+
+class OrphanPlayerTests(unittest.TestCase):
+    """Closing the terminal must not leave a speech player talking to nobody."""
+
+    def _run_child(self, signal_number):
+        import os
+        import signal as signal_module
+        import subprocess as sp
+        import sys
+        import time
+
+        read_fd, write_fd = os.pipe()
+        child = os.fork()
+        if child == 0:
+            os.close(read_fd)
+            import cli.commands.agent as agent
+
+            agent._install_player_reaper()
+            player = sp.Popen(["sleep", "120"])
+            agent._track_player(player)
+            os.write(write_fd, str(player.pid).encode())
+            os.close(write_fd)
+            time.sleep(30)
+            os._exit(0)
+
+        os.close(write_fd)
+        player_pid = int(os.read(read_fd, 32))
+        os.close(read_fd)
+        time.sleep(1.5)
+        os.kill(child, signal_number)
+        os.waitpid(child, 0)
+        time.sleep(1.0)
+        try:
+            with open(f"/proc/{player_pid}/stat") as handle:
+                state = handle.read().split(") ", 1)[1][0]
+        except FileNotFoundError:
+            state = "gone"
+        sp.run(["kill", "-9", str(player_pid)], stderr=sp.DEVNULL)
+        return state
+
+    def test_a_hangup_stops_the_player(self):
+        import signal as signal_module
+
+        self.assertIn(self._run_child(signal_module.SIGHUP), ("gone", "Z"))
+
+    def test_a_terminate_stops_the_player(self):
+        import signal as signal_module
+
+        self.assertIn(self._run_child(signal_module.SIGTERM), ("gone", "Z"))
+
+    def test_tracking_forgets_a_player_once_it_finishes(self):
+        import cli.commands.agent as agent
+
+        process = mock.Mock()
+        agent._track_player(process)
+        agent._untrack_player(process)
+        self.assertNotIn(process, agent._live_players)
+
+    def test_killing_skips_players_that_already_exited(self):
+        import cli.commands.agent as agent
+
+        process = mock.Mock()
+        process.poll.return_value = 0
+        agent._track_player(process)
+        agent._kill_live_players()
+        process.kill.assert_not_called()
+
+
 if __name__ == "__main__":
     unittest.main()

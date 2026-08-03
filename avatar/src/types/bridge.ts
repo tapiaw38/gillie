@@ -40,6 +40,7 @@ export type AvatarBridgeEvent =
   | { type: 'bridge-status'; connected: boolean }
 
 export interface AvatarBridge {
+  zoom: number
   getSnapshot(): Promise<AvatarBridgeEvent | null>
   hide(): void
   subscribe(listener: (event: AvatarBridgeEvent) => void): () => void

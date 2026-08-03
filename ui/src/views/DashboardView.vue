@@ -416,6 +416,14 @@ const integrations = computed<IntegrationItem[]>(() => [
     enabled: true,
   },
   {
+    name: t('dashboard.integrations.avatar.name'),
+    description: t('dashboard.integrations.avatar.description'),
+    icon: 'pi pi-user',
+    tone: 'primary',
+    to: 'avatar',
+    enabled: true,
+  },
+  {
     name: t('dashboard.integrations.cronJobs.name'),
     description: t('dashboard.integrations.cronJobs.description'),
     icon: 'pi pi-clock',
@@ -485,6 +493,7 @@ const PRODUCTIVITY_ROUTES = [
   'jira-integration',
 ]
 const AUTOMATION_ROUTES = [
+  'avatar',
   'system-commands',
   'cron-jobs',
   'tool-prompts',

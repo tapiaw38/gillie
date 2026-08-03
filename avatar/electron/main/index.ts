@@ -24,8 +24,19 @@ import type {
   VoiceState,
 } from './types'
 
-const WINDOW_WIDTH = 430
-const WINDOW_HEIGHT = 680
+const DEFAULT_WINDOW_WIDTH = 430
+const DEFAULT_WINDOW_HEIGHT = 680
+const DEFAULT_ZOOM = 1.5
+
+function numberFromEnv(name: string, fallback: number, min: number, max: number): number {
+  const parsed = Number(process.env[name])
+  if (!Number.isFinite(parsed)) return fallback
+  return Math.min(max, Math.max(min, parsed))
+}
+
+const WINDOW_WIDTH = Math.round(numberFromEnv('AVATAR_WINDOW_WIDTH', DEFAULT_WINDOW_WIDTH, 200, 3840))
+const WINDOW_HEIGHT = Math.round(numberFromEnv('AVATAR_WINDOW_HEIGHT', DEFAULT_WINDOW_HEIGHT, 200, 2160))
+const AVATAR_ZOOM = numberFromEnv('AVATAR_ZOOM', DEFAULT_ZOOM, 0.5, 4)
 const startInBackground = process.argv.includes('--background')
 const protocolScheme = 'avatar'
 const debugEnabled = process.env.AVATAR_DEBUG === '1'
@@ -174,6 +185,7 @@ function createWindow(): BrowserWindow {
       contextIsolation: true,
       nodeIntegration: false,
       sandbox: true,
+      additionalArguments: [`--avatar-zoom=${AVATAR_ZOOM}`],
     },
   })
 

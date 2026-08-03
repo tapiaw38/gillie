@@ -13,11 +13,14 @@ In-chat commands:
   /exit    — quit (also Ctrl+C or Ctrl+D)
 """
 
+import atexit
 import contextlib
 import os
 import re
+import signal
 import subprocess
 import sys
+import threading
 import time
 import glob as _glob
 import mimetypes
@@ -615,6 +618,58 @@ class AudioQueue:
         self._thread.join(timeout=5)
 
 
+_live_players: set = set()
+_live_players_lock = threading.Lock()
+_player_reaper_installed = False
+
+
+def _kill_live_players(*_args) -> None:
+    """Stop every player this process started.
+
+    Closing the terminal sends SIGHUP, whose default action kills Python without
+    running atexit handlers, so the spawned player outlived its parent and kept
+    talking with nothing left to stop it.
+    """
+    with _live_players_lock:
+        players = list(_live_players)
+        _live_players.clear()
+    for player in players:
+        with contextlib.suppress(Exception):
+            if player.poll() is None:
+                player.kill()
+
+
+def _install_player_reaper() -> None:
+    global _player_reaper_installed
+    if _player_reaper_installed:
+        return
+    _player_reaper_installed = True
+    atexit.register(_kill_live_players)
+    for sig in (signal.SIGHUP, signal.SIGTERM):
+        with contextlib.suppress(ValueError, OSError):
+            previous = signal.getsignal(sig)
+
+            def handler(signum, frame, _previous=previous):
+                _kill_live_players()
+                if callable(_previous):
+                    _previous(signum, frame)
+                else:
+                    signal.signal(signum, signal.SIG_DFL)
+                    os.kill(os.getpid(), signum)
+
+            signal.signal(sig, handler)
+
+
+def _track_player(process) -> None:
+    with _live_players_lock:
+        _live_players.add(process)
+
+
+def _untrack_player(process) -> None:
+    with _live_players_lock:
+        _live_players.discard(process)
+
+
 def _play_audio(url: str, on_process=None) -> None:
     """Play an audio URL using the first available system player.
 
@@ -622,6 +677,7 @@ def _play_audio(url: str, on_process=None) -> None:
     """
     if not url.startswith("http"):
         return
+    _install_player_reaper()
     players = [
         ["mpv", "--no-video", "--really-quiet", url],
         ["ffplay", "-nodisp", "-autoexit", "-loglevel", "quiet", url],
@@ -634,6 +690,7 @@ def _play_audio(url: str, on_process=None) -> None:
         except FileNotFoundError:
             continue
         found = True
+        _track_player(process)
         if on_process is not None:
             on_process(process)
         code = 0
@@ -642,6 +699,7 @@ def _play_audio(url: str, on_process=None) -> None:
         except subprocess.TimeoutExpired:
             process.kill()
         finally:
+            _untrack_player(process)
             if on_process is not None:
                 on_process(None)
         if code <= 0:
@@ -1959,6 +2017,37 @@ def set_workspace(
     console.print(f"[green]✓[/green] Workspace set to: {ws_path}")
 
 
+def _start_avatar():
+    """Open the avatar alongside a typed conversation.
+
+    Unlike listen mode this leaves the terminal visible, because the whole point
+    here is that you keep typing into it.
+    """
+    from cli.commands import avatar as avatar_cmd
+
+    process = avatar_cmd.spawn()
+    if avatar_cmd.wait_for_bridge():
+        # The chat loop has many exits — /exit, double Ctrl+C, an unhandled
+        # error — so cleanup is registered here rather than at each one.
+        atexit.register(_stop_avatar, process)
+        console.print("[dim]🐙 avatar ready[/dim]")
+        return process
+
+    console.print(
+        "[yellow]⚠[/yellow] Avatar did not answer on its bridge; continuing without it."
+    )
+    _stop_avatar(process)
+    return None
+
+
+def _stop_avatar(process) -> None:
+    if process is None or process.poll() is not None:
+        return
+    process.terminate()
+    with contextlib.suppress(subprocess.TimeoutExpired):
+        process.wait(timeout=5)
+
+
 @app.callback(invoke_without_command=True)
 def agent(
     ctx: typer.Context,
@@ -1983,6 +2072,9 @@ def agent(
         "--mode",
         "-m",
         help="Approval mode: plan | default | risky | auto-edit | yolo",
+    ),
+    avatar: bool = typer.Option(
+        False, "--avatar", "-a", help="Show the avatar on screen while you chat"
     ),
 ):
     """Interactive chat with the assistant from the terminal."""
@@ -2035,6 +2127,8 @@ def agent(
     if not current_id:
         console.print("[red]✗[/red] Could not retrieve conversation ID.")
         raise typer.Exit(1)
+
+    avatar_proc = _start_avatar() if avatar else None
 
     mode = [initial_mode]
 
@@ -2443,6 +2537,8 @@ def agent(
             always_rejected=always_rejected,
             session_local_files=session_local_files,
         )
+
+    _stop_avatar(avatar_proc)
 
     try:
         requests.post(

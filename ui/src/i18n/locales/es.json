@@ -200,6 +200,10 @@
       "contacts": {
         "name": "Contactos",
         "description": "Gestiona contactos e identidades de conversación"
+      },
+      "avatar": {
+        "name": "Avatar",
+        "description": "Tamaño de ventana y zoom de cámara del personaje"
       }
     }
   },
@@ -1402,7 +1406,9 @@
       "nodeDeletedDetail": "El nodo se ha eliminado del workflow",
       "nodeAdded": "Nodo Agregado",
       "nodeAddedHttpDetail": "Se ha creado un nuevo nodo HTTP Request",
-      "nodeAddedConditionDetail": "Se ha creado un nuevo nodo de condición"
+      "nodeAddedConditionDetail": "Se ha creado un nuevo nodo de condición",
+      "unresolvedParams": "Parámetros sin origen",
+      "unresolvedParamsDetail": "Nada provee estos valores: {params}. Agregalos a input_params o mapealos desde un paso anterior."
     },
     "node": {
       "newStep": "Nuevo Paso",
@@ -1424,7 +1430,17 @@
       "responseMapping": "Mapeo de Respuesta",
       "responseMappingHint": "Agrega mapeos para extraer datos de la respuesta",
       "saveChanges": "Guardar Cambios",
-      "deleteNode": "Eliminar Nodo"
+      "deleteNode": "Eliminar Nodo",
+      "headers": "Headers",
+      "addHeader": "Agregar header",
+      "headersHint": "Valores admiten {param}. Ej: Authorization → Bearer {auth_token}",
+      "testStep": "Probar este paso",
+      "runTest": "Ejecutar",
+      "testHint": "Contexto de prueba en JSON: los valores que reemplazan cada {param}.",
+      "testContextInvalid": "El contexto de prueba no es JSON válido.",
+      "testOk": "Respuesta recibida",
+      "testFailed": "Falló",
+      "testPathsHint": "Clickeá un campo para agregarlo al mapeo de respuesta:"
     },
     "guide": {
       "title": "Guía Rápida de Workflows",
@@ -1501,5 +1517,25 @@
     "contactUs": "Contáctanos",
     "about": "Acerca de",
     "allRightsReserved": "Todos los derechos reservados."
+  },
+  "avatar": {
+    "title": "Avatar",
+    "subtitle": "Definí el tamaño de la ventana y el encuadre del personaje",
+    "save": "Guardar",
+    "saved": "Configuración guardada",
+    "savedDetail": "Reiniciá el avatar para aplicarla",
+    "saveError": "No se pudo guardar la configuración del avatar",
+    "loading": "Cargando configuración...",
+    "width": "Ancho de ventana",
+    "widthHint": "Cuán ancha es la ventana de escritorio, en píxeles",
+    "height": "Alto de ventana",
+    "heightHint": "Cuán alta es la ventana de escritorio, en píxeles",
+    "zoom": "Zoom de cámara",
+    "zoomHint": "Valores más altos acercan la cámara y recortan más",
+    "zoomFar": "Cuerpo entero",
+    "zoomNear": "Primer plano",
+    "restore": "Restaurar valores por defecto",
+    "preview": "Vista previa",
+    "restartNote": "Los cambios se aplican al reiniciar el avatar. Corré gillie avatar stop y gillie avatar start."
   }
 }

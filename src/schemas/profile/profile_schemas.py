@@ -15,6 +15,9 @@ class ProfileInput(BaseModel):
     tts_enabled: Optional[bool] = None
     tts_voice: Optional[str] = None
     tts_engine: Optional[str] = None
+    avatar_width: Optional[int] = None
+    avatar_height: Optional[int] = None
+    avatar_zoom: Optional[float] = None
     response_language: Optional[str] = None
 
 
@@ -60,6 +63,9 @@ class ProfileOutputData(BaseModel):
     tts_enabled: Optional[bool] = False
     tts_voice: Optional[str] = None
     tts_engine: Optional[str] = None
+    avatar_width: Optional[int] = None
+    avatar_height: Optional[int] = None
+    avatar_zoom: Optional[float] = None
     response_language: Optional[str] = "en"
     active_provider: Optional[str] = None
     provider_keys: Optional[Dict[str, str]] = None
@@ -89,6 +95,9 @@ class ProfileOutput(BaseModel):
                 tts_enabled=profile.tts_enabled or False,
                 tts_voice=profile.tts_voice,
                 tts_engine=profile.tts_engine,
+                avatar_width=profile.avatar_width,
+                avatar_height=profile.avatar_height,
+                avatar_zoom=profile.avatar_zoom,
                 response_language=profile.response_language or "en",
                 active_provider=profile.active_provider,
                 provider_keys=profile.provider_keys,

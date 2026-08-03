@@ -13,6 +13,8 @@ import typer
 from rich.console import Console
 from rich.panel import Panel
 
+from cli.config.db import get_avatar_layout
+
 console = Console()
 app = typer.Typer(help="Manage the Gillie Avatar companion app.")
 
@@ -122,6 +124,36 @@ def _cpu_limit_prefix() -> list[str]:
     return ["taskset", "-c", f"0-{cores - 1}"]
 
 
+_LAYOUT_ENV = {
+    "avatar_width": ("AVATAR_WINDOW_WIDTH", int),
+    "avatar_height": ("AVATAR_WINDOW_HEIGHT", int),
+    "avatar_zoom": ("AVATAR_ZOOM", float),
+}
+
+
+def _layout_env() -> dict:
+    """Turn the window size and zoom saved from the UI into launch variables.
+
+    Anything unset or unusable is dropped so the app keeps its own defaults
+    rather than starting with a zero-sized window.
+    """
+    layout = get_avatar_layout()
+    resolved = {}
+    for field, (variable, cast) in _LAYOUT_ENV.items():
+        value = layout.get(field)
+        if value in (None, ""):
+            continue
+        try:
+            number = cast(value)
+        except (TypeError, ValueError):
+            console.print(f"[yellow]⚠[/yellow] Ignoring invalid {field}: {value!r}")
+            continue
+        if number <= 0:
+            continue
+        resolved[variable] = str(number)
+    return resolved
+
+
 def _build_launch(background: bool = False, port: int | None = None) -> tuple[list[str], dict]:
     electron_bin = AVATAR_DIR / "node_modules" / ".bin" / "electron"
     if not electron_bin.exists():
@@ -142,6 +174,7 @@ def _build_launch(background: bool = False, port: int | None = None) -> tuple[li
     env = os.environ.copy()
     if port is not None:
         env["AVATAR_BRIDGE_PORT"] = str(port)
+    env.update(_layout_env())
 
     if os.environ.get("WAYLAND_DISPLAY"):
         cmd += ["--ozone-platform=wayland", "--enable-features=WaylandWindowDecorations"]

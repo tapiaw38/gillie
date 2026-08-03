@@ -200,6 +200,10 @@
       "contacts": {
         "name": "Contacts",
         "description": "Manage conversation contacts and identities"
+      },
+      "avatar": {
+        "name": "Avatar",
+        "description": "Window size and camera zoom for the desktop character"
       }
     }
   },
@@ -1402,7 +1406,9 @@
       "nodeDeletedDetail": "The node was removed from the workflow",
       "nodeAdded": "Node Added",
       "nodeAddedHttpDetail": "A new HTTP Request node was created",
-      "nodeAddedConditionDetail": "A new condition node was created"
+      "nodeAddedConditionDetail": "A new condition node was created",
+      "unresolvedParams": "Unresolved parameters",
+      "unresolvedParamsDetail": "Nothing provides these values: {params}. Add them to input_params or map them from an earlier step."
     },
     "node": {
       "newStep": "New Step",
@@ -1424,7 +1430,17 @@
       "responseMapping": "Response Mapping",
       "responseMappingHint": "Add mappings to extract data from the response",
       "saveChanges": "Save Changes",
-      "deleteNode": "Delete Node"
+      "deleteNode": "Delete Node",
+      "headers": "Headers",
+      "addHeader": "Add header",
+      "headersHint": "Values accept {param}. E.g. Authorization → Bearer {auth_token}",
+      "testStep": "Test this step",
+      "runTest": "Run",
+      "testHint": "Test context as JSON: the values each {param} stands for.",
+      "testContextInvalid": "The test context is not valid JSON.",
+      "testOk": "Response received",
+      "testFailed": "Failed",
+      "testPathsHint": "Click a field to add it to the response mapping:"
     },
     "guide": {
       "title": "Quick Workflow Guide",
@@ -1501,5 +1517,25 @@
     "contactUs": "Contact Us",
     "about": "About",
     "allRightsReserved": "All rights reserved."
+  },
+  "avatar": {
+    "title": "Avatar",
+    "subtitle": "Size the desktop window and frame the character",
+    "save": "Save",
+    "saved": "Layout saved",
+    "savedDetail": "Restart the avatar to apply it",
+    "saveError": "Could not save the avatar layout",
+    "loading": "Loading avatar settings...",
+    "width": "Window width",
+    "widthHint": "How wide the desktop window is, in pixels",
+    "height": "Window height",
+    "heightHint": "How tall the desktop window is, in pixels",
+    "zoom": "Camera zoom",
+    "zoomHint": "Higher values move the camera closer and crop tighter",
+    "zoomFar": "Full body",
+    "zoomNear": "Close up",
+    "restore": "Restore defaults",
+    "preview": "Preview",
+    "restartNote": "Changes apply the next time the avatar starts. Run gillie avatar stop and gillie avatar start."
   }
 }

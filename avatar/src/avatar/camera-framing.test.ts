@@ -47,4 +47,7 @@ describe('calculateFullBodyFraming', () => {
     );
     expect(zoomed.target.toArray()).toEqual(normal.target.toArray());
   });
+
+
+
 });

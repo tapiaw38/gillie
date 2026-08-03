@@ -12,6 +12,7 @@ import { createVrmAnimator, type PlayOptions } from './vrm-animation'
 import { applyCharacterTextures, loadVrm } from './vrm-loader'
 
 const MODEL_URL = './assets/model.vrm'
+const DEFAULT_ZOOM = 1.5
 const MAX_PIXEL_RATIO = 1.5
 const TARGET_FPS = 60
 const FRAME_INTERVAL = 1 / TARGET_FPS
@@ -33,12 +34,13 @@ function frameCamera(
   camera: THREE.PerspectiveCamera,
   controls: OrbitControls,
   object: THREE.Object3D,
+  zoom: number,
 ): void {
   object.updateWorldMatrix(true, true)
   const box = new THREE.Box3().setFromObject(object)
   if (box.isEmpty()) return
 
-  const framing = calculateFullBodyFraming(box, camera.fov, camera.aspect, 1.12, 1.0)
+  const framing = calculateFullBodyFraming(box, camera.fov, camera.aspect, 1.12, zoom)
   camera.position.copy(framing.position)
   camera.near = Math.max(0.01, framing.distance / 100)
   camera.far = Math.max(100, framing.distance * 100)
@@ -145,7 +147,7 @@ export function createAvatarStage(canvas: HTMLCanvasElement): AvatarStage {
     updateBlink = createBlink(loaded)
     scene.add(loaded.scene)
     resize()
-    frameCamera(camera, controls, loaded.scene)
+    frameCamera(camera, controls, loaded.scene, window.avatarBridge?.zoom ?? DEFAULT_ZOOM)
     const request = pendingPlay ?? {
       animation,
       options: { playback: 'loop' as AnimationPlayback },

@@ -9,6 +9,9 @@ export interface AssistantProfileUpdateParams {
   tts_enabled?: boolean
   tts_voice?: string
   tts_engine?: string
+  avatar_width?: number
+  avatar_height?: number
+  avatar_zoom?: number
   tool_prompts?: string
   disabled_tools?: string[]
   response_language?: string
@@ -65,6 +68,9 @@ export interface AssistantProfile {
   tts_enabled: boolean
   tts_voice?: string
   tts_engine?: string
+  avatar_width?: number
+  avatar_height?: number
+  avatar_zoom?: number
   response_language?: string
   iteration_limit: number
   api_keys: ApiKey[]
