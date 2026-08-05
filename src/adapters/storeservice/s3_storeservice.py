@@ -26,7 +26,6 @@ class S3StoreService:
         self.client.put_object(
             Bucket=self.config.aws_config.bucket_name,
             Key=temp_file_name,
-            ACL="public-read",
             Body=buffer,
             ContentLength=size,
             ContentType=content_type,
