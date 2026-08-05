@@ -37,14 +37,7 @@ class S3StoreService:
         return temp_file_name
 
     def generate_url(self, key_name: str) -> str:
-        return self.client.generate_presigned_url(
-            "get_object",
-            Params={
-                "Bucket": self.config.aws_config.bucket_name,
-                "Key": key_name,
-            },
-            ExpiresIn=3600,
-        )
+        return f"https://{self.config.aws_config.bucket_name}.s3.{self.config.aws_config.region}.amazonaws.com/{key_name}"
 
     def delete_object(self, key_name: str) -> None:
         self.client.delete_object(
