@@ -264,18 +264,6 @@ const handleSlashCommand = (text: string): boolean => {
   return false
 }
 
-declare global {
-  interface Window {
-    electronAPI?: {
-      readFile: (filePath: string) => Promise<string>
-      listDir: (dirPath: string) => Promise<string[]>
-      listDirShallow: (dirPath: string) => Promise<string[]>
-      glob: (pattern: string, base: string) => Promise<string[]>
-      fetchUrl: (url: string) => Promise<string>
-    }
-  }
-}
-
 const expandAtReferences = async (text: string): Promise<string> => {
   const api = window.electronAPI
   if (!api) return text

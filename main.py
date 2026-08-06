@@ -56,6 +56,7 @@ class AppRuntime:
     mongo_clients: list[MongoDBClient]
     brain: Optional[object] = None
     skill_manager: Optional[object] = None
+    store_service: object = None
 
 
 def _load_runtime_config() -> tuple[Optional["AssistantConfig"], ConfigurationService]:
@@ -350,6 +351,7 @@ def create_app() -> FastAPI:
         app.state.neonize_integration = runtime.neonize_integration
         app.state.neonize_integration.set_app_loop(app.state.main_loop)
         app.state.integrations = runtime.integrations
+        app.state.store_service = runtime.store_service
         app.state.openai_integration = runtime.integrations.openai
         app.state.profile_client = runtime.profile_client
         app.state.migrations_client = runtime.migrations_client

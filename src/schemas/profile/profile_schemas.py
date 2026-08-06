@@ -78,6 +78,7 @@ class ProfileOutputData(BaseModel):
     contacts: Optional[List[ContactOutputData]]
     files: Optional[List[FileOutputData]]
     integrations: Optional[List[IntegrationOutputData]]
+    avatar_assets: Optional[List[Dict[str, Any]]] = None
 
 
 class ProfileOutput(BaseModel):
@@ -145,5 +146,6 @@ class ProfileOutput(BaseModel):
                     if profile.integrations
                     else None
                 ),
+                avatar_assets=profile.avatar_assets,
             )
         )

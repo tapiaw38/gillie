@@ -32,6 +32,7 @@ class Profile(BaseModel):
     contacts: Optional[List[Contact]] = Field(default=None)
     files: Optional[List[File]] = Field(default=None)
     integrations: Optional[List[Integration]] = Field(default=None)
+    avatar_assets: Optional[List[Dict[str, Any]]] = Field(default=None)
 
     class Config:
         populate_by_name = True

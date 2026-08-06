@@ -1,10 +1,11 @@
-import { app, shell, BrowserWindow, ipcMain, session } from 'electron'
+import { app, shell, BrowserWindow, dialog, ipcMain, session } from 'electron'
 import { join } from 'path'
 import { electronApp, optimizer, is } from '@electron-toolkit/utils'
 import * as fs from 'fs'
 import * as nodePath from 'path'
 import * as https from 'https'
 import * as http from 'http'
+import { execFile } from 'child_process'
 
 ipcMain.handle('fs:readFile', async (_event, filePath: string): Promise<string> => {
   try {
@@ -175,6 +176,92 @@ ipcMain.handle('net:fetchUrl', async (_event, url: string): Promise<string> => {
       reject(new Error('Request timed out'))
     })
   })
+})
+
+type AvatarAssets = { model: string | null; animations: string[] }
+const avatarCandidates = [
+  process.env.GILLIE_WORKSPACE ? nodePath.join(process.env.GILLIE_WORKSPACE, 'avatar') : '',
+  nodePath.resolve(__dirname, '../../../avatar'),
+  nodePath.resolve(process.cwd(), '../avatar'),
+].filter(Boolean)
+const AVATAR_DIR = avatarCandidates.find((candidate) => fs.existsSync(nodePath.join(candidate, 'package.json'))) || avatarCandidates[0]
+const AVATAR_ASSET_DIR = nodePath.join(AVATAR_DIR, 'public', 'assets')
+const ANIMATION_DIR = nodePath.join(AVATAR_ASSET_DIR, 'animations')
+
+function readAvatarAssets(): AvatarAssets {
+  const model = fs.existsSync(nodePath.join(AVATAR_ASSET_DIR, 'model.vrm')) ? 'model.vrm' : null
+  let animations: string[] = []
+  if (fs.existsSync(ANIMATION_DIR)) {
+    animations = fs
+      .readdirSync(ANIMATION_DIR, { withFileTypes: true })
+      .filter((entry) => entry.isFile() && entry.name.toLowerCase().endsWith('.vrma'))
+      .map((entry) => entry.name)
+      .sort((a, b) => a.localeCompare(b))
+  }
+  return { model, animations }
+}
+
+function ensureAssetDirectories(): void {
+  fs.mkdirSync(ANIMATION_DIR, { recursive: true })
+}
+
+function runAvatarBuild(): Promise<void> {
+  return new Promise((resolve, reject) => {
+    execFile('npm', ['run', 'assets:generate'], { cwd: AVATAR_DIR }, (generateError, _stdout, stderr) => {
+      if (generateError) {
+        reject(new Error(stderr || generateError.message))
+        return
+      }
+      execFile('npm', ['run', 'build'], { cwd: AVATAR_DIR }, (buildError, _buildStdout, buildStderr) => {
+        if (buildError) reject(new Error(buildStderr || buildError.message))
+        else resolve()
+      })
+    })
+  })
+}
+
+ipcMain.handle('avatar:listAssets', async (): Promise<AvatarAssets> => readAvatarAssets())
+
+ipcMain.handle('avatar:importModel', async (): Promise<AvatarAssets> => {
+  const result = await dialog.showOpenDialog({
+    title: 'Seleccionar modelo VRM',
+    properties: ['openFile'],
+    filters: [{ name: 'Modelo VRM', extensions: ['vrm'] }],
+  })
+  if (result.canceled || result.filePaths.length === 0) return readAvatarAssets()
+  ensureAssetDirectories()
+  fs.copyFileSync(result.filePaths[0], nodePath.join(AVATAR_ASSET_DIR, 'model.vrm'))
+  return readAvatarAssets()
+})
+
+ipcMain.handle('avatar:importAnimations', async (): Promise<AvatarAssets> => {
+  const result = await dialog.showOpenDialog({
+    title: 'Seleccionar animaciones VRMA',
+    properties: ['openFile', 'multiSelections'],
+    filters: [{ name: 'Animación VRMA', extensions: ['vrma'] }],
+  })
+  if (result.canceled || result.filePaths.length === 0) return readAvatarAssets()
+  ensureAssetDirectories()
+  for (const source of result.filePaths) {
+    const name = nodePath.basename(source)
+    fs.copyFileSync(source, nodePath.join(ANIMATION_DIR, name))
+  }
+  return readAvatarAssets()
+})
+
+ipcMain.handle('avatar:removeAnimation', async (_event, name: string): Promise<AvatarAssets> => {
+  const safeName = nodePath.basename(name)
+  if (safeName !== name || !safeName.toLowerCase().endsWith('.vrma')) {
+    throw new Error('Nombre de animación inválido')
+  }
+  const target = nodePath.join(ANIMATION_DIR, safeName)
+  if (fs.existsSync(target)) fs.unlinkSync(target)
+  return readAvatarAssets()
+})
+
+ipcMain.handle('avatar:save', async (): Promise<AvatarAssets> => {
+  await runAvatarBuild()
+  return readAvatarAssets()
 })
 
 const iconPath = join(__dirname, '../../resources/icon.png')

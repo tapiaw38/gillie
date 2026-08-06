@@ -7,9 +7,14 @@ import Button from 'primevue/button'
 import Slider from 'primevue/slider'
 import Toast from 'primevue/toast'
 import Message from 'primevue/message'
+import InputSwitch from 'primevue/inputswitch'
+import { inject } from 'vue'
+import type { IAvatarService } from '@/services/avatar/avatarService'
 
 const { t } = useI18n()
 const toast = useToast()
+const services = inject<{ avatarService: IAvatarService }>('services')
+const avatarService = services!.avatarService
 const {
   assistantProfile,
   getAssistantProfile,
@@ -28,6 +33,142 @@ const LIMITS = {
 const width = ref(DEFAULTS.width)
 const height = ref(DEFAULTS.height)
 const zoom = ref(DEFAULTS.zoom)
+const avatarAssets = ref<{ model: string | null; animations: string[] }>({
+  model: null,
+  animations: [],
+})
+const assetsBusy = ref(false)
+const assetsDirty = ref(false)
+const assetsLoadError = ref(false)
+const storageMode = ref<'local' | 'remote'>(
+  (localStorage.getItem('gillie-avatar-storage') as 'local' | 'remote') || 'local',
+)
+const remoteModelInput = ref<HTMLInputElement | null>(null)
+const remoteAnimationsInput = ref<HTMLInputElement | null>(null)
+const hasElectron = computed(() => Boolean(window.electronAPI?.avatar))
+
+async function loadAvatarAssets() {
+  try {
+    if (storageMode.value === 'remote') {
+      const response = await avatarService.listAssets()
+      avatarAssets.value = {
+        model: response.data.model?.name || null,
+        animations: response.data.animations.map((asset) => asset.name),
+      }
+    } else if (window.electronAPI?.avatar) {
+      avatarAssets.value = await window.electronAPI.avatar.listAssets()
+    }
+    assetsLoadError.value = false
+  } catch {
+    assetsLoadError.value = true
+  }
+}
+
+function setStorageMode(remote: boolean) {
+  storageMode.value = remote ? 'remote' : 'local'
+  localStorage.setItem('gillie-avatar-storage', storageMode.value)
+  assetsDirty.value = false
+  void loadAvatarAssets()
+}
+
+async function uploadRemoteFiles(files: File[], type: 'model' | 'animation') {
+  assetsBusy.value = true
+  try {
+    for (const file of files) {
+      const response = await avatarService.uploadAsset(file, type)
+      avatarAssets.value = {
+        model: response.data.model?.name || null,
+        animations: response.data.animations.map((asset) => asset.name),
+      }
+    }
+    assetsDirty.value = true
+    toast.add({ severity: 'success', summary: t('avatar.assetAdded'), life: 2500 })
+  } catch (error) {
+    toast.add({ severity: 'error', summary: t('common.error'), detail: String(error), life: 4000 })
+  } finally {
+    assetsBusy.value = false
+  }
+}
+
+function onRemoteModelSelected(event: Event) {
+  const files = Array.from((event.target as HTMLInputElement).files || [])
+  if (files[0]) void uploadRemoteFiles([files[0]], 'model')
+}
+
+function onRemoteAnimationsSelected(event: Event) {
+  const files = Array.from((event.target as HTMLInputElement).files || [])
+  if (files.length) void uploadRemoteFiles(files, 'animation')
+}
+
+async function importModel() {
+  if (storageMode.value === 'remote') {
+    remoteModelInput.value?.click()
+    return
+  }
+  if (!window.electronAPI?.avatar) return
+  assetsBusy.value = true
+  try {
+    avatarAssets.value = await window.electronAPI.avatar.importModel()
+    assetsDirty.value = true
+    toast.add({ severity: 'success', summary: t('avatar.assetAdded'), life: 2500 })
+  } catch (error) {
+    toast.add({ severity: 'error', summary: t('common.error'), detail: String(error), life: 4000 })
+  } finally {
+    assetsBusy.value = false
+  }
+}
+
+async function importAnimations() {
+  if (storageMode.value === 'remote') {
+    remoteAnimationsInput.value?.click()
+    return
+  }
+  if (!window.electronAPI?.avatar) return
+  assetsBusy.value = true
+  try {
+    avatarAssets.value = await window.electronAPI.avatar.importAnimations()
+    assetsDirty.value = true
+    toast.add({ severity: 'success', summary: t('avatar.assetAdded'), life: 2500 })
+  } catch (error) {
+    toast.add({ severity: 'error', summary: t('common.error'), detail: String(error), life: 4000 })
+  } finally {
+    assetsBusy.value = false
+  }
+}
+
+async function removeAnimation(name: string) {
+  if (storageMode.value === 'remote') {
+    assetsBusy.value = true
+    try {
+      const response = await avatarService.removeAnimation(name)
+      avatarAssets.value = {
+        model: response.data.model?.name || null,
+        animations: response.data.animations.map((asset) => asset.name),
+      }
+      assetsDirty.value = true
+    } catch (error) {
+      toast.add({
+        severity: 'error',
+        summary: t('common.error'),
+        detail: String(error),
+        life: 4000,
+      })
+    } finally {
+      assetsBusy.value = false
+    }
+    return
+  }
+  if (!window.electronAPI?.avatar) return
+  assetsBusy.value = true
+  try {
+    avatarAssets.value = await window.electronAPI.avatar.removeAnimation(name)
+    assetsDirty.value = true
+  } catch (error) {
+    toast.add({ severity: 'error', summary: t('common.error'), detail: String(error), life: 4000 })
+  } finally {
+    assetsBusy.value = false
+  }
+}
 
 watch(
   assistantProfile,
@@ -121,6 +262,15 @@ async function save() {
   zoom.value = payload.avatar_zoom
   try {
     await updateAssistantProfile(payload)
+    if (assetsDirty.value && storageMode.value === 'remote') {
+      assetsBusy.value = true
+      await avatarService.rebuild()
+      assetsDirty.value = false
+    } else if (assetsDirty.value && window.electronAPI?.avatar) {
+      assetsBusy.value = true
+      await window.electronAPI.avatar.save()
+      assetsDirty.value = false
+    }
     toast.add({
       severity: 'success',
       summary: t('avatar.saved'),
@@ -134,6 +284,8 @@ async function save() {
       detail: t('avatar.saveError'),
       life: 3000,
     })
+  } finally {
+    assetsBusy.value = false
   }
 }
 
@@ -143,7 +295,9 @@ function restoreDefaults() {
   zoom.value = DEFAULTS.zoom
 }
 
-onMounted(getAssistantProfile)
+onMounted(async () => {
+  await Promise.all([getAssistantProfile(), loadAvatarAssets()])
+})
 </script>
 
 <template>
@@ -240,6 +394,97 @@ onMounted(getAssistantProfile)
           </div>
           <p class="preview-caption">{{ width }} × {{ height }} px</p>
         </div>
+      </div>
+    </div>
+
+    <div class="panel assets-panel">
+      <div class="panel-body">
+        <div class="assets-header">
+          <div>
+            <h3 class="preview-title">{{ t('avatar.assetsTitle') }}</h3>
+            <small class="field-hint">{{ t('avatar.assetsHint') }}</small>
+          </div>
+        </div>
+        <div class="storage-mode-row">
+          <div class="storage-mode-copy">
+            <i :class="storageMode === 'remote' ? 'pi pi-cloud' : 'pi pi-desktop'" />
+            <div>
+              <strong>{{
+                storageMode === 'remote' ? t('avatar.remoteStorage') : t('avatar.localStorage')
+              }}</strong>
+              <small>{{
+                storageMode === 'remote'
+                  ? t('avatar.remoteStorageHint')
+                  : t('avatar.localStorageHint')
+              }}</small>
+            </div>
+          </div>
+          <InputSwitch
+            :model-value="storageMode === 'remote'"
+            @update:model-value="setStorageMode"
+          />
+        </div>
+        <div class="asset-actions">
+          <Button
+            :label="t('avatar.replaceModel')"
+            icon="pi pi-upload"
+            severity="secondary"
+            outlined
+            :loading="assetsBusy"
+            :disabled="storageMode === 'local' && !hasElectron"
+            @click="importModel"
+          />
+          <Button
+            :label="t('avatar.addAnimations')"
+            icon="pi pi-plus"
+            :loading="assetsBusy"
+            :disabled="storageMode === 'local' && !hasElectron"
+            @click="importAnimations"
+          />
+          <input
+            ref="remoteModelInput"
+            type="file"
+            accept=".vrm"
+            hidden
+            @change="onRemoteModelSelected"
+          />
+          <input
+            ref="remoteAnimationsInput"
+            type="file"
+            accept=".vrma"
+            multiple
+            hidden
+            @change="onRemoteAnimationsSelected"
+          />
+        </div>
+        <div class="asset-list">
+          <div class="asset-row">
+            <span
+              ><i class="pi pi-user" /> {{ avatarAssets.model || t('avatar.modelMissing') }}</span
+            >
+            <small>{{ t('avatar.modelRequired') }}</small>
+          </div>
+          <div v-for="animation in avatarAssets.animations" :key="animation" class="asset-row">
+            <span><i class="pi pi-play" /> {{ animation }}</span>
+            <Button
+              icon="pi pi-trash"
+              severity="danger"
+              text
+              rounded
+              :aria-label="`${t('avatar.removeAnimation')} ${animation}`"
+              :disabled="assetsBusy"
+              @click="removeAnimation(animation)"
+            />
+          </div>
+          <small v-if="avatarAssets.animations.length === 0" class="field-hint">{{
+            t('avatar.noAnimations')
+          }}</small>
+        </div>
+        <small v-if="storageMode === 'local' && !hasElectron" class="dirty-note">{{
+          t('avatar.desktopOnly')
+        }}</small>
+        <small v-if="assetsLoadError" class="dirty-note">{{ t('avatar.assetsLoadError') }}</small>
+        <small v-if="assetsDirty" class="dirty-note">{{ t('avatar.unsavedAssets') }}</small>
       </div>
     </div>
 
@@ -452,7 +697,9 @@ onMounted(getAssistantProfile)
   background:
     linear-gradient(45deg, rgba(139, 92, 246, 0.06) 25%, transparent 25%) 0 0 / 16px 16px,
     linear-gradient(-45deg, rgba(139, 92, 246, 0.06) 25%, transparent 25%) 0 0 / 16px 16px;
-  transition: width 0.15s ease, height 0.15s ease;
+  transition:
+    width 0.15s ease,
+    height 0.15s ease;
   overflow: hidden;
 }
 
@@ -484,9 +731,102 @@ onMounted(getAssistantProfile)
   margin-top: 1rem;
 }
 
+.assets-panel {
+  margin-top: 1rem;
+}
+
+.assets-header,
+.asset-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+}
+
+.storage-mode-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  margin-top: 1rem;
+  padding: 0.75rem 0.9rem;
+  border: 1px solid var(--do-border-light);
+  border-radius: 0.55rem;
+  background: color-mix(in srgb, var(--do-blue) 5%, transparent);
+}
+
+.storage-mode-copy {
+  display: flex;
+  align-items: center;
+  gap: 0.7rem;
+  min-width: 0;
+}
+
+.storage-mode-copy > i {
+  color: var(--do-blue);
+  font-size: 1.1rem;
+}
+
+.storage-mode-copy div {
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+}
+
+.storage-mode-copy small {
+  color: var(--do-text-muted);
+  line-height: 1.3;
+}
+
+.asset-actions {
+  display: flex;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  margin-top: 0.75rem;
+}
+
+.asset-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.45rem;
+  margin-top: 1rem;
+}
+
+.asset-row {
+  min-height: 2.5rem;
+  padding: 0.35rem 0.65rem;
+  border: 1px solid var(--do-border-light);
+  border-radius: 0.4rem;
+}
+
+.asset-row i {
+  color: var(--do-blue);
+  margin-right: 0.4rem;
+}
+
+.dirty-note {
+  display: block;
+  margin-top: 0.75rem;
+  color: var(--do-warning, #b45309);
+}
+
 @media (max-width: 820px) {
   .layout-grid {
     grid-template-columns: 1fr;
+  }
+
+  .assets-header,
+  .storage-mode-row {
+    align-items: flex-start;
+  }
+
+  .storage-mode-row {
+    flex-direction: column;
+  }
+
+  .asset-actions {
+    justify-content: flex-start;
   }
 }
 </style>
