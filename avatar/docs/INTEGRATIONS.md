@@ -30,13 +30,13 @@ Gillie Avatar exposes these tools:
 
 | Tool | Input | Effect |
 | --- | --- | --- |
-| `play_animation` | `animation`: `idle`, `greeting`, `talk`, `happy`, `finger-gun`, or `dance` | Shows Gillie Avatar and plays an installed animation once |
+| `play_animation` | `animation`: one role declared by `public/assets/manifest.json` | Shows Gillie Avatar and plays an installed animation once |
 | `control_window` | `action`: `show`, `hide`, or `toggle` | Controls the Gillie Avatar window without quitting the app |
 | `get_status` | None | Reads window visibility, voice state, and listener status |
 
-The animation names are a stable product contract rather than file paths.
-Future character packs can replace the media behind those names without
-changing the MCP configuration or granting filesystem access.
+Animation names are read from `public/assets/manifest.json`, grouped by role,
+rather than hardcoded file paths. Future character packs can add or replace
+roles without changing MCP configuration or granting filesystem access.
 
 An MCP-triggered animation temporarily takes priority over voice-driven body
 motion. Lip sync continues while the clip plays. A newer MCP animation replaces
@@ -138,8 +138,9 @@ Animation preview:
 }
 ```
 
-Allowed animations are `IDLE`, `GREETING`, `TALK`, `HAPPY`, `FINGER_GUN`, and
-`DANCE`.
+Allowed animation events are generated from roles in the asset manifest. `IDLE`
+and `TALK` are automatic voice-driven states; deliberate gesture events come
+from the remaining manifest roles.
 
 Send events:
 
