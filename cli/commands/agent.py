@@ -686,7 +686,12 @@ def _play_audio(url: str, on_process=None) -> None:
     found = False
     for cmd in players:
         try:
-            process = subprocess.Popen(cmd)
+            process = subprocess.Popen(
+                cmd,
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+                stdin=subprocess.DEVNULL,
+            )
         except FileNotFoundError:
             continue
         found = True

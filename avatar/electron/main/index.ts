@@ -17,12 +17,7 @@ import { configureHyprlandWindow, getHyprlandWindowPlacement } from './hyprland-
 import { createAudioListener } from './audio-listener'
 import { isAllowedRendererNavigation } from './navigation-policy'
 import { parseProtocolUrl, voiceState } from './protocol-actions'
-import type {
-  AudioListener,
-  AudioListenerStatus,
-  BridgeEvent,
-  VoiceState,
-} from './types'
+import type { AudioListener, AudioListenerStatus, BridgeEvent, VoiceState } from './types'
 
 const DEFAULT_WINDOW_WIDTH = 430
 const DEFAULT_WINDOW_HEIGHT = 680
@@ -34,8 +29,12 @@ function numberFromEnv(name: string, fallback: number, min: number, max: number)
   return Math.min(max, Math.max(min, parsed))
 }
 
-const WINDOW_WIDTH = Math.round(numberFromEnv('AVATAR_WINDOW_WIDTH', DEFAULT_WINDOW_WIDTH, 200, 3840))
-const WINDOW_HEIGHT = Math.round(numberFromEnv('AVATAR_WINDOW_HEIGHT', DEFAULT_WINDOW_HEIGHT, 200, 2160))
+const WINDOW_WIDTH = Math.round(
+  numberFromEnv('AVATAR_WINDOW_WIDTH', DEFAULT_WINDOW_WIDTH, 200, 3840),
+)
+const WINDOW_HEIGHT = Math.round(
+  numberFromEnv('AVATAR_WINDOW_HEIGHT', DEFAULT_WINDOW_HEIGHT, 200, 2160),
+)
 const AVATAR_ZOOM = numberFromEnv('AVATAR_ZOOM', DEFAULT_ZOOM, 0.5, 4)
 const startInBackground = process.argv.includes('--background')
 const protocolScheme = 'avatar'
@@ -231,7 +230,11 @@ function createWindow(): BrowserWindow {
 
 function flushPendingRendererEvents(): void {
   rendererLoadHookAttached = false
-  if (!avatarWindow || avatarWindow.isDestroyed() || avatarWindow.webContents.isLoading()) {
+  if (
+    !avatarWindow ||
+    avatarWindow.isDestroyed() ||
+    avatarWindow.webContents.isLoading()
+  ) {
     return
   }
   for (const event of pendingRendererEvents.values()) {
@@ -273,7 +276,7 @@ function handleBridgeEvent(event: BridgeEvent): void {
       showOverlay()
     }
   } else if (event.type === 'audio-level' && event.level > 0.025) {
-    showOverlay()
+    if (!avatarWindow?.isVisible()) showOverlay()
   } else if (event.type === 'animation') {
     showOverlay()
   }
@@ -327,8 +330,14 @@ function createTray(): void {
       { label: 'Show avatar', click: () => showOverlay({ focus: true }) },
       { label: 'Hide avatar', click: () => void hideOverlay() },
       { type: 'separator' },
-      { label: 'Preview listening', click: () => handleBridgeEvent(voiceState('listening')) },
-      { label: 'Preview speaking', click: () => handleBridgeEvent(voiceState('speaking')) },
+      {
+        label: 'Preview listening',
+        click: () => handleBridgeEvent(voiceState('listening')),
+      },
+      {
+        label: 'Preview speaking',
+        click: () => handleBridgeEvent(voiceState('speaking')),
+      },
       {
         label: 'Preview dance',
         click: () => handleBridgeEvent({ type: 'animation', animation: 'DANCE' }),
@@ -448,10 +457,11 @@ app.on('before-quit', () => {
   if (hyprlandConfigurationTimer) clearTimeout(hyprlandConfigurationTimer)
   audioListener?.stop()
   globalShortcut.unregisterAll()
-  void bridge?.close().catch((error) => debugLog('integration server close failed', error))
+  void bridge
+    ?.close()
+    .catch((error) => debugLog('integration server close failed', error))
 })
 
-app.on('window-all-closed', () => {
-})
+app.on('window-all-closed', () => {})
 
 export { tray }

@@ -16,7 +16,7 @@ const VOICE_PHASES = ['inactive', 'starting', 'active', 'stopping'] as const
 const VOICE_ACTIVITIES = ['idle', 'listening', 'speaking'] as const
 
 export const SERVER_INSTRUCTIONS =
-  'This is your body on the user\'s desktop. The character on screen is you, not a puppet you operate, so speak from inside it and never say you have no body. Use play_animation for a deliberate gesture, then describe it in the first person: you waved, you danced. Your mouth and body already move on their own while you speak, so never call play_animation to look like you are talking. Use control_window to show or hide yourself. get_status is read-only. This body never produces audio on its own.'
+  "This is your body on the user's desktop. The character on screen is you, not a puppet you operate, so speak from inside it and never say you have no body. Use play_animation for a deliberate gesture, then describe it in the first person: you waved, you danced. Your mouth and body already move on their own while you speak, so never call play_animation to look like you are talking. Use control_window to show or hide yourself. get_status is read-only. This body never produces audio on its own."
 
 export type WindowAction = (typeof WINDOW_ACTIONS)[number]
 
@@ -79,7 +79,9 @@ export function createAvatarMcpServer({
     },
     async ({ animation }) => {
       await onAnimation(animation)
-      return textResult(`You are now making the ${animation} gesture on screen.`)
+      return textResult(
+        `Animation command accepted for ${animation}. Playback is asynchronous; do not claim completion unless it is visibly confirmed.`,
+      )
     },
   )
 
@@ -101,7 +103,9 @@ export function createAvatarMcpServer({
     },
     async ({ action }) => {
       const visible = await onWindowAction(action)
-      return textResult(`You are now ${visible ? 'visible' : 'hidden'} on the user's screen.`)
+      return textResult(
+        `You are now ${visible ? 'visible' : 'hidden'} on the user's screen.`,
+      )
     },
   )
 
@@ -109,7 +113,8 @@ export function createAvatarMcpServer({
     'get_status',
     {
       title: 'Get Gillie Avatar status',
-      description: "Read Gillie Avatar's window visibility, voice state, and local listener status.",
+      description:
+        "Read Gillie Avatar's window visibility, voice state, and local listener status.",
       annotations: {
         readOnlyHint: true,
         destructiveHint: false,
@@ -124,7 +129,8 @@ export function createAvatarMcpServer({
     'set_voice_state',
     {
       title: 'Set Gillie Avatar voice state',
-      description: "Update Gillie Avatar's normalized voice lifecycle and activity state.",
+      description:
+        "Update Gillie Avatar's normalized voice lifecycle and activity state.",
       inputSchema: {
         phase: z.enum(VOICE_PHASES),
         activity: z.enum(VOICE_ACTIVITIES),
@@ -140,7 +146,9 @@ export function createAvatarMcpServer({
     },
     async (state) => {
       await onVoiceState(state as VoiceState)
-      return textResult(`Gillie Avatar voice state set to ${state.phase}/${state.activity}.`)
+      return textResult(
+        `Gillie Avatar voice state set to ${state.phase}/${state.activity}.`,
+      )
     },
   )
 

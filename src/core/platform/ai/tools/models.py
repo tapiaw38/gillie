@@ -6286,7 +6286,12 @@ If data is not found, say so clearly."""
                     "error": "The avatar app is not reachable, so the gesture was not played.",
                     "animation": animation,
                 }
-            return {"success": True, "animation": animation}
+            return {
+                "success": True,
+                "animation": animation,
+                "status": "requested",
+                "note": "Animation command accepted by Avatar. Playback is asynchronous.",
+            }
 
         async def avatar_control_window_tool(action: str) -> Dict[str, Any]:
             action = str(action).strip().lower()
@@ -6311,7 +6316,7 @@ If data is not found, say so clearly."""
             [
                 StructuredTool(
                     name="avatar_play_animation",
-                    description="Make a deliberate gesture with your own body, which the user can see on screen. Use it when you want to dance, wave, greet, or react. Afterwards refer to it in the first person: you danced, not the avatar. Your talking motion and lip sync happen on their own — never call this to look like you are speaking.",
+                    description="Make a deliberate gesture with your own body, which the user can see on screen. Call this tool for every explicit gesture request, including repeats. Use it when you want to dance, wave, greet, or react. Only claim the current gesture after this tool returns success. Its success means the command was accepted asynchronously, not that playback was verified. Your talking motion and lip sync happen on their own — never call this to look like you are speaking.",
                     func=avatar_play_animation_tool,
                     args_schema=AvatarPlayAnimationArgs,
                     coroutine=avatar_play_animation_tool,
