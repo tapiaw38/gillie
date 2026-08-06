@@ -112,7 +112,7 @@ class TextToSpeechService:
             URL of the stored audio file or None if generation fails
         """
         settings = settings or {}
-        key = (text, language, settings.get("voice"), settings.get("engine"))
+        key = (text, language, settings.get("voice"), settings.get("engine"), settings.get("pitch", 0))
         cached = self._phrase_cache.get(key)
         if cached:
             return cached

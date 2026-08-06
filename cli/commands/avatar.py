@@ -72,6 +72,7 @@ def _sources_newer_than(target: Path) -> bool:
 
 
 def _ensure_build(rebuild: bool) -> None:
+    _run(["npm", "run", "assets:generate"])
     renderer_index = AVATAR_DIR / "out" / "renderer" / "index.html"
     if not rebuild and renderer_index.exists() and not _sources_newer_than(renderer_index):
         return

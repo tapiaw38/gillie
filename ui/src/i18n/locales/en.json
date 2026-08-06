@@ -204,6 +204,10 @@
       "avatar": {
         "name": "Avatar",
         "description": "Window size and camera zoom for the desktop character"
+      },
+      "voice": {
+        "name": "Voice",
+        "description": "Speech engine, voice, language, and pitch"
       }
     }
   },
@@ -1537,5 +1541,32 @@
     "restore": "Restore defaults",
     "preview": "Preview",
     "restartNote": "Changes apply the next time the avatar starts. Run gillie avatar stop and gillie avatar start."
+  },
+  "voice": {
+    "title": "Voice",
+    "subtitle": "Configure how your assistant sounds",
+    "loading": "Loading voice settings...",
+    "saved": "Voice settings saved",
+    "saveError": "Could not save voice settings",
+    "audioResponses": "Audio responses",
+    "audioResponsesDesc": "The assistant replies with a voice message in addition to text",
+    "engine": "Voice provider",
+    "engineDesc": "Which speech engine generates the audio",
+    "engineNoKey": "API key required",
+    "engineSet": "Provider set to {engine}",
+    "voice": "Voice",
+    "voiceDesc": "Which voice the assistant speaks with",
+    "voiceSet": "Voice set to {voice}",
+    "pitch": "Pitch",
+    "pitchDesc": "Shift voice lower or higher. Zero keeps natural pitch.",
+    "lower": "Lower",
+    "higher": "Higher",
+    "pitchSet": "Pitch set to {value} semitones",
+    "language": "Response language",
+    "languageDesc": "Language used to synthesize spoken replies",
+    "english": "Language set to English",
+    "spanish": "Language set to Spanish",
+    "enabled": "Audio responses enabled",
+    "disabled": "Audio responses disabled"
   }
 }

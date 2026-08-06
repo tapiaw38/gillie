@@ -12,6 +12,8 @@ logger = logging.getLogger(__name__)
 
 class TTSIntegration:
     DEFAULT_SPEECH_SPEED = 1.3
+    MIN_PITCH_SEMITONES = -6.0
+    MAX_PITCH_SEMITONES = 6.0
 
     def __init__(self, config_service: ConfigurationService):
         self.config_service = config_service
@@ -69,11 +71,13 @@ class TTSIntegration:
                 await self._run_blocking(
                     self._generate_gtts_speech_file, text, output_path, tts_settings
                 )
+                await self._apply_pitch_if_needed(output_path, tts_settings)
                 return output_path
 
         await self._run_blocking(
             self._generate_speech_file, text, output_path, tts_settings
         )
+        await self._apply_pitch_if_needed(output_path, tts_settings)
 
         return output_path
 
@@ -130,13 +134,14 @@ class TTSIntegration:
             settings.get("language", "en")
         )
         rate = self._edge_rate(settings, config)
-        logger.info("TTS (edge): voice='%s' rate='%s'", voice, rate)
+        pitch = self._edge_pitch(settings)
+        logger.info("TTS (edge): voice='%s' rate='%s' pitch='%s'", voice, rate, pitch)
 
         processed_text = self._prepare_neural_text(
             text, language=settings.get("language", "en")
         )
 
-        await edge_tts.Communicate(processed_text, voice, rate=rate).save(output_path)
+        await edge_tts.Communicate(processed_text, voice, rate=rate, pitch=pitch).save(output_path)
 
         if not os.path.exists(output_path) or os.path.getsize(output_path) <= 1000:
             raise RuntimeError("edge TTS produced no usable audio")
@@ -159,6 +164,47 @@ class TTSIntegration:
     @classmethod
     def _edge_rate(cls, settings: Dict[str, Any], config) -> str:
         return f"{round((cls._speech_speed(settings, config) - 1) * 100):+d}%"
+
+    @classmethod
+    def _pitch_semitones(cls, settings: Dict[str, Any]) -> float:
+        try:
+            value = float(settings.get("pitch", 0.0) or 0.0)
+        except (TypeError, ValueError):
+            logger.warning("TTS: ignoring invalid pitch %r", settings.get("pitch"))
+            return 0.0
+        return max(cls.MIN_PITCH_SEMITONES, min(cls.MAX_PITCH_SEMITONES, value))
+
+    @classmethod
+    def _edge_pitch(cls, settings: Dict[str, Any]) -> str:
+        semitones = cls._pitch_semitones(settings)
+        hz = round(440 * (2 ** (semitones / 12) - 1))
+        return f"{hz:+d}Hz"
+
+    async def _apply_pitch_if_needed(self, output_path: str, settings: Dict[str, Any]) -> None:
+        pitch = self._pitch_semitones(settings)
+        if pitch == 0 or not os.path.exists(output_path):
+            return
+        await self._run_blocking(self._pitch_wav, output_path, pitch)
+
+    @staticmethod
+    def _pitch_wav(path: str, semitones: float) -> None:
+        import subprocess
+
+        factor = 2 ** (semitones / 12)
+        temp_path = path + ".pitch.wav"
+        result = subprocess.run(
+            [
+                "ffmpeg", "-y", "-i", path,
+                "-filter:a", f"asetrate=22050*{factor:.8f},aresample=22050,atempo={1 / factor:.8f}",
+                "-acodec", "pcm_s16le", temp_path,
+            ],
+            capture_output=True, text=True, timeout=30,
+        )
+        if result.returncode != 0:
+            if os.path.exists(temp_path):
+                os.unlink(temp_path)
+            raise RuntimeError(f"ffmpeg pitch filter failed: {result.stderr[:200]}")
+        os.replace(temp_path, path)
 
     @staticmethod
     def _default_edge_voice(language: str) -> str:

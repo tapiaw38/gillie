@@ -1,4 +1,4 @@
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from typing import Optional, List, Dict, Any
 from datetime import datetime
 from src.core.domain import Profile
@@ -15,6 +15,7 @@ class ProfileInput(BaseModel):
     tts_enabled: Optional[bool] = None
     tts_voice: Optional[str] = None
     tts_engine: Optional[str] = None
+    tts_pitch: Optional[float] = Field(default=None, ge=-6, le=6)
     avatar_width: Optional[int] = None
     avatar_height: Optional[int] = None
     avatar_zoom: Optional[float] = None
@@ -63,6 +64,7 @@ class ProfileOutputData(BaseModel):
     tts_enabled: Optional[bool] = False
     tts_voice: Optional[str] = None
     tts_engine: Optional[str] = None
+    tts_pitch: Optional[float] = 0.0
     avatar_width: Optional[int] = None
     avatar_height: Optional[int] = None
     avatar_zoom: Optional[float] = None
@@ -95,6 +97,7 @@ class ProfileOutput(BaseModel):
                 tts_enabled=profile.tts_enabled or False,
                 tts_voice=profile.tts_voice,
                 tts_engine=profile.tts_engine,
+                tts_pitch=profile.tts_pitch,
                 avatar_width=profile.avatar_width,
                 avatar_height=profile.avatar_height,
                 avatar_zoom=profile.avatar_zoom,

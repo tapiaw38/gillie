@@ -204,6 +204,10 @@
       "avatar": {
         "name": "Avatar",
         "description": "Tamaño de ventana y zoom de cámara del personaje"
+      },
+      "voice": {
+        "name": "Voz",
+        "description": "Motor, voz, idioma y tono del asistente"
       }
     }
   },
@@ -1537,5 +1541,32 @@
     "restore": "Restaurar valores por defecto",
     "preview": "Vista previa",
     "restartNote": "Los cambios se aplican al reiniciar el avatar. Corré gillie avatar stop y gillie avatar start."
+  },
+  "voice": {
+    "title": "Voz",
+    "subtitle": "Configurá cómo suena tu asistente",
+    "loading": "Cargando configuración de voz...",
+    "saved": "Configuración de voz guardada",
+    "saveError": "No se pudo guardar la configuración de voz",
+    "audioResponses": "Respuestas en audio",
+    "audioResponsesDesc": "El asistente responde con un mensaje de voz además del texto",
+    "engine": "Proveedor de voz",
+    "engineDesc": "Qué motor genera el audio",
+    "engineNoKey": "requiere API key",
+    "engineSet": "Proveedor configurado en {engine}",
+    "voice": "Voz",
+    "voiceDesc": "Con qué voz habla el asistente",
+    "voiceSet": "Voz configurada en {voice}",
+    "pitch": "Tono",
+    "pitchDesc": "Hacé la voz más grave o más fina. Cero mantiene el tono natural.",
+    "lower": "Grave",
+    "higher": "Fina",
+    "pitchSet": "Tono configurado en {value} semitonos",
+    "language": "Idioma de respuesta",
+    "languageDesc": "Idioma usado para sintetizar respuestas habladas",
+    "english": "Idioma configurado en inglés",
+    "spanish": "Idioma configurado en español",
+    "enabled": "Respuestas de audio activadas",
+    "disabled": "Respuestas de audio desactivadas"
   }
 }

@@ -11,10 +11,64 @@
       "source": null
     },
     {
+      "path": "animations/dance1.vrma",
+      "role": "dance",
+      "license": null,
+      "source": null
+    },
+    {
+      "path": "animations/dance2.vrma",
+      "role": "dance",
+      "license": "Author terms: commercial and non-commercial use permitted when embedded so the data cannot be extracted; redistribution and resale prohibited",
+      "source": "OBF — Maron Yatsuhashi (https://booth.pm/ja/browse/3D%E3%83%A2%E3%83%BC%E3%82%B7%E3%83%A7%E3%83%B3%E3%83%BB%E3%82%A2%E3%83%8B%E3%83%A1%E3%83%BC%E3%82%B7%E3%83%A7%E3%83%B3)"
+    },
+    {
+      "path": "animations/dance3.vrma",
+      "role": "dance",
+      "license": "Author terms: commercial and non-commercial use permitted when embedded so the data cannot be extracted; redistribution and resale prohibited",
+      "source": "シカ色デイズ — Maron Yatsuhashi (https://booth.pm/ja/browse/3D%E3%83%A2%E3%83%BC%E3%82%B7%E3%83%A7%E3%83%B3%E3%83%BB%E3%82%A2%E3%83%8B%E3%83%A1%E3%83%BC%E3%82%B7%E3%83%A7%E3%83%B3)"
+    },
+    {
+      "path": "animations/dance4.vrma",
+      "role": "dance",
+      "license": "Author terms: commercial and non-commercial use permitted when embedded so the data cannot be extracted; redistribution and resale prohibited",
+      "source": "テレパシ — Maron Yatsuhashi (https://booth.pm/ja/browse/3D%E3%83%A2%E3%83%BC%E3%82%B7%E3%83%A7%E3%83%B3%E3%83%BB%E3%82%A2%E3%83%8B%E3%83%A1%E3%83%BC%E3%82%B7%E3%83%A7%E3%83%B3)"
+    },
+    {
+      "path": "animations/dance5.vrma",
+      "role": "dance",
+      "license": "Author terms: commercial and non-commercial use permitted when embedded so the data cannot be extracted; redistribution and resale prohibited",
+      "source": "なぜ謎ANSWER — Maron Yatsuhashi (https://booth.pm/ja/browse/3D%E3%83%A2%E3%83%BC%E3%82%B7%E3%83%A7%E3%83%B3%E3%83%BB%E3%82%A2%E3%83%8B%E3%83%A1%E3%83%BC%E3%82%B7%E3%83%A7%E3%83%B3)"
+    },
+    {
+      "path": "animations/finger-gun.vrma",
+      "role": "finger-gun",
+      "license": null,
+      "source": null
+    },
+    {
+      "path": "animations/greeting.vrma",
+      "role": "greeting",
+      "license": null,
+      "source": null
+    },
+    {
+      "path": "animations/happy.vrma",
+      "role": "happy",
+      "license": null,
+      "source": null
+    },
+    {
       "path": "animations/idle.vrma",
       "role": "idle",
       "license": null,
       "source": null
+    },
+    {
+      "path": "animations/kneel.vrma",
+      "role": "kneel",
+      "license": "CC0-1.0",
+      "source": "Generated procedurally by poses.mjs in the persona repo"
     },
     {
       "path": "animations/talk1.vrma",
@@ -33,54 +87,6 @@
       "role": "talk",
       "license": null,
       "source": null
-    },
-    {
-      "path": "animations/greeting.vrma",
-      "role": "greeting",
-      "license": null,
-      "source": null
-    },
-    {
-      "path": "animations/happy.vrma",
-      "role": "happy",
-      "license": null,
-      "source": null
-    },
-    {
-      "path": "animations/finger-gun.vrma",
-      "role": "finger-gun",
-      "license": null,
-      "source": null
-    },
-    {
-      "path": "animations/dance.vrma",
-      "role": "dance",
-      "license": null,
-      "source": null
-    },
-    {
-      "path": "animations/dance-obf.vrma",
-      "role": "dance",
-      "license": "Author terms: use permitted incl. commercial when embedded; redistribution prohibited",
-      "source": "https://booth.pm/ja/browse/3D%E3%83%A2%E3%83%BC%E3%82%B7%E3%83%A7%E3%83%B3%E3%83%BB%E3%82%A2%E3%83%8B%E3%83%A1%E3%83%BC%E3%82%B7%E3%83%A7%E3%83%B3 (Maron Yatsuhashi)"
-    },
-    {
-      "path": "animations/dance-shikairo.vrma",
-      "role": "dance",
-      "license": "Author terms: use permitted incl. commercial when embedded; redistribution prohibited",
-      "source": "https://booth.pm/ja/browse/3D%E3%83%A2%E3%83%BC%E3%82%B7%E3%83%A7%E3%83%B3%E3%83%BB%E3%82%A2%E3%83%8B%E3%83%A1%E3%83%BC%E3%82%B7%E3%83%A7%E3%83%B3 (Maron Yatsuhashi)"
-    },
-    {
-      "path": "animations/dance-telepathy.vrma",
-      "role": "dance",
-      "license": "Author terms: use permitted incl. commercial when embedded; redistribution prohibited",
-      "source": "https://booth.pm/ja/browse/3D%E3%83%A2%E3%83%BC%E3%82%B7%E3%83%A7%E3%83%B3%E3%83%BB%E3%82%A2%E3%83%8B%E3%83%A1%E3%83%BC%E3%82%B7%E3%83%A7%E3%83%B3 (Maron Yatsuhashi)"
-    },
-    {
-      "path": "animations/dance-nazonazo.vrma",
-      "role": "dance",
-      "license": "Author terms: use permitted incl. commercial when embedded; redistribution prohibited",
-      "source": "https://booth.pm/ja/browse/3D%E3%83%A2%E3%83%BC%E3%82%B7%E3%83%A7%E3%83%B3%E3%83%BB%E3%82%A2%E3%83%8B%E3%83%A1%E3%83%BC%E3%82%B7%E3%83%A7%E3%83%B3 (Maron Yatsuhashi)"
     }
   ]
 }

@@ -673,6 +673,7 @@ class AddMessageUseCase:
             for key, value in (
                 ("voice", getattr(profile, "tts_voice", None)),
                 ("engine", getattr(profile, "tts_engine", None)),
+                ("pitch", getattr(profile, "tts_pitch", None)),
             )
             if value
         }
@@ -722,6 +723,7 @@ class AddMessageUseCase:
                 for key, value in (
                     ("voice", getattr(profile, "tts_voice", None)),
                     ("engine", getattr(profile, "tts_engine", None)),
+                    ("pitch", getattr(profile, "tts_pitch", None)),
                 )
                 if value
             }

@@ -27,6 +27,7 @@ class UpdateUseCase:
                 tts_enabled=profile.tts_enabled,
                 tts_voice=profile.tts_voice,
                 tts_engine=profile.tts_engine,
+                tts_pitch=profile.tts_pitch,
                 avatar_width=profile.avatar_width,
                 avatar_height=profile.avatar_height,
                 avatar_zoom=profile.avatar_zoom,

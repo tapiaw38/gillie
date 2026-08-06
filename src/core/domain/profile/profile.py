@@ -20,6 +20,7 @@ class Profile(BaseModel):
     tts_enabled: Optional[bool] = Field(default=False)
     tts_voice: Optional[str] = Field(default=None)
     tts_engine: Optional[str] = Field(default=None)
+    tts_pitch: Optional[float] = Field(default=0.0)
     avatar_width: Optional[int] = Field(default=None)
     avatar_height: Optional[int] = Field(default=None)
     avatar_zoom: Optional[float] = Field(default=None)

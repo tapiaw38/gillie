@@ -941,9 +941,6 @@ AVATAR_MANIFEST_PATH = (
 
 _AUTOMATIC_AVATAR_ROLES = frozenset({"idle", "talk"})
 
-_AVATAR_ANIMATION_FALLBACK = ("greeting", "happy", "finger-gun", "dance")
-
-
 def installed_avatar_animations(
     manifest_path: "Path | None" = None,
 ) -> tuple:
@@ -955,8 +952,10 @@ def installed_avatar_animations(
     path = manifest_path or AVATAR_MANIFEST_PATH
     try:
         manifest = json.loads(path.read_text(encoding="utf-8"))
-    except (OSError, ValueError):
-        return _AVATAR_ANIMATION_FALLBACK
+    except (OSError, ValueError) as exc:
+        raise RuntimeError(
+            f"Avatar animation manifest unavailable: {path}"
+        ) from exc
 
     roles = []
     for asset in manifest.get("assets") or []:
@@ -967,7 +966,9 @@ def installed_avatar_animations(
             continue
         if role not in roles:
             roles.append(role)
-    return tuple(roles) or _AVATAR_ANIMATION_FALLBACK
+    if not roles:
+        raise RuntimeError(f"Avatar animation manifest has no playable poses: {path}")
+    return tuple(roles)
 
 
 AVATAR_ANIMATIONS = installed_avatar_animations()

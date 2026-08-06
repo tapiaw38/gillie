@@ -44,6 +44,12 @@ class ProviderSelectionTests(unittest.TestCase):
 
 
 class VoiceResolutionTests(unittest.TestCase):
+    def test_pitch_is_clamped_to_supported_range(self):
+        tts = _integration(TTSConfig())
+        self.assertEqual(tts._pitch_semitones({"pitch": -20}), -6)
+        self.assertEqual(tts._pitch_semitones({"pitch": 20}), 6)
+        self.assertEqual(tts._edge_pitch({"pitch": 0}), "+0Hz")
+
     def _post_payload(self, config, settings):
         tts = _integration(config)
         response = mock.Mock(content=b"RIFF")

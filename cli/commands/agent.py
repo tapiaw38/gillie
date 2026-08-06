@@ -721,7 +721,7 @@ def _stream_assistant(
     always_approved: set = None,
     always_rejected: set = None,
     session_local_files: list = None,
-) -> str:
+) -> AudioQueue:
     """Stream the assistant reply token by token from the SSE endpoint.
 
     When the backend emits an approval_request event the function pauses,
@@ -1148,7 +1148,7 @@ def _stream_assistant(
         audio.stop()
         console.print(Rule(style="dim red"))
         console.print()
-        return full_text
+        return audio
 
     if _cancel_requested.is_set():
         audio.stop()
@@ -1160,7 +1160,7 @@ def _stream_assistant(
         console.print("[yellow]⏹  Cancelled[/yellow]")
         console.print(Rule(style="dim"))
         console.print()
-        return full_text
+        return audio
 
     if full_text:
         if _streaming_text:
@@ -1170,10 +1170,10 @@ def _stream_assistant(
     console.print(Rule(style="dim"))
     console.print()
 
-    audio.wait()
-
     _track_tokens(content, full_text)
-    return full_text
+    # Keep playback alive while caller renders the next prompt. Caller stops
+    # this queue when user submits new input, which also silences avatar output.
+    return audio
 
 
 def _print_history(messages: list, assistant_name: str) -> None:
@@ -2275,6 +2275,16 @@ def agent(
         return console.input(f"[bold cyan]{prompt_text}[/bold cyan]").strip()
 
     _last_ctrl_c: float = 0.0  # timestamp of last Ctrl+C at the prompt
+    active_audio: AudioQueue | None = None
+
+    def _interrupt_active_audio() -> None:
+        """Stop current reply before accepting a new command or message."""
+        nonlocal active_audio
+        if active_audio is None:
+            return
+        active_audio.stop()
+        active_audio.wait()
+        active_audio = None
 
     while True:
         try:
@@ -2285,6 +2295,7 @@ def agent(
 
             now = _t.time()
             if now - _last_ctrl_c < 2.0:
+                _interrupt_active_audio()
                 _print_session_cost()
                 console.print("\n[dim]Goodbye 👋[/dim]")
                 break
@@ -2294,12 +2305,17 @@ def agent(
             )
             continue
         except EOFError:
+            _interrupt_active_audio()
             _print_session_cost()
             console.print("\n[dim]Goodbye 👋[/dim]")
             break
 
         if not user_input:
             continue
+
+        # Typed input is a deliberate barge-in: stop audio before handling
+        # /new, /exit, slash commands, or sending the next user message.
+        _interrupt_active_audio()
 
         cmd = user_input.lower()
 
@@ -2462,7 +2478,7 @@ def agent(
                 console.print(f"[green]✓[/green] Uploaded: [bold]{file_name}[/bold]\n")
                 attach_msg = f"I've just uploaded the file '{file_name}' (url: {file_url}). Please use it in our conversation when relevant."
                 _print_user(attach_msg)
-                _stream_assistant(
+                active_audio = _stream_assistant(
                     current_id,
                     assistant_name,
                     attach_msg,
@@ -2527,7 +2543,7 @@ def agent(
         _print_user(display_input)
         prompt_attached_files.clear()
         prompt_pasted_blocks.clear()
-        _stream_assistant(
+        active_audio = _stream_assistant(
             current_id,
             assistant_name,
             user_input,
@@ -2538,6 +2554,7 @@ def agent(
             session_local_files=session_local_files,
         )
 
+    _interrupt_active_audio()
     _stop_avatar(avatar_proc)
 
     try:

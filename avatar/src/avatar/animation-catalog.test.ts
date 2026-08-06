@@ -43,12 +43,12 @@ describe('Gillie Avatar animation contract', () => {
     const catalog = await loadAnimationCatalog(async () => ({
       assets: [
         { path: 'model.vrm', role: 'model' },
-        { path: 'animations/dance.vrma', role: 'dance' },
-        { path: 'animations/dance-obf.vrma', role: 'dance' },
+        { path: 'animations/dance1.vrma', role: 'dance' },
+        { path: 'animations/dance2.vrma', role: 'dance' },
       ],
     }))
 
-    expect(catalog.DANCE).toEqual(['dance.vrma', 'dance-obf.vrma'])
+    expect(catalog.DANCE).toEqual(['dance1.vrma', 'dance2.vrma'])
   })
 
   it('reads the manifest once and reuses it', async () => {

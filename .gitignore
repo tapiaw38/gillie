@@ -102,6 +102,9 @@ avatar/**/*.pdb
 avatar/**/*.vrm
 avatar/**/*.vrma
 
+# Generated from local character media during avatar build
+avatar/public/assets/manifest.json
+
 # environment variables
 avatar/.env
 avatar/.env.*
@@ -119,4 +122,3 @@ avatar/.vscode/
 
 # Build output
 release/
-

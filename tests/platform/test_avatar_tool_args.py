@@ -1,4 +1,5 @@
 import unittest
+from pathlib import Path
 
 from pydantic import ValidationError
 
@@ -7,10 +8,15 @@ from src.core.platform.ai.tools.models import (
     AvatarControlWindowArgs,
     AvatarPlayAnimationArgs,
     normalize_avatar_animation,
+    installed_avatar_animations,
 )
 
 
 class AvatarAnimationArgsTests(unittest.TestCase):
+    def test_missing_manifest_does_not_invent_animation_names(self):
+        with self.assertRaises(RuntimeError):
+            installed_avatar_animations(Path("/tmp/does-not-exist/avatar-manifest.json"))
+
     def test_the_schema_advertises_the_installed_animations(self):
         schema = AvatarPlayAnimationArgs.model_json_schema()
         self.assertEqual(

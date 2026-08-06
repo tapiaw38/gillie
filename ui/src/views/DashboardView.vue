@@ -424,6 +424,14 @@ const integrations = computed<IntegrationItem[]>(() => [
     enabled: true,
   },
   {
+    name: t('dashboard.integrations.voice.name'),
+    description: t('dashboard.integrations.voice.description'),
+    icon: 'pi pi-microphone',
+    tone: 'info',
+    to: 'voice',
+    enabled: true,
+  },
+  {
     name: t('dashboard.integrations.cronJobs.name'),
     description: t('dashboard.integrations.cronJobs.description'),
     icon: 'pi pi-clock',
@@ -494,6 +502,7 @@ const PRODUCTIVITY_ROUTES = [
 ]
 const AUTOMATION_ROUTES = [
   'avatar',
+  'voice',
   'system-commands',
   'cron-jobs',
   'tool-prompts',
