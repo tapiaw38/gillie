@@ -8,13 +8,7 @@ export interface VoiceState {
   phase: VoicePhase
 }
 
-export type BridgeAnimation =
-  | 'IDLE'
-  | 'GREETING'
-  | 'TALK'
-  | 'HAPPY'
-  | 'FINGER_GUN'
-  | 'DANCE'
+export type BridgeAnimation = string
 
 export interface AudioListenerStatus {
   available: boolean

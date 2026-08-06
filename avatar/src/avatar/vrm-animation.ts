@@ -6,7 +6,11 @@ import {
 } from '@pixiv/three-vrm-animation'
 import type { VRM } from '@pixiv/three-vrm'
 import * as THREE from 'three'
-import { nextAnimation, type AnimationType } from './animation-catalog'
+import {
+  loadAnimationCatalog,
+  nextAnimation,
+  type AnimationType,
+} from './animation-catalog'
 import {
   configureAnimationAction,
   crossFadeAnimationActions,
@@ -75,7 +79,10 @@ export function createVrmAnimator(vrm: VRM): VrmAnimator {
       const generation = ++requestGeneration
       pendingCompletion = null
       try {
-        const path = nextAnimation(type, previousAnimation.get(type) ?? null)
+        const catalog = await loadAnimationCatalog()
+        const choices = catalog[type] ?? []
+        if (choices.length === 0) throw new Error(`No clips installed for ${type}`)
+        const path = nextAnimation(choices, previousAnimation.get(type) ?? null)
         previousAnimation.set(type, path)
         const animation = await load(path)
         if (generation !== requestGeneration || !mixer) return

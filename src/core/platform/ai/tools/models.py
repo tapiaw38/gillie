@@ -10,6 +10,7 @@ import fnmatch
 import json
 import logging
 import os
+from pathlib import Path
 from typing import Optional, List, Dict, Any, Literal
 from pydantic import BaseModel, Field, field_validator
 from langchain_core.tools import StructuredTool
@@ -934,7 +935,42 @@ class CronRunArgs(BaseModel):
     job_id: str = Field(description="The job ID to run now")
 
 
-AVATAR_ANIMATIONS = ("greeting", "happy", "finger-gun", "dance")
+AVATAR_MANIFEST_PATH = (
+    Path(__file__).resolve().parents[5] / "avatar" / "public" / "assets" / "manifest.json"
+)
+
+_AUTOMATIC_AVATAR_ROLES = frozenset({"idle", "talk"})
+
+_AVATAR_ANIMATION_FALLBACK = ("greeting", "happy", "finger-gun", "dance")
+
+
+def installed_avatar_animations(
+    manifest_path: "Path | None" = None,
+) -> tuple:
+    """Read the gestures the installed avatar can actually play.
+
+    The avatar's asset manifest is the single place its clips are declared, so
+    dropping a new one in there is enough for the model to be offered it.
+    """
+    path = manifest_path or AVATAR_MANIFEST_PATH
+    try:
+        manifest = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return _AVATAR_ANIMATION_FALLBACK
+
+    roles = []
+    for asset in manifest.get("assets") or []:
+        role = asset.get("role")
+        if not isinstance(role, str) or role in _AUTOMATIC_AVATAR_ROLES:
+            continue
+        if not str(asset.get("path", "")).startswith("animations/"):
+            continue
+        if role not in roles:
+            roles.append(role)
+    return tuple(roles) or _AVATAR_ANIMATION_FALLBACK
+
+
+AVATAR_ANIMATIONS = installed_avatar_animations()
 
 _AVATAR_ANIMATION_SYNONYMS = {
     "wave": "greeting",
@@ -958,8 +994,8 @@ def normalize_avatar_animation(value: str) -> str:
 
 
 class AvatarPlayAnimationArgs(BaseModel):
-    animation: Literal["greeting", "happy", "finger-gun", "dance"] = Field(
-        description="The gesture to make: greeting, happy, finger-gun, or dance"
+    animation: Literal[AVATAR_ANIMATIONS] = Field(  # type: ignore[valid-type]
+        description="The gesture to make, one of: " + ", ".join(AVATAR_ANIMATIONS)
     )
 
     @field_validator("animation", mode="before")

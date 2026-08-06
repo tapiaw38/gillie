@@ -1,4 +1,5 @@
 import type { BridgeAnimation, BridgeEvent, VoiceActivity, VoicePhase } from './types'
+import { ANIMATION_EVENT_NAMES } from './asset-manifest'
 
 export type ProtocolCommand =
   | { type: 'show' | 'hide' | 'toggle' }
@@ -52,13 +53,7 @@ export function parseProtocolUrl(
     if (action === 'inactive' || action === 'stop') {
       return [{ type: 'event', event: voiceState('idle', 'inactive') }]
     }
-    const animation: BridgeAnimation | undefined = {
-      idle: 'IDLE',
-      greeting: 'GREETING',
-      happy: 'HAPPY',
-      'finger-gun': 'FINGER_GUN',
-      dance: 'DANCE',
-    }[action] as BridgeAnimation | undefined
+    const animation: BridgeAnimation | undefined = ANIMATION_EVENT_NAMES[action]
     if (animation) {
       return [{ type: 'event', event: { type: 'animation', animation } }]
     }

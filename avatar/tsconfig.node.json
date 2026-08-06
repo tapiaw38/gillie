@@ -5,7 +5,8 @@
     "vitest.config.*",
     "eslint.config.*",
     "electron.vite.config.*",
-    "electron/**/*"
+    "electron/**/*",
+    "shared/**/*"
   ],
   "compilerOptions": {
     "noEmit": true,

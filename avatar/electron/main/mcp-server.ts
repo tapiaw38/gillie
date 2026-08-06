@@ -5,18 +5,12 @@ import * as z from 'zod'
 import { version } from '../../package.json'
 import type { AudioListenerStatus, BridgeAnimation, VoiceState } from './types'
 import type { McpHandler } from './bridge-server'
+import { ANIMATION_EVENT_NAMES as EVENT_NAMES, ANIMATION_ROLES } from './asset-manifest'
 
 export const MCP_PATH = '/mcp'
 
-export const ANIMATION_EVENT_NAMES: Record<string, BridgeAnimation> = {
-  idle: 'IDLE',
-  greeting: 'GREETING',
-  talk: 'TALK',
-  happy: 'HAPPY',
-  'finger-gun': 'FINGER_GUN',
-  dance: 'DANCE',
-}
-export const ANIMATION_NAMES = Object.keys(ANIMATION_EVENT_NAMES) as [string, ...string[]]
+export { ANIMATION_EVENT_NAMES } from './asset-manifest'
+export const ANIMATION_NAMES = ANIMATION_ROLES as [string, ...string[]]
 export const WINDOW_ACTIONS = ['show', 'hide', 'toggle'] as const
 const VOICE_PHASES = ['inactive', 'starting', 'active', 'stopping'] as const
 const VOICE_ACTIVITIES = ['idle', 'listening', 'speaking'] as const
@@ -47,7 +41,7 @@ function textResult(text: string) {
 }
 
 export function getAnimationEventName(animation: string): BridgeAnimation | null {
-  return ANIMATION_EVENT_NAMES[animation] ?? null
+  return EVENT_NAMES[animation] ?? null
 }
 
 export function createAvatarMcpServer({
