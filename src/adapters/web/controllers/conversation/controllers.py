@@ -11,6 +11,7 @@ from src.core.use_cases.use_cases import Usecases
 from src.adapters.web.dependencies import get_usecases
 from typing import Optional
 import logging
+import os
 
 
 router = APIRouter(
@@ -64,12 +65,38 @@ async def add_message(
     voice_content: Optional[UploadFile] = File(None),
     image_content: Optional[UploadFile] = File(None),
     files: Optional[list[UploadFile]] = File(None),
+    document_content: Optional[UploadFile] = File(None),
     usecases: Usecases = Depends(get_usecases),
     has_image_processor: Optional[str] = Query(None, regex="^(activate|deactivate)$"),
     has_text_to_voice: Optional[str] = Query(None, regex="^(activate|deactivate)$")
 ):
     sender = SenderEnum.user
     user_id = request.state.user.get("user_id")
+
+    if document_content:
+        filename = os.path.basename(document_content.filename or "")
+        extension = os.path.splitext(filename)[1].lower()
+        if extension not in {".pdf", ".docx"}:
+            from fastapi import HTTPException
+            raise HTTPException(status_code=415, detail="Only PDF and DOCX documents are supported")
+
+        # Keep multipart document handling inside Gillie so its existing PDF,
+        # OCR, DOCX and RAG tools can access the uploaded file by name.
+        from src.schemas import FileInput
+        uploaded = await usecases.profile.add_files_usecase.execute(
+            user_id,
+            [FileInput(document_content)],
+        )
+        if not uploaded.data:
+            from fastapi import HTTPException
+            raise HTTPException(status_code=502, detail="Document upload failed")
+
+        stored_name = uploaded.data[-1].name
+        content = (
+            f"{content}\n\n"
+            f"[Documento adjunto: {filename}; archivo interno: {stored_name}]\n"
+            "Usá las herramientas documentales disponibles para leerlo."
+        )
 
     auth_token = None
     auth_header = request.headers.get("Authorization")

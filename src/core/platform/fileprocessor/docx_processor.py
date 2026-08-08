@@ -86,6 +86,10 @@ class DocxProcessor(BaseFileProcessor):
             logger.error(f"Error parsing DOCX XML: {e}")
             return ""
 
+    def extract_text_for_evaluation(self, docx_data: bytes) -> str:
+        """Extract DOCX text from already-downloaded bytes."""
+        return self._extract_text_from_bytes(docx_data)
+
     async def search_images_in_docx(
         self, docx_url: str, search_term: str, max_results: int = 5
     ) -> List[ImageSearchResult]:
