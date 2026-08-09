@@ -972,6 +972,7 @@ def installed_avatar_animations(
 
 
 AVATAR_ANIMATIONS = installed_avatar_animations()
+_AVATAR_ANIMATION_SCHEMA = AVATAR_ANIMATIONS or ("unavailable",)
 
 _AVATAR_ANIMATION_SYNONYMS = {
     "wave": "greeting",
@@ -995,8 +996,8 @@ def normalize_avatar_animation(value: str) -> str:
 
 
 class AvatarPlayAnimationArgs(BaseModel):
-    animation: Literal[AVATAR_ANIMATIONS] = Field(  # type: ignore[valid-type]
-        description="The gesture to make, one of: " + ", ".join(AVATAR_ANIMATIONS)
+    animation: Literal[_AVATAR_ANIMATION_SCHEMA] = Field(  # type: ignore[valid-type]
+        description="The gesture to make, one of: " + ", ".join(_AVATAR_ANIMATION_SCHEMA)
     )
 
     @field_validator("animation", mode="before")
@@ -6268,7 +6269,7 @@ If data is not found, say so clearly."""
             )
         )
 
-    if avatar_mcp is not None and avatar_mcp.avatar_available():
+    if AVATAR_ANIMATIONS and avatar_mcp is not None and avatar_mcp.avatar_available():
 
         async def avatar_play_animation_tool(animation: str) -> Dict[str, Any]:
             requested = animation
