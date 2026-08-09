@@ -953,9 +953,8 @@ def installed_avatar_animations(
     try:
         manifest = json.loads(path.read_text(encoding="utf-8"))
     except (OSError, ValueError) as exc:
-        raise RuntimeError(
-            f"Avatar animation manifest unavailable: {path}"
-        ) from exc
+        logger.warning("Avatar animations disabled; manifest unavailable: %s", path)
+        return ()
 
     roles = []
     for asset in manifest.get("assets") or []:
@@ -967,7 +966,8 @@ def installed_avatar_animations(
         if role not in roles:
             roles.append(role)
     if not roles:
-        raise RuntimeError(f"Avatar animation manifest has no playable poses: {path}")
+        logger.warning("Avatar animations disabled; no playable poses: %s", path)
+        return ()
     return tuple(roles)
 
 

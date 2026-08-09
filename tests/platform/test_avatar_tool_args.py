@@ -14,8 +14,10 @@ from src.core.platform.ai.tools.models import (
 
 class AvatarAnimationArgsTests(unittest.TestCase):
     def test_missing_manifest_does_not_invent_animation_names(self):
-        with self.assertRaises(RuntimeError):
-            installed_avatar_animations(Path("/tmp/does-not-exist/avatar-manifest.json"))
+        self.assertEqual(
+            installed_avatar_animations(Path("/tmp/does-not-exist/avatar-manifest.json")),
+            (),
+        )
 
     def test_the_schema_advertises_the_installed_animations(self):
         schema = AvatarPlayAnimationArgs.model_json_schema()
