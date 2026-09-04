@@ -1760,8 +1760,8 @@ class FileImageProcessor(BaseFileProcessor):
             return {"page_text_content": {}}
 
     def _analyze_image_with_python_tools(self, image_base64: str) -> Dict[str, Any]:
-        """Placeholder for image analysis"""
-        return {"quality_score": 0.7, "objects_detected": 1, "text_detected": False}
+        """Analyze uploaded images with the shared concrete implementation."""
+        return super()._analyze_image_with_python_tools(image_base64)
 
     def _create_detailed_description(self, technical_analysis: Dict[str, Any]) -> str:
         """Create a basic description from technical analysis"""

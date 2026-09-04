@@ -342,21 +342,21 @@ class BaseFileProcessor:
         """Calculate sharpness of an image using Laplacian operator"""
         try:
             if len(img_array.shape) == 3:
-                gray = cv2.cvtColor(img_array, cv2.COLOR_RGB2GRAY)
+                gray = (
+                    cv2.cvtColor(img_array, cv2.COLOR_RGB2GRAY)
+                    if cv2 is not None
+                    else np.dot(img_array[..., :3], [0.2989, 0.5870, 0.1140])
+                )
             else:
                 gray = img_array
 
-            laplacian = cv2.Laplacian(gray, cv2.CV_64F)
-            return float(laplacian.var())
+            if cv2 is not None:
+                return float(cv2.Laplacian(gray, cv2.CV_64F).var())
+
+            gradient_y, gradient_x = np.gradient(gray.astype(float))
+            return float(np.var(gradient_x) + np.var(gradient_y))
         except Exception:
-            if len(img_array.shape) == 3:
-                gray = np.dot(img_array[..., :3], [0.2989, 0.5870, 0.1140])
-            else:
-                gray = img_array
-
-            kernel = np.array([[0, -1, 0], [-1, 4, -1], [0, -1, 0]])
-            laplacian = cv2.filter2D(gray, cv2.CV_64F, kernel)
-            return float(laplacian.var())
+            return 0.0
 
     def _detect_text_regions(self, img_array: np.ndarray) -> bool:
         """Detect if there are text regions in the image"""
