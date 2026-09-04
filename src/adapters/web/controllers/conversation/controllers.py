@@ -130,12 +130,18 @@ async def transcribe_voice(
     conversation_id: str,
     request: Request,
     voice_content: UploadFile = File(...),
+    language: Optional[str] = Form(default=None),
     usecases: Usecases = Depends(get_usecases),
 ):
-    """Transcribe a recording without generating a reply."""
+    """Transcribe a recording without generating a reply.
+
+    `language` is the language being spoken. It defaults to the profile's, but
+    a client listening to a call in another language can override it without
+    changing the language its replies come back in.
+    """
     user_id = request.state.user.get("user_id")
     text = await usecases.conversation.add_message_usecase.transcribe(
-        voice_content, user_id
+        voice_content, user_id, language
     )
     return {"data": {"text": text or ""}}
 

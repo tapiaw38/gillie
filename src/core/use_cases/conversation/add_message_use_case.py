@@ -317,14 +317,23 @@ class AddMessageUseCase:
             raise NewApplicationError(ConversationMessageValidationError)
         conversation.messages.append(message)
 
-    async def transcribe(self, voice_content, user_id: str) -> Optional[str]:
+    async def transcribe(
+        self, voice_content, user_id: str, language: Optional[str] = None
+    ) -> Optional[str]:
         """Transcribe a recording on its own, so a caller can show the text
-        before the reply is generated."""
+        before the reply is generated.
+
+        `language` names the language being spoken, which is not always the one
+        the assistant answers in: a client listening to an English call still
+        wants its reply in the profile's language.
+        """
         context = self.context_factory()
         if not context.platform_managers:
             return None
-        profile = await context.repositories.profile.find_by_user_id(user_id)
-        lang = (profile.response_language if profile else None) or "en"
+        lang = language
+        if not lang:
+            profile = await context.repositories.profile.find_by_user_id(user_id)
+            lang = (profile.response_language if profile else None) or "en"
         try:
             return await context.platform_managers.voice_transcription.transcribe_audio_file(
                 audio_file=voice_content,
