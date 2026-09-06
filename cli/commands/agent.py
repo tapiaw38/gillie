@@ -155,7 +155,15 @@ _SAFE_TOOLS = {
     "browser_extract",
 }
 
-_ALWAYS_ASK_TOOLS = {"run_shell", "git_commit"}
+_ALWAYS_ASK_TOOLS = {
+    "run_shell",
+    "git_commit",
+    "system_propose",
+    "system_confirm",
+    "browser_evaluate",
+    "browser_connect",
+    "download_file",
+}
 
 _EDIT_TOOLS = {
     "edit_file",
@@ -163,22 +171,35 @@ _EDIT_TOOLS = {
     "cron_create",
     "cron_delete",
     "cron_run",
-    "system_propose",
-    "system_confirm",
     "browser_click",
     "browser_type",
 }
 
 
-def _should_ask(tool_name: str, mode: str, always_approved: set) -> bool:
-    """Return True when the user must be prompted before the tool runs."""
+def _should_ask(
+    tool_name: str, mode: str, always_approved: set, always_ask: bool = False
+) -> bool:
+    """Return True when the user must be prompted before the tool runs.
+
+    Order is the policy. An explicit "always approve this tool" from the user
+    wins — they chose that tool by name after seeing what it wanted to do,
+    which beats any blanket mode. Plan mode executes nothing, so it has
+    nothing to approve. Past those, the server's always_ask verdict outranks
+    the blanket modes: picking yolo is a statement about tedium, not consent
+    to a shell command nobody read.
+
+    Args:
+        always_ask: the server's own verdict, carried on the approval request.
+    """
     if tool_name in always_approved:
         return False
+    if mode == _Mode.PLAN:
+        return False
+    if always_ask or tool_name in _ALWAYS_ASK_TOOLS:
+        return True
     if tool_name in _SAFE_TOOLS:
         return False
     if mode == _Mode.YOLO:
-        return False
-    if mode == _Mode.PLAN:
         return False
     if mode == _Mode.AUTO_EDIT and tool_name in _EDIT_TOOLS:
         return False
@@ -206,11 +227,17 @@ def _base_url() -> str:
     return f"http://{host}:{port}"
 
 
-def _workspace_headers(mode: str = "") -> dict:
-    """Return HTTP headers carrying the client workspace path and optional mode."""
+def _workspace_headers(mode: str = "", run_id: str = "") -> dict:
+    """Return HTTP headers carrying the client workspace path and optional mode.
+
+    `run_id` names a run whose stream dropped. Sending it back asks the backend
+    to pick that run up where it stopped instead of starting a second one.
+    """
     headers = {"X-Gillie-Workspace": str(_workspace())}
     if mode == _Mode.PLAN:
         headers["X-Gillie-Mode"] = "plan"
+    if run_id:
+        headers["X-Gillie-Run-Id"] = run_id
     return headers
 
 
@@ -726,6 +753,7 @@ def _stream_assistant(
     always_approved: set = None,
     always_rejected: set = None,
     session_local_files: list = None,
+    run_state: dict = None,
 ) -> AudioQueue:
     """Stream the assistant reply token by token from the SSE endpoint.
 
@@ -762,6 +790,7 @@ def _stream_assistant(
     _stream_done = threading.Event()
     _prompt_active = threading.Event()  # pauses watcher during approval prompts
     _resp_holder = [None]  # filled after the request is established
+    run_state = run_state if run_state is not None else {}
 
     def _escape_watcher() -> None:
         """Background thread: set _cancel_requested and close the response when ESC."""
@@ -907,7 +936,7 @@ def _stream_assistant(
         resp = requests.post(
             _base_url() + f"/conversation/{conv_id}/message/stream",
             data={"content": content},
-            headers=_workspace_headers(effective_mode),
+            headers=_workspace_headers(effective_mode, run_state.get("run_id", "")),
             stream=True,
             timeout=900,
         )
@@ -929,9 +958,15 @@ def _stream_assistant(
             except _json.JSONDecodeError:
                 token = payload  # fallback for non-JSON frames
             if token == "[DONE]":
+                # The run finished, so there is nothing to resume. Clearing it
+                # anywhere else would also wipe it when the stream drops, which
+                # is the one case resuming exists for.
+                run_state.pop("run_id", None)
                 break
             if isinstance(token, dict):
-                if token.get("type") == "audio":
+                if token.get("type") == "agent_run":
+                    run_state["run_id"] = str(token.get("run_id", ""))
+                elif token.get("type") == "audio":
                     if token.get("url"):
                         audio.add(token["url"])
                 elif token.get("type") == "tool_call":
@@ -1018,9 +1053,16 @@ def _stream_assistant(
                     tool_name = token.get("tool", "tool")
                     file_path = token.get("file", "")
                     diff = token.get("diff", "")
+                    risk = token.get("risk", "")
+                    always_ask = bool(token.get("always_ask", False))
 
+                    badge = ""
+                    if risk in ("execute", "destructive"):
+                        badge = f" [bold red]{risk.upper()}[/bold red]"
+                    elif risk == "write":
+                        badge = f" [yellow]{risk}[/yellow]"
                     console.print(
-                        f"\n[bold]🔧 {tool_name}[/bold] → [cyan]{file_path}[/cyan]"
+                        f"\n[bold]🔧 {tool_name}[/bold]{badge} → [cyan]{file_path}[/cyan]"
                     )
                     if diff:
                         for diff_line in diff.splitlines():
@@ -1037,7 +1079,9 @@ def _stream_assistant(
                             else:
                                 console.print(f"[dim]{diff_line}[/dim]")
 
-                    ask = _should_ask(tool_name, effective_mode, always_approved)
+                    ask = _should_ask(
+                        tool_name, effective_mode, always_approved, always_ask
+                    )
 
                     if tool_name in always_rejected:
                         approved = False
@@ -1140,6 +1184,11 @@ def _stream_assistant(
             _stop_live()
             _had_error = True
             console.print(f"[red]✗[/red] API stream disconnected: {e}")
+            if run_state.get("run_id"):
+                console.print(
+                    "[dim]  Send the same message again to pick this run up "
+                    "where it stopped.[/dim]"
+                )
     except requests.exceptions.HTTPError as e:
         _stop_live()
         _had_error = True
@@ -1167,6 +1216,9 @@ def _stream_assistant(
 
     if _cancel_requested.is_set():
         audio.stop()
+        # Cancelling is a decision, not an accident: do not offer to resume
+        # what the user just stopped.
+        run_state.pop("run_id", None)
         if full_text:
             if _streaming_text:
                 _replace_streamed_with_markdown(full_text)
@@ -2140,6 +2192,8 @@ def agent(
     always_approved: set = set()
     always_rejected: set = set()
 
+    run_state: dict = {}
+
     session_files: list = []
     session_local_files: list = []
     prompt_attached_files: list[str] = []
@@ -2490,6 +2544,7 @@ def agent(
                     always_approved=always_approved,
                     always_rejected=always_rejected,
                     session_local_files=session_local_files,
+                    run_state=run_state,
                 )
             continue
 
@@ -2555,6 +2610,7 @@ def agent(
             always_approved=always_approved,
             always_rejected=always_rejected,
             session_local_files=session_local_files,
+            run_state=run_state,
         )
 
     _interrupt_active_audio()

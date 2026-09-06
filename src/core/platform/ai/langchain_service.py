@@ -528,6 +528,8 @@ class LangChainService:
                             "tool": request.get("tool", "unknown"),
                             "file": request.get("file", ""),
                             "diff": request.get("diff", ""),
+                            "risk": request.get("risk", "unknown"),
+                            "always_ask": bool(request.get("always_ask", False)),
                         }
                         try:
                             await asyncio.wait_for(

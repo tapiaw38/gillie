@@ -34,6 +34,7 @@ interface ApprovalRequest {
   tool_name: string
   target: string
   diff: string
+  risk: string
 }
 
 interface HistoricalMessage {
@@ -141,6 +142,10 @@ const scrollToBottom = async () => {
     messagesEl.value.scrollTop = messagesEl.value.scrollHeight
   }
 }
+
+const NOTABLE_RISKS = ['write', 'execute', 'destructive']
+
+const isNotableRisk = (risk?: string): boolean => !!risk && NOTABLE_RISKS.includes(risk)
 
 const getToolIcon = (toolName: string): string => {
   const key = Object.keys(TOOL_ICONS).find((k) => toolName.toLowerCase().includes(k))
@@ -583,6 +588,7 @@ const processStreamEvent = async (msg: ChatMessage, payload: unknown) => {
         tool_name: String(event.tool ?? ''),
         target: String(event.file ?? ''),
         diff: String(event.diff ?? ''),
+        risk: String(event.risk ?? ''),
       }
       approvalFeedback.value = ''
       approvalVisible.value = true
@@ -928,6 +934,11 @@ watch(
                 >
                   <i :class="['pi', getToolIcon(tool.name), 'tool-chip-icon']" />
                   <span class="tool-chip-name">{{ tool.name }}</span>
+                  <span
+                    v-if="isNotableRisk(tool.risk)"
+                    :class="['tool-chip-risk', `tool-chip-risk--${tool.risk}`]"
+                    >{{ tool.risk }}</span
+                  >
                   <span v-if="tool.arg" class="tool-chip-arg">{{ tool.arg }}</span>
                   <i v-if="tool.done" class="pi pi-check tool-chip-status" />
                   <span v-else class="tool-chip-spinner" />
@@ -1548,6 +1559,26 @@ watch(
 .tool-chip-name {
   font-family: monospace;
   font-size: 0.8rem;
+}
+
+.tool-chip-risk {
+  font-size: 0.62rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  padding: 0.05rem 0.3rem;
+  border-radius: 3px;
+  flex-shrink: 0;
+}
+
+.tool-chip-risk--write {
+  background: rgba(245, 166, 35, 0.22);
+}
+
+.tool-chip-risk--execute,
+.tool-chip-risk--destructive {
+  background: rgba(226, 66, 66, 0.22);
+  color: var(--do-danger, #e24242);
 }
 
 .tool-chip-arg {

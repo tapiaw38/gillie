@@ -31,12 +31,26 @@ def request_approval(tool_name: str, target: str, diff: str) -> Tuple[bool, str]
     Only valid inside a graph node. Returns ``(approved, feedback)``, where
     feedback is the user's reason for rejecting — the model receives it so it
     can try a different approach rather than simply retrying the same edit.
+
+    The request carries the server's own reading of the tool alongside it:
+
+    * ``risk`` so a client can show what class of thing it is about to allow.
+    * ``always_ask`` for the ones no blanket "stop asking me" mode may answer
+      on the user's behalf. Clients used to decide that from a hardcoded list
+      of tool names, which meant every new dangerous tool was auto-approved
+      until somebody remembered to update each client.
     """
+    from src.core.platform.ai.agent_contracts import needs_central_approval, risk_for
+
+    risk = risk_for(tool_name)
     decision = interrupt({
         "type": "approval_request",
         "tool": tool_name,
         "file": target,
         "diff": diff,
+        "risk": risk,
+        "always_ask": risk in ("execute", "destructive")
+        or needs_central_approval(tool_name),
     })
     if isinstance(decision, dict):
         return bool(decision.get("approved")), str(decision.get("feedback") or "")
@@ -51,11 +65,8 @@ def rejection_message(target: str, feedback: str) -> str:
     return message
 
 
-# { request_id: (event, {"approved": bool, "feedback": str}) }
 _pending: Dict[str, Tuple[asyncio.Event, dict]] = {}
 
-# One client for the process. Building a MongoClient per call leaks a
-# connection pool every time, and these run on the request path.
 _client = None
 _client_failed = False
 

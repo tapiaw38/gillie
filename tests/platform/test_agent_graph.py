@@ -14,6 +14,7 @@ from src.core.platform.ai.graph import (
     TAG_FILE_URL,
     TAG_LOCAL_FILE,
     TAG_NEEDS_APPROVAL,
+    approval_target,
     brief_result,
     build_agent_graph,
     final_text,
@@ -703,3 +704,97 @@ def test_an_untagged_tool_is_not_paused():
     run(graph, {"messages": [HumanMessage("go")], "file_urls": {}}, config_for("no-approval"))
 
     assert ran == ["ran"]
+
+
+def test_the_approval_prompt_shows_the_whole_command():
+    """key_arg basenames a path to keep the progress line short. Reusing it
+    here showed 'x' for 'rm -rf /tmp/x' — the user would be approving blind."""
+    from src.core.platform.ai.graph import key_arg
+
+    args = {"command": "rm -rf /tmp/x"}
+
+    assert approval_target(args) == "rm -rf /tmp/x"
+    assert key_arg("system_propose", args) == "x", "the shortening is the point of key_arg"
+
+
+def test_the_approval_prompt_shows_a_full_path_not_its_basename():
+    assert approval_target({"path": "/etc/nginx/nginx.conf"}) == "/etc/nginx/nginx.conf"
+    assert approval_target({"url": "https://bank.example/transfer"}) == (
+        "https://bank.example/transfer"
+    )
+
+
+def test_the_command_reaches_the_approval_request_unmangled():
+    class ShellArgs(BaseModel):
+        command: str
+
+    async def shell(command: str):
+        return "ran"
+
+    llm = ScriptedLLM([
+        [call_chunk("system_propose", {"command": "rm -rf /tmp/x"}, "1")],
+        [text_chunk("done")],
+    ])
+    graph = build_agent_graph(
+        llm,
+        [make_tool("system_propose", shell, schema=ShellArgs, tags=[TAG_NEEDS_APPROVAL])],
+        checkpointer=InMemorySaver(), approvals_enabled=True,
+    )
+    config = config_for("approval-target")
+
+    async def drive():
+        await graph.ainvoke({"messages": [HumanMessage("go")], "file_urls": {}}, config)
+        snapshot = await graph.aget_state(config)
+        return snapshot.tasks[0].interrupts[0].value
+
+    request = asyncio.run(drive())
+
+    assert request["file"] == "rm -rf /tmp/x"
+    assert "rm -rf /tmp/x" in request["diff"]
+
+
+def test_the_approval_request_carries_the_servers_own_verdict():
+    """Clients used to keep their own list of dangerous tool names, so each
+    one auto-approved every new dangerous tool until it was updated."""
+    class ShellArgs(BaseModel):
+        command: str
+
+    async def shell(command: str):
+        return "ran"
+
+    llm = ScriptedLLM([
+        [call_chunk("run_shell", {"command": "rm -rf /"}, "1")],
+        [text_chunk("done")],
+    ])
+    graph = build_agent_graph(
+        llm, [make_tool("run_shell", shell, schema=ShellArgs)],
+        checkpointer=InMemorySaver(), approvals_enabled=True,
+    )
+    config = config_for("verdict")
+
+    async def drive():
+        await graph.ainvoke({"messages": [HumanMessage("go")], "file_urls": {}}, config)
+        return (await graph.aget_state(config)).tasks[0].interrupts[0].value
+
+    request = asyncio.run(drive())
+
+    assert request["risk"] == "execute"
+    assert request["always_ask"] is True
+
+
+def test_a_write_is_flagged_but_left_auto_approvable():
+    """auto-edit mode exists to skip these; flagging them always_ask would
+    make the mode useless."""
+    from src.core.platform.ai.agent_contracts import needs_central_approval, risk_for
+
+    assert risk_for("write_file") == "write"
+    assert not needs_central_approval("write_file")
+
+
+def test_every_shell_capable_tool_reads_as_always_ask():
+    from src.core.platform.ai.agent_contracts import needs_central_approval, risk_for
+
+    for name in ("run_shell", "run_command", "system_propose", "system_confirm",
+                 "git_commit", "browser_evaluate", "browser_connect", "download_file"):
+        verdict = risk_for(name) in ("execute", "destructive") or needs_central_approval(name)
+        assert verdict, f"{name} would be auto-approved by a yolo client"
