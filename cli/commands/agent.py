@@ -1106,7 +1106,7 @@ def _stream_assistant(
                             timeout=10,
                         )
                     except Exception:
-                        pass  # best-effort; the backend will timeout after 120s
+                        pass
 
                     _start_live_spinner("Thinking...")
                 continue

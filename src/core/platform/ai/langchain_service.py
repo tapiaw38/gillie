@@ -1,20 +1,26 @@
 """
 LangChain Service
 
-Enhanced AI service using LangChain with:
-- Pydantic validation for tools
-- LangGraph memory management
-- LangSmith observability
-- Automatic retry and error handling
+Owns everything around one LLM turn — provider selection, prompt assembly,
+concurrency, circuit breaking — and hands the turn itself to the LangGraph
+agent loop in :mod:`src.core.platform.ai.graph`.
+
+Both entry points run that same graph. ``generate_response`` waits for the
+final answer; ``generate_response_stream`` yields it as it arrives and can
+pause mid-run to ask the user to approve a tool call.
 """
 
-import logging
 import asyncio
+import logging
 import os
-from typing import List, Dict, Any, Optional
+import uuid
+from typing import Any, Dict, List, Optional
+
+from langchain_core.messages import HumanMessage, SystemMessage
 from langchain_openai import ChatOpenAI
-from langchain_core.messages import HumanMessage, AIMessage, SystemMessage, ToolMessage
-from langchain_core.tools import StructuredTool
+from langgraph.checkpoint.memory import InMemorySaver
+from langgraph.errors import GraphRecursionError
+from langgraph.types import Command
 
 
 def _is_anthropic_url(base_url: str) -> bool:
@@ -38,8 +44,6 @@ from src.core.platform.ai.ollama_adapter import (
     is_local_provider as _is_local_provider,
     build_ollama_llm as _build_ollama_llm,
     route_tools as _route_tools_ollama,
-    resolve_tool_name as _resolve_tool_name,
-    normalize_tool_args as _normalize_tool_args,
     resolve_profile as _resolve_profile,
     PromptProfile as _PromptProfile,
 )
@@ -77,59 +81,31 @@ def _build_llm(model: str, api_key: str, base_url: str, auth_type: str = "api_ke
 
 from src.core.platform.config.service import ConfigurationService
 from src.core.domain import Profile
+from src.core.platform.ai.graph import (
+    build_agent_graph,
+    emit_event as _write_event,
+    final_text,
+    missing_file_urls,
+)
+from src.core.platform.ai.tools.approval_manager import create_pending, take_decision
 from .tools.models import create_langchain_tools
 from .memory.manager import ConversationMemoryManager
 
 logger = logging.getLogger(__name__)
 
 
-def _get_key_arg(tool_name: str, args: dict) -> str:
-    """Extract the most meaningful arg to display in the CLI tool progress line."""
-    for key in ("file_name", "path", "query", "url", "name", "command"):
-        val = args.get(key)
-        if val and isinstance(val, str):
-            # Show only the basename to keep the line short
-            import os as _os
-            return _os.path.basename(val.rstrip("/")) or val
-    # Fallback: first string arg value
-    for val in args.values():
-        if val and isinstance(val, str):
-            return val[:60]
-    return ""
+def _pending_approval(snapshot) -> Optional[dict]:
+    """The approval a suspended run is waiting on, or None if it finished.
 
-
-def _brief_result(tool_name: str, result_str: str) -> str:
-    """Return a one-line summary of a tool result for CLI display."""
-    import json as _json
-    try:
-        data = _json.loads(result_str)
-    except Exception:
-        data = None
-
-    if tool_name in ("read_docx",):
-        n = len(data.get("paragraphs", [])) if isinstance(data, dict) else 0
-        return f"{n} paragraphs read" if n else "read"
-    if tool_name in ("analyze_excel", "read_excel"):
-        n = len(data.get("sheets", [])) if isinstance(data, dict) else 0
-        return f"{n} sheet(s) analyzed" if n else "analyzed"
-    if tool_name in ("modify_docx", "modify_excel", "write_docx", "write_excel"):
-        saved = data.get("saved_to", "") if isinstance(data, dict) else ""
-        import os as _os
-        return f"saved → {_os.path.basename(saved)}" if saved else "saved"
-    if tool_name in ("list_directory",):
-        lines = result_str.count("\n")
-        return f"{lines} entries" if lines else "listed"
-    if tool_name in ("find_files",):
-        files = data.get("files", []) if isinstance(data, dict) else []
-        return f"{len(files)} file(s) found"
-    if tool_name in ("search_documents", "search_content"):
-        results = data.get("results", []) if isinstance(data, dict) else []
-        return f"{len(results)} result(s)"
-    if tool_name == "run_command":
-        return "command executed"
-    if "error" in result_str[:50].lower():
-        return "error"
-    return "ok"
+    Only the first is returned: the graph runs one tool per step, so there is
+    never more than one outstanding request.
+    """
+    for task in getattr(snapshot, "tasks", ()) or ():
+        for interruption in getattr(task, "interrupts", ()) or ():
+            value = interruption.value
+            if isinstance(value, dict):
+                return value
+    return None
 
 
 class LangChainService:
@@ -273,6 +249,77 @@ class LangChainService:
             logger.info(f"LLM recovered after {self._consecutive_failures} failures")
             self._consecutive_failures = 0
 
+    def _prepare_run(
+        self,
+        question: str,
+        context: Optional[str],
+        previous_messages: List[Dict[str, Any]],
+        profile: Profile,
+        use_tools: bool,
+        client_workspace: str,
+        approvals_enabled: bool = False,
+        plan_mode: bool = False,
+        auth_token: Optional[str] = None,
+        shell_output_callback=None,
+    ):
+        """Assemble everything one agent run needs: prompt, history, tools, LLM."""
+        prompt_profile = self._get_profile()
+        system_prompt = self._build_system_prompt(
+            profile, context, client_workspace, prompt_profile
+        )
+        messages = self._convert_messages_to_langchain(
+            previous_messages=previous_messages,
+            system_prompt=system_prompt,
+            current_question=question,
+        )
+        messages = self.memory_manager.optimize_message_history(
+            messages,
+            system_prompt=system_prompt,
+            max_messages=prompt_profile.max_history_messages,
+            max_chars=prompt_profile.max_context_chars,
+        )
+        if not use_tools:
+            logger.debug("No tools enabled")
+            return prompt_profile, messages, []
+
+        tools = create_langchain_tools(
+            self.openai_integration,
+            profile,
+            skill_manager=self.skill_manager,
+            store_service=self.store_service,
+            job_usecases=self.job_usecases,
+            shell_output_callback=shell_output_callback,
+            client_workspace=client_workspace,
+            approvals_enabled=approvals_enabled,
+            plan_mode=plan_mode,
+            brain=self.brain,
+            avatar_mcp=self.avatar_mcp,
+            auth_token=auth_token,
+        )
+        return prompt_profile, messages, tools
+
+    async def _bind_tools(self, question: str, tools: list):
+        """Narrow the tool set if the provider needs it, then bind it."""
+        if not tools:
+            return self.llm, []
+        if _is_local_provider(self.config.base_url, self.config.model):
+            tools = await self._route_tools(question, tools)
+        logger.debug(f"Bound {len(tools)} tools to LLM")
+        return self.llm.bind_tools(tools), tools
+
+    @staticmethod
+    def _run_config(thread_id: str, max_tool_rounds: int) -> Dict[str, Any]:
+        """Graph config for one turn.
+
+        The recursion limit stands in for the old max-rounds counter: a round
+        is one model step plus one tool step, plus the final model step that
+        produces the answer.
+        """
+        return {
+            "configurable": {"thread_id": thread_id},
+            "recursion_limit": max(4, 2 * max_tool_rounds + 2),
+        }
+
     async def generate_response(
         self,
         question: str,
@@ -284,15 +331,11 @@ class LangChainService:
         client_workspace: str = "",
     ) -> str:
         """
-        Generate AI response using LangChain with tool support.
+        Generate a complete AI response, running tools to completion first.
 
-        Args:
-            question: User's question
-            context: Additional context (RAG results, etc.)
-            previous_messages: Conversation history
-            profile: User profile
-            conversation_id: Conversation identifier
-            use_tools: Whether to enable tool calling
+        Approvals are off on this path: it serves callers with no one watching
+        (WhatsApp, cron, the HTTP API), where pausing for a human would hang
+        the request until it times out.
 
         Returns:
             Generated response text
@@ -300,72 +343,44 @@ class LangChainService:
         Raises:
             Exception: If circuit breaker is open or generation fails
         """
-
         if self._is_circuit_open():
             logger.warning("Circuit breaker is OPEN - using fallback")
             raise Exception("AI service temporarily unavailable (circuit breaker)")
 
         async with self.semaphore:
             try:
-                prompt_profile = self._get_profile()
-                system_prompt = self._build_system_prompt(profile, context, client_workspace, prompt_profile)
-
-                messages = self._convert_messages_to_langchain(
+                prompt_profile, messages, tools = self._prepare_run(
+                    question=question,
+                    context=context,
                     previous_messages=previous_messages,
-                    system_prompt=system_prompt,
-                    current_question=question
+                    profile=profile,
+                    use_tools=use_tools,
+                    client_workspace=client_workspace,
+                )
+                llm_with_tools, tools = await self._bind_tools(question, tools)
+
+                logger.info(
+                    f"Generating response for user {profile.user_id} "
+                    f"[profile={prompt_profile.name}]"
+                )
+                graph = build_agent_graph(llm_with_tools, tools, checkpointer=InMemorySaver())
+                config = self._run_config(
+                    self.memory_manager.create_thread_id(conversation_id, profile.user_id),
+                    prompt_profile.max_tool_rounds,
                 )
 
-                thread_id = self.memory_manager.create_thread_id(
-                    conversation_id, profile.user_id
-                )
-                messages = self.memory_manager.optimize_message_history(
-                    messages,
-                    system_prompt=system_prompt,
-                    max_messages=prompt_profile.max_history_messages,
-                    max_chars=prompt_profile.max_context_chars,
-                )
-
-                tools = None
-                if use_tools:
-                    tools = create_langchain_tools(
-                        self.openai_integration,
-                        profile,
-                        skill_manager=self.skill_manager,
-                        store_service=self.store_service,
-                        job_usecases=self.job_usecases,
-                        client_workspace=client_workspace,
-                        brain=self.brain,
-                        avatar_mcp=self.avatar_mcp,
+                try:
+                    state = await graph.ainvoke(
+                        {"messages": messages, "file_urls": {}}, config
                     )
-                    if _is_local_provider(self.config.base_url, self.config.model):
-                        tools = await self._route_tools(question, tools)
-                    llm_with_tools = self.llm.bind_tools(tools)
-                    logger.debug(f"Bound {len(tools)} tools to LLM")
-                else:
-                    llm_with_tools = self.llm
-                    logger.debug("No tools enabled")
-
-                logger.info(f"Generating response for user {profile.user_id} [profile={prompt_profile.name}]")
-                response = await llm_with_tools.ainvoke(messages)
-
-                if hasattr(response, 'tool_calls') and response.tool_calls:
-                    response_text = await self._handle_tool_calls(
-                        response=response,
-                        messages=messages,
-                        llm_with_tools=llm_with_tools,
-                        tools=tools,
-                        max_rounds=prompt_profile.max_tool_rounds,
+                except GraphRecursionError:
+                    logger.warning(
+                        f"Agent hit the {prompt_profile.max_tool_rounds}-round limit; "
+                        f"answering from the work done so far"
                     )
-                else:
-                    response_text = _extract_text(response.content)
+                    state = (await graph.aget_state(config)).values
 
-                self.memory_manager.save_checkpoint(
-                    thread_id=thread_id,
-                    messages=messages + [response],
-                    metadata={"profile_id": profile.user_id}
-                )
-
+                response_text = final_text(state, _extract_text)
                 self._record_success()
                 logger.info("Response generated successfully")
                 return response_text
@@ -383,343 +398,126 @@ class LangChainService:
         profile: Profile,
         conversation_id: str,
         use_tools: bool = True,
-        shell_output_queue: Optional[asyncio.Queue] = None,
         client_workspace: str = "",
         plan_mode: bool = False,
         auth_token: Optional[str] = None,
+        approval_timeout: float = 300.0,
     ):
         """
-        Stream AI response tokens. Uses astream() for direct responses and
-        falls back to ainvoke() + _handle_tool_calls() when tool calls are needed.
-        Yields str tokens and, when a shell command is running with an active
-        shell_output_queue, also yields {"type": "shell_output", "line": "..."} dicts
-        in real time as process lines are emitted.
+        Stream the response as it is produced.
+
+        Yields plain ``str`` tokens for answer text, and dicts for everything
+        the CLI renders alongside it: ``tool_call``, ``tool_result``,
+        ``shell_output``, ``local_file_used`` and ``approval_request``.
+
+        A tool that needs approval suspends the whole graph. This method emits
+        the ``approval_request``, waits for ``POST /conversation/tool/approve``
+        to answer it, then resumes the run exactly where it stopped.
         """
         if self._is_circuit_open():
             raise Exception("AI service temporarily unavailable (circuit breaker)")
 
         async with self.semaphore:
             try:
-                prompt_profile = self._get_profile()
-                system_prompt = self._build_system_prompt(profile, context, client_workspace, prompt_profile)
-                messages = self._convert_messages_to_langchain(
+                async def emit_shell_line(line: str) -> None:
+                    _write_event({"type": "shell_output", "line": line})
+
+                prompt_profile, messages, tools = self._prepare_run(
+                    question=question,
+                    context=context,
                     previous_messages=previous_messages,
-                    system_prompt=system_prompt,
-                    current_question=question,
+                    profile=profile,
+                    use_tools=use_tools,
+                    client_workspace=client_workspace,
+                    approvals_enabled=True,
+                    plan_mode=plan_mode,
+                    auth_token=auth_token,
+                    shell_output_callback=emit_shell_line,
                 )
-                thread_id = self.memory_manager.create_thread_id(conversation_id, profile.user_id)
-                messages = self.memory_manager.optimize_message_history(
-                    messages,
-                    system_prompt=system_prompt,
-                    max_messages=prompt_profile.max_history_messages,
-                    max_chars=prompt_profile.max_context_chars,
+                llm_with_tools, tools = await self._bind_tools(question, tools)
+
+                logger.info(
+                    f"Stream: profile={prompt_profile.name}, "
+                    f"max_rounds={prompt_profile.max_tool_rounds}"
                 )
-                logger.info(f"Stream: profile={prompt_profile.name}, max_rounds={prompt_profile.max_tool_rounds}")
+                graph = build_agent_graph(llm_with_tools, tools, checkpointer=InMemorySaver())
+                config = self._run_config(
+                    self.memory_manager.create_thread_id(conversation_id, profile.user_id),
+                    prompt_profile.max_tool_rounds,
+                )
 
-                shell_output_callback = None
-                if shell_output_queue is not None:
-                    async def _shell_line_callback(line: str) -> None:
-                        await shell_output_queue.put(line)
+                streamed = ""
+                payload: Any = {"messages": messages, "file_urls": {}}
+                exhausted = False
 
-                    shell_output_callback = _shell_line_callback
-
-                approval_callback = None
-                if shell_output_queue is not None:
-                    async def _approval_callback(
-                        request_id: str,
-                        tool_name: str,
-                        file_path: str,
-                        diff: str,
-                    ) -> bool:
-                        from src.core.platform.ai.tools.approval_manager import (
-                            create_pending, get_decision, cleanup,
-                        )
-                        await shell_output_queue.put({
-                            "type": "approval_request",
-                            "request_id": request_id,
-                            "tool": tool_name,
-                            "file": file_path,
-                            "diff": diff,
-                        })
-                        event = create_pending(request_id)
-                        try:
-                            await asyncio.wait_for(event.wait(), timeout=300)
-                            return get_decision(request_id)
-                        except asyncio.TimeoutError:
-                            logger.warning(
-                                f"Approval request {request_id} timed out after 120s — rejecting"
-                            )
-                            return False
-                        finally:
-                            cleanup(request_id)
-
-                    approval_callback = _approval_callback
-
-                tools = None
-                llm_with_tools = self.llm
-                if use_tools:
-                    tools = create_langchain_tools(
-                        self.openai_integration,
-                        profile,
-                        skill_manager=self.skill_manager,
-                        store_service=self.store_service,
-                        job_usecases=self.job_usecases,
-                        shell_output_callback=shell_output_callback,
-                        client_workspace=client_workspace,
-                        approval_callback=approval_callback,
-                        plan_mode=plan_mode,
-                        brain=self.brain,
-                        avatar_mcp=self.avatar_mcp,
-                        auth_token=auth_token,
-                    )
-                    if _is_local_provider(self.config.base_url, self.config.model):
-                        tools = await self._route_tools(question, tools)
-                    llm_with_tools = self.llm.bind_tools(tools)
-
-                accumulated_chunks = []
-                has_tool_calls = False
-                full_content = ""
-
-                async for chunk in llm_with_tools.astream(messages):
-                    accumulated_chunks.append(chunk)
-                    if hasattr(chunk, "tool_call_chunks") and chunk.tool_call_chunks:
-                        has_tool_calls = True
-                    if not has_tool_calls and chunk.content:
-                        text = _extract_text(chunk.content)
-                        yield text
-                        full_content += text
-
-                if has_tool_calls:
-                    combined = accumulated_chunks[0]
-                    for c in accumulated_chunks[1:]:
-                        try:
-                            combined = combined + c
-                        except Exception:
-                            pass
-
-                    for tc in getattr(combined, "tool_calls", []):
-                        yield {
-                            "type": "tool_call",
-                            "name": tc.get("name", "tool"),
-                            "round": 1,
-                            "arg": _get_key_arg(tc.get("name", ""), tc.get("args", {})),
-                        }
-
-                    if shell_output_queue is not None:
-                        _DONE_SENTINEL = object()
-
-                        async def _run_tool_calls_and_signal():
-                            try:
-                                return await self._handle_tool_calls(
-                                    combined, messages, llm_with_tools, tools,
-                                    max_rounds=prompt_profile.max_tool_rounds,
-                                    event_queue=shell_output_queue,
-                                )
-                            finally:
-                                await shell_output_queue.put(_DONE_SENTINEL)
-
-                        tool_task = asyncio.create_task(_run_tool_calls_and_signal())
-
-                        while True:
-                            item = await shell_output_queue.get()
-                            if item is _DONE_SENTINEL:
-                                break
-                            if isinstance(item, dict):
+                while True:
+                    # Messages that turned out to be tool calls stop streaming
+                    # as text: the user wants the answer, not the call.
+                    suppressed: set = set()
+                    try:
+                        async for mode, item in graph.astream(
+                            payload, config, stream_mode=["messages", "custom"]
+                        ):
+                            if mode == "custom":
                                 yield item
-                            else:
-                                yield {"type": "shell_output", "line": item}
-
-                        response_text = await tool_task
-                    else:
-                        response_text = await self._handle_tool_calls(
-                            combined, messages, llm_with_tools, tools,
-                            max_rounds=prompt_profile.max_tool_rounds,
+                                continue
+                            chunk, metadata = item
+                            if metadata.get("langgraph_node") != "model":
+                                continue
+                            if getattr(chunk, "tool_call_chunks", None):
+                                suppressed.add(chunk.id)
+                            if chunk.id in suppressed or not chunk.content:
+                                continue
+                            text = _extract_text(chunk.content)
+                            if text:
+                                streamed += text
+                                yield text
+                    except GraphRecursionError:
+                        logger.warning(
+                            f"Agent hit the {prompt_profile.max_tool_rounds}-round limit "
+                            f"mid-stream; answering from the work done so far"
                         )
+                        exhausted = True
 
-                    logger.info(f"Stream: yielding tool-call result, length={len(response_text or '')}")
-                    yield response_text
-                    full_content = response_text
+                    snapshot = await graph.aget_state(config)
+                    request = None if exhausted else _pending_approval(snapshot)
+                    if request is None:
+                        break
 
-                from langchain_core.messages import AIMessage as LCAIMessage
-                ai_msg = LCAIMessage(content=full_content)
-                self.memory_manager.save_checkpoint(
-                    thread_id=thread_id,
-                    messages=messages + [ai_msg],
-                    metadata={"profile_id": profile.user_id},
-                )
+                    request_id = str(uuid.uuid4())
+                    answered = create_pending(request_id)
+                    yield {
+                        "type": "approval_request",
+                        "request_id": request_id,
+                        "tool": request.get("tool", "unknown"),
+                        "file": request.get("file", ""),
+                        "diff": request.get("diff", ""),
+                    }
+                    try:
+                        await asyncio.wait_for(answered.wait(), timeout=approval_timeout)
+                    except asyncio.TimeoutError:
+                        logger.warning(
+                            f"Approval request {request_id} timed out after "
+                            f"{approval_timeout}s — rejecting"
+                        )
+                    payload = Command(resume=take_decision(request_id))
+
+                state = (await graph.aget_state(config)).values
+                if not streamed.strip():
+                    text = final_text(state, _extract_text)
+                    streamed = text
+                    yield text
+                else:
+                    for url in missing_file_urls(state, streamed):
+                        logger.info(f"Appending missing file URL to response: {url}")
+                        yield f"\n{url}"
+
                 self._record_success()
 
             except Exception as e:
                 self._record_failure()
                 logger.error(f"Error in generate_response_stream: {e}")
                 raise
-
-    async def _handle_tool_calls(
-        self,
-        response: AIMessage,
-        messages: List,
-        llm_with_tools,
-        tools: List = None,
-        max_rounds: int = 30,
-        event_queue=None,
-    ) -> str:
-        """
-        Handle tool calls from the AI response, looping until the model
-        returns text content (supports chained/multi-round tool calls).
-        """
-        import json as _json
-        import inspect
-        import re as _re
-
-        _FILE_URL_RE = _re.compile(
-            r"https?://[^\s\)\]\"\'<>]+"
-            r"\.(?:jpg|jpeg|png|gif|webp|bmp|svg"
-            r"|pdf|doc|docx|xls|xlsx|csv|txt|ppt|pptx"
-            r"|zip|tar|gz|json|xml|mp4|mp3|ogg|wav)"
-            r"(?:\?[^\s\)\]\"\'<>]*)?",
-            _re.IGNORECASE,
-        )
-        _FILE_TOOLS = {"send_screenshot", "send_file"}
-        _pending_file_urls: dict[str, str] = {}  # tool_name → last successful URL
-
-        for round_num in range(max_rounds):
-            tool_calls = getattr(response, "tool_calls", None)
-            if not tool_calls:
-                break
-
-            logger.info(f"Tool-call round {round_num + 1}: handling {len(tool_calls)} call(s)")
-            messages.append(response)
-
-            for tool_call in tool_calls:
-                tool_name = tool_call.get("name", "unknown")
-                tool_args = tool_call.get("args", {})
-                tool_id = tool_call.get("id", "unknown")
-
-                # Resolve tool name aliases and normalize args for Ollama
-                resolved_name = _resolve_tool_name(tool_name)
-                if resolved_name != tool_name:
-                    logger.info(f"Tool alias: {tool_name} → {resolved_name}")
-                    tool_name = resolved_name
-                tool_args = _normalize_tool_args(tool_name, tool_args)
-
-                logger.info(f"Executing tool: {tool_name} with args: {tool_args}")
-
-                tool_result = f"Tool {tool_name} not found"
-                for tool in tools or []:
-                    if tool.name == tool_name:
-                        if hasattr(tool, 'args_schema') and tool.args_schema:
-                            try:
-                                validated = tool.args_schema(**tool_args)
-                                tool_args = validated.model_dump()
-                            except Exception as ve:
-                                missing = [
-                                    fname for fname, finfo in tool.args_schema.model_fields.items()
-                                    if finfo.is_required() and fname not in tool_args
-                                ]
-                                missing_str = ", ".join(missing) if missing else "unknown"
-                                tool_result = (
-                                    f"Tool call validation failed for '{tool_name}': missing required fields: {missing_str}. "
-                                    f"You MUST retry this tool call immediately with ALL required arguments included in a single call. "
-                                    f"Do not respond to the user until the tool succeeds."
-                                )
-                                logger.warning(f"Tool {tool_name} args validation failed — missing: {missing_str}")
-                                break
-                        try:
-                            if hasattr(tool, 'coroutine') and tool.coroutine:
-                                tool_result = await tool.coroutine(**tool_args)
-                            elif hasattr(tool, 'afunc') and tool.afunc:
-                                tool_result = await tool.afunc(**tool_args)
-                            elif hasattr(tool, 'func') and tool.func:
-                                if inspect.iscoroutinefunction(tool.func):
-                                    tool_result = await tool.func(**tool_args)
-                                else:
-                                    tool_result = tool.func(**tool_args)
-                            else:
-                                tool_result = f"Tool {tool_name} has no executable method"
-                        except Exception as e:
-                            logger.error(f"Error executing tool {tool_name}: {e}", exc_info=True)
-                            tool_result = f"Error executing tool: {str(e)}"
-                        break
-
-                if isinstance(tool_result, dict):
-                    tool_result_str = _json.dumps(tool_result, ensure_ascii=False)
-                else:
-                    tool_result_str = str(tool_result)
-
-                logger.info(f"Tool {tool_name} result: {tool_result_str[:200]}...")
-
-                # Emit tool_result event so the CLI can show brief feedback
-                if event_queue is not None:
-                    await event_queue.put({
-                        "type": "tool_result",
-                        "name": tool_name,
-                        "round": round_num + 1,
-                        "summary": _brief_result(tool_name, tool_result_str),
-                    })
-
-                # Track local files accessed or modified during the session
-                if event_queue is not None and tool_name in (
-                    "read_docx", "modify_docx", "analyze_excel", "modify_excel",
-                    "read_excel", "write_excel", "write_docx",
-                ):
-                    try:
-                        import json as _j
-                        result_data = _j.loads(tool_result_str) if tool_result_str.startswith("{") else {}
-                        saved = result_data.get("saved_to") or result_data.get("path") or tool_args.get("file_name", "") or tool_args.get("path", "")
-                        if saved:
-                            await event_queue.put({
-                                "type": "local_file_used",
-                                "path": saved,
-                                "tool": tool_name,
-                            })
-                    except Exception:
-                        pass
-
-                if tool_name in _FILE_TOOLS:
-                    urls = _FILE_URL_RE.findall(tool_result_str)
-                    if urls:
-                        _pending_file_urls[tool_name] = urls[-1]
-                    else:
-                        _pending_file_urls.pop(tool_name, None)
-
-                messages.append(ToolMessage(content=tool_result_str, tool_call_id=tool_id))
-
-            logger.info(f"Invoking LLM after round {round_num + 1}")
-            try:
-                response = await llm_with_tools.ainvoke(messages)
-            except Exception as e:
-                logger.error(f"LLM invoke failed after tool execution (round {round_num + 1}): {e}")
-                from langchain_core.messages import AIMessage as _AIMsg
-                response = _AIMsg(content="Lo siento, ocurrió un error al procesar los resultados. Por favor, intenta de nuevo.")
-            content = _extract_text(response.content)
-            logger.info(f"Response after round {round_num + 1}: length={len(content)}, has_more_tool_calls={bool(getattr(response, 'tool_calls', None))}")
-
-            if content and not getattr(response, "tool_calls", None):
-                break
-
-            if event_queue is not None:
-                for tc in getattr(response, "tool_calls", []):
-                    await event_queue.put({
-                        "type": "tool_call",
-                        "name": tc.get("name", "tool"),
-                        "round": round_num + 2,
-                        "arg": _get_key_arg(tc.get("name", ""), tc.get("args", {})),
-                    })
-
-        content = _extract_text(response.content or "")
-        if not content:
-            logger.warning(
-                f"_handle_tool_calls exhausted {max_rounds} rounds without a final text response"
-            )
-            content = "(Las herramientas se ejecutaron correctamente. Tarea completada.)"
-
-        # Append file URLs from send_screenshot/send_file that the LLM didn't include
-        for url in _pending_file_urls.values():
-            if url not in content:
-                logger.info(f"Appending missing file URL to response: {url}")
-                content = f"{content}\n{url}"
-
-        return content
 
     @staticmethod
     def _build_workspace_map(workspace: str, max_files: int = 180) -> str:
@@ -942,5 +740,5 @@ class LangChainService:
             "langsmith_enabled": self.enable_langsmith,
             "consecutive_failures": self._consecutive_failures,
             "circuit_open": self._is_circuit_open(),
-            "memory_stats": self.memory_manager.get_memory_stats(),
+            "max_history_messages": self.memory_manager.max_messages,
         }

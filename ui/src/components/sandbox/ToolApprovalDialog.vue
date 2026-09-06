@@ -8,6 +8,7 @@ import Textarea from 'primevue/textarea'
 interface ApprovalRequest {
   request_id: string
   tool_name: string
+  target: string
   diff: string
 }
 
@@ -72,6 +73,9 @@ const handleReject = () => {
           <p class="approval-warning-title">{{ t('sandbox.approvalTitle') }}</p>
           <p class="approval-warning-tool">
             {{ t('sandbox.approvalTool') }}: <strong>{{ pendingApproval?.tool_name }}</strong>
+            <template v-if="pendingApproval?.target">
+              → <code>{{ pendingApproval.target }}</code>
+            </template>
           </p>
         </div>
       </div>

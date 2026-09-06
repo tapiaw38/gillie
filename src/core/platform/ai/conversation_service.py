@@ -63,7 +63,6 @@ class ConversationService:
         else:
             self.memory_manager = None
 
-        # Initialize circuit breaker
         if self.config.enable_circuit_breaker:
             self.circuit_breaker = circuit_breaker or CircuitBreakerService(
                 CircuitBreakerConfig()
@@ -109,24 +108,19 @@ class ConversationService:
             ProviderError: If LLM provider fails
         """
         try:
-            # Build enhanced system prompt with context
             enhanced_system_prompt = self._build_system_prompt(
                 system_prompt, context
             )
 
-            # Prepare messages
             messages = []
             if previous_messages:
-                # Convert to LangChain format if memory manager exists
                 if self.memory_manager:
                     langchain_messages = self.memory_manager.messages_to_langchain(
                         previous_messages
                     )
-                    # Optimize history
                     langchain_messages = self.memory_manager.optimize_message_history(
                         langchain_messages
                     )
-                    # Convert back to dict format
                     messages = [
                         {"role": msg.__class__.__name__.replace("Message", "").lower(),
                          "content": msg.content}
@@ -135,7 +129,6 @@ class ConversationService:
                 else:
                     messages = previous_messages
 
-            # Create LLM request
             llm_request = LLMRequest(
                 prompt=user_message,
                 system_prompt=enhanced_system_prompt,
@@ -146,7 +139,6 @@ class ConversationService:
                 metadata=metadata or {},
             )
 
-            # Generate response through circuit breaker if enabled
             if self.circuit_breaker:
                 response = await self.circuit_breaker.call(
                     self.provider.generate_response,
@@ -253,8 +245,5 @@ class ConversationService:
 
         if self.circuit_breaker:
             stats["circuit_breaker"] = self.circuit_breaker.get_state()
-
-        if self.memory_manager:
-            stats["memory"] = self.memory_manager.get_memory_stats()
 
         return stats

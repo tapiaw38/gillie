@@ -15,6 +15,8 @@ from typing import Optional, List, Dict, Any, Literal
 from pydantic import BaseModel, Field, field_validator
 from langchain_core.tools import StructuredTool
 
+from src.core.platform.ai.graph import TAG_FILE_URL, TAG_LOCAL_FILE
+
 logger = logging.getLogger(__name__)
 
 _clip_model = None
@@ -1736,7 +1738,7 @@ def create_langchain_tools(
     job_usecases=None,
     shell_output_callback=None,
     client_workspace: str = "",
-    approval_callback=None,
+    approvals_enabled: bool = False,
     plan_mode: bool = False,
     brain=None,
     avatar_mcp=None,
@@ -1754,9 +1756,11 @@ def create_langchain_tools(
         shell_output_callback: Optional async callable(line: str) -> None.
             When provided, run_shell streams stdout line by line through this
             callback instead of buffering the full output before returning.
-        approval_callback: Optional async callable(request_id, tool_name, path, diff) -> bool.
-            When provided, edit_file and write_file pause and wait for explicit
-            user approval before applying any changes to disk.
+        approvals_enabled: When True, tools that change the user's machine
+            suspend the graph run and wait for explicit approval before
+            applying anything. Requires a caller that can answer the
+            interrupt — leave it off for unattended callers (WhatsApp, cron),
+            which would otherwise hang forever waiting on nobody.
         plan_mode: When True, state-mutating tools (edit_file, write_file,
             download_file, run_shell, git_commit) describe what they *would* do without
             actually executing anything.
@@ -3505,18 +3509,18 @@ def create_langchain_tools(
 
     async def _confirm_close(label: str) -> bool:
         """Closing the user's browser is their call, never ours."""
-        if not approval_callback:
+        if not approvals_enabled:
             return False
-        import uuid as _uuid
+        from src.core.platform.ai.tools.approval_manager import request_approval
 
-        return await approval_callback(
-            str(_uuid.uuid4()),
+        approved, _ = request_approval(
             "browser_connect",
             label,
             f"Quit the running {label} so the assistant can drive it?\n"
             f"{label} is asked to close gracefully and restores its tabs on relaunch, "
             f"but anything typed into an open form may be lost.",
         )
+        return approved
 
     async def _terminate(name: str) -> bool:
         """Graceful SIGTERM only — SIGKILL is what loses the user's session."""
@@ -3978,20 +3982,13 @@ If data is not found, say so clearly."""
             # This runs with the full authority of whatever the user is logged
             # into — cookies, localStorage, open banking or chat tabs. It is the
             # most privileged tool in the set, so it asks like write_file does.
-            if approval_callback:
-                import uuid as _uuid
+            if approvals_enabled:
+                from src.core.platform.ai.tools.approval_manager import request_approval
 
-                request_id = str(_uuid.uuid4())
-                approved = await approval_callback(
-                    request_id,
-                    "browser_evaluate",
-                    page.url,
-                    script[:2000],
+                approved, feedback = request_approval(
+                    "browser_evaluate", page.url, script[:2000]
                 )
                 if not approved:
-                    from src.core.platform.ai.tools.approval_manager import get_feedback
-
-                    feedback = get_feedback(request_id)
                     msg = f"JavaScript execution on '{page.url}' was rejected by the user."
                     if feedback:
                         msg += f" Reason: {feedback}. Please try a different approach."
@@ -4228,7 +4225,6 @@ If data is not found, say so clearly."""
     async def write_file_tool(path: str, content: str, create_dirs: bool = True) -> str:
         """Create or overwrite a file with the given content."""
         import difflib as _difflib
-        import uuid as _uuid
 
         resolved, err = _resolve_safe_path(path)
         if err:
@@ -4262,7 +4258,12 @@ If data is not found, say so clearly."""
                 "diff": diff[:500],
             }
 
-        if approval_callback:
+        if approvals_enabled:
+            from src.core.platform.ai.tools.approval_manager import (
+                rejection_message,
+                request_approval,
+            )
+
             if resolved.exists() and resolved.is_file():
                 try:
                     current_lines = resolved.read_text(errors="replace").splitlines(
@@ -4282,21 +4283,11 @@ If data is not found, say so clearly."""
                     lineterm="",
                 )
             )
-            request_id = str(_uuid.uuid4())
-            approved = await approval_callback(
-                request_id,
-                "write_file",
-                path,
-                diff or f"(new file) {path}",
+            approved, feedback = request_approval(
+                "write_file", path, diff or f"(new file) {path}"
             )
             if not approved:
-                from src.core.platform.ai.tools.approval_manager import get_feedback
-
-                feedback = get_feedback(request_id)
-                msg = f"Change to '{path}' was rejected by the user."
-                if feedback:
-                    msg += f" Reason: {feedback}. Please try a different approach."
-                return {"skipped": True, "message": msg}
+                return {"skipped": True, "message": rejection_message(path, feedback)}
 
         try:
             if create_dirs:
@@ -4310,7 +4301,6 @@ If data is not found, say so clearly."""
     async def edit_file_tool(path: str, old_string: str, new_string: str) -> str:
         """Replace old_string with new_string in a file using cascading match strategies."""
         import difflib
-        import uuid as _uuid
 
         resolved, err = _resolve_safe_path(path)
         if err:
@@ -4345,7 +4335,12 @@ If data is not found, say so clearly."""
                 "diff": diff_plan[:500],
             }
 
-        if approval_callback:
+        if approvals_enabled:
+            from src.core.platform.ai.tools.approval_manager import (
+                rejection_message,
+                request_approval,
+            )
+
             old_lines = (old_string or "").splitlines(keepends=True)
             new_lines = (new_string or "").splitlines(keepends=True)
             diff = "".join(
@@ -4357,21 +4352,11 @@ If data is not found, say so clearly."""
                     lineterm="",
                 )
             )
-            request_id = str(_uuid.uuid4())
-            approved = await approval_callback(
-                request_id,
-                "edit_file",
-                path,
-                diff or f"Replace content in {path}",
+            approved, feedback = request_approval(
+                "edit_file", path, diff or f"Replace content in {path}"
             )
             if not approved:
-                from src.core.platform.ai.tools.approval_manager import get_feedback
-
-                feedback = get_feedback(request_id)
-                msg = f"Change to '{path}' was rejected by the user."
-                if feedback:
-                    msg += f" Reason: {feedback}. Please try a different approach."
-                return {"skipped": True, "message": msg}
+                return {"skipped": True, "message": rejection_message(path, feedback)}
 
         exact_count = original.count(old_string)
         if exact_count > 1:
@@ -5179,7 +5164,13 @@ If data is not found, say so clearly."""
 
     disabled = set(getattr(profile, "disabled_tools", None) or [])
 
-    def _tool(name, description, func, schema):
+    def _tool(name, description, func, schema, tags=None):
+        """Build one tool.
+
+        `tags` declares what the result carries so the agent loop can react to
+        it without knowing this tool by name — see TAG_* in
+        src.core.platform.ai.graph.
+        """
         if name in disabled:
             return None
         return StructuredTool(
@@ -5188,6 +5179,7 @@ If data is not found, say so clearly."""
             func=func,
             args_schema=schema,
             coroutine=func,
+            tags=list(tags) if tags else None,
         )
 
     def _available_workflows() -> Dict[str, Dict[str, Any]]:
@@ -5712,28 +5704,42 @@ If data is not found, say so clearly."""
                     prompts["analyze_excel"],
                     analyze_excel_tool,
                     AnalyzeExcelArgs,
+                    tags=[TAG_LOCAL_FILE],
                 ),
                 _tool(
                     "write_excel",
                     prompts["write_excel"],
                     write_excel_tool,
                     WriteExcelArgs,
+                    tags=[TAG_LOCAL_FILE],
                 ),
-                _tool("read_docx", prompts["read_docx"], read_docx_tool, ReadDocxArgs),
                 _tool(
-                    "write_docx", prompts["write_docx"], write_docx_tool, WriteDocxArgs
+                    "read_docx",
+                    prompts["read_docx"],
+                    read_docx_tool,
+                    ReadDocxArgs,
+                    tags=[TAG_LOCAL_FILE],
+                ),
+                _tool(
+                    "write_docx",
+                    prompts["write_docx"],
+                    write_docx_tool,
+                    WriteDocxArgs,
+                    tags=[TAG_LOCAL_FILE],
                 ),
                 _tool(
                     "modify_excel",
                     prompts["modify_excel"],
                     modify_excel_tool,
                     ModifyExcelArgs,
+                    tags=[TAG_LOCAL_FILE],
                 ),
                 _tool(
                     "modify_docx",
                     prompts["modify_docx"],
                     modify_docx_tool,
                     ModifyDocxArgs,
+                    tags=[TAG_LOCAL_FILE],
                 ),
                 _tool(
                     "insert_image_docx",
@@ -5779,6 +5785,7 @@ If data is not found, say so clearly."""
                     prompts.get("send_file", _DEFAULT_TOOL_PROMPTS["send_file"]),
                     send_file_tool,
                     SendFileArgs,
+                    tags=[TAG_FILE_URL],
                 ),
                 _tool(
                     "send_screenshot",
@@ -5787,6 +5794,7 @@ If data is not found, say so clearly."""
                     ),
                     send_screenshot_tool,
                     SendScreenshotArgs,
+                    tags=[TAG_FILE_URL],
                 ),
                 _tool(
                     "take_screenshot",
