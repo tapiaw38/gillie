@@ -13,6 +13,7 @@ import ToolApprovalDialog from '@/components/sandbox/ToolApprovalDialog.vue'
 interface ToolCallEvent {
   name: string
   arg: string
+  risk?: string
   done: boolean
 }
 
@@ -22,6 +23,7 @@ interface ChatMessage {
   content: string
   toolCalls: ToolCallEvent[]
   shellOutput: string[]
+  citations?: string[]
   audioUrls?: string[]
   audioIndex?: number
   isStreaming?: boolean
@@ -71,6 +73,7 @@ const pendingApproval = ref<ApprovalRequest | null>(null)
 const approvalVisible = ref(false)
 const approvalFeedback = ref('')
 const approvalLoading = ref(false)
+const activeRunId = ref<string | null>(null)
 
 const currentWorkspace = ref('')
 const attachedFiles = ref<string[]>([])
@@ -431,6 +434,7 @@ const sendMessage = async () => {
       props.apiKey,
       currentWorkspace.value || undefined,
       streamAbortController.value.signal,
+      activeRunId.value ?? undefined,
     )
 
     if (!response.ok) {
@@ -513,6 +517,10 @@ const processStreamEvent = async (msg: ChatMessage, payload: unknown) => {
   if (typeof payload === 'string') {
     if (payload === '[DONE]') {
       msg.isStreaming = false
+      // The run finished, so there is nothing left to resume. Clearing this
+      // anywhere else — a finally block, say — would also wipe it when the
+      // connection drops, which is the one case resuming exists for.
+      activeRunId.value = null
       return
     }
     if (payload.startsWith('[ERROR]')) {
@@ -535,10 +543,15 @@ const processStreamEvent = async (msg: ChatMessage, payload: unknown) => {
   const event = payload as Record<string, unknown>
 
   switch (event.type) {
+    case 'agent_run': {
+      activeRunId.value = String(event.run_id ?? '') || null
+      break
+    }
     case 'tool_call': {
       msg.toolCalls.push({
         name: String(event.name ?? ''),
         arg: String(event.arg ?? ''),
+        risk: String(event.risk ?? ''),
         done: false,
       })
       break
@@ -547,6 +560,12 @@ const processStreamEvent = async (msg: ChatMessage, payload: unknown) => {
     case 'tool_result': {
       const pending = [...msg.toolCalls].reverse().find((t) => !t.done)
       if (pending) pending.done = true
+      break
+    }
+
+    case 'citations': {
+      const items = Array.isArray(event.items) ? event.items.map(String) : []
+      msg.citations = [...new Set([...(msg.citations ?? []), ...items])]
       break
     }
 
@@ -913,6 +932,20 @@ watch(
                   <i v-if="tool.done" class="pi pi-check tool-chip-status" />
                   <span v-else class="tool-chip-spinner" />
                 </div>
+              </div>
+
+              <div v-if="msg.citations?.length" class="tool-chips">
+                <a
+                  v-for="url in msg.citations"
+                  :key="url"
+                  :href="url"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  class="tool-chip tool-chip--done"
+                >
+                  <i class="pi pi-link tool-chip-icon" />
+                  <span class="tool-chip-arg">{{ url }}</span>
+                </a>
               </div>
 
               <!-- Shell output -->

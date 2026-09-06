@@ -979,8 +979,18 @@ def _stream_assistant(
                     summary = token.get("summary", "")
                     if summary:
                         _stop_live()
-                        console.print(f"  [green]✓[/green] [dim]{summary}[/dim]")
+                        if token.get("ok", True):
+                            console.print(f"  [green]✓[/green] [dim]{summary}[/dim]")
+                        else:
+                            console.print(f"  [red]✗[/red] [dim]{summary}[/dim]")
                     _start_live_spinner("Thinking...")
+                elif token.get("type") == "citations":
+                    urls = token.get("items") or []
+                    if urls:
+                        _stop_live()
+                        for url in urls:
+                            console.print(f"  [dim]🔗 {url}[/dim]")
+                        _start_live_spinner("Thinking...")
                 elif token.get("type") == "local_file_used":
                     path = token.get("path", "")
                     if path and session_local_files is not None:
@@ -1176,8 +1186,6 @@ def _stream_assistant(
     console.print()
 
     _track_tokens(content, full_text)
-    # Keep playback alive while caller renders the next prompt. Caller stops
-    # this queue when user submits new input, which also silences avatar output.
     return audio
 
 
@@ -1199,13 +1207,11 @@ def _print_history(messages: list, assistant_name: str) -> None:
 
 
 _AT_URL_RE = re.compile(r"@(https?://[^\s]+)")
-# Keep @ reference parsing strict/ascii-safe to avoid binary-garbage expansions
-# when terminals accidentally paste non-text bytes (e.g. drag/drop glitches).
 _AT_GLOB_RE = re.compile(r"@@([A-Za-z0-9_./~*?\[\]\-]+)")
 _AT_DIR_RE = re.compile(r"@([A-Za-z0-9_./~\-]+/)")
 _AT_FILE_RE = re.compile(
     r"@([A-Za-z0-9_./~\-]+\.[A-Za-z0-9_]+)"
-)  # path (abs or rel) ending with .extension
+)
 _FILE_PATH_RE = re.compile(r"(?:file://)?(/[^\s]+)")
 
 _LOCAL_DOC_EXTS = {".xlsx", ".xls", ".docx", ".doc", ".csv", ".pdf"}
@@ -1684,10 +1690,6 @@ def listen(
                             continue
                         rms = float(np.sqrt(np.mean(chunk**2)))
                         levels.append(rms)
-                        # The speakers feed the assistant's own voice back into
-                        # the microphone. The median of the recent levels is
-                        # that echo, and a real interruption has to rise above
-                        # it; a 600ms burst cannot shift a 3s median.
                         echo = float(np.median(levels))
                         bar = max(self._trigger_level, echo * _BARGE_IN_ECHO_MARGIN)
                         if rms > bar and _is_voice(chunk):
@@ -2032,8 +2034,6 @@ def _start_avatar():
 
     process = avatar_cmd.spawn()
     if avatar_cmd.wait_for_bridge():
-        # The chat loop has many exits — /exit, double Ctrl+C, an unhandled
-        # error — so cleanup is registered here rather than at each one.
         atexit.register(_stop_avatar, process)
         console.print("[dim]🐙 avatar ready[/dim]")
         return process
@@ -2318,8 +2318,6 @@ def agent(
         if not user_input:
             continue
 
-        # Typed input is a deliberate barge-in: stop audio before handling
-        # /new, /exit, slash commands, or sending the next user message.
         _interrupt_active_audio()
 
         cmd = user_input.lower()

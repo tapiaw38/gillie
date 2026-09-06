@@ -17,9 +17,11 @@ Two properties of the graph shape matter:
   resume costs nothing and changes nothing.
 """
 
+import asyncio
 import json
 import logging
 import re
+import time
 from typing import Annotated, Any, Optional, TypedDict
 
 from langchain_core.messages import (
@@ -32,6 +34,7 @@ from langgraph.config import get_stream_writer
 from langgraph.errors import GraphBubbleUp
 from langgraph.graph import END, START, StateGraph
 from langgraph.graph.message import add_messages
+from .agent_contracts import RunBudget, can_retry, needs_central_approval, observation, redact, risk_for
 
 logger = logging.getLogger(__name__)
 
@@ -45,8 +48,13 @@ logger = logging.getLogger(__name__)
 #   re-attached to the final answer.
 # LOCAL_FILE: the result names a file in the user's workspace, which the CLI
 #   lists at the end of a turn so they can see what was touched.
+# NEEDS_APPROVAL: this tool applies its change the moment it runs, with no
+#   confirmation step of its own. Some tools only need it under part of their
+#   configuration, which a name-based list in agent_contracts cannot express —
+#   the tool knows, so the tool declares it.
 TAG_FILE_URL = "file_url"
 TAG_LOCAL_FILE = "local_file"
+TAG_NEEDS_APPROVAL = "needs_approval"
 
 _FILE_URL_RE = re.compile(
     r"https?://[^\s\)\]\"\'<>]+"
@@ -121,12 +129,26 @@ def key_arg(tool_name: str, args: dict) -> str:
     return ""
 
 
+def result_payload(result: str) -> Any:
+    """What the tool actually returned, unwrapped from its observation.
+
+    Every result now travels inside the ToolObservation envelope
+    (``{"ok", "data", ...}``), so anything reading the tool's own fields has
+    to look one level down. Plain results from before the envelope, and
+    non-JSON results, are returned untouched.
+    """
+    try:
+        parsed = json.loads(result)
+    except Exception:
+        return None
+    if isinstance(parsed, dict) and "ok" in parsed and "data" in parsed:
+        return parsed["data"]
+    return parsed
+
+
 def brief_result(tool_name: str, result: str) -> str:
     """One-line summary of a tool result, for the CLI's progress line."""
-    try:
-        data = json.loads(result)
-    except Exception:
-        data = None
+    data = result_payload(result)
 
     if tool_name == "read_docx":
         count = len(data.get("paragraphs", [])) if isinstance(data, dict) else 0
@@ -206,7 +228,8 @@ def _validate_args(tool, args: dict) -> tuple[dict, Optional[str]]:
         )
 
 
-def build_agent_graph(llm_with_tools, tools: list, checkpointer=None):
+def build_agent_graph(llm_with_tools, tools: list, checkpointer=None, budget: RunBudget | None = None,
+                      approvals_enabled: bool = False, tool_timeout: float = 90.0):
     """Compile the agent loop for one request.
 
     ``tools`` close over the caller's profile, workspace and callbacks, so a
@@ -220,6 +243,7 @@ def build_agent_graph(llm_with_tools, tools: list, checkpointer=None):
     )
 
     tools_by_name = {tool.name: tool for tool in tools or []}
+    budget = budget or RunBudget()
 
     async def call_model(state: AgentState) -> dict:
         messages = state["messages"]
@@ -242,10 +266,12 @@ def build_agent_graph(llm_with_tools, tools: list, checkpointer=None):
             )
 
         for call in getattr(response, "tool_calls", None) or []:
+            name = call.get("name", "tool")
             emit_event({
                 "type": "tool_call",
-                "name": call.get("name", "tool"),
-                "arg": key_arg(call.get("name", ""), call.get("args", {})),
+                "name": name,
+                "arg": key_arg(name, call.get("args", {})),
+                "risk": risk_for(name),
             })
         return {"messages": [response]}
 
@@ -261,34 +287,79 @@ def build_agent_graph(llm_with_tools, tools: list, checkpointer=None):
             logger.info(f"Tool alias: {call.get('name')} → {tool_name}")
         args = _normalize_tool_args(tool_name, call.get("args", {}) or {})
         call_id = call.get("id", "unknown")
+        # Keyed by call_id so an approval replay of this node is admitted
+        # again rather than mistaken for the model repeating itself.
+        blocked = budget.admit(tool_name, args, call_id)
+        started = time.monotonic()
 
         tool = tools_by_name.get(tool_name)
-        if tool is None:
-            result: Any = f"Tool {tool_name} not found"
+        if blocked:
+            result: Any = {"ok": False, "error": blocked, "retryable": False}
+        elif tool is None:
+            result = {"ok": False, "error": f"Tool {tool_name} not found", "retryable": False}
         else:
             args, validation_error = _validate_args(tool, args)
             if validation_error:
                 result = validation_error
+            elif approvals_enabled and (
+                needs_central_approval(tool_name)
+                or declares(tool, TAG_NEEDS_APPROVAL)
+            ):
+                from src.core.platform.ai.tools.approval_manager import rejection_message, request_approval
+                approved, feedback = request_approval(
+                    tool_name, key_arg(tool_name, args),
+                    json.dumps(redact(args), ensure_ascii=False)[:2000],
+                )
+                result = None if approved else {"ok": False, "error": rejection_message(tool_name, feedback)}
             else:
+                result = None
+            if result is None:
                 logger.info(f"Executing tool: {tool_name} with args: {args}")
                 try:
-                    result = await _run_tool(tool, args)
+                    result = await asyncio.wait_for(_run_tool(tool, args), timeout=tool_timeout)
                 except GraphBubbleUp:
                     raise
+                except asyncio.TimeoutError as e:
+                    result = observation(None, error=e).as_json()
                 except Exception as e:
                     logger.error(f"Error executing tool {tool_name}: {e}", exc_info=True)
-                    result = f"Error executing tool: {e}"
+                    if can_retry(tool_name):
+                        try:
+                            result = await asyncio.wait_for(_run_tool(tool, args), timeout=tool_timeout)
+                        except GraphBubbleUp:
+                            raise
+                        except Exception as retry_error:
+                            result = observation(None, error=retry_error).as_json()
+                    else:
+                        result = observation(None, error=e).as_json()
 
-        result_str = (
-            json.dumps(result, ensure_ascii=False) if isinstance(result, dict) else str(result)
-        )
+        normalized = observation(result)
+        result_str = normalized.as_json()
         logger.info(f"Tool {tool_name} result: {result_str[:200]}...")
 
         emit_event({
             "type": "tool_result",
             "name": tool_name,
             "summary": brief_result(tool_name, result_str),
+            "ok": normalized.ok,
+            "retryable": normalized.retryable,
         })
+        # The audit trail belongs in the server log, not on the wire: no client
+        # renders it, and shipping tool arguments to the browser widens their
+        # exposure for nothing.
+        logger.info(
+            "agent_trace",
+            extra={
+                "tool": tool_name,
+                "risk": risk_for(tool_name),
+                # Not "args": logging reserves that name on LogRecord.
+                "tool_args": redact(args),
+                "ok": normalized.ok,
+                "duration_ms": int((time.monotonic() - started) * 1000),
+            },
+        )
+        if normalized.citations:
+            emit_event({"type": "citations", "items": normalized.citations})
 
         if declares(tool, TAG_LOCAL_FILE):
             path = _touched_path(result_str, args)
@@ -325,10 +396,7 @@ def build_agent_graph(llm_with_tools, tools: list, checkpointer=None):
 
 def _touched_path(result_str: str, args: dict) -> str:
     """Best-effort path of the file a document tool just read or wrote."""
-    try:
-        data = json.loads(result_str) if result_str.startswith("{") else {}
-    except Exception:
-        data = {}
+    data = result_payload(result_str)
     if isinstance(data, dict):
         saved = data.get("saved_to") or data.get("path")
         if saved:

@@ -91,30 +91,37 @@ def build_ollama_llm(model: str):
 
 TOOL_GROUPS: dict[str, list[str]] = {
     "web":       ["web_search", "fetch_url", "download_file"],
-    "files":     ["read_file", "write_file", "edit_file", "list_directory", "find_files", "grep_files"],
-    "shell":     ["run_shell"],
+    "files":     [
+        "read_file", "write_file", "edit_file", "list_directory", "find_files",
+        "grep_files", "list_storage_files",
+    ],
+    "shell":     ["run_shell", "system_propose", "system_confirm"],
     "git":       ["git_status", "git_diff", "git_log", "git_commit"],
     "code":      ["check_code", "repo_map"],
     "documents": [
         "analyze_pdf", "extract_text_from_pdf", "analyze_excel", "write_excel",
         "read_docx", "write_docx", "modify_excel", "modify_docx",
         "insert_image_docx", "insert_image_excel", "search_documents",
+        "read_pptx", "write_pptx", "modify_pptx", "insert_image_pptx",
     ],
-    "media":     ["search_images", "describe_image", "take_screenshot", "send_file", "send_screenshot"],
+    "media":     [
+        "search_images", "describe_image", "take_screenshot", "send_file",
+        "send_screenshot", "generate_image", "generate_video",
+    ],
     "browser":   [
         "browser_connect", "browser_navigate", "browser_act", "browser_extract",
         "browser_get_content", "browser_click", "browser_type", "browser_screenshot",
         "browser_close", "browser_switch_tab", "browser_evaluate",
     ],
     "calendar":  ["calendar_list_events", "calendar_create_event", "calendar_update_event", "calendar_delete_event"],
-    "memory":    ["organize_memory", "save_memory", "search_memory", "save_solution"],
+    "memory":    ["organize_memory", "save_memory", "search_memory", "save_solution", "owner_insights"],
     "database":  [],  # matched dynamically by prefix query_* / execute_sql_*
     "clickup":   ["clickup_get_tasks", "clickup_create_task", "clickup_update_task", "clickup_add_comment", "clickup_get_workspaces"],
     "jira":      ["jira_search_issues", "jira_create_issue", "jira_update_issue", "jira_transition_issue", "jira_add_comment", "jira_get_projects"],
     "teams":     ["teams_send_message"],
 }
 
-_WEB_ALWAYS = {"web_search", "fetch_url", "download_file"}
+_ALWAYS_AVAILABLE = {"web_search", "fetch_url", "download_file", "run_workflow"}
 
 _ROUTING_SYSTEM = (
     "You are a tool router. Given the user's message, respond with ONLY a JSON array "
@@ -126,9 +133,16 @@ _ROUTING_SYSTEM = (
 
 
 async def route_tools(llm, user_message: str, all_tools: list) -> list:
-    """
-    Run a fast routing call to select only the relevant tool subset for Ollama.
-    Reduces 50+ tools to a small focused set to avoid context overflow.
+    """Narrow the tool set to what this message plausibly needs.
+
+    Every tool schema is re-sent on every call of a turn, so the full catalogue
+    costs roughly 10k tokens per LLM call — repeated once per tool round. This
+    trades one cheap routing call for that.
+
+    Unclassified tools are kept, not dropped. TOOL_GROUPS is maintained by
+    hand, so a tool added without touching it would otherwise vanish from the
+    assistant silently, and the failure would look like the model "forgetting"
+    how to do something rather than like a missing list entry.
     """
     try:
         response = await llm.ainvoke([
@@ -145,15 +159,30 @@ async def route_tools(llm, user_message: str, all_tools: list) -> list:
         logger.warning(f"Tool routing failed ({e}), falling back to web+shell")
         categories = ["web", "shell"]
 
-    allowed: set[str] = set(_WEB_ALWAYS)
+    allowed: set[str] = set(_ALWAYS_AVAILABLE)
     for cat in categories:
         allowed.update(TOOL_GROUPS.get(cat, []))
         if cat == "database":
             allowed.update(t.name for t in all_tools if t.name.startswith(("query_", "execute_sql_")))
 
+    allowed.update(unclassified_tools(all_tools))
+
     filtered = [t for t in all_tools if t.name in allowed]
-    logger.info(f"Tool routing: categories={categories} → {len(filtered)}/{len(all_tools)} tools")
-    return filtered if filtered else all_tools[:8]
+    logger.info(
+        f"Tool routing: categories={categories} → {len(filtered)}/{len(all_tools)} tools"
+    )
+    return filtered if filtered else all_tools
+
+
+def unclassified_tools(all_tools: list) -> set[str]:
+    """Names no category claims. Kept available, and worth adding to a group."""
+    grouped = {name for names in TOOL_GROUPS.values() for name in names}
+    return {
+        tool.name
+        for tool in all_tools
+        if tool.name not in grouped
+        and not tool.name.startswith(("query_", "execute_sql_"))
+    }
 
 
 TOOL_ALIASES: dict[str, str] = {

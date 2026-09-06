@@ -13,9 +13,12 @@ from pydantic import BaseModel
 from src.core.platform.ai.graph import (
     TAG_FILE_URL,
     TAG_LOCAL_FILE,
+    TAG_NEEDS_APPROVAL,
+    brief_result,
     build_agent_graph,
     final_text,
     pending_tool_calls,
+    result_payload,
 )
 from src.core.platform.ai.tools.approval_manager import request_approval
 
@@ -143,7 +146,7 @@ def test_a_rejected_change_is_reported_without_running_the_tool():
 
     assert applied == [], "a rejected tool must not touch anything"
     results = [m for m in state["messages"] if isinstance(m, ToolMessage)]
-    assert results[-1].content == "rejected: wrong file"
+    assert result_payload(results[-1].content) == "rejected: wrong file"
 
 
 def test_an_approved_change_resumes_and_applies():
@@ -314,6 +317,7 @@ def _service(llm, tools):
     service.memory_manager = type("M", (), {
         "create_thread_id": staticmethod(lambda c, u: f"{u}_{c}"),
     })()
+    service.checkpointer = InMemorySaver()
     service._prepare_run = lambda **kwargs: (
         _PromptProfileStub(), [HumanMessage("go")], tools
     )
@@ -351,7 +355,8 @@ def test_stream_emits_text_tokens_and_tool_events():
 
     assert "".join(i for i in items if isinstance(i, str)) == "all done"
     kinds = [i["type"] for i in items if isinstance(i, dict)]
-    assert kinds == ["tool_call", "tool_result"]
+    # agent_run comes first so a client can resume this run after a drop.
+    assert kinds == ["agent_run", "tool_call", "tool_result"]
 
 
 def test_stream_does_not_leak_tool_call_chunks_as_text():
@@ -395,7 +400,7 @@ def test_stream_asks_for_approval_then_resumes_on_yes():
             out.append(item)
             if isinstance(item, dict) and item["type"] == "approval_request":
                 # Stand in for POST /conversation/tool/approve.
-                assert submit_decision(item["request_id"], True, "")
+                assert await submit_decision(item["request_id"], True, "")
         return out
 
     items = asyncio.run(go())
@@ -539,3 +544,162 @@ def test_the_real_tool_factory_tags_the_tools_the_loop_reacts_to():
     for name in ("read_docx", "write_docx", "modify_docx", "modify_excel", "analyze_excel"):
         assert name in tools, f"{name} disappeared from the tool set"
         assert declares(tools[name], TAG_LOCAL_FILE), f"{name} lost its {TAG_LOCAL_FILE} tag"
+
+
+def test_result_payload_unwraps_the_observation_envelope():
+    """brief_result and _touched_path read the tool's own fields, which now
+    live one level down inside the envelope."""
+    from src.core.platform.ai.agent_contracts import observation
+    from src.core.platform.ai.graph import _touched_path
+
+    wrapped = observation(json.dumps({"saved_to": "/w/report.docx"})).as_json()
+
+    assert result_payload(wrapped) == {"saved_to": "/w/report.docx"}
+    assert _touched_path(wrapped, {}) == "/w/report.docx"
+    assert brief_result("modify_docx", wrapped) == "saved → report.docx"
+
+
+def test_result_payload_passes_through_a_bare_result():
+    assert result_payload(json.dumps({"paragraphs": [1, 2]})) == {"paragraphs": [1, 2]}
+    assert result_payload("not json") is None
+
+
+def test_an_approved_tool_runs_once_when_the_node_replays():
+    """The approval pause replays the node; the tool must not run twice."""
+    runs = []
+
+    async def write(**_):
+        approved, _feedback = request_approval("write_file", "notes.md", "+ hi")
+        if not approved:
+            return "rejected"
+        runs.append("written")
+        return "written"
+
+    llm = ScriptedLLM([
+        [call_chunk("write_file", {}, "1")],
+        [text_chunk("done")],
+    ])
+    graph = build_agent_graph(
+        llm, [make_tool("write_file", write)],
+        checkpointer=InMemorySaver(), approvals_enabled=True,
+    )
+    config = config_for("replay")
+
+    async def drive():
+        await graph.ainvoke({"messages": [HumanMessage("go")], "file_urls": {}}, config)
+        return await graph.ainvoke(Command(resume={"approved": True, "feedback": ""}), config)
+
+    state = asyncio.run(drive())
+
+    assert runs == ["written"], "the approved tool ran once, not zero or twice"
+    assert final_text(state, str) == "done"
+
+
+def _profile(integrations=None):
+    return type("P", (), {
+        "user_id": "u1", "functions": None, "tool_prompts": None,
+        "disabled_tools": None, "integrations": integrations, "files": None,
+        "assistant_name": "g", "business_context": "", "response_language": "en",
+    })()
+
+
+def _system_integration(require_confirmation: bool):
+    from datetime import datetime, timezone
+
+    from src.core.domain import Integration
+
+    now = datetime.now(timezone.utc)
+    return [Integration(
+        name="system_commands",
+        type="system",
+        activated=True,
+        config={"require_confirmation": require_confirmation},
+        created_at=now,
+        updated_at=now,
+    )]
+
+
+def _find(profile, name):
+    from src.core.platform.ai.tools.models import create_langchain_tools
+
+    for t in create_langchain_tools(None, profile) if True else []:
+        if t and t.name == name:
+            return t
+    return None
+
+
+def test_system_propose_asks_when_it_runs_the_command_itself():
+    """With the profile's own confirmation off, nothing else stands between
+    the model and a shell on the server."""
+    from src.core.platform.ai.graph import TAG_NEEDS_APPROVAL, declares
+
+    tool = _find(_profile(_system_integration(False)), "system_propose")
+
+    assert tool is not None
+    assert declares(tool, TAG_NEEDS_APPROVAL)
+
+
+def test_system_propose_does_not_double_ask_when_a_code_is_required():
+    """With confirmation on it only proposes; the user still has to send the
+    code back, so prompting here too would be two asks for one command."""
+    from src.core.platform.ai.graph import TAG_NEEDS_APPROVAL, declares
+
+    tool = _find(_profile(_system_integration(True)), "system_propose")
+
+    assert tool is not None
+    assert not declares(tool, TAG_NEEDS_APPROVAL)
+
+
+def test_a_tool_tagged_for_approval_is_paused_by_the_graph():
+    ran = []
+
+    async def shell(**_):
+        ran.append("ran")
+        return "output"
+
+    llm = ScriptedLLM([
+        [call_chunk("system_propose", {"command": "rm -rf /tmp/x"}, "1")],
+        [text_chunk("done")],
+    ])
+    graph = build_agent_graph(
+        llm,
+        [make_tool("system_propose", shell, tags=[TAG_NEEDS_APPROVAL])],
+        checkpointer=InMemorySaver(),
+        approvals_enabled=True,
+    )
+    config = config_for("tagged-approval")
+
+    async def drive():
+        await graph.ainvoke({"messages": [HumanMessage("go")], "file_urls": {}}, config)
+        snapshot = await graph.aget_state(config)
+        assert ran == [], "the command must not run before the user answers"
+        request = snapshot.tasks[0].interrupts[0].value
+        assert request["tool"] == "system_propose"
+        return await graph.ainvoke(
+            Command(resume={"approved": False, "feedback": "no"}), config
+        )
+
+    asyncio.run(drive())
+
+    assert ran == [], "a rejected command must never reach the shell"
+
+
+def test_an_untagged_tool_is_not_paused():
+    ran = []
+
+    async def harmless(**_):
+        ran.append("ran")
+        return "ok"
+
+    llm = ScriptedLLM([
+        [call_chunk("read_file", {"path": "a"}, "1")],
+        [text_chunk("done")],
+    ])
+    graph = build_agent_graph(
+        llm, [make_tool("read_file", harmless)],
+        checkpointer=InMemorySaver(), approvals_enabled=True,
+    )
+
+    run(graph, {"messages": [HumanMessage("go")], "file_urls": {}}, config_for("no-approval"))
+
+    assert ran == ["ran"]

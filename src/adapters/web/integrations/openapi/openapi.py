@@ -195,6 +195,7 @@ class OpenAIIntegration:
         client_workspace: str = "",
         plan_mode: bool = False,
         auth_token: Optional[str] = None,
+        run_id: Optional[str] = None,
     ):
         """Stream AI response tokens via LangChain.
 
@@ -221,6 +222,7 @@ class OpenAIIntegration:
             client_workspace=client_workspace,
             plan_mode=plan_mode,
             auth_token=auth_token,
+            run_id=run_id,
         ):
             yield token
 
