@@ -146,6 +146,20 @@ def result_payload(result: str) -> Any:
     return parsed
 
 
+def approval_target(args: dict) -> str:
+    """What is about to happen, shown verbatim in the approval prompt.
+
+    Deliberately not ``key_arg``: that shortens a path to its basename to keep
+    the CLI's progress line narrow, which renders "rm -rf /tmp/x" as "x". Some-
+    one deciding whether to allow a command has to see the command.
+    """
+    for key in ("command", "url", "path", "file_name", "name", "query"):
+        value = args.get(key)
+        if value and isinstance(value, str):
+            return value[:500]
+    return ""
+
+
 def brief_result(tool_name: str, result: str) -> str:
     """One-line summary of a tool result, for the CLI's progress line."""
     data = result_payload(result)
@@ -307,8 +321,8 @@ def build_agent_graph(llm_with_tools, tools: list, checkpointer=None, budget: Ru
             ):
                 from src.core.platform.ai.tools.approval_manager import rejection_message, request_approval
                 approved, feedback = request_approval(
-                    tool_name, key_arg(tool_name, args),
-                    json.dumps(redact(args), ensure_ascii=False)[:2000],
+                    tool_name, approval_target(args),
+                    json.dumps(redact(args), ensure_ascii=False, indent=2)[:2000],
                 )
                 result = None if approved else {"ok": False, "error": rejection_message(tool_name, feedback)}
             else:
