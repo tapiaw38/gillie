@@ -199,8 +199,6 @@ class AddMessageUseCase:
             else ""
         )
 
-        shell_output_queue: asyncio.Queue = asyncio.Queue()
-
         full_text = ""
         pending_speech = ""
         speech_tasks: list = []
@@ -229,7 +227,6 @@ class AddMessageUseCase:
             previous_messages=conversation_history,
             profile=conversation.profile,
             conversation_id=conversation_id,
-            shell_output_queue=shell_output_queue,
             client_workspace=client_workspace,
             plan_mode=plan_mode,
             auth_token=auth_token,

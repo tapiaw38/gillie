@@ -6,7 +6,7 @@ A single-user AI assistant API built with FastAPI. Supports conversational inter
 
 ## Requirements
 
-- Python 3.10+
+- Python 3.11+
 - Docker (only if using local MongoDB)
 - Linux (systemd service management)
 
@@ -22,7 +22,7 @@ cd gillie-api
 
 `install.sh` will:
 
-1. Verify Python 3.10+
+1. Verify Python 3.11+
 2. Create a `.venv` virtual environment
 3. Install all dependencies from `requirements.txt`
 4. Make the `./gillie` CLI executable

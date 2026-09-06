@@ -30,6 +30,7 @@ interface ChatMessage {
 interface ApprovalRequest {
   request_id: string
   tool_name: string
+  target: string
   diff: string
 }
 
@@ -560,7 +561,8 @@ const processStreamEvent = async (msg: ChatMessage, payload: unknown) => {
     case 'approval_request': {
       pendingApproval.value = {
         request_id: String(event.request_id ?? ''),
-        tool_name: String(event.tool_name ?? ''),
+        tool_name: String(event.tool ?? ''),
+        target: String(event.file ?? ''),
         diff: String(event.diff ?? ''),
       }
       approvalFeedback.value = ''
