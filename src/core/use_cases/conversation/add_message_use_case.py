@@ -156,8 +156,13 @@ class AddMessageUseCase:
         auth_token: Optional[str] = None,
         has_text_to_voice: Optional[str] = None,
         message: Optional[MessageInput] = None,
+        run_id: Optional[str] = None,
     ):
-        """Streaming variant for CLI. Yields str tokens, shell_output dicts, and audio dicts."""
+        """Streaming variant for CLI. Yields str tokens, shell_output dicts, and audio dicts.
+
+        `run_id` identifies a run whose connection dropped, so a reconnecting
+        client resumes it instead of starting a second one.
+        """
         context = self.context_factory()
         profile = await context.repositories.profile.find_by_user_id(user_id)
         message = message or MessageInput(content=content)
@@ -183,8 +188,12 @@ class AddMessageUseCase:
 
         memory_scope_id = self._build_memory_scope_id(conversation)
 
-        user_message = self._create_user_message(content, SenderEnum.user, image_attachments=image_attachments)
-        self._add_message_to_conversation(conversation, user_message)
+        user_message = self._resume_target(conversation, content) if run_id else None
+        if user_message is None:
+            user_message = self._create_user_message(
+                content, SenderEnum.user, image_attachments=image_attachments
+            )
+            self._add_message_to_conversation(conversation, user_message)
 
         scoped_message_context = self._build_message_context(message.context, conversation)
         enhanced_context = await self._inject_skill_context(
@@ -230,6 +239,7 @@ class AddMessageUseCase:
             client_workspace=client_workspace,
             plan_mode=plan_mode,
             auth_token=auth_token,
+            run_id=run_id,
         ):
             yield token
             if not isinstance(token, str):
@@ -307,6 +317,20 @@ class AddMessageUseCase:
         mcp = getattr(context.integrations, "mcp", None)
         if mcp is not None:
             await mcp.avatar_control_window("show")
+
+    @staticmethod
+    def _resume_target(conversation, content: str) -> Optional[Message]:
+        """The already-stored turn a reconnecting client is resuming, if any.
+
+        A resumed run must not append the user's message a second time. But
+        `run_id` arrives from a client header, so the last message is only
+        reused when it really is the same user turn — otherwise the assistant's
+        own reply would be fed back as if the user had written it.
+        """
+        last = conversation.messages[-1] if conversation.messages else None
+        if last is None or last.sender != SenderEnum.user:
+            return None
+        return last if (last.content or "").strip() == (content or "").strip() else None
 
     def _create_user_message(
         self,

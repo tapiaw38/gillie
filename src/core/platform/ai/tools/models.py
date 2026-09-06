@@ -15,7 +15,11 @@ from typing import Optional, List, Dict, Any, Literal
 from pydantic import BaseModel, Field, field_validator
 from langchain_core.tools import StructuredTool
 
-from src.core.platform.ai.graph import TAG_FILE_URL, TAG_LOCAL_FILE
+from src.core.platform.ai.graph import (
+    TAG_FILE_URL,
+    TAG_LOCAL_FILE,
+    TAG_NEEDS_APPROVAL,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -6100,6 +6104,11 @@ If data is not found, say so clearly."""
                     func=system_propose_tool,
                     args_schema=SystemProposeArgs,
                     coroutine=system_propose_tool,
+                    # With confirmation on, this only proposes: the user still
+                    # has to send the code back, so asking here as well would
+                    # be two prompts for one command. With it off the shell
+                    # runs on the spot, and this is the only thing in the way.
+                    tags=None if needs_confirmation else [TAG_NEEDS_APPROVAL],
                 )
             )
 
@@ -6519,4 +6528,9 @@ If data is not found, say so clearly."""
         )
         logger.info("Google Calendar tools registered (integration active)")
 
-    return tools
+    # Last line of defence for disabled_tools. The list above is built through
+    # `_tool`, which honours it, but every block after that appends
+    # StructuredTool directly and has to repeat the check by hand — the avatar
+    # and calendar blocks never did, so those tools could not be turned off at
+    # all. Filtering once here means a tool added later cannot miss it.
+    return [tool for tool in tools if tool is not None and tool.name not in disabled]

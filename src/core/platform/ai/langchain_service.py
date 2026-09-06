@@ -18,7 +18,6 @@ from typing import Any, Dict, List, Optional
 
 from langchain_core.messages import HumanMessage, SystemMessage
 from langchain_openai import ChatOpenAI
-from langgraph.checkpoint.memory import InMemorySaver
 from langgraph.errors import GraphRecursionError
 from langgraph.types import Command
 
@@ -41,7 +40,6 @@ def _extract_text(content) -> str:
 
 from src.core.platform.ai.ollama_adapter import (
     is_ollama_url as _is_ollama_url,
-    is_local_provider as _is_local_provider,
     build_ollama_llm as _build_ollama_llm,
     route_tools as _route_tools_ollama,
     resolve_profile as _resolve_profile,
@@ -90,8 +88,45 @@ from src.core.platform.ai.graph import (
 from src.core.platform.ai.tools.approval_manager import create_pending, take_decision
 from .tools.models import create_langchain_tools
 from .memory.manager import ConversationMemoryManager
+from .checkpointer import mongo_checkpointer
 
 logger = logging.getLogger(__name__)
+
+
+def schema_tokens(tools: list) -> int:
+    """Rough token cost of sending these tool schemas once.
+
+    Approximated at 4 chars per token — good enough to compare two tool sets,
+    which is all this is used for.
+    """
+    from langchain_core.utils.function_calling import convert_to_openai_tool
+    import json as _json
+
+    try:
+        return sum(len(_json.dumps(convert_to_openai_tool(t))) for t in tools) // 4
+    except Exception:
+        return 0
+
+
+def _log_routing_saving(before: list, after: list) -> None:
+    """Record what routing actually saved, so the trade stays measurable.
+
+    The saving is per LLM call, and a turn makes one call per tool round, so
+    the real figure for a turn is this multiplied by the number of rounds.
+    """
+    if len(after) >= len(before):
+        return
+    kept, full = schema_tokens(after), schema_tokens(before)
+    logger.info(
+        "tool_routing",
+        extra={
+            "tools_before": len(before),
+            "tools_after": len(after),
+            "tokens_before": full,
+            "tokens_after": kept,
+            "tokens_saved_per_call": full - kept,
+        },
+    )
 
 
 def _pending_approval(snapshot) -> Optional[dict]:
@@ -156,6 +191,7 @@ class LangChainService:
 
 
         self.memory_manager = ConversationMemoryManager(max_messages=20)
+        self.checkpointer = mongo_checkpointer(config_service)
 
         self.semaphore = asyncio.Semaphore(max_concurrent_requests)
 
@@ -299,11 +335,25 @@ class LangChainService:
         return prompt_profile, messages, tools
 
     async def _bind_tools(self, question: str, tools: list):
-        """Narrow the tool set if the provider needs it, then bind it."""
+        """Narrow the tool set to what this turn needs, then bind it.
+
+        Routing used to run only for local models, which framed it as a
+        context-window workaround. It is really a cost control: the schemas go
+        out again on every call of a turn, so a 30-round turn pays for the full
+        catalogue thirty times over. Hosted models have the room, not the
+        budget.
+
+        Set GILLIE_TOOL_ROUTING=off to send everything, e.g. to check whether a
+        misrouted turn is the router's fault.
+        """
         if not tools:
             return self.llm, []
-        if _is_local_provider(self.config.base_url, self.config.model):
+
+        if os.getenv("GILLIE_TOOL_ROUTING", "on").lower() not in ("off", "0", "false"):
+            before = tools
             tools = await self._route_tools(question, tools)
+            _log_routing_saving(before, tools)
+
         logger.debug(f"Bound {len(tools)} tools to LLM")
         return self.llm.bind_tools(tools), tools
 
@@ -363,7 +413,7 @@ class LangChainService:
                     f"Generating response for user {profile.user_id} "
                     f"[profile={prompt_profile.name}]"
                 )
-                graph = build_agent_graph(llm_with_tools, tools, checkpointer=InMemorySaver())
+                graph = build_agent_graph(llm_with_tools, tools, checkpointer=self.checkpointer)
                 config = self._run_config(
                     self.memory_manager.create_thread_id(conversation_id, profile.user_id),
                     prompt_profile.max_tool_rounds,
@@ -379,6 +429,8 @@ class LangChainService:
                         f"answering from the work done so far"
                     )
                     state = (await graph.aget_state(config)).values
+                finally:
+                    await self._discard_checkpoints(config)
 
                 response_text = final_text(state, _extract_text)
                 self._record_success()
@@ -389,6 +441,13 @@ class LangChainService:
                 self._record_failure()
                 logger.error(f"Error generating response: {e}")
                 raise
+
+    async def _discard_checkpoints(self, config: Dict[str, Any]) -> None:
+        """Drop a finished run's checkpoints. Never fails the turn over it."""
+        try:
+            await self.checkpointer.adelete_thread(config["configurable"]["thread_id"])
+        except Exception as e:
+            logger.warning(f"Could not delete agent checkpoints: {e}")
 
     async def generate_response_stream(
         self,
@@ -402,6 +461,7 @@ class LangChainService:
         plan_mode: bool = False,
         auth_token: Optional[str] = None,
         approval_timeout: float = 300.0,
+        run_id: Optional[str] = None,
     ):
         """
         Stream the response as it is produced.
@@ -440,19 +500,46 @@ class LangChainService:
                     f"Stream: profile={prompt_profile.name}, "
                     f"max_rounds={prompt_profile.max_tool_rounds}"
                 )
-                graph = build_agent_graph(llm_with_tools, tools, checkpointer=InMemorySaver())
+                graph = build_agent_graph(
+                    llm_with_tools, tools, checkpointer=self.checkpointer, approvals_enabled=True
+                )
+                thread_id = run_id or self.memory_manager.create_thread_id(conversation_id, profile.user_id)
                 config = self._run_config(
-                    self.memory_manager.create_thread_id(conversation_id, profile.user_id),
+                    thread_id,
                     prompt_profile.max_tool_rounds,
                 )
 
                 streamed = ""
+                yield {"type": "agent_run", "run_id": thread_id}
                 payload: Any = {"messages": messages, "file_urls": {}}
                 exhausted = False
 
+                request = (
+                    _pending_approval(await graph.aget_state(config)) if run_id else None
+                )
+
                 while True:
-                    # Messages that turned out to be tool calls stop streaming
-                    # as text: the user wants the answer, not the call.
+                    if request is not None:
+                        request_id = str(uuid.uuid4())
+                        answered = await create_pending(request_id, thread_id, request)
+                        yield {
+                            "type": "approval_request",
+                            "request_id": request_id,
+                            "tool": request.get("tool", "unknown"),
+                            "file": request.get("file", ""),
+                            "diff": request.get("diff", ""),
+                        }
+                        try:
+                            await asyncio.wait_for(
+                                answered.wait(), timeout=approval_timeout
+                            )
+                        except asyncio.TimeoutError:
+                            logger.warning(
+                                f"Approval request {request_id} timed out after "
+                                f"{approval_timeout}s — rejecting"
+                            )
+                        payload = Command(resume=await take_decision(request_id))
+
                     suppressed: set = set()
                     try:
                         async for mode, item in graph.astream(
@@ -484,24 +571,6 @@ class LangChainService:
                     if request is None:
                         break
 
-                    request_id = str(uuid.uuid4())
-                    answered = create_pending(request_id)
-                    yield {
-                        "type": "approval_request",
-                        "request_id": request_id,
-                        "tool": request.get("tool", "unknown"),
-                        "file": request.get("file", ""),
-                        "diff": request.get("diff", ""),
-                    }
-                    try:
-                        await asyncio.wait_for(answered.wait(), timeout=approval_timeout)
-                    except asyncio.TimeoutError:
-                        logger.warning(
-                            f"Approval request {request_id} timed out after "
-                            f"{approval_timeout}s — rejecting"
-                        )
-                    payload = Command(resume=take_decision(request_id))
-
                 state = (await graph.aget_state(config)).values
                 if not streamed.strip():
                     text = final_text(state, _extract_text)
@@ -513,6 +582,7 @@ class LangChainService:
                         yield f"\n{url}"
 
                 self._record_success()
+                await self._discard_checkpoints(config)
 
             except Exception as e:
                 self._record_failure()

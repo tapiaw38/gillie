@@ -15,9 +15,14 @@ Two halves that meet at the LangGraph run:
 The registry below only bridges that HTTP round trip; it holds no tool state.
 """
 import asyncio
+import logging
+import os
+from datetime import datetime, timezone
 from typing import Dict, Tuple
 
 from langgraph.types import interrupt
+
+logger = logging.getLogger(__name__)
 
 
 def request_approval(tool_name: str, target: str, diff: str) -> Tuple[bool, str]:
@@ -49,21 +54,90 @@ def rejection_message(target: str, feedback: str) -> str:
 # { request_id: (event, {"approved": bool, "feedback": str}) }
 _pending: Dict[str, Tuple[asyncio.Event, dict]] = {}
 
+# One client for the process. Building a MongoClient per call leaks a
+# connection pool every time, and these run on the request path.
+_client = None
+_client_failed = False
 
-def create_pending(request_id: str) -> asyncio.Event:
+
+def _approval_collection():
+    """The audit collection, or None when Mongo is unavailable.
+
+    Durability here is a bonus: the in-memory event is what actually wakes the
+    live SSE stream, so losing Mongo costs resumability, not correctness.
+    """
+    global _client, _client_failed
+    if _client_failed:
+        return None
+    if _client is None:
+        try:
+            from pymongo import MongoClient
+
+            _client = MongoClient(
+                os.getenv("DATABASE_URI", "mongodb://localhost:27017"),
+                connectTimeoutMS=1_000,
+                serverSelectionTimeoutMS=1_000,
+            )
+        except Exception:
+            _client_failed = True
+            return None
+    try:
+        return _client[os.getenv("DB_NAME", "gillie-db")]["agent_approvals"]
+    except Exception:
+        return None
+
+
+async def _mongo(operation, *args, **kwargs):
+    """Run a blocking pymongo call off the event loop, swallowing failures."""
+    collection = _approval_collection()
+    if collection is None:
+        return None
+    try:
+        return await asyncio.to_thread(getattr(collection, operation), *args, **kwargs)
+    except Exception as e:
+        logger.warning(f"Approval audit write failed ({operation}): {e}")
+        return None
+
+
+async def create_pending(
+    request_id: str, run_id: str = "", request: dict | None = None
+) -> asyncio.Event:
     """Register a new pending approval and return the event to wait on."""
     event = asyncio.Event()
     _pending[request_id] = (event, {"approved": False, "feedback": ""})
+    await _mongo(
+        "update_one",
+        {"request_id": request_id},
+        {"$set": {
+            "run_id": run_id,
+            "status": "pending",
+            "request": request or {},
+            "created_at": datetime.now(timezone.utc),
+        }},
+        upsert=True,
+    )
     return event
 
 
-def submit_decision(request_id: str, approved: bool, feedback: str = "") -> bool:
+async def submit_decision(request_id: str, approved: bool, feedback: str = "") -> bool:
     """Record the user's decision and unblock its waiter.
 
-    Returns False if the request_id is unknown — already timed out, already
-    answered, or never registered.
+    Returns False if the request_id is unknown to *this* process — already
+    timed out, already answered, or never registered. Mongo being reachable
+    says nothing about that, so it does not affect the answer.
     """
     entry = _pending.get(request_id)
+    await _mongo(
+        "update_one",
+        {"request_id": request_id},
+        {"$set": {
+            "approved": approved,
+            "feedback": feedback or "",
+            "decided_at": datetime.now(timezone.utc),
+            "status": "decided",
+        }},
+        upsert=False,
+    )
     if entry is None:
         return False
     event, decision = entry
@@ -73,7 +147,19 @@ def submit_decision(request_id: str, approved: bool, feedback: str = "") -> bool
     return True
 
 
-def take_decision(request_id: str) -> dict:
-    """Read a decision and drop the request. Unknown ids read as a rejection."""
+async def take_decision(request_id: str) -> dict:
+    """Read a decision and drop the request. Unknown ids read as a rejection.
+
+    The in-memory entry is authoritative: it is the same object
+    ``submit_decision`` wrote, in the same process. Re-reading Mongo here would
+    only add a way for a stale or half-written document to override a decision
+    the user already gave.
+    """
     _, decision = _pending.pop(request_id, (None, {"approved": False, "feedback": ""}))
+    await _mongo(
+        "update_one",
+        {"request_id": request_id},
+        {"$set": {"status": "closed", "closed_at": datetime.now(timezone.utc)}},
+        upsert=False,
+    )
     return decision
