@@ -228,7 +228,7 @@ class OpenAIIntegration:
     @log_function_call
     async def search_images_in_files(
         self, search_term: str, profile: Profile, max_results: int = 5
-    ) -> List[ImageSearchResult]:
+    ) -> List["ImageSearchResult"]:
         self.logger.info(
             f"Searching images for term: '{search_term}' in {len(profile.files or [])} files"
         )
@@ -341,7 +341,7 @@ class OpenAIIntegration:
     @log_function_call
     async def search_images_with_text_analysis(
         self, search_term: str, profile: Profile, max_results: int = 5
-    ) -> List[ImageSearchResult]:
+    ) -> List["ImageSearchResult"]:
         self.logger.info(
             f"Enhanced image search with text analysis for term: '{search_term}'"
         )
