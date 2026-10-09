@@ -154,12 +154,26 @@ class AddMessageUseCase:
         client_workspace: str = "",
         plan_mode: bool = False,
         auth_token: Optional[str] = None,
+        message: Optional[MessageInput] = None,
     ):
         """Streaming variant for CLI. Yields str tokens, shell_output dicts, and audio dicts."""
         context = self.context_factory()
         profile = await context.repositories.profile.find_by_user_id(user_id)
+        message = message or MessageInput(content=content)
+        content = await self._process_voice_content(message, profile, context)
         conversation = await self._get_and_validate_conversation(conversation_id, user_id, context)
         asyncio.create_task(self._show_avatar(context))
+        image_attachments, image_analysis_summary = await self._process_image_content(
+            message=message,
+            user_id=user_id,
+            context=context,
+            user_message_content=content,
+            conversation=conversation,
+        )
+        if image_analysis_summary:
+            content = f"{content.strip()}\n\n[Attached image analysis]\n{image_analysis_summary}" if content.strip() else f"[Attached image analysis]\n{image_analysis_summary}"
+        if message.voice_content and not content.strip():
+            return
 
         compact_uc = CompactConversationUseCase(self.context_factory)
         compaction_event = await compact_uc.compact_if_needed(conversation, conversation_id, context)
@@ -168,10 +182,10 @@ class AddMessageUseCase:
 
         memory_scope_id = self._build_memory_scope_id(conversation)
 
-        user_message = self._create_user_message(content, SenderEnum.user)
+        user_message = self._create_user_message(content, SenderEnum.user, image_attachments=image_attachments)
         self._add_message_to_conversation(conversation, user_message)
 
-        scoped_message_context = self._build_message_context(None, conversation)
+        scoped_message_context = self._build_message_context(message.context, conversation)
         enhanced_context = await self._inject_skill_context(
             scoped_message_context,
             content,

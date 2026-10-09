@@ -152,6 +152,10 @@ async def add_message_stream(
     request: Request,
     usecases: Usecases = Depends(get_usecases),
     content: Optional[str] = Form(default=None),
+    context: Optional[str] = Form(default=None),
+    voice_content: Optional[UploadFile] = File(None),
+    image_content: Optional[UploadFile] = File(None),
+    files: Optional[list[UploadFile]] = File(None),
 ):
     """Stream AI response tokens as Server-Sent Events (SSE).
 
@@ -165,6 +169,7 @@ async def add_message_stream(
         try:
             body = await request.json()
             content = body.get("content", "")
+            context = body.get("context")
         except Exception:
             content = ""
 
@@ -182,6 +187,13 @@ async def add_message_stream(
                 client_workspace=client_workspace,
                 plan_mode=plan_mode,
                 auth_token=auth_token,
+                message=MessageInput(
+                    content=content or "",
+                    context=context,
+                    voice_content=voice_content,
+                    image_content=image_content,
+                    image_contents=files,
+                ),
             ):
                 yield f"data: {json.dumps(token)}\n\n"
         except Exception as e:
