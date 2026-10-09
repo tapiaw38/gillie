@@ -154,6 +154,7 @@ class AddMessageUseCase:
         client_workspace: str = "",
         plan_mode: bool = False,
         auth_token: Optional[str] = None,
+        has_text_to_voice: Optional[str] = None,
         message: Optional[MessageInput] = None,
     ):
         """Streaming variant for CLI. Yields str tokens, shell_output dicts, and audio dicts."""
@@ -205,11 +206,11 @@ class AddMessageUseCase:
         speech_tasks: list = []
         audio_url = None
         emitted = 0
-        speech_enabled = self._tts_active(None, profile) and bool(context.platform_managers)
+        speech_enabled = self._tts_active(has_text_to_voice, profile) and bool(context.platform_managers)
 
         def speak(fragment: str) -> None:
             speech_tasks.append(asyncio.create_task(self._generate_audio_if_enabled(
-                has_text_to_voice=None, text=fragment, profile=profile,
+                has_text_to_voice=has_text_to_voice, text=fragment, profile=profile,
                 user_id=user_id, conversation_id=conversation_id, context=context,
             )))
 

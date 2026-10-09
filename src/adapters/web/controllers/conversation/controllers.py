@@ -153,6 +153,7 @@ async def add_message_stream(
     usecases: Usecases = Depends(get_usecases),
     content: Optional[str] = Form(default=None),
     context: Optional[str] = Form(default=None),
+    has_text_to_voice: Optional[str] = Query(None, regex="^(activate|deactivate)$"),
     voice_content: Optional[UploadFile] = File(None),
     image_content: Optional[UploadFile] = File(None),
     files: Optional[list[UploadFile]] = File(None),
@@ -187,6 +188,7 @@ async def add_message_stream(
                 client_workspace=client_workspace,
                 plan_mode=plan_mode,
                 auth_token=auth_token,
+                has_text_to_voice=has_text_to_voice,
                 message=MessageInput(
                     content=content or "",
                     context=context,
