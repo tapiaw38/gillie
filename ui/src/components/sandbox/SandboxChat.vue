@@ -15,6 +15,7 @@ interface ToolCallEvent {
   arg: string
   risk?: string
   done: boolean
+  ok?: boolean
 }
 
 interface ChatMessage {
@@ -564,7 +565,14 @@ const processStreamEvent = async (msg: ChatMessage, payload: unknown) => {
 
     case 'tool_result': {
       const pending = [...msg.toolCalls].reverse().find((t) => !t.done)
-      if (pending) pending.done = true
+      if (pending) {
+        pending.done = true
+        // A failed call used to finish with the same tick as a successful one,
+        // which reads as "that worked". It matters most for the calls that were
+        // refused rather than attempted — a tool needing approval on a channel
+        // that cannot ask comes back here as ok: false.
+        pending.ok = event.ok !== false
+      }
       break
     }
 
@@ -940,7 +948,11 @@ watch(
                     >{{ tool.risk }}</span
                   >
                   <span v-if="tool.arg" class="tool-chip-arg">{{ tool.arg }}</span>
-                  <i v-if="tool.done" class="pi pi-check tool-chip-status" />
+                  <i
+                    v-if="tool.done && tool.ok === false"
+                    class="pi pi-times tool-chip-status tool-chip-status--failed"
+                  />
+                  <i v-else-if="tool.done" class="pi pi-check tool-chip-status" />
                   <span v-else class="tool-chip-spinner" />
                 </div>
               </div>
@@ -1594,6 +1606,10 @@ watch(
 .tool-chip-status {
   font-size: 0.7rem;
   flex-shrink: 0;
+}
+
+.tool-chip-status--failed {
+  color: var(--do-danger, #e24242);
 }
 
 .tool-chip-spinner {
