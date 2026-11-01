@@ -1,190 +1,115 @@
+"""FAQ storage: the `faqs.skill.md` round trip.
+
+Rewritten against where FAQs actually live. The previous version imported
+`src.adapters.datasources.repositories.faq.repository`, a Mongo-backed
+repository that no longer exists — FAQs moved to a Markdown skill file managed
+by `SkillManager`, which is what every use case under `use_cases/memory` calls
+today. The stale import aborted collection for the whole suite, so nothing in
+`tests/` ran under a bare `pytest`.
+
+`no_sql_faqs_client` is still threaded through `Datasources`, but nothing
+reads it any more; the file is the store.
+"""
+
 import pytest
-from unittest.mock import MagicMock
-from datetime import datetime
-from uuid import uuid4
-from src.adapters.datasources.repositories.faq.repository import Repository
-from src.adapters.datasources.datasources import Datasources
-from src.core.domain import FAQ
+
+from src.core.platform.managers.skill_manager import SkillManager
 
 
 @pytest.fixture
-def mock_client():
-    return MagicMock()
+def skills(tmp_path):
+    """A manager over an empty directory, so each test owns its own file."""
+    return SkillManager(memory_dir=tmp_path)
 
 
-@pytest.fixture
-def mock_datasources(mock_client):
-    datasources = MagicMock(spec=Datasources)
-    datasources.no_sql_faqs_client = mock_client
-    return datasources
+def test_a_fresh_store_has_no_faqs(skills):
+    assert skills.get_faqs() == []
 
 
-@pytest.fixture
-def repository(mock_datasources):
-    return Repository(datasources=mock_datasources)
+def test_an_added_faq_comes_back_with_its_fields(skills):
+    faq_id = skills.add_faq("¿Cómo pido un reembolso?", "Escribinos y lo tramitamos.")
+
+    stored = skills.get_faqs()
+
+    assert len(stored) == 1
+    assert stored[0]["id"] == faq_id
+    assert stored[0]["question"] == "¿Cómo pido un reembolso?"
+    assert stored[0]["answer"] == "Escribinos y lo tramitamos."
 
 
-def build_faq(**kwargs):
-    defaults = {
-        "id": str(uuid4()),
-        "profile_id": str(uuid4()),
-        "question": "What is Python?",
-        "answer": "Python is a programming language",
-        "category": "Programming",
-        "tags": ["python", "programming"],
-        "is_active": True,
-        "order": 1,
-        "created_at": datetime.now(),
-        "updated_at": datetime.now()
-    }
-    defaults.update(kwargs)
-    return FAQ(**defaults)
+def test_the_category_defaults_when_none_is_given(skills):
+    skills.add_faq("P", "R")
+
+    assert skills.get_faqs()[0]["category"] == "General"
 
 
-def test_create_faq_success(repository, mock_client):
-    """Test successful FAQ creation"""
-    faq = build_faq()
-    mock_client.insert_one.return_value.inserted_id = faq.id
+def test_a_given_category_is_kept(skills):
+    skills.add_faq("P", "R", category="Envíos")
 
-    result = repository.create(faq)
-
-    assert result == faq.id
-    mock_client.insert_one.assert_called_once()
+    assert skills.get_faqs()[0]["category"] == "Envíos"
 
 
-def test_create_faq_failure(repository, mock_client):
-    """Test FAQ creation failure"""
-    faq = build_faq()
-    mock_client.insert_one.side_effect = Exception("Database error")
+def test_each_faq_gets_its_own_id(skills):
+    """Blocks are found by id for update and delete, so a collision would make
+    one FAQ's edit land on another's text."""
+    first = skills.add_faq("P1", "R1")
+    second = skills.add_faq("P2", "R2")
 
-    with pytest.raises(Exception):
-        repository.create(faq)
-
-
-def test_find_by_id_success(repository, mock_client):
-    """Test finding FAQ by ID successfully"""
-    faq = build_faq()
-    mock_faq_dict = faq.dict(by_alias=True)
-    mock_faq_dict["_id"] = faq.id
-    mock_client.find_one.return_value = mock_faq_dict
-
-    result = repository.find_by_id(faq.id)
-
-    assert result is not None
-    assert result.question == faq.question
-    mock_client.find_one.assert_called_once()
+    assert first != second
+    assert {f["id"] for f in skills.get_faqs()} == {first, second}
 
 
-def test_find_by_id_not_found(repository, mock_client):
-    """Test finding FAQ by ID when not found"""
-    mock_client.find_one.return_value = None
+def test_updating_rewrites_only_the_one_block(skills):
+    first = skills.add_faq("P1", "R1", category="Uno")
+    second = skills.add_faq("P2", "R2", category="Dos")
 
-    result = repository.find_by_id("nonexistent_id")
+    assert skills.update_faq(second, "P2 nueva", "R2 nueva") is True
 
-    assert result is None
-
-
-def test_find_all_success(repository, mock_client):
-    """Test finding all FAQs for a profile"""
-    profile_id = str(uuid4())
-    faq1 = build_faq(profile_id=profile_id, question="Question 1")
-    faq2 = build_faq(profile_id=profile_id, question="Question 2")
-
-    mock_faqs = [
-        {**faq1.dict(by_alias=True), "_id": faq1.id},
-        {**faq2.dict(by_alias=True), "_id": faq2.id}
-    ]
-
-    mock_cursor = MagicMock()
-    mock_cursor.__iter__.return_value = iter(mock_faqs)
-    mock_cursor.sort.return_value = mock_cursor
-    mock_client.find.return_value = mock_cursor
-
-    result = repository.find_all(profile_id)
-
-    assert len(result) == 2
-    assert result[0].question == "Question 1"
-    assert result[1].question == "Question 2"
+    by_id = {f["id"]: f for f in skills.get_faqs()}
+    assert by_id[second]["question"] == "P2 nueva"
+    assert by_id[second]["answer"] == "R2 nueva"
+    assert by_id[first]["question"] == "P1"
+    assert by_id[first]["answer"] == "R1"
 
 
-def test_find_all_with_filters(repository, mock_client):
-    """Test finding FAQs with profile_id, category and is_active filters"""
-    mock_cursor = MagicMock()
-    mock_cursor.__iter__.return_value = iter([])
-    mock_cursor.sort.return_value = mock_cursor
-    mock_client.find.return_value = mock_cursor
+def test_updating_keeps_the_category_when_none_is_passed(skills):
+    faq_id = skills.add_faq("P", "R", category="Envíos")
 
-    profile_id = str(uuid4())
-    repository.find_all(profile_id=profile_id, category="Programming", is_active=True)
+    skills.update_faq(faq_id, "P nueva", "R nueva")
 
-    mock_client.find.assert_called_once()
-    call_args = mock_client.find.call_args[0][0]
-    assert call_args["profile_id"] == profile_id
-    assert call_args["category"] == "Programming"
-    assert call_args["is_active"] is True
+    assert skills.get_faqs()[0]["category"] == "Envíos"
 
 
-def test_update_faq_success(repository, mock_client):
-    """Test updating FAQ successfully"""
-    faq = build_faq()
-    mock_client.update_one.return_value.matched_count = 1
+def test_updating_an_unknown_id_reports_it_rather_than_writing(skills):
+    skills.add_faq("P", "R")
 
-    result = repository.update(faq.id, faq)
-
-    assert result == faq.id
-    mock_client.update_one.assert_called_once()
+    assert skills.update_faq("does-not-exist", "P", "R") is False
+    assert len(skills.get_faqs()) == 1
 
 
-def test_update_faq_not_found(repository, mock_client):
-    """Test updating FAQ when not found"""
-    faq = build_faq()
-    mock_client.update_one.return_value.matched_count = 0
+def test_deleting_removes_only_the_one_block(skills):
+    first = skills.add_faq("P1", "R1")
+    second = skills.add_faq("P2", "R2")
 
-    with pytest.raises(Exception) as exc_info:
-        repository.update(faq.id, faq)
+    assert skills.delete_faq(first) is True
 
-    assert "not found" in str(exc_info.value)
-
-
-def test_delete_faq_success(repository, mock_client):
-    """Test deleting FAQ successfully"""
-    faq_id = str(uuid4())
-    mock_client.delete_one.return_value.deleted_count = 1
-
-    result = repository.delete(faq_id)
-
-    assert result is True
-    mock_client.delete_one.assert_called_once()
+    remaining = skills.get_faqs()
+    assert [f["id"] for f in remaining] == [second]
+    assert remaining[0]["question"] == "P2"
 
 
-def test_delete_faq_not_found(repository, mock_client):
-    """Test deleting FAQ when not found"""
-    faq_id = str(uuid4())
-    mock_client.delete_one.return_value.deleted_count = 0
+def test_deleting_an_unknown_id_reports_it_rather_than_emptying_the_file(skills):
+    skills.add_faq("P", "R")
 
-    result = repository.delete(faq_id)
-
-    assert result is False
+    assert skills.delete_faq("does-not-exist") is False
+    assert len(skills.get_faqs()) == 1
 
 
-def test_find_by_category_success(repository, mock_client):
-    """Test finding FAQs by profile_id and category"""
-    profile_id = str(uuid4())
-    faq1 = build_faq(profile_id=profile_id, category="Python")
-    faq2 = build_faq(profile_id=profile_id, category="Python")
+def test_the_store_survives_a_new_manager_over_the_same_directory(tmp_path):
+    """The file is the store, not the instance. The API builds a manager per
+    request, so a FAQ added on one has to be visible to the next."""
+    faq_id = SkillManager(memory_dir=tmp_path).add_faq("P", "R")
 
-    mock_faqs = [
-        {**faq1.dict(by_alias=True), "_id": faq1.id},
-        {**faq2.dict(by_alias=True), "_id": faq2.id}
-    ]
+    reopened = SkillManager(memory_dir=tmp_path).get_faqs()
 
-    mock_cursor = MagicMock()
-    mock_cursor.__iter__.return_value = iter(mock_faqs)
-    mock_cursor.sort.return_value = mock_cursor
-    mock_client.find.return_value = mock_cursor
-
-    result = repository.find_by_category(profile_id, "Python")
-
-    assert len(result) == 2
-    assert all(faq.category == "Python" for faq in result)
-    mock_client.find.assert_called_once()
+    assert [f["id"] for f in reopened] == [faq_id]
