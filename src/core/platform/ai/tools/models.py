@@ -6083,6 +6083,15 @@ If data is not found, say so clearly."""
         if "system_propose" not in disabled:
 
             async def system_propose_tool(command: str) -> Dict[str, Any]:
+                # With confirmation off, propose_command runs the command on
+                # the spot, so plan mode has to stop here like run_shell does.
+                # It also stops with confirmation on: a plan that banks a
+                # pending code the user never asked for is still a change.
+                if plan_mode:
+                    return {
+                        "plan_only": True,
+                        "would_do": f"Run: {command}",
+                    }
                 return await propose_command(command, profile)
 
             if needs_confirmation:
@@ -6116,6 +6125,13 @@ If data is not found, say so clearly."""
         if "system_confirm" not in disabled and needs_confirmation:
 
             async def system_confirm_tool(code: str) -> Dict[str, Any]:
+                # confirm_command always executes, and it also consumes the
+                # pending code, so plan mode must not reach it.
+                if plan_mode:
+                    return {
+                        "plan_only": True,
+                        "would_do": f"Run the command held under code '{code}'",
+                    }
                 return await confirm_command(code)
 
             tools.append(
