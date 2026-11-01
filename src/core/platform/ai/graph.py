@@ -315,16 +315,27 @@ def build_agent_graph(llm_with_tools, tools: list, checkpointer=None, budget: Ru
             args, validation_error = _validate_args(tool, args)
             if validation_error:
                 result = validation_error
-            elif approvals_enabled and (
-                needs_central_approval(tool_name)
-                or declares(tool, TAG_NEEDS_APPROVAL)
-            ):
-                from src.core.platform.ai.tools.approval_manager import rejection_message, request_approval
-                approved, feedback = request_approval(
-                    tool_name, approval_target(args),
-                    json.dumps(redact(args), ensure_ascii=False, indent=2)[:2000],
+            elif needs_central_approval(tool_name) or declares(tool, TAG_NEEDS_APPROVAL):
+                from src.core.platform.ai.tools.approval_manager import (
+                    approval_unavailable,
+                    rejection_message,
+                    request_approval,
                 )
-                result = None if approved else {"ok": False, "error": rejection_message(tool_name, feedback)}
+
+                if not approvals_enabled:
+                    # No stream to ask on. Running it anyway is the one outcome
+                    # the approval exists to prevent, so it is refused.
+                    result = {
+                        "ok": False,
+                        "error": approval_unavailable(tool_name),
+                        "retryable": False,
+                    }
+                else:
+                    approved, feedback = request_approval(
+                        tool_name, approval_target(args),
+                        json.dumps(redact(args), ensure_ascii=False, indent=2)[:2000],
+                    )
+                    result = None if approved else {"ok": False, "error": rejection_message(tool_name, feedback)}
             else:
                 result = None
             if result is None:

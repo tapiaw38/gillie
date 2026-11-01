@@ -5,14 +5,22 @@ Two halves that meet at the LangGraph run:
 
 * A tool calls :func:`request_approval`, which suspends the run at that exact
   point and checkpoints it. Nothing after the call executes until a decision
-  arrives. The configured in-memory checkpointer is process-local, so a
-  restart or a disconnected stream rejects the pending operation rather than
-  resuming it later.
+  arrives. Checkpoints are durable (see :mod:`.checkpointer`), so a run whose
+  stream dropped can be resumed by `run_id` within the checkpoint TTL.
 * The stream driver sees the suspended run, emits an ``approval_request`` event
   to the CLI, and parks on :func:`create_pending` until ``POST
   /conversation/tool/approve`` delivers the answer via :func:`submit_decision`.
 
 The registry below only bridges that HTTP round trip; it holds no tool state.
+Unlike the checkpoints, it is process-local: the ``asyncio.Event`` that wakes
+the waiting stream only exists in the process serving it, so a decision has to
+reach the same process that asked. A request this process does not know is
+read as a rejection rather than waited on.
+
+Approval needs a live stream to ask on. Where there is none — the blocking
+:meth:`generate_response` path, which serves WhatsApp, MercadoLibre and the
+internal managers — a tool that would need approving is refused with
+:func:`approval_unavailable` instead of running unasked.
 """
 import asyncio
 import logging
@@ -55,6 +63,22 @@ def request_approval(tool_name: str, target: str, diff: str) -> Tuple[bool, str]
     if isinstance(decision, dict):
         return bool(decision.get("approved")), str(decision.get("feedback") or "")
     return bool(decision), ""
+
+
+def approval_unavailable(tool_name: str) -> str:
+    """The tool result when a tool needs approval and nothing can ask.
+
+    Returned instead of running the tool. Denying is the only safe default: the
+    alternative on a channel that cannot prompt is to apply the change with
+    nobody having agreed to it, which is what the approval exists to prevent.
+    The wording tells the model the refusal is about this channel, so it
+    reports back rather than retrying the same call.
+    """
+    return (
+        f"'{tool_name}' needs the user's approval and this channel cannot ask "
+        f"for it, so it was not run. Do not retry it. Tell the user it has to "
+        f"be run from an interactive session."
+    )
 
 
 def rejection_message(target: str, feedback: str) -> str:
@@ -156,6 +180,18 @@ async def submit_decision(request_id: str, approved: bool, feedback: str = "") -
     decision["feedback"] = feedback or ""
     event.set()
     return True
+
+
+def discard_pending(request_id: str) -> None:
+    """Drop a pending request without awaiting anything.
+
+    Used on the teardown path, where the client has gone and the coroutine is
+    being unwound. :func:`take_decision` would do this too, but it awaits the
+    audit write, and awaiting while a generator is closing is not something to
+    rely on. Losing the audit row costs nothing here; leaking the entry would
+    hold it until the process restarts.
+    """
+    _pending.pop(request_id, None)
 
 
 async def take_decision(request_id: str) -> dict:

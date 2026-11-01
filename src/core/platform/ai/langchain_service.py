@@ -85,7 +85,11 @@ from src.core.platform.ai.graph import (
     final_text,
     missing_file_urls,
 )
-from src.core.platform.ai.tools.approval_manager import create_pending, take_decision
+from src.core.platform.ai.tools.approval_manager import (
+    create_pending,
+    discard_pending,
+    take_decision,
+)
 from .tools.models import create_langchain_tools
 from .memory.manager import ConversationMemoryManager
 from .checkpointer import mongo_checkpointer
@@ -141,6 +145,25 @@ def _pending_approval(snapshot) -> Optional[dict]:
             if isinstance(value, dict):
                 return value
     return None
+
+
+def _resume_payload(snapshot, fresh: Any) -> Any:
+    """What to hand the graph when a client reconnects with a `run_id`.
+
+    None means "carry on from the checkpoint". That is the right answer
+    whenever the thread already holds messages: re-sending them would append
+    the user's question a second time, because ``add_messages`` keys on message
+    id and these are freshly built objects. It holds for a run that was
+    suspended mid-approval and for one that had already finished — there the
+    graph has nothing left to do and the stream closes on the state that is
+    there.
+
+    A `run_id` naming a thread with no state is not a resume at all (expired
+    checkpoint, or a client inventing one), so the turn starts normally.
+    """
+    if (getattr(snapshot, "values", None) or {}).get("messages"):
+        return None
+    return fresh
 
 
 class LangChainService:
@@ -225,7 +248,12 @@ class LangChainService:
         return _resolve_profile(base_url, model, provider_name)
 
     async def _route_tools(self, user_message: str, all_tools: list) -> list:
-        """For Ollama: run a fast routing call to select only relevant tool groups."""
+        """Run a fast routing call to select only the relevant tool groups.
+
+        Applies to every provider, not just Ollama: see :meth:`_bind_tools` for
+        why. The avatar is local runtime control rather than a routed category,
+        so its tools are added back unconditionally.
+        """
         routed = await _route_tools_ollama(self.llm, user_message, all_tools)
         # The avatar is local runtime control, not an Ollama tool category.
         avatar_tools = [tool for tool in all_tools if tool.name.startswith("avatar_")]
@@ -514,9 +542,11 @@ class LangChainService:
                 payload: Any = {"messages": messages, "file_urls": {}}
                 exhausted = False
 
-                request = (
-                    _pending_approval(await graph.aget_state(config)) if run_id else None
-                )
+                request = None
+                if run_id:
+                    resumed = await graph.aget_state(config)
+                    request = _pending_approval(resumed)
+                    payload = _resume_payload(resumed, payload)
 
                 while True:
                     if request is not None:
@@ -540,6 +570,13 @@ class LangChainService:
                                 f"Approval request {request_id} timed out after "
                                 f"{approval_timeout}s — rejecting"
                             )
+                        except (asyncio.CancelledError, GeneratorExit):
+                            # The client went away mid-prompt. Drop the registry
+                            # entry on the way out, or it is held until the
+                            # process restarts: nothing else ever reads it,
+                            # since resuming re-asks on the new stream.
+                            discard_pending(request_id)
+                            raise
                         payload = Command(resume=await take_decision(request_id))
 
                     suppressed: set = set()

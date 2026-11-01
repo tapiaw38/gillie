@@ -3986,17 +3986,22 @@ If data is not found, say so clearly."""
             # This runs with the full authority of whatever the user is logged
             # into — cookies, localStorage, open banking or chat tabs. It is the
             # most privileged tool in the set, so it asks like write_file does.
-            if approvals_enabled:
-                from src.core.platform.ai.tools.approval_manager import request_approval
+            from src.core.platform.ai.tools.approval_manager import (
+                approval_unavailable,
+                request_approval,
+            )
 
-                approved, feedback = request_approval(
-                    "browser_evaluate", page.url, script[:2000]
-                )
-                if not approved:
-                    msg = f"JavaScript execution on '{page.url}' was rejected by the user."
-                    if feedback:
-                        msg += f" Reason: {feedback}. Please try a different approach."
-                    return msg
+            if not approvals_enabled:
+                return approval_unavailable("browser_evaluate")
+
+            approved, feedback = request_approval(
+                "browser_evaluate", page.url, script[:2000]
+            )
+            if not approved:
+                msg = f"JavaScript execution on '{page.url}' was rejected by the user."
+                if feedback:
+                    msg += f" Reason: {feedback}. Please try a different approach."
+                return msg
 
             # Playwright's page.evaluate requires an expression or a function.
             # Top-level `return` is a SyntaxError. Auto-wrap in IIFE when needed.
@@ -4262,6 +4267,11 @@ If data is not found, say so clearly."""
                 "diff": diff[:500],
             }
 
+        if not approvals_enabled:
+            from src.core.platform.ai.tools.approval_manager import approval_unavailable
+
+            return {"skipped": True, "message": approval_unavailable("write_file")}
+
         if approvals_enabled:
             from src.core.platform.ai.tools.approval_manager import (
                 rejection_message,
@@ -4338,6 +4348,11 @@ If data is not found, say so clearly."""
                 "would_do": f"Edit '{path}'",
                 "diff": diff_plan[:500],
             }
+
+        if not approvals_enabled:
+            from src.core.platform.ai.tools.approval_manager import approval_unavailable
+
+            return {"skipped": True, "message": approval_unavailable("edit_file")}
 
         if approvals_enabled:
             from src.core.platform.ai.tools.approval_manager import (
