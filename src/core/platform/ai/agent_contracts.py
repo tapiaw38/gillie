@@ -112,6 +112,7 @@ class RunBudget:
     calls: int = 0
     seen: set[str] = field(default_factory=set)
     admitted: set[str] = field(default_factory=set)
+    epoch: int = 0
 
     def admit(self, name: str, args: dict, call_id: str = "") -> str | None:
         """Verdict for one tool call: None to proceed, else why it is refused."""
@@ -123,7 +124,8 @@ class RunBudget:
         if self.calls >= self.max_tools:
             return "Agent tool budget exhausted. Return final answer."
 
-        fingerprint = f"{name}:{json.dumps(redact(args), sort_keys=True, default=str)}"
+        mutates = risk_for(name) not in ("read", "unknown")
+        fingerprint = self._fingerprint(name, args, mutates)
         if fingerprint in self.seen:
             return (
                 "Repeated identical tool call blocked. Use its observation or "
@@ -134,4 +136,23 @@ class RunBudget:
         self.seen.add(fingerprint)
         if call_id:
             self.admitted.add(call_id)
+        # Anything that changed state invalidates the observations taken before
+        # it, so re-reading the same path afterwards is new work rather than a
+        # repeat. Bumping the epoch retires the reads recorded so far in one
+        # step, without touching the budget counters.
+        if mutates:
+            self.epoch += 1
         return None
+
+    def _fingerprint(self, name: str, args: dict, mutates: bool) -> str:
+        """Identity of one call, for the repeat check.
+
+        A read is scoped to the epoch it happened in: once something has
+        changed, asking again is a different question. A call that changes
+        something is scoped to the whole run instead, because running the same
+        side effect twice is a repeat however much happened in between — which
+        is what this check is mainly here to stop.
+        """
+        payload = json.dumps(redact(args), sort_keys=True, default=str)
+        epoch = "*" if mutates else self.epoch
+        return f"{epoch}:{name}:{payload}"

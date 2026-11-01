@@ -67,3 +67,43 @@ def test_an_unclassified_tool_is_never_retried():
 def test_known_read_tools_stay_retryable():
     assert can_retry("read_file") is True
     assert can_retry("web_search") is True
+
+
+def test_budget_allows_re_reading_a_path_after_something_changed_it():
+    """A read-after-write is new work, not a repeat.
+
+    Without this the obvious edit loop — read a file, change it, read it back
+    to check — is refused on its last step, and the model is told to use an
+    observation that the write in between made stale.
+    """
+    budget = RunBudget()
+    assert budget.admit("read_file", {"path": "a.txt"}) is None
+    assert "Repeated" in budget.admit("read_file", {"path": "a.txt"})
+
+    assert budget.admit("write_file", {"path": "a.txt", "content": "x"}) is None
+
+    assert budget.admit("read_file", {"path": "a.txt"}) is None
+
+
+def test_budget_still_blocks_a_repeated_side_effect_across_epochs():
+    """The counterpart: a mutation is scoped to the whole run.
+
+    Letting the epoch retire these too would mean any write could be replayed
+    by sandwiching another one between the attempts.
+    """
+    budget = RunBudget()
+    assert budget.admit("write_file", {"path": "a.txt", "content": "x"}) is None
+    assert budget.admit("write_file", {"path": "b.txt", "content": "y"}) is None
+
+    assert "Repeated" in budget.admit("write_file", {"path": "a.txt", "content": "x"})
+
+
+def test_budget_does_not_let_an_unknown_tool_retire_the_repeat_check():
+    """`risk_for` reads an unlisted tool as "unknown", which is not a licence
+    to treat it as a mutation: that would hand any unclassified tool a way to
+    clear the check."""
+    budget = RunBudget()
+    assert budget.admit("read_file", {"path": "a.txt"}) is None
+    assert budget.admit("some_unlisted_tool", {"x": 1}) is None
+
+    assert "Repeated" in budget.admit("read_file", {"path": "a.txt"})
