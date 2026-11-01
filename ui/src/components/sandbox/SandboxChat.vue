@@ -13,7 +13,9 @@ import ToolApprovalDialog from '@/components/sandbox/ToolApprovalDialog.vue'
 interface ToolCallEvent {
   name: string
   arg: string
+  risk?: string
   done: boolean
+  ok?: boolean
 }
 
 interface ChatMessage {
@@ -22,6 +24,7 @@ interface ChatMessage {
   content: string
   toolCalls: ToolCallEvent[]
   shellOutput: string[]
+  citations?: string[]
   audioUrls?: string[]
   audioIndex?: number
   isStreaming?: boolean
@@ -30,7 +33,9 @@ interface ChatMessage {
 interface ApprovalRequest {
   request_id: string
   tool_name: string
+  target: string
   diff: string
+  risk: string
 }
 
 interface HistoricalMessage {
@@ -70,6 +75,7 @@ const pendingApproval = ref<ApprovalRequest | null>(null)
 const approvalVisible = ref(false)
 const approvalFeedback = ref('')
 const approvalLoading = ref(false)
+const activeRunId = ref<string | null>(null)
 
 const currentWorkspace = ref('')
 const attachedFiles = ref<string[]>([])
@@ -137,6 +143,10 @@ const scrollToBottom = async () => {
     messagesEl.value.scrollTop = messagesEl.value.scrollHeight
   }
 }
+
+const NOTABLE_RISKS = ['write', 'execute', 'destructive']
+
+const isNotableRisk = (risk?: string): boolean => !!risk && NOTABLE_RISKS.includes(risk)
 
 const getToolIcon = (toolName: string): string => {
   const key = Object.keys(TOOL_ICONS).find((k) => toolName.toLowerCase().includes(k))
@@ -430,6 +440,7 @@ const sendMessage = async () => {
       props.apiKey,
       currentWorkspace.value || undefined,
       streamAbortController.value.signal,
+      activeRunId.value ?? undefined,
     )
 
     if (!response.ok) {
@@ -512,6 +523,10 @@ const processStreamEvent = async (msg: ChatMessage, payload: unknown) => {
   if (typeof payload === 'string') {
     if (payload === '[DONE]') {
       msg.isStreaming = false
+      // The run finished, so there is nothing left to resume. Clearing this
+      // anywhere else — a finally block, say — would also wipe it when the
+      // connection drops, which is the one case resuming exists for.
+      activeRunId.value = null
       return
     }
     if (payload.startsWith('[ERROR]')) {
@@ -534,10 +549,15 @@ const processStreamEvent = async (msg: ChatMessage, payload: unknown) => {
   const event = payload as Record<string, unknown>
 
   switch (event.type) {
+    case 'agent_run': {
+      activeRunId.value = String(event.run_id ?? '') || null
+      break
+    }
     case 'tool_call': {
       msg.toolCalls.push({
         name: String(event.name ?? ''),
         arg: String(event.arg ?? ''),
+        risk: String(event.risk ?? ''),
         done: false,
       })
       break
@@ -545,7 +565,20 @@ const processStreamEvent = async (msg: ChatMessage, payload: unknown) => {
 
     case 'tool_result': {
       const pending = [...msg.toolCalls].reverse().find((t) => !t.done)
-      if (pending) pending.done = true
+      if (pending) {
+        pending.done = true
+        // A failed call used to finish with the same tick as a successful one,
+        // which reads as "that worked". It matters most for the calls that were
+        // refused rather than attempted — a tool needing approval on a channel
+        // that cannot ask comes back here as ok: false.
+        pending.ok = event.ok !== false
+      }
+      break
+    }
+
+    case 'citations': {
+      const items = Array.isArray(event.items) ? event.items.map(String) : []
+      msg.citations = [...new Set([...(msg.citations ?? []), ...items])]
       break
     }
 
@@ -560,8 +593,10 @@ const processStreamEvent = async (msg: ChatMessage, payload: unknown) => {
     case 'approval_request': {
       pendingApproval.value = {
         request_id: String(event.request_id ?? ''),
-        tool_name: String(event.tool_name ?? ''),
+        tool_name: String(event.tool ?? ''),
+        target: String(event.file ?? ''),
         diff: String(event.diff ?? ''),
+        risk: String(event.risk ?? ''),
       }
       approvalFeedback.value = ''
       approvalVisible.value = true
@@ -907,10 +942,33 @@ watch(
                 >
                   <i :class="['pi', getToolIcon(tool.name), 'tool-chip-icon']" />
                   <span class="tool-chip-name">{{ tool.name }}</span>
+                  <span
+                    v-if="isNotableRisk(tool.risk)"
+                    :class="['tool-chip-risk', `tool-chip-risk--${tool.risk}`]"
+                    >{{ tool.risk }}</span
+                  >
                   <span v-if="tool.arg" class="tool-chip-arg">{{ tool.arg }}</span>
-                  <i v-if="tool.done" class="pi pi-check tool-chip-status" />
+                  <i
+                    v-if="tool.done && tool.ok === false"
+                    class="pi pi-times tool-chip-status tool-chip-status--failed"
+                  />
+                  <i v-else-if="tool.done" class="pi pi-check tool-chip-status" />
                   <span v-else class="tool-chip-spinner" />
                 </div>
+              </div>
+
+              <div v-if="msg.citations?.length" class="tool-chips">
+                <a
+                  v-for="url in msg.citations"
+                  :key="url"
+                  :href="url"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  class="tool-chip tool-chip--done"
+                >
+                  <i class="pi pi-link tool-chip-icon" />
+                  <span class="tool-chip-arg">{{ url }}</span>
+                </a>
               </div>
 
               <!-- Shell output -->
@@ -1515,6 +1573,26 @@ watch(
   font-size: 0.8rem;
 }
 
+.tool-chip-risk {
+  font-size: 0.62rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  padding: 0.05rem 0.3rem;
+  border-radius: 3px;
+  flex-shrink: 0;
+}
+
+.tool-chip-risk--write {
+  background: rgba(245, 166, 35, 0.22);
+}
+
+.tool-chip-risk--execute,
+.tool-chip-risk--destructive {
+  background: rgba(226, 66, 66, 0.22);
+  color: var(--do-danger, #e24242);
+}
+
 .tool-chip-arg {
   color: inherit;
   opacity: 0.7;
@@ -1528,6 +1606,10 @@ watch(
 .tool-chip-status {
   font-size: 0.7rem;
   flex-shrink: 0;
+}
+
+.tool-chip-status--failed {
+  color: var(--do-danger, #e24242);
 }
 
 .tool-chip-spinner {

@@ -177,6 +177,7 @@ async def add_message_stream(
     user_id = request.state.user.get("user_id")
     client_workspace = request.headers.get("X-Gillie-Workspace", "")
     plan_mode = request.headers.get("X-Gillie-Mode", "") == "plan"
+    run_id = request.headers.get("X-Gillie-Run-Id", "") or None
     auth_header = request.headers.get("Authorization", "")
     auth_token = auth_header.replace("Bearer ", "") if auth_header else None
     async def event_generator():
@@ -196,6 +197,7 @@ async def add_message_stream(
                     image_content=image_content,
                     image_contents=files,
                 ),
+                run_id=run_id,
             ):
                 yield f"data: {json.dumps(token)}\n\n"
         except Exception as e:
@@ -225,7 +227,7 @@ async def approve_tool(request: Request):
     request_id = body.get("request_id", "")
     approved = bool(body.get("approved", False))
     feedback = str(body.get("feedback", "") or "")
-    found = submit_decision(request_id, approved, feedback)
+    found = await submit_decision(request_id, approved, feedback)
     return {"ok": found}
 
 

@@ -8,7 +8,9 @@ import Textarea from 'primevue/textarea'
 interface ApprovalRequest {
   request_id: string
   tool_name: string
+  target: string
   diff: string
+  risk: string
 }
 
 interface Props {
@@ -22,6 +24,10 @@ interface Emits {
   (event: 'approve', feedback: string): void
   (event: 'reject', feedback: string): void
 }
+
+const NOTABLE_RISKS = ['write', 'execute', 'destructive']
+
+const isNotableRisk = (risk?: string): boolean => !!risk && NOTABLE_RISKS.includes(risk)
 
 const props = defineProps<Props>()
 const emit = defineEmits<Emits>()
@@ -72,6 +78,14 @@ const handleReject = () => {
           <p class="approval-warning-title">{{ t('sandbox.approvalTitle') }}</p>
           <p class="approval-warning-tool">
             {{ t('sandbox.approvalTool') }}: <strong>{{ pendingApproval?.tool_name }}</strong>
+            <span
+              v-if="isNotableRisk(pendingApproval?.risk)"
+              :class="['approval-risk', `approval-risk--${pendingApproval?.risk}`]"
+              >{{ pendingApproval?.risk }}</span
+            >
+            <template v-if="pendingApproval?.target">
+              → <code>{{ pendingApproval.target }}</code>
+            </template>
           </p>
         </div>
       </div>
@@ -167,6 +181,23 @@ const handleReject = () => {
   font-weight: 600;
   color: var(--do-text-secondary);
   margin: 0 0 0.5rem;
+}
+
+.approval-risk {
+  margin-left: 0.4rem;
+  font-size: 0.65rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  padding: 0.1rem 0.35rem;
+  border-radius: 3px;
+  background: rgba(245, 166, 35, 0.22);
+}
+
+.approval-risk--execute,
+.approval-risk--destructive {
+  background: rgba(226, 66, 66, 0.25);
+  color: var(--do-danger, #e24242);
 }
 
 .diff-viewer {

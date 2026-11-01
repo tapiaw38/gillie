@@ -26,6 +26,7 @@ export interface ISandboxService {
     apiKey: string,
     workspace?: string,
     signal?: AbortSignal,
+    runId?: string,
   ): Promise<Response>
   approveToolRequest(
     requestId: string,
@@ -102,6 +103,7 @@ export class SandboxService implements ISandboxService {
     apiKey: string,
     workspace?: string,
     signal?: AbortSignal,
+    runId?: string,
   ): Promise<Response> {
     const baseURL = this.api.defaults.baseURL?.replace(/\/$/, '') ?? ''
     const headers: Record<string, string> = {
@@ -112,6 +114,7 @@ export class SandboxService implements ISandboxService {
     if (workspace) {
       headers['X-Gillie-Workspace'] = workspace
     }
+    if (runId) headers['X-Gillie-Run-Id'] = runId
 
     return fetch(`${baseURL}/conversation/${conversationId}/message/stream`, {
       method: 'POST',

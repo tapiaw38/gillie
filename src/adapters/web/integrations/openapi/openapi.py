@@ -192,17 +192,18 @@ class OpenAIIntegration:
         previous_messages: str,
         profile: Profile,
         conversation_id: Optional[str] = None,
-        shell_output_queue=None,
         client_workspace: str = "",
         plan_mode: bool = False,
         auth_token: Optional[str] = None,
+        run_id: Optional[str] = None,
     ):
-        """Stream AI response tokens via LangChain. Yields str tokens and shell_output dicts.
+        """Stream AI response tokens via LangChain.
+
+        Yields str tokens for answer text, plus dicts for everything the CLI
+        renders alongside it: tool_call, tool_result, shell_output,
+        local_file_used and approval_request.
 
         Args:
-            shell_output_queue: Optional asyncio.Queue. When provided, run_shell tool output
-                is emitted line-by-line as {"type": "shell_output", "line": "..."} dicts
-                in real time rather than buffering until the command finishes.
             client_workspace: Optional path sent by the CLI client via X-Gillie-Workspace.
                 When non-empty, overrides the GILLIE_WORKSPACE env var for all file tools.
             plan_mode: When True, state-mutating tools return a description of the intended
@@ -218,10 +219,10 @@ class OpenAIIntegration:
             profile=profile,
             conversation_id=conversation_id or profile.user_id,
             use_tools=True,
-            shell_output_queue=shell_output_queue,
             client_workspace=client_workspace,
             plan_mode=plan_mode,
             auth_token=auth_token,
+            run_id=run_id,
         ):
             yield token
 

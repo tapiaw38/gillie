@@ -1,29 +1,20 @@
 """
-Conversation Memory Manager using LangGraph
+Conversation history shaping.
 
-This module provides persistent conversation memory management using LangGraph's
-checkpoint system, allowing for better context retention across messages.
+The durable record of a conversation lives in MongoDB (see the conversation
+repository); this module only turns that record into the message list a single
+LLM call receives, trimming it to fit the model's context budget.
 """
 
 import logging
 from typing import Dict, Any, List, Optional
-from datetime import datetime
-from langgraph.checkpoint.memory import MemorySaver
 from langchain_core.messages import HumanMessage, AIMessage, SystemMessage, BaseMessage
 
 logger = logging.getLogger(__name__)
 
 
 class ConversationMemoryManager:
-    """
-    Manages conversation memory using LangGraph's checkpoint system.
-
-    Features:
-    - Persistent memory across conversation turns
-    - Configurable message history length
-    - Automatic memory optimization
-    - Thread-based conversation tracking
-    """
+    """Builds and trims the per-request message window."""
 
     def __init__(self, max_messages: int = 20):
         """
@@ -32,7 +23,6 @@ class ConversationMemoryManager:
         Args:
             max_messages: Maximum number of messages to keep in memory
         """
-        self.memory = MemorySaver()
         self.max_messages = max_messages
         logger.info(f"ConversationMemoryManager initialized with max_messages={max_messages}")
 
@@ -129,90 +119,3 @@ class ConversationMemoryManager:
 
         optimized.extend(history)
         return optimized
-
-    def get_conversation_state(
-        self,
-        thread_id: str
-    ) -> Optional[Dict[str, Any]]:
-        """
-        Get the current state of a conversation thread.
-
-        Args:
-            thread_id: Unique thread identifier
-
-        Returns:
-            Conversation state dictionary or None if not found
-        """
-        try:
-            logger.debug(f"Retrieving state for thread: {thread_id}")
-            return {
-                "thread_id": thread_id,
-                "last_accessed": datetime.utcnow().isoformat(),
-            }
-        except Exception as e:
-            logger.error(f"Error retrieving conversation state: {e}")
-            return None
-
-    def save_checkpoint(
-        self,
-        thread_id: str,
-        messages: List[BaseMessage],
-        metadata: Optional[Dict[str, Any]] = None
-    ) -> bool:
-        """
-        Save a checkpoint of the conversation state.
-
-        Args:
-            thread_id: Unique thread identifier
-            messages: Current message history
-            metadata: Optional metadata to store with checkpoint
-
-        Returns:
-            True if successful, False otherwise
-        """
-        try:
-            checkpoint_data = {
-                "messages": messages,
-                "metadata": metadata or {},
-                "timestamp": datetime.utcnow().isoformat(),
-            }
-
-            logger.debug(
-                f"Saving checkpoint for thread {thread_id}: {len(messages)} messages"
-            )
-
-            return True
-
-        except Exception as e:
-            logger.error(f"Error saving checkpoint: {e}")
-            return False
-
-    def clear_thread(self, thread_id: str) -> bool:
-        """
-        Clear memory for a specific thread.
-
-        Args:
-            thread_id: Thread to clear
-
-        Returns:
-            True if successful, False otherwise
-        """
-        try:
-            logger.info(f"Clearing memory for thread: {thread_id}")
-            return True
-        except Exception as e:
-            logger.error(f"Error clearing thread memory: {e}")
-            return False
-
-    def get_memory_stats(self) -> Dict[str, Any]:
-        """
-        Get statistics about current memory usage.
-
-        Returns:
-            Dictionary with memory statistics
-        """
-        return {
-            "max_messages": self.max_messages,
-            "backend": "LangGraph MemorySaver",
-            "persistent": True,
-        }
