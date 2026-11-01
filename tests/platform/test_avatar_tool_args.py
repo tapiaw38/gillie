@@ -12,6 +12,14 @@ from src.core.platform.ai.tools.models import (
 )
 
 
+_NEEDS_ASSETS = unittest.skipUnless(
+    AVATAR_ANIMATIONS,
+    "needs the avatar asset manifest, which is gitignored and absent in a "
+    "fresh clone; without it no animation is installed and there is nothing "
+    "for the schema to advertise",
+)
+
+
 class AvatarAnimationArgsTests(unittest.TestCase):
     def test_missing_manifest_does_not_invent_animation_names(self):
         self.assertEqual(
@@ -19,12 +27,14 @@ class AvatarAnimationArgsTests(unittest.TestCase):
             (),
         )
 
+    @_NEEDS_ASSETS
     def test_the_schema_advertises_the_installed_animations(self):
         schema = AvatarPlayAnimationArgs.model_json_schema()
         self.assertEqual(
             schema["properties"]["animation"]["enum"], list(AVATAR_ANIMATIONS)
         )
 
+    @_NEEDS_ASSETS
     def test_accepts_the_casing_and_spacing_a_model_actually_writes(self):
         for written in ("Dance", " DANCE ", "finger_gun", "fingergun"):
             with self.subTest(written=written):
