@@ -3,6 +3,7 @@ import io
 import logging
 import os
 import random
+import re
 import uuid
 from datetime import datetime, timezone
 from typing import Optional, Tuple
@@ -25,6 +26,76 @@ from src.core.use_cases.conversation.compact_use_case import CompactConversation
 logger = logging.getLogger(__name__)
 
 _LANG_MAP = {"en": "en-US", "es": "es-ES", "fr": "fr-FR", "de": "de-DE", "pt": "pt-BR"}
+
+# Markers that only really appear in one of the supported languages. Deliberately
+# not a language detector: the job is to notice when a reply is clearly not in
+# the profile's language, so a marker shared across candidates (Spanish and
+# Portuguese "está", "como", "para") earns its keep only where it is distinctive.
+_LANG_MARKERS = {
+    "es": (
+        "¿¡ñ",
+        {"qué", "cómo", "dónde", "gracias", "hola", "acá", "aquí", "puedo",
+         "ayudarte", "ayudar", "para", "por", "con", "pero", "muy", "tengo",
+         "necesito", "escribir", "estoy", "hoy", "soy", "quién", "cuál"},
+    ),
+    "pt": (
+        "ãõç",
+        {"você", "não", "obrigado", "então", "isso", "estou", "fazer",
+         "preciso", "aqui", "muito"},
+    ),
+    "fr": (
+        "çœ",
+        {"bonjour", "merci", "vous", "c'est", "êtes", "voilà", "aujourd'hui",
+         "besoin", "pouvez", "je", "votre"},
+    ),
+    "de": (
+        "äöüß",
+        {"ich", "nicht", "danke", "hallo", "kann", "heute", "bitte", "und",
+         "ist", "brauchen", "ihnen"},
+    ),
+    "en": (
+        "",
+        {"hello", "what", "you", "need", "today", "the", "and", "is", "can",
+         "thanks", "please", "help", "your", "there", "would", "with"},
+    ),
+}
+
+_WORD_RE = re.compile(r"[^\W\d_]+(?:'[^\W\d_]+)?", re.UNICODE)
+
+# A character that belongs to one language only is worth more than a stopword,
+# which can turn up in a quotation or a proper noun.
+_MARKER_CHAR_WEIGHT = 3
+_LANG_MIN_SCORE = 2
+
+
+def _infer_language(text: str) -> Optional[str]:
+    """The language `text` is clearly written in, or None when it is not clear.
+
+    Returning None is the common case for short text, and the caller then keeps
+    whatever the profile says. Guessing from one or two tokens would swap the
+    voice mid-conversation on an "Ok." or a bare file name.
+    """
+    if not text:
+        return None
+    lowered = text.lower()
+    words = set(_WORD_RE.findall(lowered))
+
+    scores = {}
+    for lang, (chars, stopwords) in _LANG_MARKERS.items():
+        hits = sum(1 for char in chars if char in lowered) * _MARKER_CHAR_WEIGHT
+        hits += len(words & stopwords)
+        if hits:
+            scores[lang] = hits
+    if not scores:
+        return None
+
+    ranked = sorted(scores.items(), key=lambda item: item[1], reverse=True)
+    best, best_score = ranked[0]
+    runner_up = ranked[1][1] if len(ranked) > 1 else 0
+    if best_score < _LANG_MIN_SCORE or best_score == runner_up:
+        return None
+    return best
+
 
 _FILLER_PHRASES = {
     "en": ["Let me check.", "One moment.", "Hang on a second."],
@@ -755,6 +826,24 @@ class AddMessageUseCase:
             logger.error(f"Error generating filler audio: {e}")
             return None
 
+    @staticmethod
+    def _resolve_tts_language(text: str, profile_language: Optional[str]) -> str:
+        """Which language to speak `text` in.
+
+        The profile language says what the user asked the assistant to reply
+        in, which is not always what it actually replied in: a profile left on
+        the "en" default while the conversation runs in Spanish used to get
+        Spanish text read out by an English voice. So the text wins whenever it
+        is clearly in one language, and the profile is the fallback for
+        everything else — short fragments, file names, anything ambiguous.
+        """
+        inferred = _infer_language(text)
+        if inferred:
+            return inferred
+        if profile_language in _LANG_MAP:
+            return profile_language
+        return "en"
+
     async def _generate_audio_if_enabled(
         self, has_text_to_voice: Optional[str], text: str,
         profile, user_id: str, conversation_id: str, context,
@@ -762,7 +851,9 @@ class AddMessageUseCase:
         if not self._tts_active(has_text_to_voice, profile) or not context.platform_managers:
             return None
         try:
-            lang = profile.response_language or "en"
+            lang = self._resolve_tts_language(
+                text, profile.response_language if profile else None
+            )
             overrides = {
                 key: value
                 for key, value in (
