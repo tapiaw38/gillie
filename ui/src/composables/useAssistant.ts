@@ -17,6 +17,7 @@ export const useAssistant = () => {
     ownerMemories,
     ownerMemoriesHasMore,
     ownerMemoriesNextOffset,
+    filesVectorStatuses,
 
     isAddAssistantProfilePending,
     isAddAssistantProfileSuccess,
@@ -99,6 +100,7 @@ export const useAssistant = () => {
     deleteContact,
     listOwnerMemories,
     removeFileById,
+    getFilesVectorStatus,
     addIntegration,
     removeIntegrationById,
   } = assistantStore
@@ -109,6 +111,7 @@ export const useAssistant = () => {
     ownerMemories,
     ownerMemoriesHasMore,
     ownerMemoriesNextOffset,
+    filesVectorStatuses,
 
     addAssistantProfileError,
     isAddAssistantProfilePending,
@@ -190,6 +193,7 @@ export const useAssistant = () => {
     deleteContact,
     listOwnerMemories,
     removeFileById,
+    getFilesVectorStatus,
     addIntegration,
     removeIntegrationById,
     reset: assistantStore.$reset,

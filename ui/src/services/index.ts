@@ -12,6 +12,7 @@ import { clickupService } from './clickup'
 import { jiraService } from './jira'
 import { slackService } from './slack'
 import { teamsService } from './teams'
+import { avatarService } from './avatar'
 
 class Services {
   assistantService: typeof assistantService
@@ -28,6 +29,7 @@ class Services {
   jiraService: typeof jiraService
   slackService: typeof slackService
   teamsService: typeof teamsService
+  avatarService: typeof avatarService
 
   constructor() {
     this.assistantService = assistantService
@@ -44,6 +46,7 @@ class Services {
     this.jiraService = jiraService
     this.slackService = slackService
     this.teamsService = teamsService
+    this.avatarService = avatarService
   }
 }
 

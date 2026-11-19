@@ -1,4 +1,5 @@
 import asyncio
+import re
 import tempfile
 import os
 import logging
@@ -10,6 +11,10 @@ logger = logging.getLogger(__name__)
 
 
 class TTSIntegration:
+    DEFAULT_SPEECH_SPEED = 1.3
+    MIN_PITCH_SEMITONES = -6.0
+    MAX_PITCH_SEMITONES = 6.0
+
     def __init__(self, config_service: ConfigurationService):
         self.config_service = config_service
         self._executor = ThreadPoolExecutor(max_workers=2)
@@ -43,6 +48,11 @@ class TTSIntegration:
 
         tts_settings = {**self.default_settings, **(settings or {})}
 
+        if not self._prepare_neural_text(
+            text, tts_settings.get("language", "en")
+        ).strip():
+            raise ValueError("Text has nothing speakable")
+
         if output_path is None:
             temp_dir = tempfile.gettempdir()
             output_path = os.path.join(
@@ -51,14 +61,216 @@ class TTSIntegration:
 
         os.makedirs(os.path.dirname(output_path), exist_ok=True)
 
-        loop = asyncio.get_event_loop()
-        await loop.run_in_executor(
-            self._executor, self._generate_speech_file, text, output_path, tts_settings
+        config = self._tts_config()
+        if self._resolve_engine(config, tts_settings.get("engine")) == "edge":
+            try:
+                await self._synthesize_edge(text, output_path, tts_settings, config)
+                return output_path
+            except Exception as e:
+                logger.warning("TTS (edge): failed, falling back to gTTS — %s", e)
+                await self._run_blocking(
+                    self._generate_gtts_speech_file, text, output_path, tts_settings
+                )
+                await self._apply_pitch_if_needed(output_path, tts_settings)
+                return output_path
+
+        await self._run_blocking(
+            self._generate_speech_file, text, output_path, tts_settings
         )
+        await self._apply_pitch_if_needed(output_path, tts_settings)
 
         return output_path
 
+    async def _run_blocking(self, func, *args):
+        loop = asyncio.get_event_loop()
+        return await loop.run_in_executor(self._executor, func, *args)
+
+    def _tts_config(self):
+        return getattr(self.config_service, "tts_config", None)
+
     def _generate_speech_file(
+        self, text: str, output_path: str, settings: Dict[str, Any]
+    ) -> None:
+        """Generate speech with the configured engine, falling back to gTTS."""
+        config = self._tts_config()
+        engine = self._resolve_engine(config, settings.get("engine"))
+
+        if engine == "openai":
+            try:
+                self._generate_openai_speech_file(text, output_path, settings, config)
+                return
+            except Exception as e:
+                logger.warning("TTS (OpenAI): failed, falling back to gTTS — %s", e)
+        elif engine == "edge":
+            try:
+                self._generate_edge_speech_file(text, output_path, settings, config)
+                return
+            except Exception as e:
+                logger.warning("TTS (edge): failed, falling back to gTTS — %s", e)
+
+        self._generate_gtts_speech_file(text, output_path, settings)
+
+    @staticmethod
+    def _resolve_engine(config, requested: Optional[str] = None) -> str:
+        engine = (requested or getattr(config, "engine", "") or "").strip().lower()
+        if engine == "openai" and not getattr(config, "api_key", ""):
+            logger.warning("TTS: openai engine requested without an API key, using gTTS")
+            return "gtts"
+        if engine:
+            return engine
+        return "openai" if getattr(config, "api_key", "") else "gtts"
+
+    def _generate_edge_speech_file(
+        self, text: str, output_path: str, settings: Dict[str, Any], config
+    ) -> None:
+        asyncio.run(self._synthesize_edge(text, output_path, settings, config))
+
+    async def _synthesize_edge(
+        self, text: str, output_path: str, settings: Dict[str, Any], config
+    ) -> None:
+        import edge_tts
+
+        voice = settings.get("voice") or config.voice or self._default_edge_voice(
+            settings.get("language", "en")
+        )
+        rate = self._edge_rate(settings, config)
+        pitch = self._edge_pitch(settings)
+        logger.info("TTS (edge): voice='%s' rate='%s' pitch='%s'", voice, rate, pitch)
+
+        processed_text = self._prepare_neural_text(
+            text, language=settings.get("language", "en")
+        )
+
+        await edge_tts.Communicate(processed_text, voice, rate=rate, pitch=pitch).save(output_path)
+
+        if not os.path.exists(output_path) or os.path.getsize(output_path) <= 1000:
+            raise RuntimeError("edge TTS produced no usable audio")
+        logger.info(
+            "TTS (edge): SUCCESS — %d bytes at %s",
+            os.path.getsize(output_path), output_path,
+        )
+
+    @classmethod
+    def _speech_speed(cls, settings: Dict[str, Any], config) -> float:
+        for candidate in (settings.get("speed"), getattr(config, "speed", None)):
+            if not candidate:
+                continue
+            try:
+                return float(candidate)
+            except (TypeError, ValueError):
+                logger.warning("TTS: ignoring invalid speed %r", candidate)
+        return cls.DEFAULT_SPEECH_SPEED
+
+    @classmethod
+    def _edge_rate(cls, settings: Dict[str, Any], config) -> str:
+        return f"{round((cls._speech_speed(settings, config) - 1) * 100):+d}%"
+
+    @classmethod
+    def _pitch_semitones(cls, settings: Dict[str, Any]) -> float:
+        try:
+            value = float(settings.get("pitch", 0.0) or 0.0)
+        except (TypeError, ValueError):
+            logger.warning("TTS: ignoring invalid pitch %r", settings.get("pitch"))
+            return 0.0
+        return max(cls.MIN_PITCH_SEMITONES, min(cls.MAX_PITCH_SEMITONES, value))
+
+    @classmethod
+    def _edge_pitch(cls, settings: Dict[str, Any]) -> str:
+        semitones = cls._pitch_semitones(settings)
+        hz = round(440 * (2 ** (semitones / 12) - 1))
+        return f"{hz:+d}Hz"
+
+    async def _apply_pitch_if_needed(self, output_path: str, settings: Dict[str, Any]) -> None:
+        pitch = self._pitch_semitones(settings)
+        if pitch == 0 or not os.path.exists(output_path):
+            return
+        await self._run_blocking(self._pitch_wav, output_path, pitch)
+
+    @staticmethod
+    def _pitch_wav(path: str, semitones: float) -> None:
+        import subprocess
+
+        factor = 2 ** (semitones / 12)
+        temp_path = path + ".pitch.wav"
+        result = subprocess.run(
+            [
+                "ffmpeg", "-y", "-i", path,
+                "-filter:a", f"asetrate=22050*{factor:.8f},aresample=22050,atempo={1 / factor:.8f}",
+                "-acodec", "pcm_s16le", temp_path,
+            ],
+            capture_output=True, text=True, timeout=30,
+        )
+        if result.returncode != 0:
+            if os.path.exists(temp_path):
+                os.unlink(temp_path)
+            raise RuntimeError(f"ffmpeg pitch filter failed: {result.stderr[:200]}")
+        os.replace(temp_path, path)
+
+    @staticmethod
+    def _default_edge_voice(language: str) -> str:
+        return {"es": "es-AR-ElenaNeural"}.get(language, "en-US-AvaNeural")
+
+    def _generate_openai_speech_file(
+        self, text: str, output_path: str, settings: Dict[str, Any], config
+    ) -> None:
+        import requests
+
+        voice = settings.get("voice") or config.voice or "nova"
+        model = config.model or "gpt-4o-mini-tts"
+        base_url = (config.base_url or "https://api.openai.com/v1").rstrip("/")
+        logger.info("TTS (OpenAI): model='%s' voice='%s'", model, voice)
+
+        response = requests.post(
+            f"{base_url}/audio/speech",
+            headers={"Authorization": f"Bearer {config.api_key}"},
+            json={
+                "model": model,
+                "voice": voice,
+                "input": self._prepare_neural_text(
+                    text, language=settings.get("language", "en")
+                ),
+                "speed": self._speech_speed(settings, config),
+                "response_format": "wav",
+            },
+            timeout=60,
+        )
+        response.raise_for_status()
+
+        temp_source_path = output_path + ".openai.wav"
+        with open(temp_source_path, "wb") as audio_file:
+            audio_file.write(response.content)
+
+        try:
+            self._transcode_to_pcm(temp_source_path, output_path)
+        finally:
+            if os.path.exists(temp_source_path):
+                os.unlink(temp_source_path)
+
+        if not os.path.exists(output_path) or os.path.getsize(output_path) <= 1000:
+            raise RuntimeError("OpenAI TTS produced no usable audio")
+        logger.info(
+            "TTS (OpenAI): SUCCESS — %d bytes at %s",
+            os.path.getsize(output_path), output_path,
+        )
+
+    def _transcode_to_pcm(self, source_path: str, output_path: str) -> None:
+        import subprocess
+
+        result = subprocess.run(
+            [
+                "ffmpeg", "-y",
+                "-i", source_path,
+                "-acodec", "pcm_s16le",
+                "-ar", "22050",
+                "-ac", "1",
+                output_path,
+            ],
+            capture_output=True, text=True, timeout=30,
+        )
+        if result.returncode != 0:
+            raise RuntimeError(f"ffmpeg failed: {result.stderr[:200]}")
+
+    def _generate_gtts_speech_file(
         self, text: str, output_path: str, settings: Dict[str, Any]
     ) -> None:
         """Generate speech file using gTTS (Google Text-to-Speech)."""
@@ -163,41 +375,98 @@ class TTSIntegration:
     async def validate_text_length(self, text: str, max_length: int = 5000) -> bool:
         return len(text.strip()) > 0 and len(text) <= max_length
 
+    _EMOJI_AND_SYMBOLS = re.compile(
+        "["
+        "\U0001F000-\U0001FAFF"
+        "\U00002190-\U000021FF"
+        "\U00002300-\U000023FF"
+        "\U00002460-\U000024FF"
+        "\U00002500-\U00002BFF"
+        "\U0000FE00-\U0000FE0F"
+        "\U0001F1E6-\U0001F1FF"
+        "\U000E0000-\U000E007F"
+        "\U0000200D"
+        "\U000020E3"
+        "]+"
+    )
+
+    _MARKUP_LEFTOVERS = re.compile(r"[*_~`|#^]+")
+
+    def _strip_unspeakable(self, text: str, language: str = "en") -> str:
+        """Remove everything a voice should never read out: emoji, code, URLs."""
+        spanish = language == "es"
+        code_word = "un bloque de código" if spanish else "a code block"
+        link_word = "un enlace" if spanish else "a link"
+        path_word = "una ruta" if spanish else "a path"
+
+        cleaned = re.sub(r"```[\s\S]*?```", f" {code_word} ", text)
+        cleaned = re.sub(r"`[^`\n]+`", " ", cleaned)
+        cleaned = re.sub(r"!\[[^\]]*\]\([^)]*\)", " ", cleaned)
+        cleaned = re.sub(r"\[([^\]]+)\]\([^)]*\)", r"\1", cleaned)
+        cleaned = re.sub(r"<[^>\s]+@[^>\s]+>|\b[\w.+-]+@[\w-]+\.[\w.]+\b", f" {link_word} ", cleaned)
+        cleaned = re.sub(r"\b(?:https?://|www\.)\S+", f" {link_word} ", cleaned)
+        cleaned = re.sub(r"(?<![\w.])(?:~|\.{1,2})?/[\w./-]{2,}", f" {path_word} ", cleaned)
+        cleaned = re.sub(r"^\s{0,3}#{1,6}\s+", "", cleaned, flags=re.MULTILINE)
+        cleaned = re.sub(r"^\s*>+\s?", "", cleaned, flags=re.MULTILINE)
+        cleaned = re.sub(r"^\s*[-*+]\s+", "", cleaned, flags=re.MULTILINE)
+        cleaned = re.sub(r"^\s*[-*_]{3,}\s*$", " ", cleaned, flags=re.MULTILINE)
+        cleaned = re.sub(r"\*{1,3}([^*\n]+)\*{1,3}", r"\1", cleaned)
+        cleaned = re.sub(r"(?<![\w])_{1,2}([^_\n]+)_{1,2}(?![\w])", r"\1", cleaned)
+        cleaned = re.sub(r"~~([^~\n]+)~~", r"\1", cleaned)
+        cleaned = self._EMOJI_AND_SYMBOLS.sub(" ", cleaned)
+        cleaned = self._MARKUP_LEFTOVERS.sub(" ", cleaned)
+        return re.sub(r"[ \t]{2,}", " ", cleaned).strip()
+
+    _ABBREVIATIONS = {
+        "es": {
+            "Dr.": "Doctor", "Dra.": "Doctora",
+            "Sr.": "Señor", "Sra.": "Señora", "Srta.": "Señorita",
+            "etc.": "etcétera", "p.ej.": "por ejemplo", "vs.": "versus",
+            "ej.": "ejemplo", "pág.": "página", "págs.": "páginas",
+            "cap.": "capítulo", "art.": "artículo", "núm.": "número",
+            "tel.": "teléfono", "dir.": "dirección",
+            "admin.": "administración", "info.": "información",
+            "config.": "configuración", "app.": "aplicación",
+            "API": "A P I", "URL": "U R L", "HTTP": "H T T P",
+            "JSON": "J S O N", "XML": "X M L", "PDF": "P D F",
+            "TTS": "T T S", "AI": "A I", "IA": "I A",
+        },
+        "en": {
+            "Dr.": "Doctor", "Mrs.": "Missus", "Mr.": "Mister", "Ms.": "Miss",
+            "etc.": "etcetera", "e.g.": "for example", "i.e.": "that is",
+            "vs.": "versus", "approx.": "approximately",
+            "API": "A P I", "URL": "U R L", "HTTP": "H T T P",
+            "JSON": "J S O N", "XML": "X M L", "PDF": "P D F",
+            "TTS": "T T S", "STT": "S T T", "AI": "A I",
+        },
+    }
+
+    def _expand_abbreviations(self, text: str, language: str = "en") -> str:
+        abbreviations = self._ABBREVIATIONS.get(language, self._ABBREVIATIONS["en"])
+        for abbrev, expansion in abbreviations.items():
+            text = text.replace(abbrev, expansion)
+        return text
+
+    def _prepare_neural_text(self, text: str, language: str = "en") -> str:
+        """Neural voices handle punctuation, numbers and symbols on their own."""
+        try:
+            return self._expand_abbreviations(
+                self._strip_unspeakable(text, language), language
+            )
+        except Exception:
+            return text
+
     def _preprocess_text_for_natural_speech(self, text: str, language: str = "en") -> str:
         """Pre-process text to make it sound more natural when spoken."""
         try:
             import re
 
-            processed_text = text
+            processed_text = self._strip_unspeakable(text, language)
 
             processed_text = re.sub(r"([.!?])\s+", r"\1... ", processed_text)
             processed_text = re.sub(r"([,;:])\s+", r"\1.. ", processed_text)
 
-            if language == "es":
-                abbreviations = {
-                    "Dr.": "Doctor", "Dra.": "Doctora",
-                    "Sr.": "Señor", "Sra.": "Señora", "Srta.": "Señorita",
-                    "etc.": "etcétera", "p.ej.": "por ejemplo", "vs.": "versus",
-                    "ej.": "ejemplo", "pág.": "página", "págs.": "páginas",
-                    "cap.": "capítulo", "art.": "artículo", "núm.": "número",
-                    "tel.": "teléfono", "dir.": "dirección",
-                    "admin.": "administración", "info.": "información",
-                    "config.": "configuración", "app.": "aplicación",
-                    "API": "A P I", "URL": "U R L", "HTTP": "H T T P",
-                    "JSON": "J S O N", "XML": "X M L", "PDF": "P D F",
-                    "TTS": "T T S", "AI": "A I", "IA": "I A",
-                }
-            else:
-                abbreviations = {
-                    "Dr.": "Doctor", "Mrs.": "Missus", "Mr.": "Mister", "Ms.": "Miss",
-                    "etc.": "etcetera", "e.g.": "for example", "i.e.": "that is",
-                    "vs.": "versus", "approx.": "approximately",
-                    "API": "A P I", "URL": "U R L", "HTTP": "H T T P",
-                    "JSON": "J S O N", "XML": "X M L", "PDF": "P D F",
-                    "TTS": "T T S", "STT": "S T T", "AI": "A I",
-                }
-            for abbrev, expansion in abbreviations.items():
-                processed_text = processed_text.replace(abbrev, expansion)
+            processed_text = self._expand_abbreviations(processed_text, language)
 
             if language == "es":
                 number_words = {
@@ -215,16 +484,6 @@ class TTSIntegration:
             processed_text = re.sub(r"\*\*(.*?)\*\*", r".. \1 ..", processed_text)
             processed_text = re.sub(r"\*(.*?)\*", r". \1 .", processed_text)
             processed_text = re.sub(r"_(.*?)_", r". \1 .", processed_text)
-
-            processed_text = re.sub(
-                r"[😀😃😄😁😆😅😂🤣😊😇🙂🙃😉😌😍🥰😘😗😙😚😋😛😝😜"
-                r"🤪🤨🧐🤓😎🤩🥳😏😒😞😔😟😕🙁☹️😣😖😫😩🥺😢😭😤😠😡"
-                r"🤬🤯😳🥵🥶😱😨😰😥😓🤗🤔🤭🤫🤥😶😐😑😬🙄😯😦😧😮😲"
-                r"🥱😴🤤😪😵🤐🥴🤢🤮🤧😷🤒🤕🤑🤠😈👿👹👺🤡💩👻💀☠️"
-                r"👽👾🤖🎃😺😸😹😻😼😽🙀😿😾]",
-                " .. ",
-                processed_text,
-            )
 
             replacements = {
                 "&": "y", "@": "arroba", "#": "numeral", "$": "dólares",

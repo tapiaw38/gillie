@@ -46,7 +46,6 @@ class STTIntegration:
             wav_path = self._convert_to_wav(audio_path)
 
             with sr.AudioFile(wav_path) as source:
-                recognizer.adjust_for_ambient_noise(source, duration=0.5)
                 audio_data = recognizer.record(source)
 
             if wav_path != audio_path and os.path.exists(wav_path):

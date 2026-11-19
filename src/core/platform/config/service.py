@@ -184,6 +184,62 @@ class VisionConfig:
     model: str = ""
 
 
+TTS_ENGINES: Dict[str, Any] = {
+    "edge": {
+        "label": "Edge Neural",
+        "description": "Free neural voices, no API key",
+        "requires_key": False,
+        "voices": {
+            "es-AR-ElenaNeural": "Elena — español (Argentina)",
+            "es-AR-TomasNeural": "Tomás — español (Argentina)",
+            "es-MX-DaliaNeural": "Dalia — español (México)",
+            "es-ES-ElviraNeural": "Elvira — español (España)",
+            "es-ES-AlvaroNeural": "Álvaro — español (España)",
+            "en-US-AvaNeural": "Ava — English (US)",
+            "en-US-AndrewNeural": "Andrew — English (US)",
+            "en-US-EmmaNeural": "Emma — English (US)",
+        },
+    },
+    "openai": {
+        "label": "OpenAI",
+        "description": "Paid, requires an OpenAI API key",
+        "requires_key": True,
+        "voices": {
+            "alloy": "Alloy — neutral, even",
+            "ash": "Ash — warm, conversational",
+            "ballad": "Ballad — soft, expressive",
+            "coral": "Coral — bright, friendly",
+            "echo": "Echo — calm, low",
+            "fable": "Fable — animated, storytelling",
+            "nova": "Nova — clear, upbeat",
+            "onyx": "Onyx — deep, steady",
+            "sage": "Sage — measured, gentle",
+            "shimmer": "Shimmer — light, airy",
+            "verse": "Verse — natural, versatile",
+        },
+    },
+    "gtts": {
+        "label": "Google Translate",
+        "description": "Free robotic fallback, no voice choice",
+        "requires_key": False,
+        "voices": {},
+    },
+}
+
+
+def voices_for_engine(engine: str) -> Dict[str, str]:
+    return (TTS_ENGINES.get(engine) or {}).get("voices", {})
+
+
+@dataclass
+class TTSConfig:
+    engine: str = ""
+    api_key: str = ""
+    base_url: str = "https://api.openai.com/v1"
+    model: str = "gpt-4o-mini-tts"
+    voice: str = "nova"
+
+
 @dataclass
 class ImageGenerationConfig:
     api_key: str = ""
@@ -226,6 +282,7 @@ class ConfigurationService:
     google_gmail_config: Optional[GoogleGmailConfig] = None
     notion_config: Optional[NotionConfig] = None
     storage_config: Optional[StorageConfig] = None
+    tts_config: Optional[TTSConfig] = None
     vision_config: Optional[VisionConfig] = None
     image_generation_config: Optional[ImageGenerationConfig] = None
     video_generation_config: Optional[VideoGenerationConfig] = None
@@ -247,6 +304,15 @@ def get_env(key: str, fallback: str) -> str:
     return os.getenv(key, fallback)
 
 
+def _as_bool(value, fallback: bool) -> bool:
+    """Read a flag that may arrive as a real bool or as text from a config file."""
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, str):
+        return value.strip().lower() == "true"
+    return fallback
+
+
 def read_config() -> ConfigurationService:
     load_dotenv()
 
@@ -261,7 +327,7 @@ def read_config() -> ConfigurationService:
         host=get_env("APP_HOST", "localhost"),
         jwt_secret=get_env("APP_JWT_SECRET", "secret"),
         encryption_algorithm=get_env("APP_ENCRYPTION_ALGORITHM", "HS256"),
-        auth_trust_localhost=get_env("AUTH_TRUST_LOCALHOST", "false").lower() == "true",
+        auth_trust_localhost=get_env("AUTH_TRUST_LOCALHOST", "true").lower() == "true",
     )
 
     nosql_config = NoSQLConfig(
@@ -432,6 +498,14 @@ def read_config() -> ConfigurationService:
         redirect_uri=get_env("GOOGLE_DRIVE_REDIRECT_URI", "http://localhost:8000/api/v1/drive/oauth/callback"),
     )
 
+    tts_config = TTSConfig(
+        engine=get_env("TTS_ENGINE", ""),
+        api_key=get_env("TTS_API_KEY", ""),
+        base_url=get_env("TTS_BASE_URL", "https://api.openai.com/v1"),
+        model=get_env("TTS_MODEL", "gpt-4o-mini-tts"),
+        voice=get_env("TTS_VOICE", "nova"),
+    )
+
     vision_config = VisionConfig(
         api_key=get_env("VISION_API_KEY", ""),
         base_url=get_env("VISION_BASE_URL", ""),
@@ -480,6 +554,7 @@ def read_config() -> ConfigurationService:
         google_gmail_config=google_gmail_config,
         notion_config=notion_config,
         storage_config=storage_config,
+        tts_config=tts_config,
         vision_config=vision_config,
         image_generation_config=image_generation_config,
         video_generation_config=video_generation_config,
@@ -599,7 +674,9 @@ def init_config_from_json(config_data: "AssistantConfig") -> None:
             host=config_data.server.host,
             jwt_secret="single-user-no-auth",
             encryption_algorithm="HS256",
-            auth_trust_localhost=getattr(config_data.server, "auth_trust_localhost", False),
+            auth_trust_localhost=_as_bool(
+                getattr(config_data.server, "auth_trust_localhost", True), True
+            ),
         ),
         nosql_config=nosql_config,
         openai_config=OpenAIConfig(
@@ -701,6 +778,13 @@ def init_config_from_json(config_data: "AssistantConfig") -> None:
             backend=s.storage.backend if hasattr(s, "storage") else "local",
             local_path=s.storage.local_path if hasattr(s, "storage") else str(Path.home() / ".local" / "share" / "gillie" / "storage"),
             local_base_url=s.storage.local_base_url if hasattr(s, "storage") else "http://localhost:8000/api/storage",
+        ),
+        tts_config=TTSConfig(
+            engine=getattr(s.tts, "engine", ""),
+            api_key=s.tts.api_key if hasattr(s.tts, "api_key") else "",
+            base_url=s.tts.base_url if getattr(s.tts, "base_url", "") else "https://api.openai.com/v1",
+            model=s.tts.model if getattr(s.tts, "model", "") else "gpt-4o-mini-tts",
+            voice=s.tts.voice if getattr(s.tts, "voice", "") else "nova",
         ),
         vision_config=VisionConfig(
             api_key=s.vision.api_key if hasattr(s, "vision") else "",

@@ -9,6 +9,18 @@ const gillieAPI = {
   glob: (pattern: string, base: string): Promise<string[]> =>
     ipcRenderer.invoke('fs:glob', pattern, base),
   fetchUrl: (url: string): Promise<string> => ipcRenderer.invoke('net:fetchUrl', url),
+  avatar: {
+    listAssets: (): Promise<{ model: string | null; animations: string[] }> =>
+      ipcRenderer.invoke('avatar:listAssets'),
+    importModel: (): Promise<{ model: string | null; animations: string[] }> =>
+      ipcRenderer.invoke('avatar:importModel'),
+    importAnimations: (): Promise<{ model: string | null; animations: string[] }> =>
+      ipcRenderer.invoke('avatar:importAnimations'),
+    removeAnimation: (name: string): Promise<{ model: string | null; animations: string[] }> =>
+      ipcRenderer.invoke('avatar:removeAnimation', name),
+    save: (): Promise<{ model: string | null; animations: string[] }> =>
+      ipcRenderer.invoke('avatar:save'),
+  },
 }
 
 if (process.contextIsolated) {
@@ -19,8 +31,8 @@ if (process.contextIsolated) {
     console.error(error)
   }
 } else {
-  // @ts-ignore
+  // @ts-expect-error Electron exposes this global in non-isolated preload mode.
   window.electron = electronAPI
-  // @ts-ignore
+  // @ts-expect-error Electron exposes this global in non-isolated preload mode.
   window.electronAPI = gillieAPI
 }

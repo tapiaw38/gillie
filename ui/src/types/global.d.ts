@@ -20,6 +20,20 @@ declare global {
   }
 
   interface Window {
+    electronAPI?: {
+      readFile: (filePath: string) => Promise<string>
+      listDir: (dirPath: string) => Promise<string[]>
+      listDirShallow: (dirPath: string) => Promise<string[]>
+      glob: (pattern: string, base: string) => Promise<string[]>
+      fetchUrl: (url: string) => Promise<string>
+      avatar: {
+        listAssets: () => Promise<{ model: string | null; animations: string[] }>
+        importModel: () => Promise<{ model: string | null; animations: string[] }>
+        importAnimations: () => Promise<{ model: string | null; animations: string[] }>
+        removeAnimation: (name: string) => Promise<{ model: string | null; animations: string[] }>
+        save: () => Promise<{ model: string | null; animations: string[] }>
+      }
+    }
     google?: {
       accounts?: {
         oauth2?: {

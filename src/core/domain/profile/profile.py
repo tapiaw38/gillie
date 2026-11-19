@@ -18,6 +18,12 @@ class Profile(BaseModel):
     updated_at: Optional[datetime] = Field(default=None)
     is_active: Optional[bool] = Field(default=True)
     tts_enabled: Optional[bool] = Field(default=False)
+    tts_voice: Optional[str] = Field(default=None)
+    tts_engine: Optional[str] = Field(default=None)
+    tts_pitch: Optional[float] = Field(default=0.0)
+    avatar_width: Optional[int] = Field(default=None)
+    avatar_height: Optional[int] = Field(default=None)
+    avatar_zoom: Optional[float] = Field(default=None)
     response_language: Optional[str] = Field(default="en")
     active_provider: Optional[str] = Field(default=None)
     provider_keys: Optional[Dict[str, str]] = Field(default=None)
@@ -26,6 +32,7 @@ class Profile(BaseModel):
     contacts: Optional[List[Contact]] = Field(default=None)
     files: Optional[List[File]] = Field(default=None)
     integrations: Optional[List[Integration]] = Field(default=None)
+    avatar_assets: Optional[List[Dict[str, Any]]] = Field(default=None)
 
     class Config:
         populate_by_name = True

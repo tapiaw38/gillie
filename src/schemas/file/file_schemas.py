@@ -79,6 +79,19 @@ class FileListOutput(BaseModel):
         )
 
 
+class FileVectorStatusData(BaseModel):
+    # status: "indexed" | "processing" | "not_indexed"
+    statuses: dict[str, str]
+
+
+class FileVectorStatusOutput(BaseModel):
+    data: FileVectorStatusData
+
+    @staticmethod
+    def from_output(statuses: dict[str, str]):
+        return FileVectorStatusOutput(data=FileVectorStatusData(statuses=statuses))
+
+
 class FileDeleteOutputData(BaseModel):
     id: str
 

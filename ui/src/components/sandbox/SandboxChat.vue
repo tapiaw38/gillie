@@ -22,7 +22,8 @@ interface ChatMessage {
   content: string
   toolCalls: ToolCallEvent[]
   shellOutput: string[]
-  audioUrl?: string
+  audioUrls?: string[]
+  audioIndex?: number
   isStreaming?: boolean
 }
 
@@ -107,8 +108,6 @@ const TOOL_ICONS: Record<string, string> = {
   http_request: 'pi-send',
 }
 
-// ── Markdown renderer ─────────────────────────────────────────────────────────
-
 marked.setOptions({ breaks: true, gfm: true } as object)
 
 marked.use({
@@ -132,21 +131,6 @@ const canSend = computed(
   () => inputText.value.trim().length > 0 && !isStreaming.value && props.conversationId !== null,
 )
 
-const lastAssistantMessage = computed(() => {
-  for (let i = messages.value.length - 1; i >= 0; i--) {
-    if (messages.value[i].role === 'assistant') return messages.value[i]
-  }
-  return null
-})
-
-const isWaitingFirstToken = computed(() => {
-  if (!isStreaming.value) return false
-  const last = lastAssistantMessage.value
-  return last?.isStreaming === true && last.content === ''
-})
-
-// ── Scroll ────────────────────────────────────────────────────────────────────
-
 const scrollToBottom = async () => {
   await nextTick()
   if (messagesEl.value) {
@@ -154,14 +138,10 @@ const scrollToBottom = async () => {
   }
 }
 
-// ── Tool icon helper ──────────────────────────────────────────────────────────
-
 const getToolIcon = (toolName: string): string => {
   const key = Object.keys(TOOL_ICONS).find((k) => toolName.toLowerCase().includes(k))
   return key ? TOOL_ICONS[key] : 'pi-cog'
 }
-
-// ── Shell toggle ──────────────────────────────────────────────────────────────
 
 const toggleShell = (messageId: string) => {
   if (expandedShell.value.has(messageId)) {
@@ -172,8 +152,6 @@ const toggleShell = (messageId: string) => {
 }
 
 const isShellExpanded = (messageId: string) => expandedShell.value.has(messageId)
-
-// ── System message helper ─────────────────────────────────────────────────────
 
 const addSystemMessage = (content: string) => {
   messages.value.push({
@@ -249,11 +227,6 @@ const expandTaggedRefs = async (text: string): Promise<string> => {
   return content
 }
 
-// ── Slash command handler ─────────────────────────────────────────────────────
-
-/**
- * Returns true if the input was a slash command (handled client-side).
- */
 const handleSlashCommand = (text: string): boolean => {
   const trimmed = text.trim()
 
@@ -291,24 +264,6 @@ const handleSlashCommand = (text: string): boolean => {
   return false
 }
 
-// ── @ reference expansion ─────────────────────────────────────────────────────
-
-declare global {
-  interface Window {
-    electronAPI?: {
-      readFile: (filePath: string) => Promise<string>
-      listDir: (dirPath: string) => Promise<string[]>
-      listDirShallow: (dirPath: string) => Promise<string[]>
-      glob: (pattern: string, base: string) => Promise<string[]>
-      fetchUrl: (url: string) => Promise<string>
-    }
-  }
-}
-
-/**
- * Expand all @references in the text before sending to the backend.
- * Prepends context blocks and returns the enriched message string.
- */
 const expandAtReferences = async (text: string): Promise<string> => {
   const api = window.electronAPI
   if (!api) return text
@@ -426,8 +381,6 @@ const handlePaste = (e: ClipboardEvent) => {
   }
 }
 
-// ── Streaming send ─────────────────────────────────────────────────────────────
-
 const sendMessage = async () => {
   if (!canSend.value) return
 
@@ -435,10 +388,8 @@ const sendMessage = async () => {
   inputText.value = ''
   autocompleteVisible.value = false
 
-  // Handle slash commands client-side
   if (handleSlashCommand(rawContent)) return
 
-  // Expand @ references
   let content: string
   try {
     const withTaggedRefs = await expandTaggedRefs(rawContent)
@@ -447,7 +398,6 @@ const sendMessage = async () => {
     content = rawContent
   }
 
-  // Push user message (show original text, not the expanded context)
   messages.value.push({
     id: crypto.randomUUID(),
     role: 'user',
@@ -456,7 +406,6 @@ const sendMessage = async () => {
     shellOutput: [],
   })
 
-  // Push empty assistant placeholder
   const assistantId = crypto.randomUUID()
   messages.value.push({
     id: assistantId,
@@ -520,7 +469,6 @@ const sendMessage = async () => {
       }
     }
 
-    // Flush remaining buffer
     if (buffer.startsWith('data: ')) {
       const rawData = buffer.slice(6).trim()
       if (rawData) {
@@ -561,7 +509,6 @@ const stopStreaming = () => {
 }
 
 const processStreamEvent = async (msg: ChatMessage, payload: unknown) => {
-  // Plain string token
   if (typeof payload === 'string') {
     if (payload === '[DONE]') {
       msg.isStreaming = false
@@ -622,7 +569,11 @@ const processStreamEvent = async (msg: ChatMessage, payload: unknown) => {
     }
 
     case 'audio': {
-      msg.audioUrl = String(event.url ?? '')
+      const url = String(event.url ?? '')
+      if (url) {
+        if (!msg.audioUrls) msg.audioUrls = []
+        msg.audioUrls.push(url)
+      }
       break
     }
 
@@ -641,19 +592,12 @@ const processStreamEvent = async (msg: ChatMessage, payload: unknown) => {
   }
 }
 
-// ── Approval ──────────────────────────────────────────────────────────────────
-
 const handleApproval = async (approved: boolean, feedback: string = '') => {
   if (!pendingApproval.value) return
   approvalLoading.value = true
 
   try {
-    await approveToolRequest(
-      pendingApproval.value.request_id,
-      approved,
-      props.apiKey,
-      feedback,
-    )
+    await approveToolRequest(pendingApproval.value.request_id, approved, props.apiKey, feedback)
   } catch {
     toast.add({
       severity: 'error',
@@ -669,21 +613,16 @@ const handleApproval = async (approved: boolean, feedback: string = '') => {
   }
 }
 
-// ── Autocomplete ──────────────────────────────────────────────────────────────
-
-/** Get the raw <textarea> element from PrimeVue's wrapper */
 const getRawTextarea = (): HTMLTextAreaElement | null => {
   const el = textareaEl.value as HTMLElement | null
   return (el?.querySelector?.('textarea') ?? el) as HTMLTextAreaElement | null
 }
 
-/** Find the @ or @@ token that ends at `cursorPos` in `text`. Returns null if none. */
 const findAtToken = (
   text: string,
   cursorPos: number,
 ): { start: number; partial: string } | null => {
   let i = cursorPos - 1
-  // Walk back until whitespace
   while (i >= 0 && !/\s/.test(text[i])) i--
   const start = i + 1
   const token = text.slice(start, cursorPos)
@@ -691,23 +630,19 @@ const findAtToken = (
   return null
 }
 
-/** Fetch directory entries for a partial path and return autocomplete items */
 const fetchPathCompletions = async (
   partial: string, // e.g. "@/home/ta" or "@rel/pa"
 ): Promise<{ label: string; value: string; hint: string }[]> => {
   if (!window.electronAPI) return []
 
-  // Strip leading @ / @@
   const isDouble = partial.startsWith('@@')
   const pathPart = partial.slice(isDouble ? 2 : 1) // path after @ or @@
 
-  // Determine dir to list and prefix to filter
   const lastSlash = pathPart.lastIndexOf('/')
   const dirToList = lastSlash >= 0 ? pathPart.slice(0, lastSlash + 1) : ''
   const prefix =
     lastSlash >= 0 ? pathPart.slice(lastSlash + 1).toLowerCase() : pathPart.toLowerCase()
 
-  // Resolve dir: if absolute use as-is, else relative to workspace or cwd
   let absDir: string
   if (dirToList.startsWith('/')) {
     absDir = dirToList
@@ -717,7 +652,6 @@ const fetchPathCompletions = async (
   }
 
   try {
-    // listDirShallow returns entries like "file.txt" or "dir/" (dirs have trailing /)
     const entries = await window.electronAPI!.listDirShallow(absDir)
     const atPrefix = isDouble ? '@@' : '@'
     return entries
@@ -742,7 +676,6 @@ const updateAutocomplete = async (value: string) => {
   const ta = getRawTextarea()
   const cursor = ta?.selectionStart ?? value.length
 
-  // ── Slash commands (only when input starts with / and has no space before cursor) ──
   const textToCursor = value.slice(0, cursor)
   if (value.startsWith('/') && !value.slice(0, cursor).includes(' ')) {
     const partial = textToCursor.toLowerCase()
@@ -755,7 +688,6 @@ const updateAutocomplete = async (value: string) => {
     return
   }
 
-  // ── @ references ──
   const atToken = findAtToken(value, cursor)
   if (atToken) {
     tokenStart.value = atToken.start
@@ -763,7 +695,6 @@ const updateAutocomplete = async (value: string) => {
 
     const partial = atToken.partial
 
-    // Static hints when user just typed @ or @@
     if (partial === '@' || partial === '@@') {
       autocompleteItems.value = AT_HINTS
       autocompleteVisible.value = true
@@ -771,13 +702,11 @@ const updateAutocomplete = async (value: string) => {
       return
     }
 
-    // Skip URL — no completion for http
     if (partial.startsWith('@http')) {
       autocompleteVisible.value = false
       return
     }
 
-    // Filesystem path completion
     const items = await fetchPathCompletions(partial)
     autocompleteItems.value = items
     autocompleteVisible.value = items.length > 0
@@ -793,20 +722,16 @@ const selectAutocompleteItem = (item: { label: string; value: string }) => {
   const cursor = ta?.selectionStart ?? inputText.value.length
 
   if (tokenIsAt.value) {
-    // Replace only the @ token portion
     const before = inputText.value.slice(0, tokenStart.value)
     const after = inputText.value.slice(cursor)
     inputText.value = before + item.value + after
-    // Place cursor after inserted text
     nextTick(() => {
       const pos = tokenStart.value + item.value.length
       ta?.setSelectionRange(pos, pos)
       ta?.focus()
-      // If it ends with / (directory), trigger completion again
       if (item.value.endsWith('/')) updateAutocomplete(inputText.value)
     })
   } else {
-    // Slash command — replace whole input
     inputText.value = item.value
     autocompleteVisible.value = false
     nextTick(() => {
@@ -819,10 +744,7 @@ const selectAutocompleteItem = (item: { label: string; value: string }) => {
   if (!item.value.endsWith('/')) autocompleteVisible.value = false
 }
 
-// ── Keyboard handler ──────────────────────────────────────────────────────────
-
 const handleKeydown = (e: KeyboardEvent) => {
-  // Always intercept Tab inside the textarea
   if (e.key === 'Tab') {
     e.preventDefault()
     if (autocompleteVisible.value && autocompleteItems.value.length > 0) {
@@ -870,17 +792,16 @@ const handleInput = () => {
   updateAutocomplete(inputText.value)
 }
 
-// ── Diff parser ───────────────────────────────────────────────────────────────
-
-const parseDiffLines = (diff: string) => {
-  return diff.split('\n').map((line) => {
-    if (line.startsWith('+') && !line.startsWith('+++')) return { text: line, type: 'added' }
-    if (line.startsWith('-') && !line.startsWith('---')) return { text: line, type: 'removed' }
-    return { text: line, type: 'context' }
-  })
+const playNextSegment = async (msg: ChatMessage, el: HTMLAudioElement) => {
+  const next = (msg.audioIndex ?? 0) + 1
+  if (next >= (msg.audioUrls?.length ?? 0)) {
+    msg.audioIndex = 0
+    return
+  }
+  msg.audioIndex = next
+  await nextTick()
+  void el.play()
 }
-
-// ── Watch ─────────────────────────────────────────────────────────────────────
 
 const mapHistoricalMessages = (historical: HistoricalMessage[]): ChatMessage[] =>
   historical.map((m) => ({
@@ -889,7 +810,7 @@ const mapHistoricalMessages = (historical: HistoricalMessage[]): ChatMessage[] =
     content: m.content,
     toolCalls: [],
     shellOutput: [],
-    audioUrl: m.audio_url,
+    audioUrls: m.audio_url ? [m.audio_url] : [],
   }))
 
 watch(
@@ -1036,9 +957,17 @@ watch(
               <!-- Content: plain text for user messages -->
               <div v-else-if="msg.content" class="msg-content">{{ msg.content }}</div>
 
-              <!-- Audio player -->
-              <div v-if="msg.audioUrl" class="msg-audio">
-                <audio :src="msg.audioUrl" controls class="msg-audio-player" />
+              <!-- Audio player: one <audio> chaining through the reply's segments -->
+              <div v-if="msg.audioUrls?.length" class="msg-audio">
+                <audio
+                  :src="msg.audioUrls[msg.audioIndex ?? 0]"
+                  controls
+                  class="msg-audio-player"
+                  @ended="playNextSegment(msg, $event.target as HTMLAudioElement)"
+                />
+                <span v-if="msg.audioUrls.length > 1" class="msg-audio-count">
+                  {{ (msg.audioIndex ?? 0) + 1 }}/{{ msg.audioUrls.length }}
+                </span>
               </div>
 
               <!-- Streaming cursor -->
@@ -1672,11 +1601,23 @@ watch(
 }
 
 /* ── Audio player ─────────────────────────────────────────────────────── */
+.msg-audio {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
 .msg-audio-player {
   width: 100%;
   max-width: 320px;
   height: 36px;
   border-radius: 0.5rem;
+}
+
+.msg-audio-count {
+  font-size: 0.75rem;
+  opacity: 0.6;
+  font-variant-numeric: tabular-nums;
 }
 
 /* ── Input area ───────────────────────────────────────────────────────── */

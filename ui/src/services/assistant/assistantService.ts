@@ -8,6 +8,7 @@ import type {
   ApiKeyRemoveResponse,
   AssistantFileResponse,
   AssistantFileRemoveResponse,
+  AssistantFileVectorStatusResponse,
   IntegrationParams,
   IntegrationResponse,
   ProfileOptionsResponse,
@@ -18,12 +19,14 @@ import type {
   ContactDeleteResponse,
   OwnerMemoryListResponse,
 } from '@/types/assistant.ts'
+import type { WorkflowStepTestParams, WorkflowStepTestResponse } from '@/types/workflow.types'
 
 export interface IAssistantService {
   addAssistant(assistantProfile: AssistantProfileParams): Promise<AssistantProfileResponse>
   getAssistant(): Promise<AssistantProfileResponse>
   updateAssistant(assistantProfile: AssistantProfileUpdateParams): Promise<AssistantProfileResponse>
   getOptions(): Promise<ProfileOptionsResponse>
+  testWorkflowStep(payload: WorkflowStepTestParams): Promise<WorkflowStepTestResponse>
   setProvider(provider: string, api_key?: string): Promise<{ data: { provider: string; model: string } }>
   addProvider(input: CustomProviderInput): Promise<{ data: { name: string; model: string } }>
   addApiKey(apiKey: ApiKeyParams): Promise<ApiKeyResponse>
@@ -35,6 +38,7 @@ export interface IAssistantService {
   listOwnerMemories(params?: { contact_id?: string; query?: string; limit?: number }): Promise<OwnerMemoryListResponse>
   addFiles(files: File[]): Promise<AssistantFileResponse>
   removeFileById(fileId: string): Promise<AssistantFileRemoveResponse>
+  getFilesVectorStatus(): Promise<AssistantFileVectorStatusResponse>
   addIntegration(integration: IntegrationParams): Promise<IntegrationResponse>
   removeIntegrationById(integrationId: string): Promise<IntegrationResponse>
 }
@@ -63,6 +67,14 @@ export class AssistantService implements IAssistantService {
 
   async getOptions(): Promise<ProfileOptionsResponse> {
     const { data } = await this.api.get<ProfileOptionsResponse>('/profile/options')
+    return data
+  }
+
+  async testWorkflowStep(payload: WorkflowStepTestParams): Promise<WorkflowStepTestResponse> {
+    const { data } = await this.api.post<WorkflowStepTestResponse>(
+      '/profile/functions/test-step',
+      payload,
+    )
     return data
   }
 
@@ -127,6 +139,11 @@ export class AssistantService implements IAssistantService {
 
   async removeFileById(fileId: string): Promise<AssistantFileRemoveResponse> {
     const { data } = await this.api.delete<AssistantFileRemoveResponse>(`/profile/files/${fileId}`)
+    return data
+  }
+
+  async getFilesVectorStatus(): Promise<AssistantFileVectorStatusResponse> {
+    const { data } = await this.api.get<AssistantFileVectorStatusResponse>('/profile/files/status')
     return data
   }
 

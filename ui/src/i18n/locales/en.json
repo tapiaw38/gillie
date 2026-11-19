@@ -200,6 +200,14 @@
       "contacts": {
         "name": "Contacts",
         "description": "Manage conversation contacts and identities"
+      },
+      "avatar": {
+        "name": "Avatar",
+        "description": "Window size and camera zoom for the desktop character"
+      },
+      "voice": {
+        "name": "Voice",
+        "description": "Speech engine, voice, language, and pitch"
       }
     }
   },
@@ -209,6 +217,14 @@
     "loadingAccount": "Loading account information...",
     "audioResponses": "Audio Responses",
     "audioResponsesDesc": "The assistant will reply with a voice message in addition to text",
+    "voice": "Voice",
+    "voiceDesc": "Which voice the assistant speaks with",
+    "voiceEngine": "Voice provider",
+    "voiceEngineDesc": "Which speech engine generates the audio",
+    "voiceEngineNoKey": "API key required",
+    "voiceEngineSet": "Voice provider set to {engine}",
+    "voiceDefault": "Default",
+    "voiceSet": "Voice set to {voice}",
     "apiKeys": "API Keys",
     "activeKeys": "active key(s)",
     "newKey": "New Key",
@@ -882,6 +898,9 @@
       "storedFiles": "Stored Files",
       "availableFiles": "available file(s)",
       "fileAvailable": "File available for the assistant",
+      "vectorIndexed": "Vectorized",
+      "vectorProcessing": "Processing…",
+      "vectorNotIndexed": "Not vectorizable",
       "deleteFile": "Delete file",
       "noFiles": "No stored files",
       "noFilesDesc": "Upload your first file to get started",
@@ -1024,7 +1043,7 @@
     "tools": {
       "search_documents": {
         "label": "Search documents",
-        "hint": "When to search inside uploaded PDFs and Excel files."
+        "hint": "When to search inside uploaded PDFs, Excel and Word files."
       },
       "query_database": {
         "label": "Query DB",
@@ -1250,10 +1269,6 @@
         "label": "Browser: Switch tab",
         "hint": "When to move between open browser tabs."
       },
-      "browser_enable_remote_debug": {
-        "label": "Browser: Remote debug",
-        "hint": "When to enable remote browser debugging."
-      },
       "browser_evaluate": {
         "label": "Browser: Evaluate JS",
         "hint": "When to execute JavaScript in the context of the open page."
@@ -1395,7 +1410,9 @@
       "nodeDeletedDetail": "The node was removed from the workflow",
       "nodeAdded": "Node Added",
       "nodeAddedHttpDetail": "A new HTTP Request node was created",
-      "nodeAddedConditionDetail": "A new condition node was created"
+      "nodeAddedConditionDetail": "A new condition node was created",
+      "unresolvedParams": "Unresolved parameters",
+      "unresolvedParamsDetail": "Nothing provides these values: {params}. Add them to input_params or map them from an earlier step."
     },
     "node": {
       "newStep": "New Step",
@@ -1417,7 +1434,17 @@
       "responseMapping": "Response Mapping",
       "responseMappingHint": "Add mappings to extract data from the response",
       "saveChanges": "Save Changes",
-      "deleteNode": "Delete Node"
+      "deleteNode": "Delete Node",
+      "headers": "Headers",
+      "addHeader": "Add header",
+      "headersHint": "Values accept {param}. E.g. Authorization → Bearer {auth_token}",
+      "testStep": "Test this step",
+      "runTest": "Run",
+      "testHint": "Test context as JSON: the values each {param} stands for.",
+      "testContextInvalid": "The test context is not valid JSON.",
+      "testOk": "Response received",
+      "testFailed": "Failed",
+      "testPathsHint": "Click a field to add it to the response mapping:"
     },
     "guide": {
       "title": "Quick Workflow Guide",
@@ -1479,7 +1506,7 @@
     "successUpload": "Files uploaded",
     "successUploadDetail": "Files were uploaded successfully",
     "invalidTypes": "Invalid file types",
-    "invalidTypesDetail": "Only PDF and Excel files (.xls, .xlsx) are allowed.",
+    "invalidTypesDetail": "Only PDF, Excel (.xls, .xlsx) and Word (.doc, .docx) files are allowed.",
     "filesTooBig": "Files too large",
     "filesTooBigDetail": "The following files exceed the 250 MiB limit: {files}",
     "filesSelected": "Files selected",
@@ -1494,5 +1521,68 @@
     "contactUs": "Contact Us",
     "about": "About",
     "allRightsReserved": "All rights reserved."
+  },
+  "avatar": {
+    "title": "Avatar",
+    "subtitle": "Size the desktop window and frame the character",
+    "save": "Save",
+    "saved": "Layout saved",
+    "savedDetail": "Restart the avatar to apply it",
+    "saveError": "Could not save the avatar layout",
+    "loading": "Loading avatar settings...",
+    "width": "Window width",
+    "widthHint": "How wide the desktop window is, in pixels",
+    "height": "Window height",
+    "heightHint": "How tall the desktop window is, in pixels",
+    "zoom": "Camera zoom",
+    "zoomHint": "Higher values move the camera closer and crop tighter",
+    "zoomFar": "Full body",
+    "zoomNear": "Close up",
+    "restore": "Restore defaults",
+    "preview": "Preview",
+    "assetsTitle": "Model and animations",
+    "assetsHint": "Load local VRM/VRMA files. They are regenerated when you save.",
+    "replaceModel": "Replace model",
+    "addAnimations": "Add animations",
+    "removeAnimation": "Remove animation",
+    "modelMissing": "No model loaded",
+    "modelRequired": "model.vrm required",
+    "noAnimations": "No animations loaded",
+    "assetAdded": "Asset loaded",
+    "desktopOnly": "File loading requires opening Gillie UI as a desktop application.",
+    "assetsLoadError": "Avatar assets could not be read. Restart Gillie UI.",
+    "localStorage": "Local",
+    "remoteStorage": "Remote",
+    "localStorageHint": "Files on this computer",
+    "remoteStorageHint": "Files are saved to the server's configured storage and built on the VPS.",
+    "unsavedAssets": "Asset changes are pending. Save to regenerate the manifest and build the avatar.",
+    "restartNote": "Changes apply the next time the avatar starts. Run gillie avatar stop and gillie avatar start."
+  },
+  "voice": {
+    "title": "Voice",
+    "subtitle": "Configure how your assistant sounds",
+    "loading": "Loading voice settings...",
+    "saved": "Voice settings saved",
+    "saveError": "Could not save voice settings",
+    "audioResponses": "Audio responses",
+    "audioResponsesDesc": "The assistant replies with a voice message in addition to text",
+    "engine": "Voice provider",
+    "engineDesc": "Which speech engine generates the audio",
+    "engineNoKey": "API key required",
+    "engineSet": "Provider set to {engine}",
+    "voice": "Voice",
+    "voiceDesc": "Which voice the assistant speaks with",
+    "voiceSet": "Voice set to {voice}",
+    "pitch": "Pitch",
+    "pitchDesc": "Shift voice lower or higher. Zero keeps natural pitch.",
+    "lower": "Lower",
+    "higher": "Higher",
+    "pitchSet": "Pitch set to {value} semitones",
+    "language": "Response language",
+    "languageDesc": "Language used to synthesize spoken replies",
+    "english": "Language set to English",
+    "spanish": "Language set to Spanish",
+    "enabled": "Audio responses enabled",
+    "disabled": "Audio responses disabled"
   }
 }

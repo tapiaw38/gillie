@@ -18,13 +18,15 @@ from src.core.platform.config.service import (
     _PROVIDER_PRESETS,
     get_available_providers,
 )
-from cli.config.db import update_provider, save_custom_provider, delete_custom_provider, delete_provider, get_provider_data
+from cli.config.db import update_provider, save_custom_provider, delete_custom_provider, delete_provider, get_provider_data, get_voice_data
 
 app = typer.Typer(help="Manage AI provider (DeepSeek, OpenRouter, Anthropic, OpenAI, etc.)")
 vision_app = typer.Typer(help="Configure vision AI provider for image description")
+voice_app = typer.Typer(help="Configure the OpenAI voice used for spoken replies")
 image_app = typer.Typer(help="Configure image generation provider")
 video_app = typer.Typer(help="Configure video generation provider")
 app.add_typer(vision_app, name="vision")
+app.add_typer(voice_app, name="voice")
 app.add_typer(image_app, name="image")
 app.add_typer(video_app, name="video")
 console = Console()
@@ -36,6 +38,43 @@ def _provider_display_name(name: str, preset: dict) -> str:
     if preset.get("base_url") == _OPENROUTER_BASE:
         return f"{name} (OpenRouter)"
     return name
+
+_VOICE_DEFAULTS: dict = {
+    "base_url": "https://api.openai.com/v1",
+    "model": "gpt-4o-mini-tts",
+    "voice": "nova",
+}
+
+_EDGE_VOICES: dict = {
+    "es-AR-ElenaNeural": "Spanish (Argentina), female",
+    "es-AR-TomasNeural": "Spanish (Argentina), male",
+    "es-MX-DaliaNeural": "Spanish (Mexico), female",
+    "es-ES-ElviraNeural": "Spanish (Spain), female",
+    "es-ES-AlvaroNeural": "Spanish (Spain), male",
+    "en-US-AvaNeural": "English (US), female",
+    "en-US-AndrewNeural": "English (US), male",
+    "en-US-EmmaNeural": "English (US), female",
+}
+
+_VOICE_ENGINES: dict = {
+    "edge": "free, no API key, neural voices",
+    "openai": "paid, needs an OpenAI API key",
+    "gtts": "free, robotic, offline fallback",
+}
+
+_OPENAI_VOICES: dict = {
+    "alloy": "neutral, even",
+    "ash": "warm, conversational",
+    "ballad": "soft, expressive",
+    "coral": "bright, friendly",
+    "echo": "calm, low",
+    "fable": "animated, storytelling",
+    "nova": "clear, upbeat",
+    "onyx": "deep, steady",
+    "sage": "measured, gentle",
+    "shimmer": "light, airy",
+    "verse": "natural, versatile",
+}
 
 _VISION_PRESETS: dict = {
     "deepseek": {"base_url": "https://api.deepseek.com",                                "model": "deepseek-vl2"},
@@ -612,6 +651,195 @@ def vision_status():
     key_status = "[green]present[/green]" if v.api_key else "[red]missing[/red]"
     console.print(f"[bold]API key  :[/bold] {key_status}")
     console.print()
+
+
+def _resolve_openai_key(api_key: Optional[str], current_key: str) -> tuple[str, str]:
+    if api_key:
+        return api_key, "flag"
+    if current_key:
+        return current_key, "voice config"
+
+    profile_data = get_provider_data()
+    providers = get_available_providers(
+        provider_keys=profile_data.get("provider_keys"),
+        custom_providers=profile_data.get("custom_providers"),
+    )
+    stored = (providers.get("openai") or {}).get("api_key", "")
+    if stored:
+        return stored, "openai provider"
+
+    return typer.prompt("Enter OpenAI API key", hide_input=True), "prompt"
+
+
+@voice_app.command("set")
+def voice_set(
+    engine: Optional[str] = typer.Option(None, "--engine", "-e", help=f"Engine ({', '.join(_VOICE_ENGINES)})"),
+    api_key: Optional[str] = typer.Option(None, "--api-key", "-k", help="OpenAI API key (openai engine only)"),
+    voice: Optional[str] = typer.Option(None, "--voice", "-v", help="Voice name for the chosen engine"),
+    model: Optional[str] = typer.Option(None, "--model", "-m", help="TTS model (openai engine only)"),
+    base_url: Optional[str] = typer.Option(None, "--base-url", help="Base URL override (openai engine only)"),
+):
+    """Set the engine and voice used for spoken replies."""
+    from cli.config.manager import config_exists, load_config, save_config
+    from InquirerPy import inquirer as _inquirer
+
+    if not config_exists():
+        console.print("[red]Not initialized.[/red] Run [bold cyan]gillie init[/bold cyan] first.")
+        raise typer.Exit(1)
+
+    cfg = load_config()
+    current = cfg.services.tts
+
+    if engine is None:
+        try:
+            engine = _inquirer.select(
+                message="Select speech engine:",
+                choices=[
+                    {"name": f"{'*' if name == (current.engine or 'edge') else ' '}  {name:<8} {desc}", "value": name}
+                    for name, desc in _VOICE_ENGINES.items()
+                ],
+                default=current.engine or "edge",
+                pointer="❯", qmark="",
+            ).execute()
+        except KeyboardInterrupt:
+            raise typer.Exit(0)
+
+    if engine not in _VOICE_ENGINES:
+        console.print(f"[red]Unknown engine:[/red] {engine}")
+        console.print(f"[dim]Known engines: {', '.join(_VOICE_ENGINES)}[/dim]")
+        raise typer.Exit(1)
+
+    if engine == "gtts":
+        cfg.services.tts.engine = "gtts"
+        cfg.services.tts.voice = ""
+        cfg.services.tts.enabled = True
+        save_config(cfg)
+        console.print("\n[green]Engine set:[/green] [bold cyan]gtts[/bold cyan] — free, robotic, offline fallback\n")
+        _restart_service_if_running()
+        return
+
+    catalog = _EDGE_VOICES if engine == "edge" else _OPENAI_VOICES
+    width = 20 if engine == "edge" else 10
+
+    if voice is None:
+        try:
+            voice = _inquirer.select(
+                message="Select voice:",
+                choices=[
+                    {"name": f"{'*' if name == current.voice else ' '}  {name:<{width}} {desc}", "value": name}
+                    for name, desc in catalog.items()
+                ],
+                default=current.voice if current.voice in catalog else next(iter(catalog)),
+                pointer="❯", qmark="",
+            ).execute()
+        except KeyboardInterrupt:
+            raise typer.Exit(0)
+
+    if voice not in catalog:
+        console.print(f"[red]Unknown voice for the {engine} engine:[/red] {voice}")
+        console.print(f"[dim]Known voices: {', '.join(catalog)}[/dim]")
+        raise typer.Exit(1)
+
+    key_source = ""
+    if engine == "openai":
+        resolved_key, key_source = _resolve_openai_key(api_key, current.api_key)
+        if not resolved_key:
+            console.print("[red]API key cannot be empty.[/red]")
+            raise typer.Exit(1)
+        cfg.services.tts.api_key = resolved_key
+        cfg.services.tts.model = model or current.model or _VOICE_DEFAULTS["model"]
+        cfg.services.tts.base_url = base_url or current.base_url or _VOICE_DEFAULTS["base_url"]
+
+    cfg.services.tts.engine = engine
+    cfg.services.tts.voice = voice
+    cfg.services.tts.enabled = True
+    save_config(cfg)
+
+    console.print(f"\n[green]Voice set:[/green] [bold cyan]{voice}[/bold cyan] — {catalog[voice]}")
+    console.print(f"  Engine   : {engine}")
+    if engine == "openai":
+        console.print(f"  Model    : {cfg.services.tts.model}")
+        console.print(f"  Base URL : {cfg.services.tts.base_url}")
+        if key_source == "openai provider":
+            console.print("  API key  : [dim]reused from the openai provider[/dim]")
+    else:
+        console.print("  API key  : [dim]not required[/dim]")
+    console.print()
+    _restart_service_if_running()
+
+
+@voice_app.command("status")
+def voice_status():
+    """Show the current voice configuration."""
+    from cli.config.manager import config_exists, load_config
+
+    if not config_exists():
+        console.print("[red]Not initialized.[/red] Run [bold cyan]gillie init[/bold cyan] first.")
+        raise typer.Exit(1)
+
+    t = load_config().services.tts
+    profile = get_voice_data()
+    profile_engine = (profile.get("tts_engine") or "").lower()
+    profile_voice = profile.get("tts_voice") or ""
+
+    config_engine = (t.engine or ("openai" if t.api_key else "gtts")).lower()
+    engine = profile_engine or config_engine
+    voice = profile_voice or t.voice
+
+    if engine == "openai" and not t.api_key:
+        console.print(
+            f"\n[yellow]![/yellow] The [bold]openai[/bold] engine is selected but no API key is configured, "
+            "so replies fall back to gTTS."
+        )
+        console.print("[dim]Run [bold]gillie provider voice set --engine openai[/bold] to add one.[/dim]")
+
+    console.print()
+    console.print(f"[bold]Spoken replies :[/bold] {'[green]on[/green]' if t.enabled else '[dim]off[/dim]'}")
+    console.print(f"[bold]Engine         :[/bold] [cyan]{engine}[/cyan] [dim]— {_VOICE_ENGINES.get(engine, '')}[/dim]")
+
+    if engine == "openai":
+        console.print(f"[bold]Voice          :[/bold] {voice or _VOICE_DEFAULTS['voice']}")
+        console.print(f"[bold]Model          :[/bold] {t.model or _VOICE_DEFAULTS['model']}")
+        console.print(f"[bold]Base URL       :[/bold] {t.base_url or _VOICE_DEFAULTS['base_url']}")
+        key_status = "[green]present[/green]" if t.api_key else "[red]missing[/red]"
+        console.print(f"[bold]API key        :[/bold] {key_status}")
+    elif engine == "edge":
+        console.print(f"[bold]Voice          :[/bold] {voice or '[dim]auto by language[/dim]'}")
+        console.print("[bold]API key        :[/bold] [dim]not required[/dim]")
+    else:
+        console.print("[dim]Run [bold]gillie provider voice set[/bold] for neural voices.[/dim]")
+
+    if profile_engine and profile_engine != config_engine:
+        console.print(
+            f"[bold]Source         :[/bold] assistant profile "
+            f"[dim](overrides the CLI setting: {config_engine})[/dim]"
+        )
+    elif profile_engine:
+        console.print("[bold]Source         :[/bold] assistant profile [dim](matches the CLI setting)[/dim]")
+    else:
+        console.print("[bold]Source         :[/bold] CLI config [dim](no profile override)[/dim]")
+    console.print()
+
+
+@voice_app.command("clear")
+def voice_clear():
+    """Reset the engine, voice, and key so spoken replies fall back to gTTS."""
+    from cli.config.manager import config_exists, load_config, save_config
+
+    if not config_exists():
+        console.print("[red]Not initialized.[/red] Run [bold cyan]gillie init[/bold cyan] first.")
+        raise typer.Exit(1)
+
+    cfg = load_config()
+    cfg.services.tts.engine = ""
+    cfg.services.tts.api_key = ""
+    cfg.services.tts.voice = ""
+    cfg.services.tts.model = ""
+    cfg.services.tts.base_url = ""
+    save_config(cfg)
+
+    console.print("\n[green]Voice configuration cleared.[/green] Spoken replies now use gTTS.\n")
+    _restart_service_if_running()
 
 
 @vision_app.command("use")

@@ -75,5 +75,50 @@ ui/.env.development
 # IA Files
 ui/QWEN.*
 ui/CLAUDE.*
+
+# Avatar specific
+
+# Dependencies and generated output
+avatar/node_modules
+avatar/dist
+avatar/out
+avatar/coverage
+avatar/.vite
+avatar/.cache
+avatar/.eslintcache
+avatar/*.tsbuildinfo
+avatar/*.tgz
+
+# Native helper binaries and compiler leftovers
+avatar/native/bin/
+avatar/**/*.dSYM/
+avatar/**/*.exp
+avatar/**/*.ilk
+avatar/**/*.lib
+avatar/**/*.obj
+avatar/**/*.pdb
+
+# Local character media (see avatar/ASSET_LICENSES.md)
+avatar/**/*.vrm
+avatar/**/*.vrma
+
+# Generated from local character media during avatar build
+avatar/public/assets/manifest.json
+
+# environment variables
+avatar/.env
+avatar/.env.*
+!avatar/.env.example
+
+# Editor directories and files
+avatar/.idea
+avatar/.vscode/
+
+# Credentials and signing material
+*.key
+*.p12
+*.pfx
+*.pem
+
 # Build output
 release/

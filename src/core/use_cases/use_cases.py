@@ -19,6 +19,7 @@ from src.core.use_cases.profile import (
     DeleteApiKeyUseCase as ProfileDeleteApiKeyUseCase,
     AddFilesUseCase as ProfileAddFilesUseCase,
     DeleteFileByIdUseCase as ProfileDeleteFileByIdUseCase,
+    GetFilesVectorStatusUseCase as ProfileGetFilesVectorStatusUseCase,
     AddIntegrationUseCase as ProfileAddIntegrationUseCase,
     DeleteIntegrationUseCase as ProfileDeleteIntegrationUseCase,
     ListOptionsUseCase as ProfileListOptionsUseCase,
@@ -150,6 +151,7 @@ class Profile:
     delete_api_key_usecase: ProfileDeleteApiKeyUseCase
     add_files_usecase: ProfileAddFilesUseCase
     delete_file_by_id_usecase: ProfileDeleteFileByIdUseCase
+    get_files_vector_status_usecase: ProfileGetFilesVectorStatusUseCase
     add_integration_usecase: ProfileAddIntegrationUseCase
     delete_integration_usecase: ProfileDeleteIntegrationUseCase
     list_options_usecase: ProfileListOptionsUseCase
@@ -351,6 +353,7 @@ def create_usecases(context_factory: Factory) -> Usecases:
             delete_api_key_usecase=ProfileDeleteApiKeyUseCase(context_factory),
             add_files_usecase=ProfileAddFilesUseCase(context_factory),
             delete_file_by_id_usecase=ProfileDeleteFileByIdUseCase(context_factory),
+            get_files_vector_status_usecase=ProfileGetFilesVectorStatusUseCase(context_factory),
             add_integration_usecase=ProfileAddIntegrationUseCase(context_factory),
             delete_integration_usecase=ProfileDeleteIntegrationUseCase(context_factory),
             list_options_usecase=ProfileListOptionsUseCase(context_factory),

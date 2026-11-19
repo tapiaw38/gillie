@@ -14,6 +14,7 @@ from pathlib import Path
 if TYPE_CHECKING:
     from src.core.platform.fileprocessor.pdf_processor import FileImageProcessor
     from src.core.platform.fileprocessor.xlsx_processor import ExcelImageProcessor
+    from src.core.platform.fileprocessor.docx_processor import DocxProcessor
     from src.core.platform.fileprocessor.processor import ImageSearchResult
     from src.core.platform.fileprocessor.hybrid_processor import HybridDocumentProcessor
     from src.core.platform.fileprocessor.rag_processor import RAGDocumentProcessor
@@ -36,6 +37,7 @@ class OpenAIIntegration:
         self._config_service = config_service
         self._image_processor = None
         self._excel_processor = None
+        self._docx_processor = None
         self._hybrid_processor = None
         self._rag_processor = None
         self._processed_documents = {}
@@ -45,6 +47,7 @@ class OpenAIIntegration:
         self.store_service = None
         self.job_usecases = None
         self.brain = None
+        self.avatar_mcp = None
 
         langchain_config = config_service.langchain_config
         if langchain_config.service_enabled:
@@ -78,6 +81,13 @@ class OpenAIIntegration:
             from src.core.platform.fileprocessor.xlsx_processor import ExcelImageProcessor
             self._excel_processor = ExcelImageProcessor(self._config_service)
         return self._excel_processor
+
+    @property
+    def docx_processor(self) -> "DocxProcessor":
+        if self._docx_processor is None:
+            from src.core.platform.fileprocessor.docx_processor import DocxProcessor
+            self._docx_processor = DocxProcessor(self._config_service)
+        return self._docx_processor
 
     @property
     def hybrid_processor(self) -> "HybridDocumentProcessor":
@@ -143,6 +153,12 @@ class OpenAIIntegration:
         if self.langchain_service is not None:
             self.langchain_service.brain = brain
 
+    def set_avatar_mcp(self, avatar_mcp) -> None:
+        """Inject the local Avatar MCP client after integrations initialize."""
+        self.avatar_mcp = avatar_mcp
+        if self.langchain_service is not None:
+            self.langchain_service.avatar_mcp = avatar_mcp
+
 
     @log_function_call
     async def ask(
@@ -179,6 +195,7 @@ class OpenAIIntegration:
         shell_output_queue=None,
         client_workspace: str = "",
         plan_mode: bool = False,
+        auth_token: Optional[str] = None,
     ):
         """Stream AI response tokens via LangChain. Yields str tokens and shell_output dicts.
 
@@ -204,13 +221,14 @@ class OpenAIIntegration:
             shell_output_queue=shell_output_queue,
             client_workspace=client_workspace,
             plan_mode=plan_mode,
+            auth_token=auth_token,
         ):
             yield token
 
     @log_function_call
     async def search_images_in_files(
         self, search_term: str, profile: Profile, max_results: int = 5
-    ) -> List[ImageSearchResult]:
+    ) -> List["ImageSearchResult"]:
         self.logger.info(
             f"Searching images for term: '{search_term}' in {len(profile.files or [])} files"
         )
@@ -323,7 +341,7 @@ class OpenAIIntegration:
     @log_function_call
     async def search_images_with_text_analysis(
         self, search_term: str, profile: Profile, max_results: int = 5
-    ) -> List[ImageSearchResult]:
+    ) -> List["ImageSearchResult"]:
         self.logger.info(
             f"Enhanced image search with text analysis for term: '{search_term}'"
         )
@@ -372,6 +390,20 @@ class OpenAIIntegration:
                 except Exception as e:
                     self.logger.error(
                         f"Error searching images in Excel {file.url}: {e}"
+                    )
+                    continue
+            elif file.url.lower().endswith((".docx", ".doc")):
+                try:
+                    results = await self.docx_processor.search_images_in_docx(
+                        file.url, search_term, max_results
+                    )
+                    all_results.extend(results)
+                    self.logger.debug(
+                        f"Found {len(results)} images in DOCX: {file.url}"
+                    )
+                except Exception as e:
+                    self.logger.error(
+                        f"Error searching images in DOCX {file.url}: {e}"
                     )
                     continue
 

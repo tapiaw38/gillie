@@ -7,6 +7,12 @@ export interface AssistantProfileUpdateParams {
   assistant_name?: string
   functions?: string
   tts_enabled?: boolean
+  tts_voice?: string
+  tts_engine?: string
+  tts_pitch?: number
+  avatar_width?: number
+  avatar_height?: number
+  avatar_zoom?: number
   tool_prompts?: string
   disabled_tools?: string[]
   response_language?: string
@@ -21,11 +27,26 @@ export interface ProviderOption {
   is_builtin: boolean
 }
 
+export interface VoiceOption {
+  id: string
+  label: string
+}
+
+export interface VoiceEngineOption {
+  key: string
+  label: string
+  description: string
+  requires_key: boolean
+  key_available: boolean
+  voices: VoiceOption[]
+}
+
 export interface ProfileOptionsResponse {
   data: {
     roles: { code: string; name: string }[]
     providers: ProviderOption[]
     active_provider: string
+    voice_engines: VoiceEngineOption[]
   }
 }
 
@@ -46,6 +67,12 @@ export interface AssistantProfile {
   updated_at: string
   is_active: boolean
   tts_enabled: boolean
+  tts_voice?: string
+  tts_engine?: string
+  tts_pitch?: number
+  avatar_width?: number
+  avatar_height?: number
+  avatar_zoom?: number
   response_language?: string
   iteration_limit: number
   api_keys: ApiKey[]
@@ -146,6 +173,14 @@ export interface AssistantFile {
 
 export interface AssistantFileResponse {
   data: AssistantFile[]
+}
+
+export type FileVectorStatus = 'indexed' | 'processing' | 'not_indexed'
+
+export interface AssistantFileVectorStatusResponse {
+  data: {
+    statuses: Record<string, FileVectorStatus>
+  }
 }
 
 export interface AssistantFileRemoveID {

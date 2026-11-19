@@ -18,6 +18,10 @@ from .profile import (
     ProviderOutputData,
     ListOptionsOutput,
     ListOptionsOutputData,
+    VoiceEngineOutputData,
+    VoiceOptionData,
+    WorkflowStepInput,
+    WorkflowStepTestInput,
 )
 from .conversation import (
     ConversationInput,
@@ -36,6 +40,7 @@ from .file import (
     FileListOutput,
     FileDeleteOutput,
     FileDeleteOutputData,
+    FileVectorStatusOutput,
 )
 from .integration import (
     IntegrationInput,
@@ -91,6 +96,8 @@ __all__ = [
     "ProfileOutput",
     "ProfileOutputData",
     "ContactInput",
+    "WorkflowStepInput",
+    "WorkflowStepTestInput",
     "ContactOutput",
     "ContactOutputData",
     "ContactListOutput",
@@ -99,6 +106,8 @@ __all__ = [
     "ProviderOutputData",
     "ListOptionsOutput",
     "ListOptionsOutputData",
+    "VoiceEngineOutputData",
+    "VoiceOptionData",
     # Conversation schemas
     "ConversationInput",
     "ConversationOutput",
@@ -115,6 +124,7 @@ __all__ = [
     "FileListOutput",
     "FileDeleteOutput",
     "FileDeleteOutputData",
+    "FileVectorStatusOutput",
     # Integration schemas
     "IntegrationInput",
     "IntegrationOutput",

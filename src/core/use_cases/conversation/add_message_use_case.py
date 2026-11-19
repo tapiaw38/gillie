@@ -2,6 +2,7 @@ import asyncio
 import io
 import logging
 import os
+import random
 import uuid
 from datetime import datetime, timezone
 from typing import Optional, Tuple
@@ -10,6 +11,7 @@ from src.schemas import MessageInput, MessageListOutput
 from src.core.domain import Message, SenderEnum, MessageImageAttachment, ImageAnalysis
 from src.core.platform.appcontext.appcontext import Factory
 from src.core.platform.errors import NewApplicationError
+from src.core.platform.managers.speech_segmentation import split_leading_sentence
 from src.core.platform.errors.mappings.conversation import (
     ConversationGetNotFoundError,
     ConversationMessageValidationError,
@@ -23,6 +25,16 @@ from src.core.use_cases.conversation.compact_use_case import CompactConversation
 logger = logging.getLogger(__name__)
 
 _LANG_MAP = {"en": "en-US", "es": "es-ES", "fr": "fr-FR", "de": "de-DE", "pt": "pt-BR"}
+
+_FILLER_PHRASES = {
+    "en": ["Let me check.", "One moment.", "Hang on a second."],
+    "es": ["A ver, dejame ver.", "Dame un segundo.", "Ahí voy, un momento."],
+    "pt": ["Deixa eu ver.", "Um momento."],
+    "fr": ["Laisse-moi voir.", "Un instant."],
+    "de": ["Lass mich nachsehen.", "Einen Moment."],
+}
+
+_FILLER_WAIT_SECONDS = 0.2
 _ALLOWED_IMAGE_MIME_TYPES = {
     "image/jpeg",
     "image/jpg",
@@ -53,6 +65,7 @@ class AddMessageUseCase:
 
         enhanced_content = await self._process_voice_content(message, profile, context)
         conversation = await self._get_and_validate_conversation(conversation_id, user_id, context)
+        await self._show_avatar(context)
         image_attachments, image_analysis_summary = await self._process_image_content(
             message=message,
             user_id=user_id,
@@ -115,7 +128,6 @@ class AddMessageUseCase:
             conversation_id=conversation_id,
             context=context,
         )
-
         assistant_message = self._create_assistant_message(content=ai_response_text, audio_url=audio_url)
         if formatted_images:
             assistant_message.content = f"{ai_response_text}\n\n{formatted_images}"
@@ -141,11 +153,28 @@ class AddMessageUseCase:
         user_id: str,
         client_workspace: str = "",
         plan_mode: bool = False,
+        auth_token: Optional[str] = None,
+        has_text_to_voice: Optional[str] = None,
+        message: Optional[MessageInput] = None,
     ):
         """Streaming variant for CLI. Yields str tokens, shell_output dicts, and audio dicts."""
         context = self.context_factory()
         profile = await context.repositories.profile.find_by_user_id(user_id)
+        message = message or MessageInput(content=content)
+        content = await self._process_voice_content(message, profile, context)
         conversation = await self._get_and_validate_conversation(conversation_id, user_id, context)
+        asyncio.create_task(self._show_avatar(context))
+        image_attachments, image_analysis_summary = await self._process_image_content(
+            message=message,
+            user_id=user_id,
+            context=context,
+            user_message_content=content,
+            conversation=conversation,
+        )
+        if image_analysis_summary:
+            content = f"{content.strip()}\n\n[Attached image analysis]\n{image_analysis_summary}" if content.strip() else f"[Attached image analysis]\n{image_analysis_summary}"
+        if message.voice_content and not content.strip():
+            return
 
         compact_uc = CompactConversationUseCase(self.context_factory)
         compaction_event = await compact_uc.compact_if_needed(conversation, conversation_id, context)
@@ -154,10 +183,10 @@ class AddMessageUseCase:
 
         memory_scope_id = self._build_memory_scope_id(conversation)
 
-        user_message = self._create_user_message(content, SenderEnum.user)
+        user_message = self._create_user_message(content, SenderEnum.user, image_attachments=image_attachments)
         self._add_message_to_conversation(conversation, user_message)
 
-        scoped_message_context = self._build_message_context(None, conversation)
+        scoped_message_context = self._build_message_context(message.context, conversation)
         enhanced_context = await self._inject_skill_context(
             scoped_message_context,
             content,
@@ -173,6 +202,27 @@ class AddMessageUseCase:
         shell_output_queue: asyncio.Queue = asyncio.Queue()
 
         full_text = ""
+        pending_speech = ""
+        speech_tasks: list = []
+        audio_url = None
+        emitted = 0
+        speech_enabled = self._tts_active(has_text_to_voice, profile) and bool(context.platform_managers)
+
+        def speak(fragment: str) -> None:
+            speech_tasks.append(asyncio.create_task(self._generate_audio_if_enabled(
+                has_text_to_voice=has_text_to_voice, text=fragment, profile=profile,
+                user_id=user_id, conversation_id=conversation_id, context=context,
+            )))
+
+        filler_spoken = False
+        filler_task = None
+        if speech_enabled:
+            phrase = self._filler_phrase(profile)
+            if phrase:
+                filler_task = self._filler_task(
+                    phrase, profile, user_id, conversation_id, context
+                )
+
         async for token in context.integrations.openai.ask_stream(
             question=content,
             context=enhanced_context,
@@ -182,22 +232,51 @@ class AddMessageUseCase:
             shell_output_queue=shell_output_queue,
             client_workspace=client_workspace,
             plan_mode=plan_mode,
+            auth_token=auth_token,
         ):
             yield token
-            if isinstance(token, str):
-                full_text += token
+            if not isinstance(token, str):
+                if (
+                    speech_enabled
+                    and not filler_spoken
+                    and isinstance(token, dict)
+                    and token.get("type") == "tool_call"
+                ):
+                    filler_spoken = True
+                    filler_url = await self._filler_audio_url(filler_task)
+                    if filler_url:
+                        yield {"type": "audio", "url": filler_url, "index": -1, "final": False}
+                continue
+            full_text += token
+            if not speech_enabled:
+                continue
+            pending_speech += token
+            sentence, pending_speech = split_leading_sentence(pending_speech)
+            if sentence:
+                speak(sentence)
+            while speech_tasks and speech_tasks[0].done():
+                url = self._segment_url(speech_tasks.pop(0))
+                if url:
+                    audio_url = audio_url or url
+                    yield {"type": "audio", "url": url, "index": emitted, "final": False}
+                    emitted += 1
 
-        audio_url = await self._generate_audio_if_enabled(
-            has_text_to_voice=None,
-            text=full_text,
-            profile=profile,
-            user_id=user_id,
-            conversation_id=conversation_id,
-            context=context,
-        )
+        if speech_enabled and pending_speech.strip():
+            speak(pending_speech)
+        if speech_enabled and not speech_tasks and not emitted and full_text.strip():
+            speak(full_text)
 
-        if audio_url:
-            yield {"type": "audio", "url": audio_url}
+        while speech_tasks:
+            task = speech_tasks.pop(0)
+            try:
+                url = await task
+            except Exception as e:
+                logger.error(f"Error generating streamed audio segment: {e}")
+                continue
+            if url:
+                audio_url = audio_url or url
+                yield {"type": "audio", "url": url, "index": emitted, "final": not speech_tasks}
+                emitted += 1
 
         assistant_message = self._create_assistant_message(content=full_text, audio_url=audio_url)
         self._add_message_to_conversation(conversation, assistant_message)
@@ -227,6 +306,11 @@ class AddMessageUseCase:
             conversation.messages = []
         return conversation
 
+    async def _show_avatar(self, context) -> None:
+        mcp = getattr(context.integrations, "mcp", None)
+        if mcp is not None:
+            await mcp.avatar_control_window("show")
+
     def _create_user_message(
         self,
         content: str,
@@ -247,6 +331,32 @@ class AddMessageUseCase:
         if any(msg.id == message.id for msg in conversation.messages):
             raise NewApplicationError(ConversationMessageValidationError)
         conversation.messages.append(message)
+
+    async def transcribe(
+        self, voice_content, user_id: str, language: Optional[str] = None
+    ) -> Optional[str]:
+        """Transcribe a recording on its own, so a caller can show the text
+        before the reply is generated.
+
+        `language` names the language being spoken, which is not always the one
+        the assistant answers in: a client listening to an English call still
+        wants its reply in the profile's language.
+        """
+        context = self.context_factory()
+        if not context.platform_managers:
+            return None
+        lang = language
+        if not lang:
+            profile = await context.repositories.profile.find_by_user_id(user_id)
+            lang = (profile.response_language if profile else None) or "en"
+        try:
+            return await context.platform_managers.voice_transcription.transcribe_audio_file(
+                audio_file=voice_content,
+                language=_LANG_MAP.get(lang, "en-US"),
+            )
+        except Exception as e:
+            logger.error(f"Error transcribing voice content: {e}")
+            return None
 
     async def _process_voice_content(self, message: MessageInput, profile, context) -> str:
         if not message.voice_content:
@@ -563,19 +673,87 @@ class AddMessageUseCase:
             logger.error(f"Error processing images: {e}")
             return None
 
+    @staticmethod
+    def _tts_active(has_text_to_voice: Optional[str], profile) -> bool:
+        return has_text_to_voice == "activate" or bool(
+            profile and getattr(profile, "tts_enabled", False)
+        )
+
+    @staticmethod
+    def _segment_url(task) -> Optional[str]:
+        try:
+            return task.result()
+        except Exception as e:
+            logger.error(f"Error generating streamed audio segment: {e}")
+            return None
+
+    def _filler_task(
+        self, phrase: str, profile, user_id: str, conversation_id: str, context,
+    ):
+        """Start synthesis of a fixed phrase, reusing the cached clip if any."""
+        lang = (profile.response_language if profile else None) or "en"
+        overrides = {
+            key: value
+            for key, value in (
+                ("voice", getattr(profile, "tts_voice", None)),
+                ("engine", getattr(profile, "tts_engine", None)),
+                ("pitch", getattr(profile, "tts_pitch", None)),
+            )
+            if value
+        }
+        task = asyncio.create_task(
+            context.platform_managers.text_to_speech.generate_and_store_cached_audio(
+                text=phrase, user_id=user_id, conversation_id=conversation_id,
+                language=lang, settings=overrides or None,
+            )
+        )
+        task.add_done_callback(lambda finished: finished.exception())
+        return task
+
+    @staticmethod
+    def _filler_phrase(profile) -> Optional[str]:
+        lang = (profile.response_language if profile else None) or "en"
+        phrases = _FILLER_PHRASES.get(lang)
+        return random.choice(phrases) if phrases else None
+
+    async def _filler_audio_url(self, task) -> Optional[str]:
+        """Return the filler clip only if it is ready, never waiting on it.
+
+        Synthesizing on the spot would add the very delay the clip exists to
+        hide, so a warm-up task is started when the turn begins and this only
+        collects it.
+        """
+        if task is None:
+            return None
+        done, _ = await asyncio.wait({task}, timeout=_FILLER_WAIT_SECONDS)
+        if task not in done:
+            return None
+        try:
+            return task.result()
+        except Exception as e:
+            logger.error(f"Error generating filler audio: {e}")
+            return None
+
     async def _generate_audio_if_enabled(
         self, has_text_to_voice: Optional[str], text: str,
         profile, user_id: str, conversation_id: str, context,
     ) -> Optional[str]:
-        tts_active = has_text_to_voice == "activate" or (
-            profile and getattr(profile, "tts_enabled", False)
-        )
-        if not tts_active or not context.platform_managers:
+        if not self._tts_active(has_text_to_voice, profile) or not context.platform_managers:
             return None
         try:
             lang = profile.response_language or "en"
+            overrides = {
+                key: value
+                for key, value in (
+                    ("voice", getattr(profile, "tts_voice", None)),
+                    ("engine", getattr(profile, "tts_engine", None)),
+                    ("pitch", getattr(profile, "tts_pitch", None)),
+                )
+                if value
+            }
             return await context.platform_managers.text_to_speech.generate_and_store_audio(
                 text=text, user_id=user_id, conversation_id=conversation_id, language=lang,
+                settings=overrides or None,
             )
         except Exception as e:
             logger.error(f"Error generating audio: {e}")

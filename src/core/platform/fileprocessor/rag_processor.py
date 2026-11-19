@@ -91,14 +91,12 @@ class RAGDocumentProcessor:
             logger.info(f"Processing document for RAG: {file_url}")
 
             if self.use_qdrant:
-                existing_info = self.qdrant_adapter.get_collection_info(collection_name)
-                if existing_info and existing_info.get("points_count", 0) > 0:
+                if self.qdrant_adapter.document_exists(collection_name, document_id):
                     logger.info(f"Document already processed in Qdrant: {document_id}")
                     return {
                         "document_id": document_id,
                         "status": "already_processed",
                         "collection_name": collection_name,
-                        "vector_count": existing_info.get("points_count", 0),
                         "storage": "qdrant"
                     }
             else:
@@ -124,6 +122,8 @@ class RAGDocumentProcessor:
                 documents = await self._process_pdf(file_url)
             elif file_type.lower() in ["xlsx", "xls"]:
                 documents = await self._process_xlsx(file_url)
+            elif file_type.lower() in ["docx", "doc"]:
+                documents = await self._process_docx(file_url)
             else:
                 return {"error": f"Unsupported file type: {file_type}"}
 
@@ -311,6 +311,69 @@ class RAGDocumentProcessor:
             logger.error(f"Error in simple chunks search: {e}")
             return []
 
+    def _check_pdf_has_text(self, pdf_data: bytes) -> bool:
+        """Check if PDF has extractable text (not just images)."""
+        try:
+            import fitz
+            doc = fitz.open(stream=pdf_data, filetype="pdf")
+            total_text = ""
+            page_count = doc.page_count
+            for page in doc:
+                total_text += page.get_text()
+            doc.close()
+            min_chars = 50 * page_count
+            return len(total_text.strip()) >= min_chars
+        except Exception as e:
+            logger.warning(f"Error checking PDF text: {e}")
+            return True
+
+    async def _extract_text_with_vision(self, pdf_data: bytes, pdf_url: str) -> List[Document]:
+        """Extract text from image-based PDF using vision API."""
+        try:
+            from pdf2image import convert_from_bytes
+            from src.core.platform.fileprocessor.pdf_processor import FileImageProcessor
+
+            processor = FileImageProcessor(self.config_service)
+
+            if not processor._vision_client:
+                logger.info("Vision API not configured, skipping vision extraction")
+                return []
+            images = convert_from_bytes(pdf_data, dpi=150)
+            documents = []
+
+            for page_num, image in enumerate(images, 1):
+                try:
+                    import io
+                    import base64
+                    buffer = io.BytesIO()
+                    image.save(buffer, format="PNG")
+                    image_base64 = base64.b64encode(buffer.getvalue()).decode("utf-8")
+
+                    text = await processor.describe_image(
+                        image_base64,
+                        prompt="Extract ALL text from this document page. Return only the text content, preserving structure. If handwritten, transcribe carefully."
+                    )
+
+                    if text and len(text.strip()) > 20:
+                        documents.append(Document(
+                            page_content=text,
+                            metadata={
+                                "source": pdf_url,
+                                "type": "pdf",
+                                "page": page_num,
+                                "extraction_method": "vision"
+                            }
+                        ))
+                        logger.info(f"Vision extracted {len(text)} chars from page {page_num}")
+                except Exception as e:
+                    logger.warning(f"Vision extraction failed for page {page_num}: {e}")
+                    continue
+
+            return documents
+        except Exception as e:
+            logger.error(f"Vision PDF extraction failed: {e}")
+            return []
+
     async def _process_pdf(self, pdf_url: str) -> List[Document]:
         import aiohttp
         import tempfile
@@ -321,21 +384,52 @@ class RAGDocumentProcessor:
                     response.raise_for_status()
                     pdf_data = await response.read()
 
-            with tempfile.NamedTemporaryFile(suffix=".pdf", delete=False) as temp_file:
-                temp_path = temp_file.name
-                temp_file.write(pdf_data)
+            has_text = self._check_pdf_has_text(pdf_data)
 
-            try:
-                from langchain_community.document_loaders import UnstructuredFileLoader
-                loader = UnstructuredFileLoader(temp_path)
-                documents = loader.load()
+            if has_text:
+                with tempfile.NamedTemporaryFile(suffix=".pdf", delete=False) as temp_file:
+                    temp_path = temp_file.name
+                    temp_file.write(pdf_data)
 
-                for doc in documents:
-                    doc.metadata.update({"source": pdf_url, "type": "pdf"})
+                try:
+                    from langchain_community.document_loaders import UnstructuredFileLoader
+                    loader = UnstructuredFileLoader(temp_path)
+                    documents = loader.load()
+
+                    for doc in documents:
+                        doc.metadata.update({
+                            "source": pdf_url,
+                            "type": "pdf",
+                            "extraction_method": "text"
+                        })
+
+                    logger.info(f"Text PDF: extracted {len(documents)} documents")
+                    return documents
+                finally:
+                    os.unlink(temp_path)
+            else:
+                logger.info("Image-based PDF detected, using vision extraction")
+                documents = await self._extract_text_with_vision(pdf_data, pdf_url)
+
+                if not documents:
+                    logger.info("Vision failed, falling back to OCR")
+                    with tempfile.NamedTemporaryFile(suffix=".pdf", delete=False) as temp_file:
+                        temp_path = temp_file.name
+                        temp_file.write(pdf_data)
+                    try:
+                        from langchain_community.document_loaders import UnstructuredFileLoader
+                        loader = UnstructuredFileLoader(temp_path)
+                        documents = loader.load()
+                        for doc in documents:
+                            doc.metadata.update({
+                                "source": pdf_url,
+                                "type": "pdf",
+                                "extraction_method": "ocr_fallback"
+                            })
+                    finally:
+                        os.unlink(temp_path)
 
                 return documents
-            finally:
-                os.unlink(temp_path)
 
         except Exception as e:
             logger.error(f"Error processing PDF: {e}")
@@ -398,6 +492,57 @@ class RAGDocumentProcessor:
 
         except Exception as e:
             logger.error(f"Error processing XLSX: {e}")
+            return []
+
+    async def _process_docx(self, docx_url: str) -> List[Document]:
+        import aiohttp
+        import tempfile
+        import os
+
+        try:
+            async with aiohttp.ClientSession() as session:
+                async with session.get(docx_url) as response:
+                    response.raise_for_status()
+                    docx_data = await response.read()
+
+            with tempfile.NamedTemporaryFile(suffix=".docx", delete=False) as temp_file:
+                temp_path = temp_file.name
+                temp_file.write(docx_data)
+
+            try:
+                from docx import Document as DocxDocument
+                doc = DocxDocument(temp_path)
+                documents = []
+
+                full_text = []
+                for para in doc.paragraphs:
+                    if para.text.strip():
+                        full_text.append(para.text.strip())
+
+                if full_text:
+                    documents.append(Document(
+                        page_content="\n".join(full_text),
+                        metadata={"source": docx_url, "type": "docx"}
+                    ))
+
+                for table_idx, table in enumerate(doc.tables):
+                    table_content = []
+                    for row in table.rows:
+                        row_text = [cell.text.strip() for cell in row.cells if cell.text.strip()]
+                        if row_text:
+                            table_content.append(" | ".join(row_text))
+                    if table_content:
+                        documents.append(Document(
+                            page_content="\n".join(table_content),
+                            metadata={"source": docx_url, "type": "docx", "table": table_idx + 1}
+                        ))
+
+                return documents
+            finally:
+                os.unlink(temp_path)
+
+        except Exception as e:
+            logger.error(f"Error processing DOCX: {e}")
             return []
 
     async def search_relevant_content(

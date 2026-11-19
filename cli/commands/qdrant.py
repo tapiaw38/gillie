@@ -8,6 +8,7 @@ gillie qdrant restart  — restart Qdrant Docker container
 gillie qdrant status   — show container status and connection info
 gillie qdrant reset    — delete all Qdrant collections
 gillie qdrant logs     — view container logs
+gillie qdrant reindex  — re-vectorize all files in user's storage
 """
 
 import shutil
@@ -285,3 +286,150 @@ def logs(
         args.append("-f")
     args.append(CONTAINER_NAME)
     _compose(args)
+
+
+def _detect_file_type(filename: str) -> str | None:
+    lower = filename.lower()
+    if lower.endswith((".xlsx", ".xls")):
+        return "xlsx"
+    if lower.endswith(".pdf"):
+        return "pdf"
+    if lower.endswith((".docx", ".doc")):
+        return "docx"
+    return None
+
+
+def _get_profile_files() -> list:
+    """Get files from current user's profile."""
+    from cli.config.db import _get_profiles_collection, _get_user_id
+
+    user_id = _get_user_id()
+    if not user_id:
+        return []
+
+    col = _get_profiles_collection()
+    if col is None:
+        return []
+
+    try:
+        doc = col.find_one({"user_id": user_id}, {"files": 1})
+        return doc.get("files", []) if doc else []
+    except Exception:
+        return []
+
+
+@app.command("reindex")
+def reindex(
+    yes: bool = typer.Option(False, "--yes", "-y", help="Skip confirmation prompt"),
+):
+    """Re-vectorize all files in user's storage to Qdrant."""
+    import asyncio
+    from rich.progress import Progress, SpinnerColumn, TextColumn
+
+    if not config_exists():
+        console.print("[red]✗[/red] No config found. Run [bold cyan]gillie init[/bold cyan] first.")
+        raise typer.Exit(1)
+
+    config = load_config()
+    if not config.services.qdrant.enabled:
+        console.print("[red]✗[/red] Qdrant is disabled. Enable with [bold cyan]gillie qdrant edit[/bold cyan].")
+        raise typer.Exit(1)
+
+    files = _get_profile_files()
+    if not files:
+        console.print("[dim]No files found in profile storage.[/dim]")
+        raise typer.Exit(0)
+
+    supported_files = []
+    for f in files:
+        name = f.get("name", "")
+        file_type = _detect_file_type(name)
+        if file_type:
+            supported_files.append((f, file_type))
+
+    if not supported_files:
+        console.print("[dim]No supported files (PDF, XLSX, DOCX) found.[/dim]")
+        raise typer.Exit(0)
+
+    console.print()
+    console.print(f"Found [bold]{len(supported_files)}[/bold] file(s) to reindex:")
+    for f, ftype in supported_files[:5]:
+        console.print(f"  • {f.get('name', 'unknown')} ({ftype})")
+    if len(supported_files) > 5:
+        console.print(f"  ... and {len(supported_files) - 5} more")
+    console.print()
+
+    if not yes:
+        try:
+            confirm = inquirer.select(
+                message="Proceed with reindexing?",
+                choices=[
+                    {"name": "  Yes, reindex all files", "value": True},
+                    {"name": "  No, cancel", "value": False},
+                ],
+                pointer="❯", qmark="",
+            ).execute()
+        except KeyboardInterrupt:
+            confirm = False
+        if not confirm:
+            console.print("Aborted.")
+            raise typer.Exit(0)
+
+    async def do_reindex():
+        from cli.config.db import _get_user_id
+        from src.core.platform.config.service import init_config_from_json
+        from src.core.platform.fileprocessor.rag_processor import RAGDocumentProcessor
+
+        user_id = _get_user_id()
+        config_service = init_config_from_json()
+        rag_processor = RAGDocumentProcessor(config_service)
+
+        # Delete existing collection first
+        collection_name = f"profile_{user_id}"
+        host = config.services.qdrant.host
+        port = config.services.qdrant.port
+
+        try:
+            import requests
+            r = requests.delete(f"http://{host}:{port}/collections/{collection_name}", timeout=10)
+            if r.status_code == 200:
+                console.print(f"[dim]Cleared existing collection '{collection_name}'[/dim]")
+        except Exception:
+            pass
+
+        success = 0
+        failed = 0
+
+        with Progress(
+            SpinnerColumn(),
+            TextColumn("[progress.description]{task.description}"),
+            console=console,
+        ) as progress:
+            for f, file_type in supported_files:
+                file_url = f.get("url", "")
+                file_name = f.get("name", "unknown")
+
+                task = progress.add_task(f"Indexing {file_name}...", total=None)
+                try:
+                    result = await rag_processor.process_and_store_document(
+                        file_url, file_type, profile_id=user_id
+                    )
+                    if result.get("error"):
+                        console.print(f"  [red]✗[/red] {file_name}: {result['error']}")
+                        failed += 1
+                    else:
+                        vectors = result.get("vector_count", 0)
+                        console.print(f"  [green]✓[/green] {file_name}: {vectors} vectors")
+                        success += 1
+                except Exception as e:
+                    console.print(f"  [red]✗[/red] {file_name}: {e}")
+                    failed += 1
+                finally:
+                    progress.remove_task(task)
+
+        return success, failed
+
+    success, failed = asyncio.run(do_reindex())
+    console.print()
+    console.print(f"✨🐙 [green]✓[/green] Reindex complete: {success} success, {failed} failed.")
+    console.print()

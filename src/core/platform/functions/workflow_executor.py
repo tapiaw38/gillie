@@ -1,173 +1,346 @@
-import logging
+import asyncio
+import ipaddress
 import json
-import aiohttp
+import logging
+import os
 import re
 from datetime import datetime
 from typing import Dict, Any, List, Optional
+from urllib.parse import quote, urlparse
+
+import aiohttp
 
 logger = logging.getLogger(__name__)
 
+_DEFAULT_STEP_TIMEOUT = 30.0
+
+# Workflow URLs come from user-authored config, so the server is being told to
+# make a request on the user's behalf. Loopback stays reachable because the
+# built-in workflows call this very API, but the cloud metadata endpoint and
+# the RFC1918 ranges are off limits unless an operator opts in.
+_ALLOW_PRIVATE_URLS = os.getenv("GILLIE_WORKFLOW_ALLOW_PRIVATE_URLS", "").lower() in ("1", "true", "yes")
+
+_PLACEHOLDER = re.compile(r"\{([A-Za-z_][A-Za-z0-9_]*)\}")
+
+_DATE_KEYWORDS = (
+    "check_in", "check_out", "fecha", "date", "inicio", "fin",
+    "start_date", "end_date", "booking_date", "reservation_date",
+)
+
+
+class WorkflowError(Exception):
+    """A workflow step failed and the run cannot meaningfully continue."""
+
 
 class WorkflowExecutor:
-    """Executes multi-step workflows sequentially, passing context between steps."""
+    """Executes multi-step workflows sequentially, passing context between steps.
+
+    Holds no per-execution state: one instance is shared by every request, so
+    the execution context, the auth token and the workflow definition all
+    travel as arguments. Keeping them on `self` leaked one tenant's token into
+    another tenant's concurrent run.
+    """
 
     def __init__(self, config_service=None):
         self.config_service = config_service
-        self.execution_context: Dict[str, Any] = {}
-        self.workflows: Dict[str, Any] = {}
-
-    def get_available_workflows(self) -> List[str]:
-        return list(self.workflows.keys())
-
-    def register_workflow(self, name: str, workflow: Dict[str, Any]):
-        self.workflows[name] = workflow
-
-    def get_workflow_info(self, workflow_name: str) -> Optional[Dict[str, Any]]:
-        if workflow_name not in self.workflows:
-            return None
-        workflow = self.workflows[workflow_name]
-        return {
-            "name": workflow["name"],
-            "description": workflow["description"],
-            "input_params": workflow["input_params"],
-            "examples": workflow["examples"],
-            "keywords": workflow["keywords"],
-        }
 
     async def execute_workflow(
         self,
-        workflow_name: str,
+        workflow: Dict[str, Any],
         input_params: Dict[str, Any],
         profile=None,
         auth_token: str = None,
     ) -> Dict[str, Any]:
         """Execute a complete workflow step by step."""
+        if not isinstance(workflow, dict):
+            raise ValueError(f"Workflow definition must be a dict, got {type(workflow).__name__}")
 
-        if workflow_name not in self.workflows:
-            raise ValueError(f"Workflow '{workflow_name}' not found. Available: {list(self.workflows.keys())}")
+        workflow_name = workflow.get("name") or "workflow"
+        steps = workflow.get("steps") or []
+        self._validate_steps(workflow_name, steps)
 
-        workflow = self.workflows[workflow_name]
-        self.execution_context = input_params.copy()
-
-        if profile:
-            if hasattr(profile, "user_id") and profile.user_id:
-                self.execution_context.setdefault("user_id", profile.user_id)
-            if hasattr(profile, "id") and profile.id:
-                self.execution_context.setdefault("profile_id", profile.id)
-
+        context: Dict[str, Any] = dict(input_params or {})
+        if profile is not None:
+            if getattr(profile, "user_id", None):
+                context.setdefault("user_id", profile.user_id)
+            if getattr(profile, "id", None):
+                context.setdefault("profile_id", profile.id)
         if auth_token:
-            self.execution_context.setdefault("auth_token", auth_token)
+            context.setdefault("auth_token", auth_token)
 
         results: Dict[str, Any] = {}
+        status = "completed"
+        stopped_at: Optional[str] = None
+        failure: Optional[str] = None
 
-        logger.info(f"[WORKFLOW] Starting '{workflow_name}' with {len(workflow.get('steps', []))} steps")
+        logger.info(f"[WORKFLOW] Starting '{workflow_name}' with {len(steps)} steps")
 
-        try:
-            for idx, step in enumerate(workflow["steps"]):
-                logger.info(f"[WORKFLOW] Step {idx + 1}: {step['name']} ({step['method'].upper()} {step['url']})")
+        async with aiohttp.ClientSession() as session:
+            for idx, step in enumerate(steps):
+                step_name = step["name"]
 
-                step_result = await self._execute_step(step)
+                # The condition guards the step: the editor draws it as a gate,
+                # and evaluating it afterwards meant a false condition still ran
+                # the request it was supposed to prevent.
+                condition = step.get("condition")
+                if condition and not self._evaluate_condition(condition, context):
+                    logger.info(f"[WORKFLOW] Condition '{condition}' not met, stopping before '{step_name}'")
+                    status = "stopped"
+                    stopped_at = step_name
+                    break
 
-                if step_result is not None:
-                    results[step["name"]] = step_result
-                    self._update_context(step_result, step.get("response_mapping", {}))
-                else:
-                    logger.warning(f"[WORKFLOW] Step '{step['name']}' returned no result")
+                logger.info(
+                    f"[WORKFLOW] Step {idx + 1}: {step_name} "
+                    f"({str(step.get('method', 'GET')).upper()} {step.get('url', '')})"
+                )
 
-                if step.get("condition"):
-                    if not self._evaluate_condition(step["condition"], results):
-                        logger.info(f"[WORKFLOW] Condition not met at step '{step['name']}', stopping")
-                        break
+                try:
+                    step_result = await self._execute_step(session, step, context)
+                except Exception as e:
+                    # A failed step leaves the context without the values the
+                    # later steps interpolate, so carrying on just fires
+                    # malformed requests at the user's API.
+                    if step.get("continue_on_error"):
+                        logger.warning(f"[WORKFLOW] Step '{step_name}' failed, continuing as configured: {e}")
+                        continue
+                    logger.error(f"[WORKFLOW] Step '{step_name}' failed, aborting '{workflow_name}': {e}")
+                    status = "failed"
+                    stopped_at = step_name
+                    failure = str(e)
+                    break
 
-        except Exception as e:
-            logger.error(f"[WORKFLOW] Error in '{workflow_name}': {e}", exc_info=True)
-            raise
+                results[step_name] = step_result
+                self._update_context(context, step_result, step.get("response_mapping") or {})
 
-        logger.info(f"[WORKFLOW] Completed '{workflow_name}', steps executed: {list(results.keys())}")
+        logger.info(f"[WORKFLOW] {status} '{workflow_name}', steps executed: {list(results.keys())}")
 
-        return {
+        outcome: Dict[str, Any] = {
             "workflow_name": workflow_name,
-            "status": "completed",
+            "status": status,
             "steps_executed": list(results.keys()),
             "final_result": results,
-            "context": self.execution_context,
+            "context": context,
+        }
+        if stopped_at:
+            outcome["stopped_at"] = stopped_at
+        if failure:
+            outcome["error"] = failure
+        return outcome
+
+    async def execute_single_step(
+        self,
+        step: Dict[str, Any],
+        context: Dict[str, Any],
+    ) -> Dict[str, Any]:
+        """Run one step on its own, for the editor's 'test this step' button."""
+        self._validate_steps("test", [step])
+        async with aiohttp.ClientSession() as session:
+            return await self._execute_step(session, step, context or {})
+
+    @staticmethod
+    def _validate_steps(workflow_name: str, steps: List[Dict[str, Any]]) -> None:
+        seen = set()
+        for step in steps:
+            name = step.get("name")
+            if not name:
+                raise ValueError(f"Workflow '{workflow_name}' has a step without a name")
+            if name in seen:
+                raise ValueError(
+                    f"Workflow '{workflow_name}' has duplicate step name '{name}'; "
+                    "results are keyed by name and would overwrite each other"
+                )
+            seen.add(name)
+            if not step.get("url"):
+                raise ValueError(f"Step '{name}' of workflow '{workflow_name}' has no url")
+
+    async def _execute_step(
+        self,
+        session: aiohttp.ClientSession,
+        step: Dict[str, Any],
+        context: Dict[str, Any],
+    ) -> Dict[str, Any]:
+        """Execute a single workflow step. Raises on failure."""
+        url = self._substitute_url(step["url"], context)
+        if not url.startswith(("http://", "https://")):
+            url = f"http://{url}"
+        await self._assert_url_allowed(url)
+
+        body: Optional[Any] = None
+        if step.get("body_template"):
+            body = self._build_body(step["body_template"], context)
+
+        headers = {
+            key: self._substitute_header(value, context)
+            for key, value in (step.get("headers") or {}).items()
         }
 
-    async def _execute_step(self, step: Dict[str, Any]) -> Optional[Dict[str, Any]]:
-        """Execute a single workflow step."""
-        try:
-            url = self._substitute(step["url"])
+        method = str(step.get("method", "GET")).upper()
+        timeout = float(step.get("timeout") or _DEFAULT_STEP_TIMEOUT)
 
-            if not url.startswith(("http://", "https://")):
-                url = f"http://{url}"
-
-            body: Optional[Dict[str, Any]] = None
-            if step.get("body_template"):
-                body = self._prepare_body(step["body_template"])
-
-            headers: Dict[str, str] = {}
-            for key, value in (step.get("headers") or {}).items():
-                headers[key] = self._substitute(value)
-
-            logger.info(f"[STEP] {step['method'].upper()} {url}")
-
-            result = await self._request(step["method"], url, headers, body)
-
-            logger.info(f"[STEP] '{step['name']}' completed")
-            return result
-
-        except Exception as e:
-            logger.error(f"[STEP] Error in '{step['name']}': {e}", exc_info=True)
-            return None
+        result = await self._request(session, method, url, headers, body, timeout)
+        logger.info(f"[STEP] '{step['name']}' completed")
+        return result
 
     async def _request(
         self,
+        session: aiohttp.ClientSession,
         method: str,
         url: str,
         headers: Dict[str, str],
-        body: Optional[Dict[str, Any]],
-        timeout: float = 30.0,
+        body: Optional[Any],
+        timeout: float = _DEFAULT_STEP_TIMEOUT,
     ) -> Dict[str, Any]:
-        """Generic HTTP request helper, supports GET/POST/PUT/DELETE/PATCH."""
-        timeout_cfg = aiohttp.ClientTimeout(total=timeout)
+        """Generic HTTP request helper, supports GET/POST/PUT/PATCH/DELETE."""
         kwargs: Dict[str, Any] = {}
-        if body is not None and method.upper() not in ("GET", "DELETE"):
+        if body is not None and method not in ("GET", "DELETE"):
             kwargs["json"] = body
 
-        async with aiohttp.ClientSession() as session:
-            async with session.request(
-                method=method.upper(),
-                url=url,
-                headers=headers,
-                timeout=timeout_cfg,
-                **kwargs,
-            ) as response:
-                response.raise_for_status()
-                return await response.json()
+        async with session.request(
+            method=method,
+            url=url,
+            headers=headers,
+            timeout=aiohttp.ClientTimeout(total=timeout),
+            **kwargs,
+        ) as response:
+            text = await response.text()
+            response.raise_for_status()
+            try:
+                return json.loads(text)
+            except json.JSONDecodeError:
+                # Not every endpoint answers JSON; the body is still worth
+                # keeping so response_mapping can reach it.
+                return {"raw": text}
 
-    def _substitute(self, template: str) -> str:
-        """Replace {param} placeholders in a string using the execution context."""
-        for param, value in self.execution_context.items():
-            date_keywords = ["check_in", "check_out", "fecha", "date", "inicio", "fin",
-                             "start_date", "end_date", "booking_date", "reservation_date"]
-            if any(kw in param.lower() for kw in date_keywords):
-                value = self._normalize_date(str(value))
-            template = template.replace(f"{{{param}}}", str(value))
-        return template
+    @staticmethod
+    async def _assert_url_allowed(url: str) -> None:
+        """Reject requests aimed at infrastructure the user should not reach."""
+        host = urlparse(url).hostname
+        if not host:
+            raise WorkflowError(f"Step url has no host: {url}")
 
-    def _prepare_body(self, body_template: str) -> Dict[str, Any]:
-        """Build the request body by substituting context variables."""
         try:
-            return json.loads(self._substitute(body_template))
-        except Exception as e:
-            logger.error(f"Error preparing body: {e}")
-            return {}
+            infos = await asyncio.get_running_loop().getaddrinfo(host, None)
+        except OSError as e:
+            raise WorkflowError(f"Could not resolve '{host}': {e}")
 
-    def _update_context(self, step_result: Dict[str, Any], response_mapping: Dict[str, str]):
+        for info in infos:
+            address = ipaddress.ip_address(info[4][0])
+            if address.is_loopback:
+                continue  # the built-in workflows call this API back
+            if address.is_link_local or address.is_multicast or address.is_reserved:
+                raise WorkflowError(
+                    f"Blocked workflow request to link-local or reserved address {address} ({host})"
+                )
+            if address.is_private and not _ALLOW_PRIVATE_URLS:
+                raise WorkflowError(
+                    f"Blocked workflow request to private address {address} ({host}). "
+                    "Set GILLIE_WORKFLOW_ALLOW_PRIVATE_URLS=1 to allow internal endpoints."
+                )
+
+    # ── Template substitution ────────────────────────────────────────────────
+
+    @classmethod
+    def _resolve(cls, param: str, context: Dict[str, Any]) -> Any:
+        value = context[param]
+        if any(kw in param.lower() for kw in _DATE_KEYWORDS):
+            return cls._normalize_date(str(value))
+        return value
+
+    @classmethod
+    def _substitute_url(cls, template: str, context: Dict[str, Any]) -> str:
+        """Fill {param} placeholders in a URL, encoding the values.
+
+        Values reach here straight from an LLM reading a user message, so an
+        unencoded '?' or '&' would rewrite the endpoint being called.
+        """
+        def replace(match: "re.Match") -> str:
+            param = match.group(1)
+            if param not in context:
+                return match.group(0)
+            return quote(str(cls._resolve(param, context)), safe="/")
+
+        return _PLACEHOLDER.sub(replace, template)
+
+    @classmethod
+    def _substitute_header(cls, template: str, context: Dict[str, Any]) -> str:
+        """Fill {param} placeholders in a header value, stripping newlines."""
+        def replace(match: "re.Match") -> str:
+            param = match.group(1)
+            if param not in context:
+                return match.group(0)
+            return str(cls._resolve(param, context)).replace("\r", "").replace("\n", "")
+
+        return _PLACEHOLDER.sub(replace, template)
+
+    @classmethod
+    def _build_body(cls, body_template: str, context: Dict[str, Any]) -> Any:
+        """Build the request body from its template.
+
+        The template is parsed as JSON *before* substitution whenever it can
+        be, so a value containing a quote lands inside a string instead of
+        breaking the document. Interpolating first and parsing after used to
+        produce an empty body and send the request anyway.
+        """
+        try:
+            parsed = json.loads(body_template)
+        except json.JSONDecodeError:
+            # Placeholder sitting in a non-string position, e.g. {"n": {count}}.
+            escaped = cls._substitute_escaped(body_template, context)
+            try:
+                return json.loads(escaped)
+            except json.JSONDecodeError as e:
+                raise WorkflowError(f"Body template is not valid JSON after substitution: {e}")
+        return cls._substitute_structure(parsed, context)
+
+    @classmethod
+    def _substitute_structure(cls, node: Any, context: Dict[str, Any]) -> Any:
+        if isinstance(node, dict):
+            return {key: cls._substitute_structure(value, context) for key, value in node.items()}
+        if isinstance(node, list):
+            return [cls._substitute_structure(item, context) for item in node]
+        if not isinstance(node, str):
+            return node
+
+        whole = _PLACEHOLDER.fullmatch(node)
+        if whole and whole.group(1) in context:
+            # "{count}" alone keeps the value's real type instead of stringifying it.
+            return cls._resolve(whole.group(1), context)
+
+        def replace(match: "re.Match") -> str:
+            param = match.group(1)
+            if param not in context:
+                return match.group(0)
+            return str(cls._resolve(param, context))
+
+        return _PLACEHOLDER.sub(replace, node)
+
+    @classmethod
+    def _substitute_escaped(cls, template: str, context: Dict[str, Any]) -> str:
+        """Substitute into raw JSON text, escaping each value as a JSON string."""
+        def replace(match: "re.Match") -> str:
+            param = match.group(1)
+            if param not in context:
+                return match.group(0)
+            value = cls._resolve(param, context)
+            if isinstance(value, (int, float, bool)) or value is None:
+                return json.dumps(value)
+            return json.dumps(str(value))[1:-1]
+
+        return _PLACEHOLDER.sub(replace, template)
+
+    # ── Context and conditions ───────────────────────────────────────────────
+
+    @classmethod
+    def _update_context(
+        cls,
+        context: Dict[str, Any],
+        step_result: Dict[str, Any],
+        response_mapping: Dict[str, str],
+    ) -> None:
         """Map response fields into the execution context using dot-paths."""
         for context_key, response_path in response_mapping.items():
             try:
-                self.execution_context[context_key] = self._get_nested(step_result, response_path)
+                context[context_key] = cls._get_nested(step_result, response_path)
             except Exception as e:
                 logger.warning(f"Could not extract '{response_path}': {e}")
 
@@ -178,42 +351,49 @@ class WorkflowExecutor:
         for key in path.split("."):
             if isinstance(current, dict) and key in current:
                 current = current[key]
+            elif isinstance(current, list) and key.isdigit() and int(key) < len(current):
+                current = current[int(key)]
             else:
                 raise KeyError(f"Path '{path}' not found in response")
         return current
 
-    def _evaluate_condition(self, condition: str, results: Dict[str, Any]) -> bool:
-        """Evaluate a simple workflow condition against the current context."""
+    @staticmethod
+    def _evaluate_condition(condition: str, context: Dict[str, Any]) -> bool:
+        """Evaluate a workflow condition against the current context.
+
+        Fails closed: a condition nobody can parse stops the workflow rather
+        than waving every remaining step through.
+        """
         try:
             if "==" in condition:
                 key, expected = (p.strip().strip("'\"") for p in condition.split("==", 1))
-                actual = self.execution_context.get(key)
+                actual = context.get(key)
                 if expected.lower() in ("true", "false"):
                     return actual == (expected.lower() == "true")
                 return str(actual) == expected
 
             if "!=" in condition:
                 key, expected = (p.strip().strip("'\"") for p in condition.split("!=", 1))
-                actual = self.execution_context.get(key)
+                actual = context.get(key)
                 if expected.lower() == "null":
                     return actual is not None
                 return str(actual) != expected
 
             if condition.startswith("exists:"):
                 key = condition.split(":", 1)[1].strip()
-                return key in self.execution_context and self.execution_context[key] is not None
+                return context.get(key) is not None
 
             if condition.startswith("greater_than:"):
                 key, threshold = condition.split(":", 1)[1].split("=", 1)
-                actual = self.execution_context.get(key.strip())
-                return bool(actual and float(actual) > float(threshold.strip()))
+                actual = context.get(key.strip())
+                return bool(actual is not None and float(actual) > float(threshold.strip()))
 
-            logger.warning(f"Unrecognized condition: {condition}")
-            return True
+            logger.warning(f"Unrecognized condition, stopping workflow: {condition}")
+            return False
 
         except Exception as e:
-            logger.error(f"Error evaluating condition '{condition}': {e}")
-            return True
+            logger.error(f"Error evaluating condition '{condition}', stopping workflow: {e}")
+            return False
 
     @staticmethod
     def _normalize_date(value: str) -> str:
@@ -239,31 +419,10 @@ class WorkflowExecutor:
                 try:
                     if fmt == "DMY":
                         day, month, year = m.groups()
-                        return datetime(int(year), int(month), int(day)).strftime("%Y-%m-%d")
                     else:
                         year, month, day = m.groups()
-                        return datetime(int(year), int(month), int(day)).strftime("%Y-%m-%d")
+                    return datetime(int(year), int(month), int(day)).strftime("%Y-%m-%d")
                 except (ValueError, TypeError):
                     continue
 
         return value
-
-    def convert_workflow_to_function(self, workflow_name: str) -> Dict[str, Any]:
-        """Convert a registered workflow to a function-compatible descriptor."""
-        if workflow_name not in self.workflows:
-            raise ValueError(f"Workflow '{workflow_name}' not found")
-
-        workflow = self.workflows[workflow_name]
-        return {
-            "name": workflow["name"],
-            "description": workflow["description"],
-            "url": f"workflow://{workflow_name}",
-            "method": "WORKFLOW",
-            "param_types": {p: "string" for p in workflow["input_params"]},
-            "param_descriptions": {p: f"Input parameter: {p}" for p in workflow["input_params"]},
-            "examples": workflow["examples"],
-            "keywords": workflow["keywords"],
-            "workflow_type": workflow_name,
-        }
-
-

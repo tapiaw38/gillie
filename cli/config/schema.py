@@ -118,6 +118,11 @@ class BrainServiceConfig:
 @dataclass
 class TTSServiceConfig:
     enabled: bool = False
+    engine: str = ""
+    api_key: str = ""
+    base_url: str = ""
+    model: str = ""
+    voice: str = ""
 
 
 @dataclass

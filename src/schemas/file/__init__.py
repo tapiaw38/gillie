@@ -5,6 +5,7 @@ from .file_schemas import (
     FileListOutput,
     FileDeleteOutput,
     FileDeleteOutputData,
+    FileVectorStatusOutput,
 )
 
 __all__ = [
@@ -14,4 +15,5 @@ __all__ = [
     "FileListOutput",
     "FileDeleteOutput",
     "FileDeleteOutputData",
+    "FileVectorStatusOutput",
 ]

@@ -1,0 +1,201 @@
+import assert from 'node:assert/strict'
+import http from 'node:http'
+import type { AddressInfo } from 'node:net'
+import { onTestFinished, test } from 'vitest'
+import {
+  createBridgeServer,
+  hostAllowed,
+  normalizeEvent,
+  originAllowed,
+} from './bridge-server'
+import type { BridgeEvent } from './types'
+
+interface ServerResponsePayload {
+  body: string
+  headers: http.IncomingHttpHeaders
+  status?: number
+}
+
+function requestServer(
+  address: AddressInfo,
+  {
+    path,
+    method = 'GET',
+    headers = {},
+    body = '',
+  }: {
+    path: string
+    method?: string
+    headers?: Record<string, string | number>
+    body?: string
+  },
+): Promise<ServerResponsePayload> {
+  return new Promise((resolve, reject) => {
+    const request = http.request(
+      {
+        hostname: '127.0.0.1',
+        port: address.port,
+        path,
+        method,
+        headers,
+      },
+      (response) => {
+        const chunks: Buffer[] = []
+        response.on('data', (chunk: Buffer) => chunks.push(chunk))
+        response.on('end', () =>
+          resolve({
+            body: Buffer.concat(chunks).toString('utf8'),
+            headers: response.headers,
+            status: response.statusCode,
+          }),
+        )
+      },
+    )
+    request.on('error', reject)
+    request.end(body)
+  })
+}
+
+test('normalizes state and clamps audio level events', () => {
+  const state = {
+    activity: 'speaking',
+    microphoneMuted: false,
+    outputMuted: false,
+    phase: 'active',
+  } as const
+  assert.deepEqual(normalizeEvent({ type: 'state', state }), { type: 'state', state })
+  assert.deepEqual(normalizeEvent({ type: 'audio-level', level: 4 }), {
+    type: 'audio-level',
+    level: 1,
+  })
+  assert.deepEqual(normalizeEvent({ type: 'animation', animation: 'DANCE' }), {
+    type: 'animation',
+    animation: 'DANCE',
+  })
+  assert.deepEqual(normalizeEvent({ type: 'animation', animation: 'HAPPY' }), {
+    type: 'animation',
+    animation: 'HAPPY',
+  })
+  assert.deepEqual(normalizeEvent({ type: 'animation', animation: 'FINGER_GUN' }), {
+    type: 'animation',
+    animation: 'FINGER_GUN',
+  })
+  assert.equal(normalizeEvent({ type: 'animation', animation: 'CELEBRATE' }), null)
+  assert.equal(normalizeEvent({ type: 'animation', animation: 'UNKNOWN' }), null)
+  assert.equal(normalizeEvent({ type: 'state', state: { phase: 'wat' } }), null)
+})
+
+test('only accepts supported app and local webview origins', () => {
+  assert.equal(originAllowed('http://127.0.0.1:5175'), true)
+  assert.equal(originAllowed('http://localhost:5175'), true)
+  assert.equal(originAllowed('codex-app://codex'), true)
+  assert.equal(originAllowed('null'), false)
+  assert.equal(originAllowed('https://example.com'), false)
+  assert.equal(originAllowed('codex://settings'), false)
+  assert.equal(originAllowed(undefined), true)
+})
+
+test('only accepts loopback Host headers', () => {
+  assert.equal(hostAllowed('127.0.0.1:47850'), true)
+  assert.equal(hostAllowed('localhost:47850'), true)
+  assert.equal(hostAllowed('[::1]:47850'), true)
+  assert.equal(hostAllowed('avatar.example'), false)
+  assert.equal(hostAllowed('127.0.0.1.example'), false)
+  assert.equal(hostAllowed(undefined), false)
+})
+
+test('bridge rejects a non-loopback Host header', async () => {
+  const bridge = createBridgeServer({ port: 0, onEvent: () => {} })
+  const address = (await bridge.listen()) as AddressInfo
+  onTestFinished(() => bridge.close())
+
+  const response = await requestServer(address, {
+    path: '/health',
+    headers: { host: 'avatar.example' },
+  })
+
+  assert.equal(response.status, 403)
+})
+
+test('bridge accepts a valid native adapter state event', async () => {
+  const events: BridgeEvent[] = []
+  const bridge = createBridgeServer({ port: 0, onEvent: (event) => events.push(event) })
+  const address = (await bridge.listen()) as AddressInfo
+  onTestFinished(() => bridge.close())
+
+  const body = JSON.stringify({
+    type: 'state',
+    state: {
+      activity: 'listening',
+      microphoneMuted: false,
+      outputMuted: false,
+      phase: 'active',
+    },
+  })
+  const response = await requestServer(address, {
+    path: '/events',
+    method: 'POST',
+    headers: {
+      'content-type': 'application/json',
+      'content-length': Buffer.byteLength(body),
+    },
+    body,
+  })
+
+  assert.equal(response.status, 202)
+  assert.equal(events.length, 1)
+  assert.equal(events[0].type === 'state' ? events[0].state.phase : null, 'active')
+})
+
+test('bridge routes only valid local JSON requests to MCP', async () => {
+  const bodies: unknown[] = []
+  const bridge = createBridgeServer({
+    port: 0,
+    onEvent: () => {},
+    mcpHandler: async (_request, response, body) => {
+      bodies.push(body)
+      response.writeHead(200, { 'content-type': 'application/json' })
+      response.end('{"ok":true}')
+    },
+  })
+  const address = (await bridge.listen()) as AddressInfo
+  onTestFinished(() => bridge.close())
+
+  const accepted = await requestServer(address, {
+    path: '/mcp',
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: '{"jsonrpc":"2.0"}',
+  })
+  const blockedOrigin = await requestServer(address, {
+    path: '/mcp',
+    method: 'POST',
+    headers: {
+      'content-type': 'application/json',
+      origin: 'https://example.com',
+    },
+    body: '{}',
+  })
+  const unsupportedMethod = await requestServer(address, { path: '/mcp' })
+  const invalidJson = await requestServer(address, {
+    path: '/mcp',
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: '{',
+  })
+  const oversized = await requestServer(address, {
+    path: '/mcp',
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ value: 'x'.repeat(64 * 1024) }),
+  })
+
+  assert.equal(accepted.status, 200)
+  assert.equal(blockedOrigin.status, 403)
+  assert.equal(unsupportedMethod.status, 405)
+  assert.equal(unsupportedMethod.headers.allow, 'POST')
+  assert.equal(invalidJson.status, 400)
+  assert.equal(JSON.parse(invalidJson.body).error.code, -32700)
+  assert.equal(oversized.status, 413)
+  assert.deepEqual(bodies, [{ jsonrpc: '2.0' }])
+})

@@ -2,6 +2,7 @@ from src.schemas import (
     FileListOutput,
     FileInput,
     FileDeleteOutput,
+    FileVectorStatusOutput,
 )
 from src.core.domain import File
 from datetime import datetime, timezone
@@ -15,11 +16,21 @@ from src.core.platform.errors.mappings.profile import (
     ProfileFileDeleteError
 )
 from uuid import uuid4
+from hashlib import md5
 from typing import List, Tuple, Optional
 from asyncio import to_thread, gather, create_task
 import logging
 
 logger = logging.getLogger(__name__)
+
+_background_tasks: set = set()
+
+
+def _spawn_background(coro):
+    task = create_task(coro)
+    _background_tasks.add(task)
+    task.add_done_callback(_background_tasks.discard)
+    return task
 
 
 def _detect_file_type(filename: str) -> Optional[str]:
@@ -28,6 +39,8 @@ def _detect_file_type(filename: str) -> Optional[str]:
         return "xlsx"
     if lower.endswith(".pdf"):
         return "pdf"
+    if lower.endswith((".docx", ".doc")):
+        return "docx"
     return None
 
 
@@ -103,7 +116,7 @@ class AddFilesUseCase:
                     # Fire-and-forget: init + ingest runs fully in background
                     file_type = _detect_file_type(file.filename)
                     if file_type:
-                        create_task(
+                        _spawn_background(
                             _ingest_into_qdrant(app.config_service, file_url, file_type, user_id, file.filename)
                         )
                         logger.info(f"[Qdrant] ingestion task queued for '{file.filename}'")
@@ -158,6 +171,49 @@ class AddFilesUseCase:
             raise NewApplicationError(ProfileFileUploadError, e)
 
 
+class GetFilesVectorStatusUseCase:
+    """Compute vectorization status per file on-demand (no persistence).
+
+    "indexed"    -> vectors present in Qdrant
+    "processing" -> vectorizable type but not yet in Qdrant (ingest running/failed)
+    "not_indexed"-> file type not vectorizable
+    """
+
+    def __init__(self, context_factory: Factory):
+        self.context_factory = context_factory
+
+    async def execute(self, user_id: str) -> FileVectorStatusOutput:
+        try:
+            context = self.context_factory()
+            profile = await context.repositories.profile.find_by_user_id(user_id)
+            if not profile:
+                raise NewApplicationError(ProfileGetNotFoundError)
+
+            files = getattr(profile, "files", None) or []
+            statuses: dict = {}
+            collection = f"profile_{user_id}"
+
+            adapter = None
+            try:
+                from src.adapters.vectorstore.qdrant_adapter import QdrantVectorStoreAdapter
+                adapter = QdrantVectorStoreAdapter(context.config_service)
+            except Exception as e:
+                logger.warning(f"[VectorStatus] Qdrant unavailable: {e}")
+
+            for f in files:
+                if _detect_file_type(f.name) is None:
+                    statuses[f.id] = "not_indexed"
+                    continue
+                document_id = md5(f.url.encode()).hexdigest()
+                exists = adapter is not None and adapter.document_exists(collection, document_id)
+                statuses[f.id] = "indexed" if exists else "processing"
+
+            return FileVectorStatusOutput.from_output(statuses)
+
+        except PyMongoError as e:
+            raise NewApplicationError(ProfileGetNotFoundError, e)
+
+
 class DeleteFileByIdUseCase:
     def __init__(self, context_factory: Factory):
         self.context_factory = context_factory
@@ -175,8 +231,8 @@ class DeleteFileByIdUseCase:
                 user_id, file_id
             )
 
-            create_task(_delete_from_s3(context.store_service, file.name, file_id))
-            create_task(_delete_from_qdrant(context.config_service, file.url, file_id, user_id))
+            _spawn_background(_delete_from_s3(context.store_service, file.name, file_id))
+            _spawn_background(_delete_from_qdrant(context.config_service, file.url, file_id, user_id))
             logger.info(f"[Delete] background tasks queued for file {file_id} (S3 + Qdrant)")
 
             profile = await context.repositories.profile.find_by_user_id(user_id)

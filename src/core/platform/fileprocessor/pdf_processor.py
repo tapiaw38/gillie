@@ -81,6 +81,48 @@ class FileImageProcessor(BaseFileProcessor):
         super().__init__(config_service)
         self.enable_fast_processing = True
 
+    async def extract_text_for_evaluation(self, pdf_data: bytes) -> str:
+        """Extract PDF text for a one-shot answer evaluation.
+
+        Native text is preferred. Scanned PDFs fall back to the existing OCR
+        pipeline. Related-image search is intentionally skipped here because
+        evaluation needs answer text, not document image recommendations.
+        """
+        if not pdf_data:
+            return ""
+
+        has_text, _, _ = self._check_pdf_has_text(pdf_data)
+        if has_text:
+            results = await self._extract_text_without_image_search(pdf_data)
+        else:
+            results = await self._extract_text_with_ocr(pdf_data)
+        return "\n\n".join(
+            result.extracted_text.strip()
+            for result in results
+            if result.extracted_text and result.extracted_text.strip()
+        )
+
+    async def _extract_text_without_image_search(
+        self, pdf_data: bytes
+    ) -> List[TextExtractionResult]:
+        """Extract native PDF text without invoking image relevance analysis."""
+        pdf_document = fitz.open(stream=pdf_data, filetype="pdf")
+        results = []
+        try:
+            for page_num in range(len(pdf_document)):
+                text = pdf_document[page_num].get_text().strip()
+                if text:
+                    results.append(TextExtractionResult(
+                        extracted_text=text,
+                        related_images=[],
+                        text_confidence=1.0,
+                        page_number=page_num + 1,
+                        extraction_method="pdf_text",
+                    ))
+            return results
+        finally:
+            pdf_document.close()
+
     async def analyze_pdf_content(self, pdf_url: str) -> PDFAnalysisResult:
         """
         Analyzes PDF content to determine if it has text
@@ -1718,8 +1760,8 @@ class FileImageProcessor(BaseFileProcessor):
             return {"page_text_content": {}}
 
     def _analyze_image_with_python_tools(self, image_base64: str) -> Dict[str, Any]:
-        """Placeholder for image analysis"""
-        return {"quality_score": 0.7, "objects_detected": 1, "text_detected": False}
+        """Analyze uploaded images with the shared concrete implementation."""
+        return super()._analyze_image_with_python_tools(image_base64)
 
     def _create_detailed_description(self, technical_analysis: Dict[str, Any]) -> str:
         """Create a basic description from technical analysis"""

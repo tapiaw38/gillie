@@ -171,3 +171,45 @@ def get_provider_data() -> Dict[str, Any]:
     except Exception as e:
         logger.warning(f"Could not read provider data from MongoDB: {e}")
         return {}
+
+
+def get_voice_data() -> Dict[str, Any]:
+    """Return the per-assistant voice overrides stored on the profile."""
+    user_id = _get_user_id()
+    if not user_id:
+        return {}
+
+    col = _get_profiles_collection()
+    if col is None:
+        return {}
+
+    try:
+        doc = col.find_one(
+            {"user_id": user_id},
+            {"tts_engine": 1, "tts_voice": 1, "tts_enabled": 1},
+        )
+        return doc or {}
+    except Exception as e:
+        logger.warning(f"Could not read voice data from MongoDB: {e}")
+        return {}
+
+
+def get_avatar_layout() -> Dict[str, Any]:
+    """Return the avatar window size and zoom stored on the profile."""
+    user_id = _get_user_id()
+    if not user_id:
+        return {}
+
+    col = _get_profiles_collection()
+    if col is None:
+        return {}
+
+    try:
+        doc = col.find_one(
+            {"user_id": user_id},
+            {"avatar_width": 1, "avatar_height": 1, "avatar_zoom": 1},
+        )
+        return doc or {}
+    except Exception as e:
+        logger.warning(f"Could not read avatar layout from MongoDB: {e}")
+        return {}

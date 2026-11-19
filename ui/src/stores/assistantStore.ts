@@ -15,6 +15,7 @@ import type {
   ContactResponse,
   ContactDeleteResponse,
   OwnerMemory,
+  FileVectorStatus,
 } from '@/types/assistant.ts'
 
 export const useAssistantStore = (assistantService: IAssistantService) =>
@@ -23,6 +24,7 @@ export const useAssistantStore = (assistantService: IAssistantService) =>
     const ownerMemories = ref<OwnerMemory[]>([])
     const ownerMemoriesHasMore = ref(false)
     const ownerMemoriesNextOffset = ref<number | null>(null)
+    const filesVectorStatuses = ref<Record<string, FileVectorStatus>>({})
 
     const {
       addAssistantProfileMutation,
@@ -37,6 +39,7 @@ export const useAssistantStore = (assistantService: IAssistantService) =>
       listOwnerMemoriesMutation,
       addFilesMutation,
       removeFileByIdMutation,
+      getFilesVectorStatusQuery,
       addIntegrationMutation,
       removeIntegrationByIdMutation,
     } = useAssistantQueries(assistantService)
@@ -202,6 +205,16 @@ export const useAssistantStore = (assistantService: IAssistantService) =>
       }
     }
 
+    const getFilesVectorStatus = async () => {
+      try {
+        const { data } = await getFilesVectorStatusQuery.refetch()
+        filesVectorStatuses.value = data?.data.statuses || {}
+      } catch (error) {
+        console.error('Failed to fetch files vector status:', error)
+        throw error
+      }
+    }
+
     const addIntegration = async (integration: IntegrationParams) => {
       try {
         const data = await addIntegrationMutation.mutateAsync(integration)
@@ -227,6 +240,7 @@ export const useAssistantStore = (assistantService: IAssistantService) =>
       ownerMemories,
       ownerMemoriesHasMore,
       ownerMemoriesNextOffset,
+      filesVectorStatuses,
       addAssistantProfile,
       getAssistantProfile,
       updateAssistantProfile,
@@ -239,6 +253,7 @@ export const useAssistantStore = (assistantService: IAssistantService) =>
       deleteContact,
       listOwnerMemories,
       removeFileById,
+      getFilesVectorStatus,
       addIntegration,
       removeIntegrationById,
 

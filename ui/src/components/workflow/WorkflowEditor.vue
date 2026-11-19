@@ -13,7 +13,8 @@ import { useI18n } from 'vue-i18n'
 import HttpRequestNode from './nodes/HttpRequestNode.vue'
 import ConditionNode from './nodes/ConditionNode.vue'
 import NodeConfigPanel from './panels/NodeConfigPanel.vue'
-import type { WorkflowFunction, WorkflowNodeData } from '@/types/workflow.types'
+import type { HttpMethod, WorkflowFunction, WorkflowNodeData, WorkflowStep } from '@/types/workflow.types'
+import { findUnresolvedParams, orderNodesByGraph } from './workflowGraph'
 
 import '@vue-flow/core/dist/style.css'
 import '@vue-flow/core/dist/theme-default.css'
@@ -205,6 +206,7 @@ const loadWorkflowFromJson = (workflow: WorkflowFunction) => {
           url: step.url,
           method: step.method,
           params: step.required_params,
+          headers: step.headers,
           bodyTemplate: step.body_template,
           responseMapping: step.response_mapping,
           condition: step.condition,
@@ -232,12 +234,13 @@ const loadWorkflowFromJson = (workflow: WorkflowFunction) => {
 }
 
 const exportToJson = (): WorkflowFunction => {
-  const steps = nodes.value.map((node) => ({
+  const steps: WorkflowStep[] = orderNodesByGraph(nodes.value, edges.value).map((node) => ({
     name: node.data?.label ?? '',
     description: node.data?.label ?? '',
     url: node.data?.config?.url || '',
-    method: (node.data?.config?.method as 'GET' | 'POST' | 'PUT' | 'DELETE') || 'GET',
+    method: (node.data?.config?.method as HttpMethod) || 'GET',
     required_params: node.data?.config?.params || [],
+    headers: node.data?.config?.headers,
     body_template: node.data?.config?.bodyTemplate,
     response_mapping: node.data?.config?.responseMapping,
     condition: node.data?.config?.condition,
@@ -256,6 +259,15 @@ const exportToJson = (): WorkflowFunction => {
 
 const handleSave = () => {
   const workflow = exportToJson()
+  const unresolved = findUnresolvedParams(workflow.steps ?? [], props.workflow?.input_params ?? [])
+  if (unresolved.length) {
+    toast.add({
+      severity: 'warn',
+      summary: t('workflow.toast.unresolvedParams'),
+      detail: t('workflow.toast.unresolvedParamsDetail', { params: unresolved.join(', ') }),
+      life: 6000,
+    })
+  }
   emit('save', workflow)
 }
 

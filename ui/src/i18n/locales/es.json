@@ -200,6 +200,14 @@
       "contacts": {
         "name": "Contactos",
         "description": "Gestiona contactos e identidades de conversación"
+      },
+      "avatar": {
+        "name": "Avatar",
+        "description": "Tamaño de ventana y zoom de cámara del personaje"
+      },
+      "voice": {
+        "name": "Voz",
+        "description": "Motor, voz, idioma y tono del asistente"
       }
     }
   },
@@ -209,6 +217,14 @@
     "loadingAccount": "Cargando información de la cuenta...",
     "audioResponses": "Respuestas en Audio",
     "audioResponsesDesc": "El asistente responderá con un mensaje de voz además del texto",
+    "voice": "Voz",
+    "voiceDesc": "Con qué voz habla el asistente",
+    "voiceEngine": "Proveedor de voz",
+    "voiceEngineDesc": "Qué motor de voz genera el audio",
+    "voiceEngineNoKey": "requiere API key",
+    "voiceEngineSet": "Proveedor de voz configurado en {engine}",
+    "voiceDefault": "Predeterminada",
+    "voiceSet": "Voz configurada en {voice}",
     "apiKeys": "Claves API",
     "activeKeys": "clave(s) activa(s)",
     "newKey": "Nueva Clave",
@@ -882,6 +898,9 @@
       "storedFiles": "Archivos Almacenados",
       "availableFiles": "archivo(s) disponible(s)",
       "fileAvailable": "Archivo disponible para el asistente",
+      "vectorIndexed": "Vectorizado",
+      "vectorProcessing": "Procesando…",
+      "vectorNotIndexed": "No vectorizable",
       "deleteFile": "Eliminar archivo",
       "noFiles": "No hay archivos almacenados",
       "noFilesDesc": "Sube tu primer archivo para comenzar",
@@ -1024,7 +1043,7 @@
     "tools": {
       "search_documents": {
         "label": "Buscar documentos",
-        "hint": "Cuándo buscar información dentro de PDFs y Excels subidos."
+        "hint": "Cuándo buscar información dentro de PDFs, Excels y documentos Word subidos."
       },
       "query_database": {
         "label": "Consultar BD",
@@ -1250,10 +1269,6 @@
         "label": "Navegador: Cambiar pestaña",
         "hint": "Cuándo cambiar entre pestañas abiertas."
       },
-      "browser_enable_remote_debug": {
-        "label": "Navegador: Debug remoto",
-        "hint": "Cuándo habilitar depuración remota del navegador."
-      },
       "browser_evaluate": {
         "label": "Navegador: Evaluar JS",
         "hint": "Cuándo ejecutar JavaScript en el contexto de la página abierta."
@@ -1395,7 +1410,9 @@
       "nodeDeletedDetail": "El nodo se ha eliminado del workflow",
       "nodeAdded": "Nodo Agregado",
       "nodeAddedHttpDetail": "Se ha creado un nuevo nodo HTTP Request",
-      "nodeAddedConditionDetail": "Se ha creado un nuevo nodo de condición"
+      "nodeAddedConditionDetail": "Se ha creado un nuevo nodo de condición",
+      "unresolvedParams": "Parámetros sin origen",
+      "unresolvedParamsDetail": "Nada provee estos valores: {params}. Agregalos a input_params o mapealos desde un paso anterior."
     },
     "node": {
       "newStep": "Nuevo Paso",
@@ -1417,7 +1434,17 @@
       "responseMapping": "Mapeo de Respuesta",
       "responseMappingHint": "Agrega mapeos para extraer datos de la respuesta",
       "saveChanges": "Guardar Cambios",
-      "deleteNode": "Eliminar Nodo"
+      "deleteNode": "Eliminar Nodo",
+      "headers": "Headers",
+      "addHeader": "Agregar header",
+      "headersHint": "Valores admiten {param}. Ej: Authorization → Bearer {auth_token}",
+      "testStep": "Probar este paso",
+      "runTest": "Ejecutar",
+      "testHint": "Contexto de prueba en JSON: los valores que reemplazan cada {param}.",
+      "testContextInvalid": "El contexto de prueba no es JSON válido.",
+      "testOk": "Respuesta recibida",
+      "testFailed": "Falló",
+      "testPathsHint": "Clickeá un campo para agregarlo al mapeo de respuesta:"
     },
     "guide": {
       "title": "Guía Rápida de Workflows",
@@ -1479,7 +1506,7 @@
     "successUpload": "Archivos subidos",
     "successUploadDetail": "Los archivos se subieron correctamente",
     "invalidTypes": "Tipos de archivo no válidos",
-    "invalidTypesDetail": "Solo se permiten archivos PDF y Excel (.xls, .xlsx).",
+    "invalidTypesDetail": "Solo se permiten archivos PDF, Excel (.xls, .xlsx) y Word (.doc, .docx).",
     "filesTooBig": "Archivos demasiado grandes",
     "filesTooBigDetail": "Los siguientes archivos superan el límite de 250 MiB: {files}",
     "filesSelected": "Archivos seleccionados",
@@ -1494,5 +1521,68 @@
     "contactUs": "Contáctanos",
     "about": "Acerca de",
     "allRightsReserved": "Todos los derechos reservados."
+  },
+  "avatar": {
+    "title": "Avatar",
+    "subtitle": "Definí el tamaño de la ventana y el encuadre del personaje",
+    "save": "Guardar",
+    "saved": "Configuración guardada",
+    "savedDetail": "Reiniciá el avatar para aplicarla",
+    "saveError": "No se pudo guardar la configuración del avatar",
+    "loading": "Cargando configuración...",
+    "width": "Ancho de ventana",
+    "widthHint": "Cuán ancha es la ventana de escritorio, en píxeles",
+    "height": "Alto de ventana",
+    "heightHint": "Cuán alta es la ventana de escritorio, en píxeles",
+    "zoom": "Zoom de cámara",
+    "zoomHint": "Valores más altos acercan la cámara y recortan más",
+    "zoomFar": "Cuerpo entero",
+    "zoomNear": "Primer plano",
+    "restore": "Restaurar valores por defecto",
+    "preview": "Vista previa",
+    "assetsTitle": "Modelo y animaciones",
+    "assetsHint": "Cargá archivos VRM/VRMA locales. Se regeneran al guardar.",
+    "replaceModel": "Reemplazar modelo",
+    "addAnimations": "Agregar animaciones",
+    "removeAnimation": "Quitar animación",
+    "modelMissing": "No hay modelo cargado",
+    "modelRequired": "model.vrm requerido",
+    "noAnimations": "No hay animaciones cargadas",
+    "assetAdded": "Asset cargado",
+    "desktopOnly": "La carga de archivos requiere abrir Gillie UI como aplicación de escritorio.",
+    "assetsLoadError": "No se pudieron leer los assets del avatar. Reiniciá Gillie UI.",
+    "localStorage": "Local",
+    "remoteStorage": "Remoto",
+    "localStorageHint": "Archivos en este equipo",
+    "remoteStorageHint": "Los archivos se guardan en el storage configurado del servidor y se compilan en la VPS.",
+    "unsavedAssets": "Hay cambios de assets pendientes. Guardá para regenerar manifest y compilar avatar.",
+    "restartNote": "Los cambios se aplican al reiniciar el avatar. Corré gillie avatar stop y gillie avatar start."
+  },
+  "voice": {
+    "title": "Voz",
+    "subtitle": "Configurá cómo suena tu asistente",
+    "loading": "Cargando configuración de voz...",
+    "saved": "Configuración de voz guardada",
+    "saveError": "No se pudo guardar la configuración de voz",
+    "audioResponses": "Respuestas en audio",
+    "audioResponsesDesc": "El asistente responde con un mensaje de voz además del texto",
+    "engine": "Proveedor de voz",
+    "engineDesc": "Qué motor genera el audio",
+    "engineNoKey": "requiere API key",
+    "engineSet": "Proveedor configurado en {engine}",
+    "voice": "Voz",
+    "voiceDesc": "Con qué voz habla el asistente",
+    "voiceSet": "Voz configurada en {voice}",
+    "pitch": "Tono",
+    "pitchDesc": "Hacé la voz más grave o más fina. Cero mantiene el tono natural.",
+    "lower": "Grave",
+    "higher": "Fina",
+    "pitchSet": "Tono configurado en {value} semitonos",
+    "language": "Idioma de respuesta",
+    "languageDesc": "Idioma usado para sintetizar respuestas habladas",
+    "english": "Idioma configurado en inglés",
+    "spanish": "Idioma configurado en español",
+    "enabled": "Respuestas de audio activadas",
+    "disabled": "Respuestas de audio desactivadas"
   }
 }

@@ -11,6 +11,7 @@ from src.core.use_cases.use_cases import Usecases
 from src.adapters.web.dependencies import get_usecases
 from typing import Optional
 import logging
+import os
 
 
 router = APIRouter(
@@ -64,12 +65,38 @@ async def add_message(
     voice_content: Optional[UploadFile] = File(None),
     image_content: Optional[UploadFile] = File(None),
     files: Optional[list[UploadFile]] = File(None),
+    document_content: Optional[UploadFile] = File(None),
     usecases: Usecases = Depends(get_usecases),
     has_image_processor: Optional[str] = Query(None, regex="^(activate|deactivate)$"),
     has_text_to_voice: Optional[str] = Query(None, regex="^(activate|deactivate)$")
 ):
     sender = SenderEnum.user
     user_id = request.state.user.get("user_id")
+
+    if document_content:
+        filename = os.path.basename(document_content.filename or "")
+        extension = os.path.splitext(filename)[1].lower()
+        if extension not in {".pdf", ".docx"}:
+            from fastapi import HTTPException
+            raise HTTPException(status_code=415, detail="Only PDF and DOCX documents are supported")
+
+        # Keep multipart document handling inside Gillie so its existing PDF,
+        # OCR, DOCX and RAG tools can access the uploaded file by name.
+        from src.schemas import FileInput
+        uploaded = await usecases.profile.add_files_usecase.execute(
+            user_id,
+            [FileInput(document_content)],
+        )
+        if not uploaded.data:
+            from fastapi import HTTPException
+            raise HTTPException(status_code=502, detail="Document upload failed")
+
+        stored_name = uploaded.data[-1].name
+        content = (
+            f"{content}\n\n"
+            f"[Documento adjunto: {filename}; archivo interno: {stored_name}]\n"
+            "Usá las herramientas documentales disponibles para leerlo."
+        )
 
     auth_token = None
     auth_header = request.headers.get("Authorization")
@@ -98,12 +125,38 @@ async def add_message(
     )
     return messages
 
+@router.post("/{conversation_id}/transcribe")
+async def transcribe_voice(
+    conversation_id: str,
+    request: Request,
+    voice_content: UploadFile = File(...),
+    language: Optional[str] = Form(default=None),
+    usecases: Usecases = Depends(get_usecases),
+):
+    """Transcribe a recording without generating a reply.
+
+    `language` is the language being spoken. It defaults to the profile's, but
+    a client listening to a call in another language can override it without
+    changing the language its replies come back in.
+    """
+    user_id = request.state.user.get("user_id")
+    text = await usecases.conversation.add_message_usecase.transcribe(
+        voice_content, user_id, language
+    )
+    return {"data": {"text": text or ""}}
+
+
 @router.post("/{conversation_id}/message/stream")
 async def add_message_stream(
     conversation_id: str,
     request: Request,
     usecases: Usecases = Depends(get_usecases),
     content: Optional[str] = Form(default=None),
+    context: Optional[str] = Form(default=None),
+    has_text_to_voice: Optional[str] = Query(None, regex="^(activate|deactivate)$"),
+    voice_content: Optional[UploadFile] = File(None),
+    image_content: Optional[UploadFile] = File(None),
+    files: Optional[list[UploadFile]] = File(None),
 ):
     """Stream AI response tokens as Server-Sent Events (SSE).
 
@@ -117,12 +170,15 @@ async def add_message_stream(
         try:
             body = await request.json()
             content = body.get("content", "")
+            context = body.get("context")
         except Exception:
             content = ""
 
     user_id = request.state.user.get("user_id")
     client_workspace = request.headers.get("X-Gillie-Workspace", "")
     plan_mode = request.headers.get("X-Gillie-Mode", "") == "plan"
+    auth_header = request.headers.get("Authorization", "")
+    auth_token = auth_header.replace("Bearer ", "") if auth_header else None
     async def event_generator():
         try:
             async for token in usecases.conversation.add_message_usecase.execute_stream(
@@ -131,6 +187,15 @@ async def add_message_stream(
                 user_id=user_id,
                 client_workspace=client_workspace,
                 plan_mode=plan_mode,
+                auth_token=auth_token,
+                has_text_to_voice=has_text_to_voice,
+                message=MessageInput(
+                    content=content or "",
+                    context=context,
+                    voice_content=voice_content,
+                    image_content=image_content,
+                    image_contents=files,
+                ),
             ):
                 yield f"data: {json.dumps(token)}\n\n"
         except Exception as e:

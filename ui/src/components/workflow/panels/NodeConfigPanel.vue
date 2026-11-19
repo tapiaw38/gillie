@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, watch, computed } from 'vue'
+import { inject, ref, watch, computed } from 'vue'
 import { useI18n } from 'vue-i18n'
 import Card from 'primevue/card'
 import InputText from 'primevue/inputtext'
@@ -8,7 +8,8 @@ import Textarea from 'primevue/textarea'
 import Button from 'primevue/button'
 import Chips from 'primevue/chips'
 import type { Node } from '@vue-flow/core'
-import type { WorkflowNodeData } from '@/types/workflow.types'
+import type { IAssistantService } from '@/services/assistant/assistantService'
+import type { HttpMethod, WorkflowNodeData, WorkflowStepTestResponse } from '@/types/workflow.types'
 
 interface Props {
   selectedNode: Node<WorkflowNodeData> | null
@@ -23,11 +24,15 @@ const emit = defineEmits<{
 
 const { t } = useI18n()
 
+// Injected directly: a one-shot test call needs no store state around it.
+const services = inject<{ assistantService: IAssistantService }>('services')
+
 // HTTP Methods
 const httpMethods = [
   { label: 'GET', value: 'GET' },
   { label: 'POST', value: 'POST' },
   { label: 'PUT', value: 'PUT' },
+  { label: 'PATCH', value: 'PATCH' },
   { label: 'DELETE', value: 'DELETE' }
 ]
 
@@ -37,13 +42,20 @@ const editForm = ref({
   url: '',
   method: 'GET',
   params: [] as string[],
+  headers: {} as Record<string, string>,
   bodyTemplate: '',
   condition: '',
   responseMapping: {} as Record<string, string>
 })
 
-// Response mapping as array for easier editing
+// Response mapping and headers as arrays for easier editing
 const responseMappingArray = ref<Array<{ key: string; value: string }>>([])
+const headersArray = ref<Array<{ key: string; value: string }>>([])
+
+// Test-run state
+const testing = ref(false)
+const testResult = ref<WorkflowStepTestResponse | null>(null)
+const testContext = ref('{}')
 
 // Watch for selected node changes
 watch(
@@ -56,6 +68,7 @@ watch(
         method: node.data.config?.method || 'GET',
         params: node.data.config?.params || [],
         bodyTemplate: node.data.config?.bodyTemplate || '',
+        headers: node.data.config?.headers || {},
         condition: node.data.config?.condition || '',
         responseMapping: node.data.config?.responseMapping || {}
       }
@@ -64,6 +77,11 @@ watch(
       responseMappingArray.value = Object.entries(editForm.value.responseMapping).map(
         ([key, value]) => ({ key, value })
       )
+      headersArray.value = Object.entries(editForm.value.headers).map(([key, value]) => ({
+        key,
+        value
+      }))
+      testResult.value = null
     }
   },
   { immediate: true }
@@ -78,6 +96,66 @@ const getResponseMappingObject = (): Record<string, string> => {
     }
   })
   return obj
+}
+
+const getHeadersObject = (): Record<string, string> => {
+  const obj: Record<string, string> = {}
+  headersArray.value.forEach((item) => {
+    if (item.key) obj[item.key] = item.value
+  })
+  return obj
+}
+
+const addHeader = () => {
+  headersArray.value.push({ key: '', value: '' })
+}
+
+const removeHeader = (index: number) => {
+  headersArray.value.splice(index, 1)
+}
+
+/**
+ * Run this one step against the real endpoint.
+ *
+ * Response mapping needs the exact shape of the response, and the only way to
+ * learn it used to be saving the workflow, sending a real message and reading
+ * the server log.
+ */
+const runTest = async () => {
+  testing.value = true
+  testResult.value = null
+  try {
+    let context: Record<string, string> = {}
+    try {
+      context = JSON.parse(testContext.value || '{}')
+    } catch {
+      testResult.value = { ok: false, error: t('workflow.config.testContextInvalid'), elapsed_ms: 0 }
+      return
+    }
+    if (!services) throw new Error('Services not provided')
+    testResult.value = await services.assistantService.testWorkflowStep({
+      step: {
+        name: editForm.value.label || 'test_step',
+        url: editForm.value.url,
+        method: editForm.value.method as HttpMethod,
+        headers: getHeadersObject(),
+        body_template: editForm.value.bodyTemplate || undefined
+      },
+      context
+    })
+  } catch (error) {
+    testResult.value = {
+      ok: false,
+      error: error instanceof Error ? error.message : String(error),
+      elapsed_ms: 0
+    }
+  } finally {
+    testing.value = false
+  }
+}
+
+const useMappingPath = (path: string) => {
+  responseMappingArray.value.push({ key: path.split('.').pop() ?? path, value: path })
 }
 
 // Add new response mapping entry
@@ -100,6 +178,7 @@ const handleSave = () => {
       url: editForm.value.url,
       method: editForm.value.method,
       params: editForm.value.params,
+      headers: getHeadersObject(),
       bodyTemplate: editForm.value.bodyTemplate,
       condition: editForm.value.condition,
       responseMapping: getResponseMappingObject()
@@ -216,6 +295,37 @@ const hasChanges = computed(() => {
             <small>{{ t('workflow.config.paramsHint') }}</small>
           </div>
 
+          <!-- Headers -->
+          <div class="form-field">
+            <div class="field-header">
+              <label>
+                <i class="pi pi-key"></i>
+                {{ t('workflow.config.headers') }}
+              </label>
+              <Button
+                icon="pi pi-plus"
+                text
+                rounded
+                size="small"
+                @click="addHeader"
+                v-tooltip.left="t('workflow.config.addHeader')"
+              />
+            </div>
+            <div v-for="(item, index) in headersArray" :key="`h-${index}`" class="mapping-row">
+              <InputText v-model="item.key" placeholder="Authorization" class="mapping-input" />
+              <InputText v-model="item.value" placeholder="Bearer {auth_token}" class="mapping-input" />
+              <Button
+                icon="pi pi-times"
+                text
+                rounded
+                severity="danger"
+                size="small"
+                @click="removeHeader(index)"
+              />
+            </div>
+            <small>{{ t('workflow.config.headersHint') }}</small>
+          </div>
+
           <!-- Body Template -->
           <div class="form-field">
             <label for="node-body">
@@ -242,6 +352,54 @@ const hasChanges = computed(() => {
               placeholder="is_valid == true"
             />
             <small>{{ t('workflow.config.conditionHint') }}</small>
+          </div>
+
+          <!-- Test run -->
+          <div class="form-field test-field">
+            <div class="field-header">
+              <label>
+                <i class="pi pi-play"></i>
+                {{ t('workflow.config.testStep') }}
+              </label>
+              <Button
+                :label="t('workflow.config.runTest')"
+                icon="pi pi-bolt"
+                size="small"
+                :loading="testing"
+                :disabled="!editForm.url"
+                @click="runTest"
+              />
+            </div>
+            <Textarea
+              v-model="testContext"
+              :rows="2"
+              placeholder='{"customer_name": "Ana", "auth_token": "test-token"}'
+            />
+            <small>{{ t('workflow.config.testHint') }}</small>
+
+            <div v-if="testResult" class="test-result">
+              <div :class="['test-status', testResult.ok ? 'ok' : 'fail']">
+                <i :class="testResult.ok ? 'pi pi-check-circle' : 'pi pi-times-circle'"></i>
+                {{ testResult.ok ? t('workflow.config.testOk') : t('workflow.config.testFailed') }}
+                <span class="test-elapsed">{{ testResult.elapsed_ms }} ms</span>
+              </div>
+              <pre v-if="testResult.error" class="test-body">{{ testResult.error }}</pre>
+              <pre v-else class="test-body">{{ JSON.stringify(testResult.response, null, 2) }}</pre>
+              <div v-if="testResult.paths?.length" class="test-paths">
+                <small>{{ t('workflow.config.testPathsHint') }}</small>
+                <div class="path-chips">
+                  <button
+                    v-for="path in testResult.paths"
+                    :key="path"
+                    type="button"
+                    class="path-chip"
+                    @click="useMappingPath(path)"
+                  >
+                    {{ path }}
+                  </button>
+                </div>
+              </div>
+            </div>
           </div>
 
           <!-- Response Mapping -->
@@ -400,6 +558,73 @@ const hasChanges = computed(() => {
   display: flex;
   align-items: center;
   justify-content: space-between;
+}
+
+.test-field {
+  border-top: 1px solid var(--p-content-border-color, rgba(128, 128, 128, 0.25));
+  padding-top: 0.75rem;
+}
+
+.test-result {
+  margin-top: 0.5rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+}
+
+.test-status {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  font-size: 0.8rem;
+  font-weight: 600;
+}
+
+.test-status.ok {
+  color: var(--p-green-500, #22c55e);
+}
+
+.test-status.fail {
+  color: var(--p-red-500, #ef4444);
+}
+
+.test-elapsed {
+  margin-left: auto;
+  font-weight: 400;
+  opacity: 0.6;
+}
+
+.test-body {
+  max-height: 12rem;
+  overflow: auto;
+  margin: 0;
+  padding: 0.5rem;
+  font-size: 0.75rem;
+  line-height: 1.4;
+  border-radius: 0.375rem;
+  background: var(--p-content-hover-background, rgba(128, 128, 128, 0.12));
+}
+
+.path-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.25rem;
+  margin-top: 0.25rem;
+}
+
+.path-chip {
+  font-family: inherit;
+  font-size: 0.7rem;
+  padding: 0.15rem 0.45rem;
+  border-radius: 999px;
+  border: 1px solid var(--p-content-border-color, rgba(128, 128, 128, 0.3));
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+}
+
+.path-chip:hover {
+  background: var(--p-content-hover-background, rgba(128, 128, 128, 0.15));
 }
 
 .mapping-row {

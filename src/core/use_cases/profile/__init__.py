@@ -4,7 +4,7 @@ from .find_all_user_ids_use_case import FindAllUserIdsUseCase
 from .find_all_use_case import FindAllUseCase
 from .update_use_case import UpdateUseCase
 from .api_key_use_cases import AddApiKeyUseCase, DeleteApiKeyUseCase
-from .file_use_cases import AddFilesUseCase, DeleteFileByIdUseCase
+from .file_use_cases import AddFilesUseCase, DeleteFileByIdUseCase, GetFilesVectorStatusUseCase
 from .integration_use_cases import AddIntegrationUseCase, DeleteIntegrationUseCase
 from .list_options_use_case import ListOptionsUseCase
 from .update_provider_use_case import UpdateProviderUseCase
@@ -27,6 +27,7 @@ __all__ = [
     "DeleteApiKeyUseCase",
     "AddFilesUseCase",
     "DeleteFileByIdUseCase",
+    "GetFilesVectorStatusUseCase",
     "AddIntegrationUseCase",
     "DeleteIntegrationUseCase",
     "ListOptionsUseCase",

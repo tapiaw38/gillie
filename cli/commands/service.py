@@ -74,6 +74,54 @@ def _check_config():
         raise typer.Exit(1)
 
 
+def _check_linger_status() -> bool:
+    """Check if loginctl linger is enabled for current user."""
+    try:
+        result = subprocess.run(
+            ["loginctl", "show-user", _get_current_user()],
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        if result.returncode == 0:
+            for line in result.stdout.splitlines():
+                if line.startswith("Linger="):
+                    return line.split("=")[1].strip().lower() == "yes"
+        return False
+    except Exception:
+        return False
+
+
+def _enable_linger() -> bool:
+    """Enable loginctl linger for user services to persist without SSH."""
+    user = _get_current_user()
+    try:
+        result = subprocess.run(
+            ["sudo", "loginctl", "enable-linger", user],
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        if result.returncode == 0:
+            console.print(f"[green]✓[/green] User linger enabled for {user}")
+            return True
+        else:
+            console.print(
+                f"[yellow]⚠[/yellow]  Could not enable linger (requires sudo). "
+                f"Run: [bold]sudo loginctl enable-linger {user}[/bold]"
+            )
+            console.print(
+                "[dim]Without linger, user services stop when SSH session ends.[/dim]"
+            )
+            return False
+    except Exception:
+        console.print(
+            f"[yellow]⚠[/yellow]  Linger setup failed. "
+            f"Manually run: [bold]sudo loginctl enable-linger {user}[/bold]"
+        )
+        return False
+
+
 @app.command("install")
 def install(
     system: bool = typer.Option(False, "--system", help="Install as system service (requires sudo)"),
@@ -95,6 +143,13 @@ def install(
     result = _systemctl(["enable", SERVICE_NAME], system)
     if result.returncode == 0:
         console.print(f"[green]✓[/green] Service enabled.")
+
+        if not system:
+            if not _check_linger_status():
+                console.print()
+                console.print("[cyan]ℹ[/cyan]  Configuring user service persistence...")
+                _enable_linger()
+
         console.print()
         console.print(f"Start with: [bold cyan]./gillie service start[/bold cyan]")
     else:
@@ -126,6 +181,16 @@ def start(
     result = _systemctl(["start", SERVICE_NAME], system)
     if result.returncode == 0:
         console.print("✨🐙 [green]✓[/green] Service started.")
+
+        if not system and not _check_linger_status():
+            console.print()
+            console.print(
+                "[yellow]⚠[/yellow]  User linger not enabled. "
+                f"Service will stop when SSH session ends."
+            )
+            console.print(
+                f"   Fix: [bold]sudo loginctl enable-linger {_get_current_user()}[/bold]"
+            )
     else:
         console.print("[red]✗[/red] Failed to start service.")
         raise typer.Exit(result.returncode)
@@ -163,6 +228,19 @@ def status(
 ):
     """Show the service status."""
     _systemctl(["status", SERVICE_NAME], system)
+
+    if not system:
+        linger_enabled = _check_linger_status()
+        console.print()
+        if linger_enabled:
+            console.print("[green]✓[/green] User linger: enabled (service persists without SSH)")
+        else:
+            console.print(
+                "[yellow]⚠[/yellow]  User linger: disabled (service stops when SSH ends)"
+            )
+            console.print(
+                f"   Fix: [bold]sudo loginctl enable-linger {_get_current_user()}[/bold]"
+            )
 
 
 @app.command("logs")

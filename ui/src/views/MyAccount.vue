@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { onMounted, reactive, ref, watch, computed } from 'vue'
+import { computed, onMounted, reactive, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import Card from 'primevue/card'
 import Toast from 'primevue/toast'
@@ -10,9 +10,7 @@ import LoadingSpinner from '@/components/core/LoadingSpinner/LoadingSpinner.vue'
 import Button from 'primevue/button'
 import DefaultModal from '@/components/core/shared/DefaultModal/DefaultModal.vue'
 import InputText from 'primevue/inputtext'
-import Dropdown from 'primevue/dropdown'
 import Tag from 'primevue/tag'
-import InputSwitch from 'primevue/inputswitch'
 import { useToogle } from '@/composables/useToogle'
 import type { ApiKeyParams } from '@/types/assistant.ts'
 import { useI18n } from 'vue-i18n'
@@ -27,14 +25,11 @@ const router = useRouter()
 const {
   assistantProfile,
   getAssistantProfile,
-  updateAssistantProfile,
   addApiKey,
   removeApiKey,
   listContacts,
 
   isGetAssistantProfilePending,
-
-  isUpdateAssistantProfilePending,
 
   isAddApiKeyPending,
   isAddApiKeySuccess,
@@ -89,70 +84,10 @@ watch(isRemoveApiKeySuccess, (value) => {
   }
 })
 
-const ttsEnabled = ref(false)
-const responseLang = ref<'en' | 'es'>('en')
-
-watch(
-  () => assistantProfile.value?.tts_enabled,
-  (val) => { ttsEnabled.value = val ?? false },
-  { immediate: true },
-)
-
-watch(
-  () => assistantProfile.value?.response_language,
-  (lang) => {
-    if (lang === 'en' || lang === 'es') responseLang.value = lang
-  },
-  { immediate: true },
-)
-
-const toggleTts = async (value: boolean) => {
-  try {
-    await updateAssistantProfile({ tts_enabled: value })
-    toast.add({
-      severity: 'success',
-      summary: t('myAccount.configSaved'),
-      detail: value ? t('myAccount.audioActivated') : t('myAccount.audioDeactivated'),
-      life: 3000,
-    })
-  } catch {
-    ttsEnabled.value = !value
-    toast.add({
-      severity: 'error',
-      summary: t('common.error'),
-      detail: t('myAccount.errorUpdateConfig'),
-      life: 3000,
-    })
-  }
-}
-
-const setResponseLanguage = async (lang: 'en' | 'es') => {
-  const prev = responseLang.value
-  responseLang.value = lang
-  try {
-    await updateAssistantProfile({ response_language: lang })
-    toast.add({
-      severity: 'success',
-      summary: t('myAccount.configSaved'),
-      detail: lang === 'en' ? t('myAccount.langSetEn') : t('myAccount.langSetEs'),
-      life: 3000,
-    })
-  } catch {
-    responseLang.value = prev
-    toast.add({
-      severity: 'error',
-      summary: t('common.error'),
-      detail: t('myAccount.errorUpdateConfig'),
-      life: 3000,
-    })
-  }
-}
-
 const addApiKeyParams = reactive<ApiKeyParams>({
   description: '',
   contact_id: '',
 })
-
 
 const modalTitleAddApiKey = computed(() => t('myAccount.addKeyTitle'))
 const changeAddApiKeyVisible = (value: boolean) => {
@@ -245,59 +180,6 @@ const removeApiKeyOpenModal = (apiKeyID: string) => {
     </div>
 
     <div v-else-if="assistantProfile" class="api-keys-section">
-      <!-- TTS Card -->
-      <Card class="tts-card">
-        <template #content>
-          <div class="tts-row">
-            <div class="tts-info">
-              <div class="tts-icon">
-                <i class="pi pi-volume-up"></i>
-              </div>
-              <div class="tts-details">
-                <h3>{{ t('myAccount.audioResponses') }}</h3>
-                <p>{{ t('myAccount.audioResponsesDesc') }}</p>
-              </div>
-            </div>
-            <InputSwitch
-              v-model="ttsEnabled"
-              :disabled="isUpdateAssistantProfilePending"
-              @change="toggleTts(ttsEnabled)"
-            />
-          </div>
-        </template>
-      </Card>
-
-      <!-- Response Language Card -->
-      <Card class="tts-card">
-        <template #content>
-          <div class="tts-row">
-            <div class="tts-info">
-              <div class="tts-icon">
-                <i class="pi pi-language"></i>
-              </div>
-              <div class="tts-details">
-                <h3>{{ t('myAccount.responseLanguage') }}</h3>
-                <p>{{ t('myAccount.responseLanguageDesc') }}</p>
-              </div>
-            </div>
-            <div class="lang-toggle">
-              <button
-                class="lang-opt"
-                :class="{ 'lang-opt--active': responseLang === 'en' }"
-                :disabled="isUpdateAssistantProfilePending"
-                @click="setResponseLanguage('en')"
-              >EN</button>
-              <button
-                class="lang-opt"
-                :class="{ 'lang-opt--active': responseLang === 'es' }"
-                :disabled="isUpdateAssistantProfilePending"
-                @click="setResponseLanguage('es')"
-              >ES</button>
-            </div>
-          </div>
-        </template>
-      </Card>
-
       <Card class="api-keys-card">
         <template #header>
           <div class="api-header">
@@ -341,7 +223,11 @@ const removeApiKeyOpenModal = (apiKeyID: string) => {
                 <div class="key-info">
                   <div class="key-header">
                     <Tag :value="apiKey.description" severity="info" class="key-tag" />
-                    <Tag :value="apiKey.contact_name || 'No contact'" severity="success" class="key-tag" />
+                    <Tag
+                      :value="apiKey.contact_name || 'No contact'"
+                      severity="success"
+                      class="key-tag"
+                    />
                     <span class="key-date">{{ t('myAccount.recentlyCreated') }}</span>
                   </div>
                   <div class="key-value-container">
@@ -421,7 +307,11 @@ const removeApiKeyOpenModal = (apiKeyID: string) => {
         </div>
       </div>
       <div class="modal-actions">
-        <Button :label="t('common.cancel')" severity="secondary" @click="isVisibleAddApiKey = false" />
+        <Button
+          :label="t('common.cancel')"
+          severity="secondary"
+          @click="isVisibleAddApiKey = false"
+        />
         <Button
           :label="t('myAccount.createKey')"
           icon="pi pi-key"
@@ -447,7 +337,11 @@ const removeApiKeyOpenModal = (apiKeyID: string) => {
         </div>
       </div>
       <div class="modal-actions">
-        <Button :label="t('common.cancel')" severity="secondary" @click="isVisibleRemoveApiKey = false" />
+        <Button
+          :label="t('common.cancel')"
+          severity="secondary"
+          @click="isVisibleRemoveApiKey = false"
+        />
         <Button
           :label="t('common.delete')"
           icon="pi pi-trash"
@@ -584,6 +478,11 @@ const removeApiKeyOpenModal = (apiKeyID: string) => {
 }
 
 /* Language toggle */
+.voice-dropdown {
+  min-width: 10rem;
+  flex-shrink: 0;
+}
+
 .lang-toggle {
   display: flex;
   border: 1px solid var(--do-border-light);
@@ -600,7 +499,9 @@ const removeApiKeyOpenModal = (apiKeyID: string) => {
   color: var(--do-text-muted);
   border: none;
   cursor: pointer;
-  transition: background 0.15s, color 0.15s;
+  transition:
+    background 0.15s,
+    color 0.15s;
 }
 
 .lang-opt:hover:not(:disabled) {
