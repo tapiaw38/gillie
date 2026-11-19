@@ -1,12 +1,21 @@
-# Gillie API
+# Gillie
 
-A single-user AI assistant API built with FastAPI. Supports conversational interfaces, document processing (PDF/OCR), RAG with vector search, TTS/STT, WhatsApp webhooks, and MercadoLibre integration. Managed entirely through a CLI tool.
+Single-user AI assistant. Gillie combines FastAPI backend, terminal agent, Electron dashboard, document/RAG pipeline, voice, integrations and optional avatar companion. Setup and local operation run through `./gillie`.
+
+## Highlights
+
+- **Agent loop** — LangGraph tool calling with streaming tool progress, safe approval prompts and plan mode.
+- **Local-first workflow** — terminal agent understands workspace files, `@` references and approved shell/file actions.
+- **Knowledge** — Markdown skill memory, FAQs, episodic brain, document ingestion and FAISS/Qdrant retrieval.
+- **Interfaces** — CLI, Electron dashboard, HTTP API, voice mode and WhatsApp-compatible integrations.
+- **Companion avatar** — optional VRM Electron overlay controlled through MCP.
 
 ---
 
 ## Requirements
 
 - Python 3.10+
+- Node.js 18+ for dashboard or avatar
 - Docker (only if using local MongoDB)
 - Linux (systemd service management)
 
@@ -16,7 +25,7 @@ A single-user AI assistant API built with FastAPI. Supports conversational inter
 
 ```bash
 git clone <repo-url>
-cd gillie-api
+cd gillie
 ./install.sh
 ```
 
@@ -24,7 +33,7 @@ cd gillie-api
 
 1. Verify Python 3.10+
 2. Create a `.venv` virtual environment
-3. Install all dependencies from `requirements.txt`
+3. Install Python dependencies from `requirements.txt`
 4. Make the `./gillie` CLI executable
 
 Optional system dependencies (installed separately):
@@ -45,13 +54,41 @@ Optional system dependencies (installed separately):
 
 # 3. Start the API server
 ./gillie start
+
+# 4. Open terminal agent in a workspace
+./gillie agent
 ```
 
-The API will be available at `http://localhost:8000`. Swagger UI at `http://localhost:8000/docs`.
+API: `http://localhost:8000`. Swagger: `http://localhost:8000/docs`.
+
+For dashboard:
+
+```bash
+./gillie ui start
+```
+
+For voice conversation:
+
+```bash
+./gillie agent listen
+```
 
 ---
 
 ## CLI Reference
+
+Run `./gillie --help` or `./gillie <command> --help` for current flags.
+
+| Command | Purpose |
+| --- | --- |
+| `init`, `status`, `start`, `install`, `reset` | Setup and API lifecycle |
+| `agent`, `agent listen`, `agent workspace`, `agent list` | Terminal chat, voice, workspace and conversations |
+| `ui` | Electron dashboard: `start`, `dev`, `build`, `stop`, `install` |
+| `db`, `qdrant` | Local Docker MongoDB/Qdrant lifecycle and maintenance |
+| `provider`, `services`, `profile`, `config` | Assistant/provider configuration |
+| `memory`, `brain`, `contact` | Skills, FAQs, episodic memory and contacts |
+| `avatar` | VRM companion lifecycle |
+| `service`, `tunnel`, `expose` | systemd, SSH tunnel and nginx operations |
 
 ### `./gillie init`
 
@@ -362,6 +399,159 @@ Key patterns:
 - **Single-user middleware** — injects the configured `user_id` into every request automatically
 - **Structured errors** — all errors have a unique code (e.g. `profile:create:name-required`) and appropriate HTTP status
 
+### Agent execution
+
+When LangChain service is enabled, Gillie runs tool-capable conversations through a LangGraph state machine:
+
+```text
+system + history + user input
+            │
+          model ── no tool call ──> final response
+            │
+         one tool
+            │
+      validation / approval / execution
+            │
+      ToolMessage observation
+            └──────────────────────> model
+```
+
+Tools run one at a time. This prevents a paused approval from replaying completed side effects. Streaming clients receive text plus structured events for tool start/result, shell output, local files and approval requests. Plan mode reports intended mutations without applying them.
+
+Use `./gillie agent` for terminal approval modes and `./gillie ui start` for dashboard approval dialogs. Unattended callers run without interactive approvals.
+
+### Workspace agent
+
+`./gillie agent` sends current workspace in `X-Gillie-Workspace`. Assistant can inspect files, use `@path`, `@@glob/**` and `@https://…` references, stream shell output and request approval for risky operations. Set default workspace:
+
+```bash
+./gillie agent workspace /path/to/project
+```
+
+---
+
+## Integrations
+
+Enable integrations in `./gillie init` or `./gillie services edit`. Credentials stay in local configuration or environment variables; do not commit them.
+
+| Integration | Primary capability | Setup notes |
+| --- | --- | --- |
+| Google Calendar | Read and manage events | OAuth client and redirect URI |
+| Google Drive | Browse, ingest and search Drive files | OAuth client and redirect URI |
+| Gmail | Read and manage mailbox data | OAuth client and redirect URI |
+| WhatsApp | Webhook messaging and device management | Webhook verification token/device setup |
+| Slack, Telegram | Messaging channels | Channel-specific credentials/webhook setup |
+| Notion | Workspace content integration | Notion integration credentials |
+| Jira, ClickUp, Teams | Work-management integrations | Provider credentials/configuration |
+| MercadoLibre | Marketplace integration | MercadoLibre credentials |
+| S3/local storage | Uploaded-file storage | Select local storage or configure AWS S3 |
+
+OAuth callback defaults are documented in [`.env.example`](.env.example). Register the exact public callback URL when exposing Gillie behind a domain.
+
+## Configuration and secrets
+
+`~/.gillie/config.json` is CLI-managed single-user configuration. `.env` is environment-based server configuration. Use one source of truth for each deployment; do not put production secrets in Git.
+
+**Priority:** if `~/.gillie/config.json` exists, the API loads it and `.env` is not used for server settings. Without it, the API falls back to `.env` (`load_dotenv`). Never commit `config.json`, `.env` or any API key.
+
+Important environment groups:
+
+| Group | Examples |
+| --- | --- |
+| Server | `APP_HOST`, `APP_PORT`, `APP_JWT_SECRET`, `LOG_LEVEL` |
+| Provider | `AI_PROVIDER`, `OPENAI_API_KEY`, `OPENAI_BASE_URL`, `OPENAI_MODEL` |
+| Data | `DATABASE_URI`, `DB_NAME`, `QDRANT_HOST`, `QDRANT_API_KEY` |
+| Agent/RAG | `LANGCHAIN_SERVICE_ENABLED`, `LANGCHAIN_VECTOR_STORE`, `EMBEDDING_PROVIDER` |
+| Observability | `LANGSMITH_API_KEY`, `LANGSMITH_PROJECT`, `LANGSMITH_TRACING_ENABLED` |
+| Avatar | `AVATAR_MCP_URL`, `AVATAR_MCP_TIMEOUT` |
+
+Copy [`.env.example`](.env.example) for an environment-driven deployment. Rotate a leaked provider, OAuth, database or AWS credential immediately.
+
+## Knowledge, RAG and Brain
+
+Gillie has three different knowledge mechanisms:
+
+| Feature | Purpose | CLI |
+| --- | --- | --- |
+| Memory skills and FAQs | Curated, always-available assistant knowledge | `gillie memory` |
+| Document RAG | Retrieved chunks from uploaded/ingested files | `gillie qdrant reindex` when needed |
+| Brain | Episodic memories plus consolidated soul knowledge | `gillie brain` |
+
+RAG flow: ingestion (file upload or Drive) → text extraction (PDF/OCR, DOCX, XLSX) → chunking → embeddings → vector store (Qdrant or FAISS) → retrieval at chat time.
+
+Brain requires Qdrant. Useful commands:
+
+```bash
+./gillie brain status
+./gillie brain stats
+./gillie brain search "customer preference"
+./gillie brain consolidate
+./gillie brain prune
+```
+
+`brain clear`, `db reset` and `qdrant reset` remove data. Review their confirmation prompts and back up data first.
+
+## Dashboard
+
+`./gillie ui start` launches the Electron dashboard from `ui/` (builds first if sources changed; `--rebuild` forces it). Requires Node.js; package manager is detected from the lockfile (`yarn.lock` → yarn, `pnpm-lock.yaml` → pnpm, else npm). Use it for chat, approval dialogs and managing assistant configuration against the running API.
+
+## Security and operations
+
+- **Auth:** requests from loopback skip auth when `AUTH_TRUST_LOCALHOST=true` (default). Remote requests must send an active API key in the `X-API-Key` header. Set `AUTH_TRUST_LOCALHOST=false` behind a reverse proxy, otherwise proxied traffic looks local.
+- Keep API on loopback unless deliberate remote access is needed.
+- Agent tools are confined to the active workspace (`X-Gillie-Workspace`); risky tools need approval.
+- Back up `~/.gillie/` too: it holds identity, services and credentials.
+- Use `./gillie expose install` only with a controlled domain, TLS and secure secrets.
+- Use `./gillie tunnel` for SSH-tunneled remote access instead of exposing MongoDB or Qdrant directly.
+- Agent tools may read workspace files, access network services or request mutations. Review approval prompts; use plan mode for a dry-run workflow.
+- Back up MongoDB before `db reset`, migration work or production upgrades. Back up Qdrant collections before reset/reindex operations. Gillie has no backup command; use the database tools directly:
+
+```bash
+# Docker local mode; adjust container name (see `docker ps`) and URI
+docker exec <mongo-container> mongodump --archive > gillie-mongo.archive
+docker exec -i <mongo-container> mongorestore --archive --drop < gillie-mongo.archive
+# Qdrant: stop it, then copy its storage volume
+```
+
+- Run `./gillie service install` for a user-level systemd service; use `./gillie service logs -f` to diagnose it.
+
+### Health and troubleshooting
+
+| Symptom | Check |
+| --- | --- |
+| API unavailable | `./gillie status`, `./gillie start`, `./gillie service status` |
+| MongoDB unavailable | `./gillie db status`, then `./gillie db start` for Docker mode |
+| Qdrant unavailable | `./gillie qdrant status`, then `./gillie qdrant start` |
+| Provider errors | `./gillie provider status`; verify key, base URL and model |
+| Dashboard will not open | `./gillie ui install`, then `./gillie ui start --rebuild` |
+| OCR/audio unavailable | Install system dependencies: `./gillie install --system` (Tesseract, audio libs) |
+| Browser tools fail | `playwright install chromium` inside the venv |
+| Auth 401 from a remote client | Send `X-API-Key`; check `AUTH_TRUST_LOCALHOST` |
+| Logs | `./gillie service logs -f`, `./gillie db logs`, `./gillie qdrant logs` |
+| Avatar bridge unavailable | Start avatar and check `http://127.0.0.1:47850/health` |
+
+## Testing and UI development
+
+```bash
+# Backend
+source .venv/bin/activate
+pytest
+pytest tests/platform -q
+
+# Dashboard
+cd ui
+npm install
+npm run build
+```
+
+Lint the dashboard with `npm run lint` (eslint, applies fixes). There is no Python linter or type checker configured. Use `./gillie ui dev` for dashboard development. Run `./gillie --help` after CLI changes and keep this README command matrix synchronized with `cli/main.py`.
+
+### Limitations
+
+- Linux is required for systemd lifecycle management and full native avatar/audio behavior (`gillie service`, `expose`).
+- Docker is optional and used for local MongoDB/Qdrant services.
+- External providers, OAuth channels and cloud storage require their own credentials and network access.
+
 ---
 
 ## Avatar — companion app
@@ -435,7 +625,7 @@ distributing any build that contains them.
 
 ## API Endpoints
 
-All endpoints are prefixed according to the domain. Authentication is handled automatically by the single-user middleware — no token required.
+In default single-user local mode, middleware resolves configured user identity automatically. Treat a remotely exposed API as a security boundary: use TLS, restrict network access and configure authentication appropriate to deployment. Swagger is the authoritative complete endpoint reference.
 
 | Domain        | Base path        |
 | ------------- | ---------------- |
@@ -481,13 +671,16 @@ pytest
 pytest -v
 ```
 
-### Docker (API + MongoDB together)
+### Docker
+
+The supported local database workflow is managed by CLI:
 
 ```bash
-make build
-make run
-make stop
+./gillie db start
+./gillie start
 ```
+
+`Dockerfile` builds API image for custom deployments. MongoDB compose definition lives in `docker-compose.mongo.yml`; Qdrant definition lives in `docker-compose.qdrant.yml`. `make` targets are legacy helpers and require a matching deployment compose file.
 
 ---
 
